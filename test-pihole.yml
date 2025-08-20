@@ -1,0 +1,33 @@
+---
+# Test playbook for Pi-hole setup
+- name: Test Pi-hole configuration
+  hosts: pi-dns
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if ansible can connect
+      ping:
+      
+    - name: Verify OS is Debian
+      assert:
+        that:
+          - ansible_distribution == "Debian"
+          - ansible_distribution_major_version == "12"
+        fail_msg: "This playbook requires Debian 12 (Bookworm)"
+        
+    - name: Check available memory (Pi 3B should have ~1GB)
+      assert:
+        that:
+          - ansible_memtotal_mb > 900
+        fail_msg: "Insufficient memory for Pi 3B"
+        
+    - name: Display system info
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+          Memory: {{ ansible_memtotal_mb }}MB
+          IP: {{ ansible_default_ipv4.address }}
+          Interface: {{ ansible_default_ipv4.interface }}

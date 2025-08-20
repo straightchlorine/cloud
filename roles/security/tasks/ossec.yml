@@ -1,0 +1,64 @@
+---
+# OSSEC HIDS installation and configuration
+
+- name: Check if OSSEC is installed
+  stat:
+    path: /var/ossec
+  register: ossec_installed
+
+- name: Install OSSEC dependencies
+  apt:
+    name:
+      - build-essential
+      - zlib1g-dev
+      - libpcre2-dev
+      - libevent-dev
+      - libssl-dev
+    state: present
+  become: yes
+  when: not ossec_installed.stat.exists
+
+- name: Download OSSEC HIDS
+  get_url:
+    url: https://github.com/ossec/ossec-hids/archive/3.7.0.tar.gz
+    dest: /tmp/ossec-3.7.0.tar.gz
+  when: not ossec_installed.stat.exists
+
+- name: Extract OSSEC
+  unarchive:
+    src: /tmp/ossec-3.7.0.tar.gz
+    dest: /tmp
+    remote_src: yes
+  when: not ossec_installed.stat.exists
+
+- name: Install OSSEC
+  shell: |
+    cd /tmp/ossec-hids-3.7.0
+    echo -e "en\nlocal\n/var/ossec\ny\ny\ny\ny" | ./install.sh
+  become: yes
+  when: not ossec_installed.stat.exists
+
+- name: Configure OSSEC
+  template:
+    src: ossec.conf.j2
+    dest: /var/ossec/etc/ossec.conf
+    backup: yes
+  become: yes
+  notify: restart ossec
+
+- name: Create OSSEC systemd service
+  template:
+    src: ossec.service.j2
+    dest: /etc/systemd/system/ossec.service
+  become: yes
+  notify:
+    - reload systemd
+    - restart ossec
+
+- name: Enable and start OSSEC
+  systemd:
+    name: ossec
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes

@@ -1,0 +1,6 @@
+# Example vault file - copy to vault.yml and encrypt with ansible-vault
+# ansible-vault create group_vars/vault.yml
+
+---
+vault_pihole_admin_password: "your-secure-admin-password"
+vault_pihole_webpassword: "your-secure-web-password"

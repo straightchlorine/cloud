@@ -1,0 +1,8 @@
+---
+# Common variables for all service hosts
+dns_upstream_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+
+# Alpine Linux package management
+package_manager: apk

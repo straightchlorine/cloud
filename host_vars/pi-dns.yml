@@ -1,0 +1,35 @@
+---
+# DNS server specific configuration - Pi-hole on Debian Bookworm
+dns_service: pihole
+dns_port: 53
+dns_interface: "{{ ansible_default_ipv4.address }}"
+
+# Pi 3B has more resources than Pi 1B
+device_type: rpi3b
+os_type: debian_bookworm
+
+# Pi-hole configuration
+pihole_admin_password: "{{ vault_pihole_admin_password }}"
+pihole_webpassword: "{{ vault_pihole_webpassword }}"
+pihole_dns_1: 1.1.1.1
+pihole_dns_2: 8.8.8.8
+pihole_interface: eth0
+pihole_ipv4_address: 192.168.20.10/24
+pihole_ipv6_address: ""
+
+# Local network configuration
+local_network: 192.168.20.0/24
+
+# Automatic updates configuration
+auto_updates_enabled: true
+auto_updates_schedule: "0 2 * * 1"  # Monday 2 AM
+auto_updates_reboot_if_required: true
+
+# Additional services for Pi 3B
+additional_services:
+  - name: netdata
+    description: "System monitoring"
+    port: 19999
+  - name: prometheus-node-exporter
+    description: "Metrics collection"
+    port: 9100

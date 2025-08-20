@@ -1,0 +1,38 @@
+# Unbound configuration for Raspberry Pi 1B
+# Optimized for limited resources
+
+server:
+    # Network configuration
+    interface: {{ dns_interface }}
+    port: {{ dns_port }}
+    access-control: {{ local_network }} allow
+    access-control: 127.0.0.0/8 allow
+    
+    # Performance tuning for Pi 1B
+    num-threads: {{ dns_threads }}
+    msg-cache-size: {{ dns_cache_size }}
+    rrset-cache-size: {{ dns_cache_size }}
+    cache-min-ttl: 3600
+    cache-max-ttl: 86400
+    
+    # Security and privacy
+    hide-identity: yes
+    hide-version: yes
+    use-caps-for-id: yes
+    
+    # Logging (minimal for Pi 1B)
+    verbosity: 1
+    log-queries: no
+    
+    # Performance optimizations
+    so-rcvbuf: 1m
+    so-sndbuf: 1m
+    outgoing-range: 60
+    num-queries-per-thread: 30
+
+# Forward zones
+forward-zone:
+    name: "."
+{% for forwarder in dns_forwarders %}
+    forward-addr: {{ forwarder }}
+{% endfor %}

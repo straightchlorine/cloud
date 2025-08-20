@@ -1,0 +1,17 @@
+filenames:
+  - /var/log/auth.log
+  - /var/log/syslog
+labels:
+  type: syslog
+
+---
+filenames:
+  - /var/log/nginx/*.log
+labels:
+  type: nginx
+
+---
+filenames:
+  - /var/ossec/logs/alerts/alerts.json
+labels:
+  type: ossec

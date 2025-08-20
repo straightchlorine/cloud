@@ -1,0 +1,84 @@
+---
+# Common tasks for all hosts running Debian Bookworm
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Install essential packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - ufw
+      - fail2ban
+      - logrotate
+      - rsync
+      - unzip
+      - software-properties-common
+    state: present
+  become: yes
+
+- name: Configure UFW firewall
+  ufw:
+    rule: allow
+    port: "22"
+    comment: "Allow SSH"
+  become: yes
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+  become: yes
+
+- name: Configure fail2ban for SSH protection
+  copy:
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 3
+      bantime = 600
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify: restart fail2ban
+
+- name: Start and enable fail2ban
+  systemd:
+    name: fail2ban
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+  become: yes
+
+- name: Configure log rotation
+  copy:
+    content: |
+      /var/log/*.log {
+          daily
+          rotate 30
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0644 root root
+      }
+    dest: /etc/logrotate.d/system-logs
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
