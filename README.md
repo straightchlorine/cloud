@@ -43,19 +43,27 @@ Ansible configuration for setting up a Raspberry Pi 3B with Pi-hole DNS filterin
    - Set static IP to 192.168.20.10
    - Enable SSH and create user `rpi`
 
-2. **Configure Secrets**:
+2. **Set up SSH Key**:
+   ```bash
+   # Ensure you have the required SSH key
+   ls ~/.ssh/ansible_controller_key
+   # If missing, create it:
+   ssh-keygen -t rsa -b 4096 -f ~/.ssh/ansible_controller_key -C "ansible-controller"
+   ```
+
+3. **Configure Secrets**:
    ```bash
    cp group_vars/vault.yml.example group_vars/vault.yml
    ansible-vault edit group_vars/vault.yml
    # Set your Pi-hole admin passwords
    ```
 
-3. **Test Connection**:
+4. **Test Connection**:
    ```bash
    ansible-playbook test-pihole.yml
    ```
 
-4. **Deploy Pi-hole**:
+5. **Deploy Pi-hole**:
    ```bash
    ansible-playbook playbooks/site.yml --limit pi-dns
    ```
