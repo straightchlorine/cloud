@@ -9,12 +9,12 @@
   hosts: services
   become: yes
   roles:
-    - dns
-  when: device_role == "dns"
+    - role: dns
+      when: device_role == "dns"
 
 - name: Configure security services
   hosts: services
   become: yes
   roles:
-    - security
-  when: device_role == "security"
+    - role: security
+      when: device_role == "security"
