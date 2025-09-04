@@ -8,7 +8,7 @@
       - e2fsprogs
       - ntfs-3g
       - exfat-fuse
-      - exfat-utils
+      - exfatprogs
     state: present
   become: yes
 
