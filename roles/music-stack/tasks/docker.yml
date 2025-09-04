@@ -12,27 +12,35 @@
     state: present
   become: yes
 
-- name: Add Docker GPG key
-  apt_key:
-    url: https://download.docker.com/linux/debian/gpg
-    state: present
-  become: yes
-
-- name: Add Docker repository
-  apt_repository:
-    repo: "deb [arch=armhf] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
-    state: present
-  become: yes
-
-- name: Install Docker
+- name: Remove conflicting Docker packages
   apt:
     name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-compose-plugin
-    state: present
-    update_cache: yes
+      - docker.io
+      - docker-doc
+      - docker-compose
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+  become: yes
+
+- name: Download Docker convenience script
+  get_url:
+    url: https://get.docker.com
+    dest: /tmp/get-docker.sh
+    mode: '0755'
+  become: yes
+
+- name: Install Docker using convenience script
+  shell: /tmp/get-docker.sh
+  become: yes
+  args:
+    creates: /usr/bin/docker
+
+- name: Clean up Docker install script
+  file:
+    path: /tmp/get-docker.sh
+    state: absent
   become: yes
 
 - name: Add user to docker group
