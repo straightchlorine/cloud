@@ -48,12 +48,18 @@
           - Scripts: ~/music-stack/scripts/
           - Logs: ~/music-stack/logs/
 
+    - name: Check if management script exists
+      stat:
+        path: "{{ music_stack_home }}/scripts/manage-stack.sh"
+      register: manage_script_stat
+
     - name: Create management script shortcuts
       file:
         src: "{{ music_stack_home }}/scripts/manage-stack.sh"
         dest: "/usr/local/bin/music-stack"
         state: link
       become: yes
+      when: manage_script_stat.stat.exists
 
     - name: Create import script shortcut
       file:
@@ -61,3 +67,4 @@
         dest: "/usr/local/bin/import-music"
         state: link
       become: yes
+      when: manage_script_stat.stat.exists
