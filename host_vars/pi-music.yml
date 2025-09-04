@@ -5,7 +5,7 @@ device_type: rpi3b
 
 # Music stack configuration
 music_stack_enabled: true
-music_stack_home: "/home/pi/music-stack"
+music_stack_home: "/home/media/compose"
 music_stack_ports:
   - "4533" # Navidrome
   - "8080" # Dozzle
@@ -34,25 +34,22 @@ rclone_version: "1.63.1"
 # Hetzner Storage Box configuration
 hetzner_host: "{{ vault_hetzner_host }}"
 hetzner_username: "{{ vault_hetzner_username }}"
+hetzner_ssh_key_path: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
 
 # Remote backup drives configuration
 backup_remote_drives:
-  - name: "nas-backup"
+  - name: "hetzner-storage-box"
     type: "sftp"
-    host: "{{ vault_nas_host }}"
-    username: "{{ vault_nas_username }}"
-    port: 22
+    host: "{{ vault_hetzner_host }}"
+    username: "{{ vault_hetzner_username }}"
+    port: 23
     path: "music-library"
-    bandwidth_limit: "5M"
-    transfers: 1
-  - name: "cloud-backup"
-    type: "s3"
-    provider: "Other"
-    access_key_id: "{{ vault_s3_access_key }}"
-    secret_access_key: "{{ vault_s3_secret_key }}"
-    endpoint: "{{ vault_s3_endpoint }}"
-    region: "us-east-1"
-    path: "music-library"
+    key_file: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
+    bandwidth_limit: "10M"
+    transfers: 2
+    # Additional Hetzner-specific options
+    host_key_check: false
+    shell_type: "unix"
 
 # Docker configuration
 docker_compose_version: "v2.20.2"

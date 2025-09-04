@@ -2,5 +2,44 @@
 # ansible-vault create group_vars/vault.yml
 
 ---
+# =============================================================================
+# DNS SERVER (Pi-hole) CONFIGURATION
+# =============================================================================
+# Required for pi-dns host
 vault_pihole_admin_password: "your-secure-admin-password"
 vault_pihole_webpassword: "your-secure-web-password"
+
+# =============================================================================
+# HETZNER STORAGE BOX CONFIGURATION
+# =============================================================================
+# Required for music server backup functionality
+vault_hetzner_host: "uXXXXXX.your-storagebox.de"
+vault_hetzner_username: "uXXXXXX"
+vault_hetzner_ssh_key_path: "/home/media/.ssh/hetzner_storage_box"
+
+# =============================================================================
+# BACKUP STORAGE PROVIDERS (Optional - only if using these services)
+# =============================================================================
+
+# NAS Backup Configuration (if using local NAS)
+vault_nas_host: "192.168.20.100"
+vault_nas_username: "backup-user"
+
+# S3-Compatible Storage (if using S3/MinIO/etc.)
+vault_s3_access_key: "your-s3-access-key-id"
+vault_s3_secret_key: "your-s3-secret-access-key"
+vault_s3_endpoint: "s3.amazonaws.com"
+
+# Google Drive Backup (if using Google Drive)
+vault_gdrive_client_id: "your-google-drive-client-id"
+vault_gdrive_client_secret: "your-google-drive-client-secret"
+vault_gdrive_token: "your-google-drive-refresh-token"
+
+# =============================================================================
+# ADDITIONAL SECURITY CREDENTIALS (Add as needed)
+# =============================================================================
+
+# API Keys for monitoring/alerting services
+# vault_monitoring_api_key: "your-monitoring-service-api-key"
+# vault_telegram_bot_token: "your-telegram-bot-token"
+# vault_slack_webhook_url: "https://hooks.slack.com/services/xxx/xxx/xxx"
