@@ -58,7 +58,7 @@
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
 
 - name: Start music stack
-  docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"
     state: present
   when: start_stack | default(true)

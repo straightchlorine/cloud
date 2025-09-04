@@ -8,9 +8,9 @@
   become: yes
 
 - name: restart music stack
-  docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"
-    restarted: yes
+    state: restarted
 
 - name: reload systemd
   systemd:
