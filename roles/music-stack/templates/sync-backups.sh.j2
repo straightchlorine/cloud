@@ -1,0 +1,44 @@
+#!/bin/bash
+# Master backup synchronization script
+
+set -e
+
+SCRIPT_DIR="{{ music_stack_home }}/scripts"
+LOG_FILE="{{ music_stack_home }}/logs/sync-backups.log"
+
+echo "$(date): Starting backup synchronization..." >> "$LOG_FILE"
+
+# Run local backup first
+echo "$(date): Running local backup..." >> "$LOG_FILE"
+"$SCRIPT_DIR/backup-local.sh"
+
+# Run Hetzner backup
+echo "$(date): Running Hetzner backup..." >> "$LOG_FILE"
+"$SCRIPT_DIR/backup-hetzner.sh"
+
+# Run remote drives backup
+echo "$(date): Running remote drives backup..." >> "$LOG_FILE"
+"$SCRIPT_DIR/backup-remote-drives.sh"
+
+# Verify backups are in sync
+echo "$(date): Verifying backup synchronization..." >> "$LOG_FILE"
+
+# Check if Hetzner and local backups match
+LOCAL_SIZE=$(du -s "{{ music_library_path }}/music" | cut -f1)
+HETZNER_SIZE=$(rclone size hetzner:music-library --json | jq -r '.bytes')
+
+if [ "$LOCAL_SIZE" -ne "$((HETZNER_SIZE / 1024))" ]; then
+    echo "$(date): WARNING: Local and Hetzner backups size mismatch!" >> "$LOG_FILE"
+    echo "$(date): Local: ${LOCAL_SIZE}KB, Hetzner: $((HETZNER_SIZE / 1024))KB" >> "$LOG_FILE"
+fi
+
+# Verify remote drives
+{% for drive in backup_remote_drives %}
+REMOTE_SIZE=$(rclone size "{{ drive.name }}:{{ drive.path | default('music-library') }}" --json | jq -r '.bytes' 2>/dev/null || echo "0")
+if [ "$REMOTE_SIZE" != "$HETZNER_SIZE" ] && [ "$REMOTE_SIZE" != "0" ]; then
+    echo "$(date): WARNING: {{ drive.name }} and Hetzner backups size mismatch!" >> "$LOG_FILE"
+    echo "$(date): {{ drive.name }}: $((REMOTE_SIZE / 1024))KB, Hetzner: $((HETZNER_SIZE / 1024))KB" >> "$LOG_FILE"
+fi
+{% endfor %}
+
+echo "$(date): Backup synchronization completed" >> "$LOG_FILE"

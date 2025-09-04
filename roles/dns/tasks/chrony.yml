@@ -1,0 +1,56 @@
+---
+# Chrony NTP server configuration for pi-dns
+
+- name: Stop systemd-timesyncd service
+  systemd:
+    name: systemd-timesyncd
+    state: stopped
+    enabled: no
+  become: yes
+  ignore_errors: yes
+
+- name: Install chrony package
+  apt:
+    name: chrony
+    state: present
+  become: yes
+
+- name: Create chrony configuration
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes
+  become: yes
+  notify: restart chrony
+
+- name: Enable and start chrony service
+  systemd:
+    name: chrony
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Configure firewall for NTP
+  ufw:
+    rule: allow
+    port: "123"
+    proto: udp
+    comment: "Allow NTP (chrony)"
+  become: yes
+
+- name: Wait for chrony to sync
+  wait_for:
+    timeout: 30
+  
+- name: Check chrony sources
+  command: chronyc sources
+  register: chrony_sources
+  changed_when: false
+  become: yes
+
+- name: Display chrony sources
+  debug:
+    var: chrony_sources.stdout_lines

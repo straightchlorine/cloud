@@ -1,0 +1,36 @@
+#!/bin/bash
+# Hetzner backup script for music library
+
+set -e
+
+SOURCE_DIR="{{ music_library_path }}/music"
+LOG_FILE="{{ music_stack_home }}/logs/backup-hetzner.log"
+BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
+
+echo "$(date): Starting Hetzner backup..." >> "$LOG_FILE"
+
+# Sync to Hetzner Storage Box
+rclone sync "$SOURCE_DIR" hetzner:music-library \
+    --progress \
+    --log-file "$LOG_FILE" \
+    --log-level INFO \
+    --exclude "*.tmp" \
+    --exclude "*.part" \
+    --exclude ".DS_Store"
+
+# Create a timestamped backup
+rclone copy "$SOURCE_DIR" "hetzner:music-library-backups/$BACKUP_DATE" \
+    --progress \
+    --log-file "$LOG_FILE" \
+    --log-level INFO \
+    --exclude "*.tmp" \
+    --exclude "*.part" \
+    --exclude ".DS_Store"
+
+# Clean old backups (keep last 30 days)
+rclone delete "hetzner:music-library-backups" \
+    --min-age 30d \
+    --log-file "$LOG_FILE" \
+    --log-level INFO
+
+echo "$(date): Hetzner backup completed successfully" >> "$LOG_FILE"

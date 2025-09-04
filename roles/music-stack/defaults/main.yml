@@ -1,0 +1,55 @@
+---
+# Default variables for music-stack role
+
+# Docker configuration
+docker_compose_version: "v2.20.2"
+
+# Music stack configuration
+music_stack_home: "/home/{{ ansible_user }}/music-stack"
+music_stack_ports:
+  - "4533"  # Navidrome
+  - "8080"  # Dozzle
+
+# Service ports
+navidrome_port: 4533
+dozzle_port: 8080
+
+# System configuration
+timezone: "UTC"
+ansible_uid: 1000
+ansible_gid: 1000
+
+# SSD configuration
+ssd_device: "/dev/sda1"
+ssd_filesystem: "ext4"
+ssd_mount_options: "defaults,noatime"
+ssd_format: false  # Set to true to format the SSD (WARNING: This will erase all data!)
+music_library_path: "/mnt/music"
+
+# Backup configuration
+rclone_version: "1.63.1"
+enable_backup_cron: true
+
+# Hetzner Storage Box configuration
+hetzner_host: "your-storage-box.your-server.de"
+hetzner_username: "your-username"
+
+# Remote backup drives (example configurations)
+backup_remote_drives:
+  - name: "backup-drive-1"
+    type: "sftp"
+    host: "192.168.1.100"
+    username: "backup"
+    port: 22
+    path: "music-library"
+    bandwidth_limit: "10M"
+    transfers: 1
+  # - name: "gdrive-backup"
+  #   type: "gdrive"
+  #   client_id: "your-client-id"
+  #   client_secret: "your-client-secret"
+  #   token: "your-token"
+  #   path: "MusicLibrary"
+
+# Stack startup
+start_stack: true

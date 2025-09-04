@@ -4,18 +4,12 @@
 - name: Update apt cache
   apt:
     update_cache: yes
-    cache_valid_time: 3600
+    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
   become: yes
 
 - name: Install required packages for Pi-hole
   apt:
-    name:
-      - curl
-      - wget
-      - git
-      - ca-certificates
-      - gnupg
-      - lsb-release
+    name: "{{ common_packages | default([]) }}"
     state: present
   become: yes
 
@@ -61,16 +55,21 @@
   include_tasks: auto_updates.yml
   when: auto_updates_enabled | default(false)
 
-- name: Configure firewall for Pi-hole
+- name: Configure Pi-hole specific firewall rules
   ufw:
     rule: allow
-    port: "{{ item }}"
-    comment: "Allow Pi-hole {{ item }}"
+    port: "{{ item.port }}"
+    comment: "{{ item.comment }}"
+    proto: "{{ item.proto | default('tcp') }}"
   loop:
-    - "53"  # DNS
-    - "80"  # Web interface
-    - "4711"  # Pi-hole FTL API
+    - { port: "53", comment: "Pi-hole DNS", proto: "udp" }
+    - { port: "53", comment: "Pi-hole DNS", proto: "tcp" }
+    - { port: "80", comment: "Pi-hole Web Interface" }
+    - { port: "4711", comment: "Pi-hole FTL API" }
   become: yes
+
+- name: Configure chrony NTP server
+  include_tasks: chrony.yml
 
 - name: Install additional monitoring services
   include_tasks: monitoring.yml

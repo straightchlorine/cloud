@@ -1,0 +1,18 @@
+---
+# Handlers for music-stack role
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+  become: yes
+
+- name: restart music stack
+  docker_compose:
+    project_src: "{{ music_stack_home }}"
+    restarted: yes
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: yes

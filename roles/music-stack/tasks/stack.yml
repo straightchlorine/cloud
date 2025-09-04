@@ -1,0 +1,64 @@
+---
+# Music stack deployment
+
+- name: Create Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ music_stack_home }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Create Beets config directory
+  file:
+    path: "{{ music_stack_home }}/config/beets"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create Beets configuration
+  template:
+    src: beets-config.yaml.j2
+    dest: "{{ music_stack_home }}/config/beets/config.yaml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Create Navidrome config directory
+  file:
+    path: "{{ music_stack_home }}/config/navidrome"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create logs directory
+  file:
+    path: "{{ music_stack_home }}/logs"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Generate JWT secret for Navidrome
+  command: openssl rand -hex 32
+  register: jwt_secret
+  changed_when: false
+  no_log: true
+
+- name: Create .env file for Docker Compose
+  template:
+    src: env.j2
+    dest: "{{ music_stack_home }}/.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  vars:
+    navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
+
+- name: Start music stack
+  docker_compose:
+    project_src: "{{ music_stack_home }}"
+    state: present
+  when: start_stack | default(true)

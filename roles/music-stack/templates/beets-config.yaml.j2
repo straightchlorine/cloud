@@ -1,0 +1,48 @@
+directory: /music
+library: /config/library.db
+import:
+    move: yes
+    copy: no
+    write: yes
+    resume: ask
+    incremental: yes
+    quiet_fallback: skip
+    timid: no
+    log: /config/import.log
+
+match:
+    strong_rec_thresh: 0.10
+    medium_rec_thresh: 0.25
+
+per_disc_numbering: yes
+
+paths:
+    default: $albumartist/$album%aunique{}/$track $title
+    singleton: Non-Album/$artist - $title
+    comp: Compilations/$album%aunique{}/$track $title
+
+plugins: fetchart embedart lyrics lastgenre scrub replaygain
+
+fetchart:
+    auto: yes
+    cautious: yes
+    cover_names: cover folder
+
+embedart:
+    auto: yes
+    maxwidth: 1000
+
+lyrics:
+    auto: yes
+    sources: genius google
+
+lastgenre:
+    auto: yes
+    source: album
+
+scrub:
+    auto: yes
+
+replaygain:
+    auto: yes
+    backend: ffmpeg

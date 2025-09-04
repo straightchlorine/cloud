@@ -4,9 +4,8 @@ dns_service: pihole
 dns_port: 53
 dns_interface: "{{ ansible_default_ipv4.address }}"
 
-# Pi 3B has more resources than Pi 1B
+# Device Configuration
 device_type: rpi3b
-os_type: debian_bookworm
 
 # Pi-hole configuration
 pihole_admin_password: "{{ vault_pihole_admin_password }}"
@@ -17,13 +16,18 @@ pihole_interface: eth0
 pihole_ipv4_address: 192.168.20.10/24
 pihole_ipv6_address: ""
 
-# Local network configuration
-local_network: 192.168.20.0/24
 
 # Automatic updates configuration
 auto_updates_enabled: true
 auto_updates_schedule: "0 2 * * 1"  # Monday 2 AM
 auto_updates_reboot_if_required: true
+
+# NTP server configuration
+ntp_server_enabled: true
+ntp_allowed_networks:
+  - "10.0.0.0/8"
+  - "192.168.0.0/16"
+  - "172.16.0.0/12"
 
 # Additional services for Pi 3B
 additional_services:
@@ -33,3 +37,6 @@ additional_services:
   - name: prometheus-node-exporter
     description: "Metrics collection"
     port: 9100
+  - name: chrony
+    description: "NTP server"
+    port: 123

@@ -1,5 +1,5 @@
 ---
-# Additional monitoring services for Pi 3B
+# Additional monitoring services for DNS server
 
 - name: Install Netdata for system monitoring
   shell: |
@@ -8,65 +8,3 @@
     creates: /usr/sbin/netdata
   become: yes
   when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
-
-- name: Install Prometheus Node Exporter
-  block:
-    - name: Create node_exporter user
-      user:
-        name: node_exporter
-        system: yes
-        shell: /bin/false
-        home: /
-        create_home: no
-      become: yes
-
-    - name: Download Node Exporter
-      get_url:
-        url: "https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-armv7.tar.gz"
-        dest: /tmp/node_exporter.tar.gz
-      become: yes
-
-    - name: Extract Node Exporter
-      unarchive:
-        src: /tmp/node_exporter.tar.gz
-        dest: /tmp
-        remote_src: yes
-      become: yes
-
-    - name: Install Node Exporter binary
-      copy:
-        src: /tmp/node_exporter-1.6.1.linux-armv7/node_exporter
-        dest: /usr/local/bin/node_exporter
-        owner: node_exporter
-        group: node_exporter
-        mode: '0755'
-        remote_src: yes
-      become: yes
-
-    - name: Create Node Exporter systemd service
-      template:
-        src: node_exporter.service.j2
-        dest: /etc/systemd/system/node_exporter.service
-        owner: root
-        group: root
-        mode: '0644'
-      become: yes
-
-    - name: Start and enable Node Exporter
-      systemd:
-        name: node_exporter
-        state: started
-        enabled: yes
-        daemon_reload: yes
-      become: yes
-
-  when: additional_services | selectattr('name', 'equalto', 'prometheus-node-exporter') | list | length > 0
-
-- name: Configure firewall rules for monitoring services
-  ufw:
-    rule: allow
-    port: "{{ item.port }}"
-    comment: "Allow {{ item.description }}"
-  loop: "{{ additional_services }}"
-  become: yes
-  when: additional_services is defined
