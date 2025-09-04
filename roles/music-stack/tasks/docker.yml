@@ -24,6 +24,28 @@
     state: absent
   become: yes
 
+- name: Remove existing Docker repository configurations
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/docker.list
+    - /etc/apt/keyrings/docker.asc
+    - /etc/apt/keyrings/docker.gpg
+  become: yes
+
+- name: Remove legacy Docker GPG keys
+  shell: |
+    apt-key del 9DC858229FC7DD38854AE2D88D81803C0EBFCD88 2>/dev/null || true
+    apt-key del 0EBFCD88 2>/dev/null || true
+  become: yes
+  changed_when: false
+
+- name: Update apt cache after cleanup
+  apt:
+    update_cache: yes
+  become: yes
+
 - name: Download Docker convenience script
   get_url:
     url: https://get.docker.com
