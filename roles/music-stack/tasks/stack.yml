@@ -61,10 +61,37 @@
   apt:
     name:
       - yt-dlp
-      - python3-beets
       - python3-pip
+      - python3-venv
+      - python3-dev
+      - build-essential
       - ffmpeg
     state: present
+  become: yes
+
+- name: Create virtual environment for Beets
+  command: python3 -m venv {{ music_stack_home }}/venv
+  args:
+    creates: "{{ music_stack_home }}/venv/bin/python"
+  become_user: "{{ ansible_user }}"
+
+- name: Install Beets in virtual environment
+  pip:
+    name:
+      - beets
+      - requests
+      - pillow
+    virtualenv: "{{ music_stack_home }}/venv"
+  become_user: "{{ ansible_user }}"
+
+- name: Create Beets wrapper script
+  copy:
+    content: |
+      #!/bin/bash
+      source {{ music_stack_home }}/venv/bin/activate
+      exec beet "$@"
+    dest: /usr/local/bin/beet
+    mode: '0755'
   become: yes
 
 - name: Create YouTube download configuration
