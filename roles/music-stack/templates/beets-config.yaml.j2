@@ -1,5 +1,5 @@
-directory: /music
-library: /config/library.db
+directory: {{ music_library_path }}/music
+library: {{ music_stack_home }}/config/beets/library.db
 import:
     move: yes
     copy: no
@@ -8,20 +8,27 @@ import:
     incremental: yes
     quiet_fallback: skip
     timid: no
-    log: /config/import.log
+    log: {{ music_stack_home }}/config/beets/import.log
+    # Better handling for YouTube downloads
+    from_scratch: no
+    group_albums: no
 
 match:
     strong_rec_thresh: 0.10
     medium_rec_thresh: 0.25
-
+    # More lenient matching for YouTube content
+    ignored_media: ['Data CD', 'DVD-Video', 'Blu-ray']
+    
 per_disc_numbering: yes
 
 paths:
     default: $albumartist/$album%aunique{}/$track $title
-    singleton: Non-Album/$artist - $title
+    singleton: YouTube Downloads/$artist - $title
     comp: Compilations/$album%aunique{}/$track $title
+    # Special path for YouTube content
+    albumtype:youtube: YouTube/$uploader/$title
 
-plugins: fetchart embedart lyrics lastgenre scrub replaygain
+plugins: fetchart embedart lyrics lastgenre scrub replaygain zero
 
 fetchart:
     auto: yes
@@ -46,3 +53,8 @@ scrub:
 replaygain:
     auto: yes
     backend: ffmpeg
+
+zero:
+    auto: yes
+    fields: comments
+    update_database: yes

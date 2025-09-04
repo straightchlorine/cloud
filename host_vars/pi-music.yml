@@ -74,3 +74,8 @@ additional_packages:
   - vorbis-tools
   - opus-tools
 
+# YouTube playlist sync configuration
+youtube_sync_enabled: true
+# Set PLAYLIST_URL environment variable in your shell or systemd service
+# Example: PLAYLIST_URL="https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxx"
+

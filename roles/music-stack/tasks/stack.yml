@@ -57,6 +57,44 @@
   vars:
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
 
+- name: Install yt-dlp for YouTube playlist downloads
+  apt:
+    name:
+      - python3-pip
+      - python3-venv
+    state: present
+  become: yes
+
+- name: Install yt-dlp via pip
+  pip:
+    name: yt-dlp
+    state: present
+  become: yes
+
+- name: Create YouTube download configuration
+  template:
+    src: yt-dlp.conf.j2
+    dest: "{{ music_stack_home }}/config/yt-dlp.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Create YouTube playlist download script
+  template:
+    src: youtube-sync.sh.j2
+    dest: "{{ music_stack_home }}/scripts/youtube-sync.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create YouTube environment configuration file
+  template:
+    src: youtube.env.j2
+    dest: "{{ music_stack_home }}/config/youtube.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
 - name: Start music stack
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"

@@ -1,0 +1,76 @@
+#!/bin/bash
+# YouTube Playlist Sync Script for Music Library
+# Downloads playlist from environment variable PLAYLIST_URL
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MUSIC_STACK_HOME="{{ music_stack_home }}"
+DOWNLOAD_DIR="{{ music_library_path }}/downloads"
+PROCESSING_DIR="{{ music_library_path }}/processing"
+LIBRARY_DIR="{{ music_library_path }}/music"
+CONFIG_FILE="$MUSIC_STACK_HOME/config/yt-dlp.conf"
+LOG_FILE="$MUSIC_STACK_HOME/logs/youtube-sync.log"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Check if PLAYLIST_URL is set
+if [[ -z "${PLAYLIST_URL:-}" ]]; then
+    log "ERROR: PLAYLIST_URL environment variable not set"
+    log "Usage: PLAYLIST_URL='https://youtube.com/playlist?list=...' $0"
+    exit 1
+fi
+
+log "Starting YouTube playlist sync for: $PLAYLIST_URL"
+
+# Create directories if they don't exist
+mkdir -p "$DOWNLOAD_DIR" "$PROCESSING_DIR" "$LIBRARY_DIR"
+
+# Download playlist using yt-dlp
+log "Downloading playlist with yt-dlp..."
+if yt-dlp --config-location "$CONFIG_FILE" "$PLAYLIST_URL" 2>&1 | tee -a "$LOG_FILE"; then
+    log "Download completed successfully"
+else
+    log "ERROR: Download failed with exit code $?"
+    exit 1
+fi
+
+# Count downloaded files
+DOWNLOAD_COUNT=$(find "$DOWNLOAD_DIR" -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -newer "$LOG_FILE" 2>/dev/null | wc -l)
+log "Downloaded $DOWNLOAD_COUNT new files"
+
+# Optional: Run Beets import on new downloads
+if command -v beet >/dev/null 2>&1 && [[ $DOWNLOAD_COUNT -gt 0 ]]; then
+    log "Running Beets import on new downloads..."
+    if beet import "$DOWNLOAD_DIR" --config "$MUSIC_STACK_HOME/config/beets/config.yaml" 2>&1 | tee -a "$LOG_FILE"; then
+        log "Beets import completed successfully"
+        
+        # Move processed files to processing directory
+        log "Moving processed files to processing directory..."
+        find "$DOWNLOAD_DIR" -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -exec mv {} "$PROCESSING_DIR/" \; 2>&1 | tee -a "$LOG_FILE"
+    else
+        log "WARNING: Beets import failed, files remain in downloads directory"
+    fi
+else
+    log "Skipping Beets import (not installed or no new files)"
+fi
+
+# Cleanup old log entries (keep last 100 lines)
+if [[ -f "$LOG_FILE" ]]; then
+    tail -n 100 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+fi
+
+log "YouTube playlist sync completed"
+
+# Optional: Trigger Navidrome rescan
+if command -v curl >/dev/null 2>&1; then
+    log "Triggering Navidrome library scan..."
+    curl -f -X POST "http://localhost:{{ navidrome_port }}/api/scanner/scan" >/dev/null 2>&1 || log "WARNING: Could not trigger Navidrome rescan"
+fi

@@ -68,3 +68,12 @@
     job: "{{ music_stack_home }}/scripts/sync-backups.sh >> {{ music_stack_home }}/logs/backup.log 2>&1"
     user: "{{ ansible_user }}"
   when: enable_backup_cron | default(true)
+
+- name: Create cron job for daily YouTube playlist sync
+  cron:
+    name: "Daily YouTube playlist sync"
+    hour: "1"
+    minute: "0"
+    job: "cd {{ music_stack_home }}/scripts && PLAYLIST_URL=\"${PLAYLIST_URL}\" ./youtube-sync.sh"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled | default(false)

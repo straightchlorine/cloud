@@ -1,0 +1,33 @@
+# yt-dlp configuration for music downloads
+# Download best audio quality, preferably opus
+--format "bestaudio[acodec=opus]/bestaudio/best"
+
+# Audio quality and format options
+--extract-audio
+--audio-format opus
+--audio-quality 0
+
+# Metadata and thumbnail options
+--embed-thumbnail
+--embed-metadata
+--embed-subs
+--write-info-json
+
+# Output template for organized downloads
+--output "{{ music_library_path }}/downloads/%(uploader)s - %(title)s.%(ext)s"
+
+# Download archive to avoid re-downloading
+--download-archive "{{ music_stack_home }}/config/youtube-archive.txt"
+
+# Ignore errors and continue with playlist
+--ignore-errors
+--continue
+
+# Prefer IPv4 (helps with connectivity issues)
+--force-ipv4
+
+# Add metadata for better Beets integration
+--add-metadata
+
+# Post-processing options
+--postprocessor-args "ffmpeg:-metadata artist=%(uploader)s -metadata album=%(playlist_title)s -metadata title=%(title)s"
