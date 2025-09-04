@@ -57,17 +57,13 @@
   vars:
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
 
-- name: Install yt-dlp for YouTube playlist downloads
+- name: Install yt-dlp and dependencies for YouTube playlist downloads
   apt:
     name:
+      - yt-dlp
+      - python3-beets
       - python3-pip
-      - python3-venv
-    state: present
-  become: yes
-
-- name: Install yt-dlp via pip
-  pip:
-    name: yt-dlp
+      - ffmpeg
     state: present
   become: yes
 
