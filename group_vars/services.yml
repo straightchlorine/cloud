@@ -1,0 +1,53 @@
+---
+# Common variables for all service hosts
+
+# DNS Configuration
+dns_upstream_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+
+# System Configuration
+ansible_python_interpreter: /usr/bin/python3
+os_type: debian_bookworm
+timezone: UTC
+
+# Network Configuration
+local_network: 192.168.20.0/24
+
+# Common Firewall Ports (SSH always allowed)
+common_firewall_ports:
+  - port: 22
+    comment: "SSH access"
+
+# Common System Packages
+common_packages:
+  - curl
+  - wget  
+  - git
+  - htop
+  - vim
+  - ufw
+  - fail2ban
+  - logrotate
+  - rsync
+  - unzip
+  - software-properties-common
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Monitoring Configuration
+prometheus_node_exporter_enabled: true
+prometheus_node_exporter_port: 9100
+
+# Log Management
+log_rotation_days: 30
+log_compression: true
+
+# Security Configuration
+fail2ban_enabled: true
+fail2ban_ssh_maxretry: 3
+fail2ban_ssh_bantime: 600
+
+# Package Management
+package_cache_valid_time: 3600

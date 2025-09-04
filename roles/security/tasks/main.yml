@@ -1,0 +1,29 @@
+---
+# Security services setup tasks for Pi 3B
+
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
+  become: yes
+
+- name: Install additional security packages
+  apt:
+    name:
+      - rsyslog
+      - build-essential
+    state: present
+  become: yes
+
+- name: Include OSSEC setup
+  include_tasks: ossec.yml
+
+- name: Include CrowdSec setup
+  include_tasks: crowdsec.yml
+
+- name: Include Uptime Kuma setup
+  include_tasks: uptime-kuma.yml
+
+- name: Include OTEL Collector setup
+  include_tasks: otel-collector.yml
+

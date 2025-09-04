@@ -1,0 +1,13 @@
+[Unit]
+Description=OSSEC Host Intrusion Detection System
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/var/ossec/bin/ossec-control start
+ExecStop=/var/ossec/bin/ossec-control stop
+ExecReload=/var/ossec/bin/ossec-control restart
+PIDFile=/var/ossec/var/run/.process_list
+
+[Install]
+WantedBy=multi-user.target

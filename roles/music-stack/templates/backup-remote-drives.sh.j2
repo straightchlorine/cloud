@@ -1,0 +1,32 @@
+#!/bin/bash
+# Remote drives backup script for music library
+
+set -e
+
+SOURCE_DIR="{{ music_library_path }}/music"
+LOG_FILE="{{ music_stack_home }}/logs/backup-remote.log"
+
+echo "$(date): Starting remote drives backup..." >> "$LOG_FILE"
+
+{% for drive in backup_remote_drives %}
+echo "$(date): Backing up to {{ drive.name }}..." >> "$LOG_FILE"
+
+# Sync to remote drive
+rclone sync "$SOURCE_DIR" "{{ drive.name }}:{{ drive.path | default('music-library') }}" \
+    --progress \
+    --log-file "$LOG_FILE" \
+    --log-level INFO \
+    --exclude "*.tmp" \
+    --exclude "*.part" \
+    --exclude ".DS_Store" \
+{% if drive.bandwidth_limit is defined %}
+    --bwlimit "{{ drive.bandwidth_limit }}" \
+{% endif %}
+{% if drive.transfers is defined %}
+    --transfers {{ drive.transfers }} \
+{% endif %}
+    || echo "$(date): Failed to backup to {{ drive.name }}" >> "$LOG_FILE"
+
+{% endfor %}
+
+echo "$(date): Remote drives backup completed" >> "$LOG_FILE"

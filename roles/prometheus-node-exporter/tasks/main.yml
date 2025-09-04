@@ -1,0 +1,24 @@
+---
+# Main tasks for prometheus-node-exporter role
+
+- name: Install Prometheus Node Exporter package
+  apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable Node Exporter service
+  systemd:
+    name: prometheus-node-exporter
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Configure UFW firewall for Node Exporter
+  ufw:
+    rule: allow
+    port: "{{ node_exporter_port }}"
+    comment: "{{ node_exporter_ufw_comment }}"
+  become: yes
+  when: node_exporter_ufw_enabled | default(true)

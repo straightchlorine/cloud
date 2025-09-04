@@ -1,0 +1,70 @@
+---
+# Backup configuration and scripts
+
+- name: Install rclone
+  get_url:
+    url: "https://downloads.rclone.org/v{{ rclone_version }}/rclone-v{{ rclone_version }}-linux-arm.zip"
+    dest: "/tmp/rclone.zip"
+  register: rclone_download
+
+- name: Extract rclone
+  unarchive:
+    src: "/tmp/rclone.zip"
+    dest: "/tmp"
+    remote_src: yes
+  when: rclone_download.changed
+
+- name: Install rclone binary
+  copy:
+    src: "/tmp/rclone-v{{ rclone_version }}-linux-arm/rclone"
+    dest: "/usr/local/bin/rclone"
+    mode: '0755'
+    remote_src: yes
+  become: yes
+  when: rclone_download.changed
+
+- name: Create rclone config directory
+  file:
+    path: "/home/{{ ansible_user }}/.config/rclone"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0700'
+
+- name: Create rclone configuration
+  template:
+    src: rclone.conf.j2
+    dest: "/home/{{ ansible_user }}/.config/rclone/rclone.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+
+- name: Create backup scripts directory
+  file:
+    path: "{{ music_stack_home }}/scripts"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create backup scripts
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ music_stack_home }}/scripts/{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - backup-local.sh
+    - backup-hetzner.sh
+    - backup-remote-drives.sh
+    - sync-backups.sh
+
+- name: Create cron job for daily backup
+  cron:
+    name: "Music library backup"
+    minute: "0"
+    hour: "2"
+    job: "{{ music_stack_home }}/scripts/sync-backups.sh >> {{ music_stack_home }}/logs/backup.log 2>&1"
+    user: "{{ ansible_user }}"
+  when: enable_backup_cron | default(true)

@@ -1,0 +1,76 @@
+---
+# DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
+  become: yes
+
+- name: Install required packages for Pi-hole
+  apt:
+    name: "{{ common_packages | default([]) }}"
+    state: present
+  become: yes
+
+- name: Download Pi-hole installer
+  get_url:
+    url: https://install.pi-hole.net
+    dest: /tmp/install-pihole.sh
+    mode: '0755'
+  become: yes
+
+- name: Create Pi-hole setup vars file
+  template:
+    src: setupVars.conf.j2
+    dest: /etc/pihole/setupVars.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+
+- name: Create Pi-hole directory
+  file:
+    path: /etc/pihole
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: yes
+
+- name: Install Pi-hole (automated)
+  shell: |
+    bash /tmp/install-pihole.sh --unattended
+  become: yes
+  args:
+    creates: /usr/local/bin/pihole
+
+- name: Set Pi-hole web admin password
+  shell: |
+    pihole -a -p "{{ pihole_webpassword }}"
+  become: yes
+  when: pihole_webpassword is defined
+
+- name: Configure automatic updates
+  include_tasks: auto_updates.yml
+  when: auto_updates_enabled | default(false)
+
+- name: Configure Pi-hole specific firewall rules
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    comment: "{{ item.comment }}"
+    proto: "{{ item.proto | default('tcp') }}"
+  loop:
+    - { port: "53", comment: "Pi-hole DNS", proto: "udp" }
+    - { port: "53", comment: "Pi-hole DNS", proto: "tcp" }
+    - { port: "80", comment: "Pi-hole Web Interface" }
+    - { port: "4711", comment: "Pi-hole FTL API" }
+  become: yes
+
+- name: Configure chrony NTP server
+  include_tasks: chrony.yml
+
+- name: Install additional monitoring services
+  include_tasks: monitoring.yml
+  when: additional_services is defined

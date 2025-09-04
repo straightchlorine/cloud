@@ -1,0 +1,41 @@
+#!/bin/bash
+# Weekly Pi-hole and system update script
+
+LOG_FILE="/var/log/weekly-updates.log"
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+echo "[$DATE] Starting weekly updates..." >> $LOG_FILE
+
+# Update system packages
+echo "[$DATE] Updating system packages..." >> $LOG_FILE
+apt update >> $LOG_FILE 2>&1
+apt upgrade -y >> $LOG_FILE 2>&1
+
+# Update Pi-hole
+echo "[$DATE] Updating Pi-hole..." >> $LOG_FILE
+pihole -up >> $LOG_FILE 2>&1
+
+# Update Pi-hole gravity (blocklists)
+echo "[$DATE] Updating Pi-hole gravity..." >> $LOG_FILE
+pihole -g >> $LOG_FILE 2>&1
+
+# Clean up
+echo "[$DATE] Cleaning up..." >> $LOG_FILE
+apt autoremove -y >> $LOG_FILE 2>&1
+apt autoclean >> $LOG_FILE 2>&1
+
+# Restart services if needed
+if [ -f /var/run/reboot-required ]; then
+    echo "[$DATE] Reboot required - scheduling reboot in 5 minutes..." >> $LOG_FILE
+{% if auto_updates_reboot_if_required | default(false) %}
+    shutdown -r +5 "System will reboot in 5 minutes for updates" >> $LOG_FILE 2>&1
+{% else %}
+    echo "[$DATE] Reboot required but auto-reboot is disabled" >> $LOG_FILE
+{% endif %}
+else
+    echo "[$DATE] Restarting Pi-hole services..." >> $LOG_FILE
+    systemctl restart pihole-FTL >> $LOG_FILE 2>&1
+fi
+
+echo "[$DATE] Weekly updates completed" >> $LOG_FILE
+echo "----------------------------------------" >> $LOG_FILE

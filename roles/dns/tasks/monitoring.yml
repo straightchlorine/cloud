@@ -1,0 +1,10 @@
+---
+# Additional monitoring services for DNS server
+
+- name: Install Netdata for system monitoring
+  shell: |
+    bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait --disable-telemetry
+  args:
+    creates: /usr/sbin/netdata
+  become: yes
+  when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0

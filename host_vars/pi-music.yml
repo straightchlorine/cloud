@@ -1,0 +1,76 @@
+# Music server specific configuration for Pi 3B
+
+# Device configuration
+device_type: rpi3b
+
+# Music stack configuration
+music_stack_enabled: true
+music_stack_home: "/home/media/compose"
+music_stack_ports:
+  - "4533" # Navidrome
+  - "8080" # Dozzle
+
+# Service configuration
+navidrome_port: 4533
+dozzle_port: 8080
+timezone: Europe/Warsaw
+
+# Storage configuration
+ssd_device: "/dev/sda1"
+ssd_filesystem: "ext4"
+ssd_mount_options: "defaults,noatime,errors=remount-ro"
+music_library_path: "/mnt/data"
+ssd_format: false
+
+# User configuration
+ansible_uid: 1000
+ansible_gid: 1000
+
+# Backup configuration
+backup_enabled: true
+enable_backup_cron: true
+rclone_version: "1.63.1"
+
+# Hetzner Storage Box configuration
+hetzner_host: "{{ vault_hetzner_host }}"
+hetzner_username: "{{ vault_hetzner_username }}"
+hetzner_ssh_key_path: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
+
+# Remote backup drives configuration
+backup_remote_drives:
+  - name: "hetzner-storage-box"
+    type: "sftp"
+    host: "{{ vault_hetzner_host }}"
+    username: "{{ vault_hetzner_username }}"
+    port: 23
+    path: "music-library"
+    key_file: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
+    bandwidth_limit: "10M"
+    transfers: 2
+    # Additional Hetzner-specific options
+    host_key_check: false
+    shell_type: "unix"
+
+# Docker configuration
+docker_compose_version: "v2.20.2"
+
+# Firewall configuration for music stack
+firewall_ports:
+  - 22 # SSH
+  - 4533 # Navidrome
+  - 8080 # Dozzle
+
+
+# Performance tuning for Pi 3B
+docker_log_driver: "json-file"
+docker_log_max_size: "10m"
+docker_log_max_file: "3"
+
+# Additional system packages for music processing
+additional_packages:
+  - ffmpeg
+  - flac
+  - lame
+  - vorbis-tools
+  - opus-tools
+

@@ -1,0 +1,70 @@
+---
+# Music stack deployment playbook for Raspberry Pi 3B
+
+- name: Deploy Music Stack on Raspberry Pi 3B
+  hosts: pi-music
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install additional system packages
+      apt:
+        name: "{{ additional_packages | default([]) }}"
+        state: present
+      when: additional_packages is defined
+
+  roles:
+    - common
+    - firewall
+    - prometheus-node-exporter
+    - music-stack
+
+  post_tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          🎵 Music Stack Deployment Complete!
+          
+          Services:
+          - Navidrome: http://{{ ansible_default_ipv4.address }}:{{ navidrome_port }}
+          - Dozzle (Logs): http://{{ ansible_default_ipv4.address }}:{{ dozzle_port }}
+          
+          Useful commands on the Pi:
+          - Manage stack: ~/music-stack/scripts/manage-stack.sh {start|stop|restart|status}
+          - Import music: ~/music-stack/scripts/import-music.sh
+          - Run backups: ~/music-stack/scripts/sync-backups.sh
+          - View logs: docker compose -f ~/music-stack/docker-compose.yml logs -f
+          
+          Directory structure:
+          - Music library: {{ music_library_path }}/music
+          - Downloads: {{ music_library_path }}/downloads
+          - Processing: {{ music_library_path }}/processing
+          - Config: ~/music-stack/config/
+          - Scripts: ~/music-stack/scripts/
+          - Logs: ~/music-stack/logs/
+
+    - name: Check if management script exists
+      stat:
+        path: "{{ music_stack_home }}/scripts/manage-stack.sh"
+      register: manage_script_stat
+
+    - name: Create management script shortcuts
+      file:
+        src: "{{ music_stack_home }}/scripts/manage-stack.sh"
+        dest: "/usr/local/bin/music-stack"
+        state: link
+      become: yes
+      when: manage_script_stat.stat.exists
+
+    - name: Create import script shortcut
+      file:
+        src: "{{ music_stack_home }}/scripts/import-music.sh"
+        dest: "/usr/local/bin/import-music"
+        state: link
+      become: yes
+      when: manage_script_stat.stat.exists

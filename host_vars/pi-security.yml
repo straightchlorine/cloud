@@ -1,0 +1,30 @@
+---
+# Security host specific configuration
+security_services:
+  - ossec
+  - crowdsec
+  - uptime-kuma
+  - otel-collector
+
+# OSSEC configuration
+ossec_email_notification: false
+ossec_log_all: true
+
+# CrowdSec configuration
+crowdsec_collections:
+  - crowdsecurity/linux
+  - crowdsecurity/sshd
+  - crowdsecurity/base-http-scenarios
+
+# Uptime Kuma configuration
+uptime_kuma_port: 3001
+uptime_kuma_user: uptime-kuma
+
+# OpenTelemetry configuration
+otel_endpoint: "http://192.168.60.10:4317"
+otel_collection_interval: 30s
+
+# Firewall ports
+firewall_ports:
+  - 22    # SSH
+  - 3001  # Uptime Kuma

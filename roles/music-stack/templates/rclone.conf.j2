@@ -1,0 +1,42 @@
+# Rclone configuration for music library backups
+
+[hetzner]
+type = sftp
+host = {{ hetzner_host }}
+user = {{ hetzner_username }}
+port = 23
+key_file = /home/{{ ansible_user }}/.ssh/id_rsa
+use_insecure_cipher = false
+disable_hashcheck = false
+
+{% for drive in backup_remote_drives %}
+[{{ drive.name }}]
+{% if drive.type == 'sftp' %}
+type = sftp
+host = {{ drive.host }}
+user = {{ drive.username }}
+port = {{ drive.port | default(22) }}
+key_file = {{ drive.key_file | default('/home/' + ansible_user + '/.ssh/id_rsa') }}
+{% elif drive.type == 's3' %}
+type = s3
+provider = {{ drive.provider }}
+access_key_id = {{ drive.access_key_id }}
+secret_access_key = {{ drive.secret_access_key }}
+region = {{ drive.region | default('us-east-1') }}
+endpoint = {{ drive.endpoint | default('') }}
+{% elif drive.type == 'gdrive' %}
+type = drive
+client_id = {{ drive.client_id }}
+client_secret = {{ drive.client_secret }}
+token = {{ drive.token }}
+{% elif drive.type == 'dropbox' %}
+type = dropbox
+client_id = {{ drive.client_id }}
+client_secret = {{ drive.client_secret }}
+token = {{ drive.token }}
+{% endif %}
+{% if drive.bandwidth_limit is defined %}
+bwlimit = {{ drive.bandwidth_limit }}
+{% endif %}
+
+{% endfor %}

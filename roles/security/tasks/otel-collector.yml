@@ -1,0 +1,49 @@
+---
+# OpenTelemetry Collector installation and configuration
+
+- name: Download OpenTelemetry Collector
+  get_url:
+    url: https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.89.0/otelcol_0.89.0_linux_arm64.tar.gz
+    dest: /tmp/otelcol.tar.gz
+  become: yes
+
+- name: Extract OpenTelemetry Collector
+  unarchive:
+    src: /tmp/otelcol.tar.gz
+    dest: /usr/local/bin/
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0755'
+  become: yes
+
+- name: Create OTEL config directory
+  file:
+    path: /etc/otelcol
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Configure OpenTelemetry Collector
+  template:
+    src: otel-config.yaml.j2
+    dest: /etc/otelcol/config.yaml
+  become: yes
+  notify: restart otel-collector
+
+- name: Create OTEL systemd service
+  template:
+    src: otel-collector.service.j2
+    dest: /etc/systemd/system/otel-collector.service
+  become: yes
+  notify:
+    - reload systemd
+    - restart otel-collector
+
+- name: Enable and start OTEL Collector
+  systemd:
+    name: otel-collector
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes

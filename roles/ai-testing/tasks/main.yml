@@ -1,0 +1,52 @@
+---
+- name: Update system packages
+  apt:
+    update_cache: yes
+    upgrade: yes
+
+- name: Install required packages
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+      - nginx
+      - nodejs
+      - npm
+      - python3
+      - python3-pip
+      - curl
+      - git
+      - htop
+    state: present
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- include_tasks: librechat.yml
+  when: "'librechat' in ai_services"
+
+- include_tasks: api-testing.yml
+  when: "'api-testing' in ai_services"
+
+- name: Configure firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ firewall_ports }}"
+  when: firewall_ports is defined
+
+- name: Enable firewall
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

@@ -1,0 +1,67 @@
+---
+# Uptime Kuma installation and configuration
+
+- name: Install Node.js and npm
+  apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+  become: yes
+
+- name: Create uptime-kuma user
+  user:
+    name: uptime-kuma
+    system: yes
+    shell: /bin/false
+    home: /opt/uptime-kuma
+    create_home: no
+  become: yes
+
+- name: Create uptime-kuma directory
+  file:
+    path: /opt/uptime-kuma
+    state: directory
+    owner: uptime-kuma
+    group: uptime-kuma
+    mode: '0755'
+  become: yes
+
+- name: Clone Uptime Kuma repository
+  git:
+    repo: https://github.com/louislam/uptime-kuma.git
+    dest: /opt/uptime-kuma
+    version: master
+  become: yes
+  become_user: uptime-kuma
+
+- name: Install Uptime Kuma dependencies
+  npm:
+    path: /opt/uptime-kuma
+    production: yes
+  become: yes
+  become_user: uptime-kuma
+
+- name: Run Uptime Kuma setup
+  shell: npm run setup
+  args:
+    chdir: /opt/uptime-kuma
+  become: yes
+  become_user: uptime-kuma
+
+- name: Create Uptime Kuma systemd service
+  template:
+    src: uptime-kuma.service.j2
+    dest: /etc/systemd/system/uptime-kuma.service
+  become: yes
+  notify:
+    - reload systemd
+    - restart uptime-kuma
+
+- name: Enable and start Uptime Kuma
+  systemd:
+    name: uptime-kuma
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes

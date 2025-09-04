@@ -1,0 +1,32 @@
+---
+# Default values for common role
+
+# System Configuration
+timezone: UTC
+package_cache_valid_time: 3600
+
+# Security Configuration  
+fail2ban_enabled: true
+fail2ban_ssh_maxretry: 3
+fail2ban_ssh_bantime: 600
+
+# Log Management
+log_rotation_days: 30
+log_compression: true
+
+# Common System Packages (can be overridden in group_vars)
+common_packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - vim
+  - ufw
+  - fail2ban
+  - logrotate
+  - rsync
+  - unzip
+  - software-properties-common
+  - ca-certificates
+  - gnupg
+  - lsb-release

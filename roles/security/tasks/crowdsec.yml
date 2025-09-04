@@ -1,0 +1,35 @@
+---
+# CrowdSec installation and configuration
+
+- name: Check if CrowdSec is installed
+  stat:
+    path: /etc/crowdsec
+  register: crowdsec_installed
+
+- name: Download and install CrowdSec
+  shell: curl -s https://install.crowdsec.net | bash
+  become: yes
+  when: not crowdsec_installed.stat.exists
+
+- name: Install CrowdSec collections
+  shell: "cscli collections install {{ item }}"
+  become: yes
+  loop:
+    - crowdsecurity/linux
+    - crowdsecurity/sshd
+    - crowdsecurity/base-http-scenarios
+  ignore_errors: yes
+
+- name: Configure CrowdSec acquisition
+  template:
+    src: crowdsec-acquis.yaml.j2
+    dest: /etc/crowdsec/acquis.yaml
+  become: yes
+  notify: restart crowdsec
+
+- name: Enable and start CrowdSec
+  systemd:
+    name: crowdsec
+    enabled: yes
+    state: started
+  become: yes

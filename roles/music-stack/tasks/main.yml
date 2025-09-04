@@ -1,0 +1,41 @@
+---
+# Music Stack setup tasks for Pi 3B
+
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - rsync
+      - htop
+      - ncdu
+      - tree
+    state: present
+  become: yes
+
+- name: Include Docker setup
+  include_tasks: docker.yml
+
+- name: Include SSD mounting
+  include_tasks: storage.yml
+
+- name: Include music stack deployment
+  include_tasks: stack.yml
+
+- name: Include backup configuration
+  include_tasks: backup.yml
+
+- name: Configure firewall rules for music stack
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ music_stack_ports }}"
+  become: yes

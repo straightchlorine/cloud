@@ -1,0 +1,11 @@
+/var/log/*.log {
+    daily
+    rotate {{ log_rotation_days | default(30) }}
+    {% if log_compression | default(true) %}
+    compress
+    delaycompress
+    {% endif %}
+    missingok
+    notifempty
+    create 0644 root root
+}

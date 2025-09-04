@@ -1,0 +1,65 @@
+#!/bin/bash
+# Music stack management script
+
+MUSIC_STACK_HOME="{{ music_stack_home }}"
+COMMAND="$1"
+
+cd "$MUSIC_STACK_HOME"
+
+case "$COMMAND" in
+    start)
+        echo "Starting music stack..."
+        docker compose up -d
+        ;;
+    stop)
+        echo "Stopping music stack..."
+        docker compose down
+        ;;
+    restart)
+        echo "Restarting music stack..."
+        docker compose restart
+        ;;
+    logs)
+        docker compose logs -f
+        ;;
+    status)
+        docker compose ps
+        ;;
+    import)
+        ./scripts/import-music.sh
+        ;;
+    backup)
+        ./scripts/sync-backups.sh
+        ;;
+    update)
+        echo "Updating music stack images..."
+        docker compose pull
+        docker compose up -d
+        ;;
+    beets)
+        echo "Starting beets container..."
+        docker compose --profile tools up -d beets
+        docker exec -it beets beet "$@"
+        ;;
+    shell)
+        SERVICE="${2:-navidrome}"
+        echo "Opening shell in $SERVICE container..."
+        docker exec -it "$SERVICE" /bin/sh
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|logs|status|import|backup|update|beets|shell}"
+        echo ""
+        echo "Commands:"
+        echo "  start    - Start the music stack"
+        echo "  stop     - Stop the music stack"
+        echo "  restart  - Restart the music stack"
+        echo "  logs     - View logs (press Ctrl+C to exit)"
+        echo "  status   - Show container status"
+        echo "  import   - Import new music files"
+        echo "  backup   - Run backup synchronization"
+        echo "  update   - Update container images"
+        echo "  beets    - Run beets commands"
+        echo "  shell    - Open shell in container (default: navidrome)"
+        exit 1
+        ;;
+esac

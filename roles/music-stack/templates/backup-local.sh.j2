@@ -1,0 +1,33 @@
+#!/bin/bash
+# Local backup script for music library
+
+set -e
+
+BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
+SOURCE_DIR="{{ music_library_path }}/music"
+BACKUP_DIR="{{ music_library_path }}/backups/local"
+LOG_FILE="{{ music_stack_home }}/logs/backup-local.log"
+
+echo "$(date): Starting local backup..." >> "$LOG_FILE"
+
+mkdir -p "$BACKUP_DIR"
+
+# Create incremental backup using rsync
+rsync -avh --delete \
+    --backup --backup-dir="$BACKUP_DIR/deleted_$BACKUP_DATE" \
+    "$SOURCE_DIR/" "$BACKUP_DIR/current/" \
+    >> "$LOG_FILE" 2>&1
+
+# Create compressed archive of the current backup
+tar -czf "$BACKUP_DIR/music_backup_$BACKUP_DATE.tar.gz" -C "$BACKUP_DIR" current/ \
+    >> "$LOG_FILE" 2>&1
+
+# Keep only the last 7 days of archives
+find "$BACKUP_DIR" -name "music_backup_*.tar.gz" -mtime +7 -delete \
+    >> "$LOG_FILE" 2>&1
+
+# Keep only the last 30 days of deleted folders
+find "$BACKUP_DIR" -name "deleted_*" -mtime +30 -exec rm -rf {} \; \
+    >> "$LOG_FILE" 2>&1
+
+echo "$(date): Local backup completed successfully" >> "$LOG_FILE"

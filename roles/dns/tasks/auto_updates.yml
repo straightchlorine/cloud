@@ -1,0 +1,54 @@
+---
+# Automatic updates configuration for Debian
+
+- name: Install unattended-upgrades package
+  apt:
+    name: unattended-upgrades
+    state: present
+  become: yes
+
+- name: Configure unattended-upgrades
+  template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+
+- name: Enable automatic updates
+  template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+
+- name: Create Pi-hole update script
+  template:
+    src: pihole-update.sh.j2
+    dest: /usr/local/bin/pihole-update.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: yes
+
+- name: Create weekly update cron job
+  cron:
+    name: "Weekly system and Pi-hole updates"
+    minute: "0"
+    hour: "2"
+    weekday: "1"
+    job: "/usr/local/bin/pihole-update.sh >> /var/log/weekly-updates.log 2>&1"
+    user: root
+  become: yes
+
+- name: Create log rotation for update logs
+  template:
+    src: weekly-updates-logrotate.j2
+    dest: /etc/logrotate.d/weekly-updates
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes

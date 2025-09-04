@@ -1,0 +1,53 @@
+---
+# Common tasks for all hosts running Debian Bookworm
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
+  become: yes
+
+- name: Install essential packages
+  apt:
+    name: "{{ common_packages | default([]) }}"
+    state: present
+  become: yes
+
+- name: Configure fail2ban for SSH protection
+  copy:
+    content: |
+      [sshd]
+      enabled = {{ fail2ban_enabled | default(true) | ternary('true', 'false') }}
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = {{ fail2ban_ssh_maxretry | default(3) }}
+      bantime = {{ fail2ban_ssh_bantime | default(600) }}
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify: restart fail2ban
+
+- name: Start and enable fail2ban
+  systemd:
+    name: fail2ban
+    state: started
+    enabled: yes
+  become: yes
+  when: fail2ban_enabled | default(true)
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone | default('UTC') }}"
+  become: yes
+
+- name: Configure log rotation
+  template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/system-logs
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes

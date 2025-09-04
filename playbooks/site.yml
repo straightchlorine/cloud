@@ -1,0 +1,22 @@
+---
+- name: Configure all hosts
+  hosts: all
+  become: yes
+  roles:
+    - common
+    - firewall
+    - prometheus-node-exporter
+
+- name: Configure DNS servers
+  hosts: services
+  become: yes
+  roles:
+    - role: dns
+      when: device_role == "dns"
+
+- name: Configure music stack
+  hosts: services
+  become: yes
+  roles:
+    - role: music-stack
+      when: device_role == "music" or music_stack_enabled | default(false)

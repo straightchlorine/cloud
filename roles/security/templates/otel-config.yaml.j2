@@ -1,0 +1,46 @@
+receivers:
+  filelog:
+    include:
+      - /var/log/auth.log
+      - /var/log/syslog
+      - /var/log/kern.log
+      - /var/ossec/logs/alerts/alerts.json
+    operators:
+      - type: regex_parser
+        regex: '^(?P<timestamp>\S+\s+\S+\s+\S+)\s+(?P<hostname>\S+)\s+(?P<service>\S+):\s*(?P<message>.*)'
+  
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      network:
+
+processors:
+  batch:
+    timeout: 1s
+  
+  resource:
+    attributes:
+      - key: service.name
+        value: "{{ inventory_hostname }}"
+        action: insert
+
+exporters:
+  otlp:
+    endpoint: "{{ otel_endpoint | default('http://localhost:4317') }}"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch, resource]
+      exporters: [otlp]
+    
+    metrics:
+      receivers: [hostmetrics]
+      processors: [batch, resource]
+      exporters: [otlp]

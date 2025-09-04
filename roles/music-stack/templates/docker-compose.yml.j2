@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    ports:
+      - "{{ navidrome_port }}:4533"
+    environment:
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_LOGLEVEL: info
+      ND_BASEURL: ""
+      ND_JWTKEY: "${NAVIDROME_JWT_SECRET}"
+      ND_AUTOIMPORTPLAYLISTS: false
+      ND_SCANNER_INTERVAL: 0  # Disable auto-scanning
+    volumes:
+      - "{{ music_library_path }}/music:/music:ro"
+      - "{{ music_stack_home }}/config/navidrome:/data"
+    restart: unless-stopped
+    user: "{{ ansible_uid }}:{{ ansible_gid }}"
+
+  beets:
+    image: linuxserver/beets:latest
+    container_name: beets
+    environment:
+      PUID: {{ ansible_uid }}
+      PGID: {{ ansible_gid }}
+      TZ: {{ timezone }}
+    volumes:
+      - "{{ music_stack_home }}/config/beets:/config"
+      - "{{ music_library_path }}/music:/music"
+      - "{{ music_library_path }}/downloads:/downloads"
+      - "{{ music_library_path }}/processing:/processing"
+    restart: unless-stopped
+    profiles:
+      - tools  # Only start when specifically requested
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    ports:
+      - "{{ dozzle_port }}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_TAILSIZE: 300
+      DOZZLE_FILTER: "name=navidrome,name=beets"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: music-stack
