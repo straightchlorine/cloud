@@ -170,7 +170,6 @@
       - beets
       - requests
       - pillow
-      - python3-acoustid
       - pyacoustid
       - musicbrainzngs
       - pylast

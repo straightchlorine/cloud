@@ -36,6 +36,19 @@ vault_gdrive_client_secret: "your-google-drive-client-secret"
 vault_gdrive_token: "your-google-drive-refresh-token"
 
 # =============================================================================
+# YOUTUBE PLAYLIST CONFIGURATION
+# =============================================================================
+# Required for music stack YouTube playlist downloads
+vault_youtube_playlists:
+  - "https://www.youtube.com/playlist?list=YOUR_FIRST_PLAYLIST_ID"
+  # - "https://www.youtube.com/playlist?list=YOUR_SECOND_PLAYLIST_ID"
+
+# Optional YouTube download settings
+vault_youtube_quality: "best"
+vault_youtube_concurrent: 10
+vault_youtube_extra_args: ""
+
+# =============================================================================
 # ADDITIONAL SECURITY CREDENTIALS (Add as needed)
 # =============================================================================
 
