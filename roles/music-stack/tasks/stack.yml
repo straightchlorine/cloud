@@ -266,6 +266,15 @@
     mode: '0755'
   tags: [youtube, scripts, cron]
 
+- name: Create Beets rescan script
+  template:
+    src: beets-rescan.sh.j2
+    dest: "{{ music_stack_home }}/scripts/beets-rescan.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  tags: [youtube, scripts, beets]
+
 - name: Start music stack
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"

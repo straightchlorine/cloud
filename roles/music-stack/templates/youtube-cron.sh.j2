@@ -40,28 +40,32 @@ fi
 # Create lock file
 echo $$ > "$LOCK_FILE"
 
-# Check if environment file exists
-if [[ ! -f "$ENV_FILE" ]]; then
-    log "ERROR: Environment file not found: $ENV_FILE"
-    exit 1
-fi
-
 # Check if sync script exists
 if [[ ! -f "$SYNC_SCRIPT" ]]; then
     log "ERROR: Sync script not found: $SYNC_SCRIPT"
     exit 1
 fi
 
-# Source environment variables
-log "Loading environment from: $ENV_FILE"
-set -a  # Export all variables
-source "$ENV_FILE"
-set +a
-
-# Verify playlist URL is set
+# Verify playlist URL is set (should come from cron environment)
 if [[ -z "${PLAYLIST_URL:-}" ]]; then
-    log "ERROR: PLAYLIST_URL not set in environment file"
-    exit 1
+    log "ERROR: PLAYLIST_URL not set in cron environment"
+    log "Attempting to load from environment file as fallback..."
+    
+    # Fallback: try to source environment file
+    if [[ -f "$ENV_FILE" ]]; then
+        log "Loading environment from: $ENV_FILE"
+        set -a  # Export all variables
+        source "$ENV_FILE"
+        set +a
+        
+        if [[ -z "${PLAYLIST_URL:-}" ]]; then
+            log "ERROR: PLAYLIST_URL not found in environment file either"
+            exit 1
+        fi
+    else
+        log "ERROR: No environment file found at $ENV_FILE"
+        exit 1
+    fi
 fi
 
 log "Starting YouTube playlist sync for: $PLAYLIST_URL"

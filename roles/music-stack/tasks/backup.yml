@@ -69,6 +69,29 @@
     user: "{{ ansible_user }}"
   when: enable_backup_cron | default(true)
 
+- name: Add environment variables to crontab for YouTube sync
+  cron:
+    name: "PLAYLIST_URL"
+    env: yes
+    value: "{{ youtube_playlists[0] if youtube_playlists is defined and youtube_playlists | length > 0 else '' }}"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled | default(false) and youtube_playlists is defined and youtube_playlists | length > 0
+  tags: [youtube, cron]
+
+- name: Add music directories to crontab environment
+  cron:
+    name: "{{ item.name }}"
+    env: yes
+    value: "{{ item.value }}"
+    user: "{{ ansible_user }}"
+  loop:
+    - { name: "MUSIC_DIRECTORY", value: "{{ music_library_path }}/downloads" }
+    - { name: "YTDLP_CACHE_DIRECTORY", value: "{{ music_stack_home }}/config" }
+    - { name: "MUSIC_STACK_HOME", value: "{{ music_stack_home }}" }
+    - { name: "PATH", value: "/usr/local/bin:/usr/bin:/bin" }
+  when: youtube_sync_enabled | default(false)
+  tags: [youtube, cron]
+
 - name: Create cron job for daily YouTube playlist sync
   cron:
     name: "Daily YouTube playlist sync"
@@ -78,3 +101,14 @@
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled | default(false)
   tags: [youtube, cron]
+
+- name: Create cron job for weekly Beets rescan
+  cron:
+    name: "Weekly Beets rescan of YouTube Downloads"
+    hour: "3"
+    minute: "0"
+    weekday: "0"
+    job: "{{ music_stack_home }}/scripts/beets-rescan.sh"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled | default(false)
+  tags: [youtube, cron, beets]

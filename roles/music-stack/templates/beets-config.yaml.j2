@@ -13,8 +13,6 @@ import:
     # Enhanced YouTube download handling
     from_scratch: no
     group_albums: no
-    # Set album threshold lower for YouTube content
-    album_rec_thresh: 0.7
     # Allow duplicates for different qualities/versions
     duplicate_action: keep
     # Auto-tag YouTube singles as singletons
@@ -23,17 +21,12 @@ import:
     none_rec_action: asis
     # Automatically import as singletons when no album match
     default_action: apply
-    # Handle timid imports automatically  
-    timid: no
 
 match:
     strong_rec_thresh: 0.04
     medium_rec_thresh: 0.25
     # Very lenient matching for YouTube content
     ignored_media: ['Data CD', 'DVD-Video', 'Blu-ray', 'Digital Media']
-    # Prefer certain sources for YouTube
-    preferred:
-        media: ['Digital Media', 'CD']
     # Distance penalties for YouTube matching
     distance_weights:
         source: 0.1
@@ -58,80 +51,24 @@ paths:
     # Fallback for unknown content
     albumartist_sort:"": _Unknown/%if{$uploader,$uploader,Unknown}/%if{$album,$album,Singles}/%if{$track,${track}. }$title
 
-# Enhanced plugin list for better YouTube handling
-plugins: fetchart embedart lastgenre scrub replaygain zero inline
+# Essential plugins only (removed problematic ones)
+plugins: fetchart embedart inline
 
 fetchart:
     auto: yes
     cautious: yes
-    cover_names: cover folder album front
-    # Try multiple sources including YouTube thumbnails
-    sources: filesystem coverart itunes amazon albumart wikipedia google bing
-    google_key: ""
-    google_engine: ""
-    # Store original thumbnails
-    store_source: yes
-    # High quality preference
-    high_resolution: yes
-    max_filesize: 0
-    enforce_ratio: no
+    sources: filesystem coverart itunes amazon albumart
     
 embedart:
     auto: yes
     maxwidth: 1000
-    # Prefer square images
     quality: 95
-    # Remove original image files after embedding
     remove_art_file: no
-
-lyrics:
-    auto: yes
-    sources: genius musixmatch google lyricwiki
-    # Fallback options for YouTube content
-    fallback: ""
-    force: no
-    # Clean up lyrics formatting
-    sanitize: yes
-
-lastgenre:
-    auto: yes
-    source: album
-    # More permissive genre detection
-    fallback: "Unknown"
-    canonical: yes
-    count: 1
-    # Whitelist common genres
-    whitelist: {{ music_stack_home }}/config/beets/genres.txt
-
-scrub:
-    auto: yes
-    # Remove unwanted tags often found in YouTube downloads
-    fields: [comments, description, synopsis, website, contact, encoded_by, encoder, 
-             original_filename, youtube_id, uploader_id, format_id]
-
-replaygain:
-    auto: yes
-    backend: ffmpeg
-    targetlevel: 89
-    # Prevent clipping
-    peak_method: true
-
-zero:
-    auto: yes
-    # Clean common junk fields from YouTube downloads
-    fields: [comments, grouping, lyrics, bpm, initial_key, media, genre, 
-             original_date, day, month, copyright, encodedby, composer, 
-             lyricist, arranger, publisher, description, synopsis, show, 
-             website, contact, albumtype, label, catalognum, script,
-             language, country, albumstatus, albumdisambig]
-    update_database: yes
 
 # Inline plugin for custom field calculations
 inline:
     # Add a YouTube flag for identification
     is_youtube: "True if 'youtube' in path.lower() or uploader else False"
-    # Clean up common YouTube naming patterns
-    clean_title: "re.sub(r'\\[.*?\\]|\\(.*?\\)', '', title).strip()"
     # Try to extract artist from title (common patterns: "Artist - Title", "Artist: Title")
     title_artist: |
         import re
@@ -154,12 +91,3 @@ inline:
             return parts[1].strip() if len(parts) > 1 else title
         else:
             return title
-    # Extract year from upload_date
-    upload_year: |
-        import re
-        if upload_date:
-            match = re.match(r'(\\d{4})', str(upload_date))
-            return int(match.group(1)) if match else None
-        else:
-            return None
-

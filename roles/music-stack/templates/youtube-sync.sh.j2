@@ -102,31 +102,21 @@ log "Found $DOWNLOAD_COUNT new audio files" "INFO"
 touch "$TIMESTAMP_FILE"
 
 # Enhanced Beets import with better error handling
-BEETS_CONFIG="$MUSIC_STACK_HOME/config/beets/config.yaml"
-if command -v beet >/dev/null 2>&1 && [[ $DOWNLOAD_COUNT -gt 0 ]]; then
+if [[ $DOWNLOAD_COUNT -gt 0 ]]; then
     log "Running Beets import on new downloads..." "INFO"
     
-    # Pre-import validation
-    if [[ ! -f "$BEETS_CONFIG" ]]; then
-        log "WARNING: Beets config not found at $BEETS_CONFIG" "WARN"
-        BEETS_CONFIG_ARG=""
+    # Run Beets import using Docker container
+    BEETS_EXIT_CODE=0
+    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm beets \
+        beet --config /config/config.yaml import /downloads --quiet 2>&1 | tee -a "$LOG_FILE"; then
+        log "Beets import completed successfully" "INFO"
     else
-        BEETS_CONFIG_ARG="--config $BEETS_CONFIG"
+        BEETS_EXIT_CODE=$?
+        log "WARNING: Beets import failed with exit code $BEETS_EXIT_CODE" "WARN"
     fi
     
-    # Run Beets import with appropriate flags for YouTube content
-    BEETS_EXIT_CODE=0
-    beet import $BEETS_CONFIG_ARG \
-        --incremental \
-        --autotag \
-        --copy \
-        --write \
-        --log "$MUSIC_STACK_HOME/logs/beets-import.log" \
-        "$DOWNLOAD_DIR" 2>&1 | tee -a "$LOG_FILE" || BEETS_EXIT_CODE=$?
     
     if [[ $BEETS_EXIT_CODE -eq 0 ]]; then
-        log "Beets import completed successfully" "INFO"
-        
         # Archive processed files instead of deleting
         ARCHIVE_DIR="$MUSIC_STACK_HOME/archive/$(date +%Y-%m-%d_%H-%M-%S)"
         mkdir -p "$ARCHIVE_DIR"
@@ -139,10 +129,8 @@ if command -v beet >/dev/null 2>&1 && [[ $DOWNLOAD_COUNT -gt 0 ]]; then
         
         log "Processed files archived successfully" "INFO"
     else
-        log "WARNING: Beets import failed with exit code $BEETS_EXIT_CODE, files remain in downloads directory" "WARN"
+        log "WARNING: Beets import failed, files remain in downloads directory" "WARN"
     fi
-elif [[ ! command -v beet >/dev/null 2>&1 ]]; then
-    log "Beets not found, skipping import" "WARN"
 else
     log "No new files to import" "INFO"
 fi

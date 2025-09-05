@@ -1,0 +1,88 @@
+#!/bin/bash
+
+### beets-rescan.sh
+# Weekly re-scan of YouTube Downloads folder to catch newly indexed songs
+# This helps find songs that weren't in MusicBrainz initially but got added later
+###
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MUSIC_STACK_HOME="{{ music_stack_home }}"
+MUSIC_DIR="{{ music_library_path }}/music"
+YOUTUBE_DOWNLOADS_DIR="$MUSIC_DIR/YouTube Downloads"
+LOG_FILE="$MUSIC_STACK_HOME/logs/beets-rescan.log"
+LOCK_FILE="/tmp/beets-rescan.lock"
+
+# Trap to cleanup on exit
+cleanup() {
+    local exit_code=$?
+    [[ -f "$LOCK_FILE" ]] && rm -f "$LOCK_FILE"
+    exit $exit_code
+}
+trap cleanup EXIT INT TERM
+
+# Check for lock file to prevent concurrent runs
+if [[ -f "$LOCK_FILE" ]]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Another Beets rescan is already running" >> "$LOG_FILE"
+    exit 1
+fi
+
+# Create lock file
+echo $$ > "$LOCK_FILE"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Beets Re-scan Started ==="
+
+# Check if YouTube Downloads directory exists
+if [[ ! -d "$YOUTUBE_DOWNLOADS_DIR" ]]; then
+    log "No YouTube Downloads directory found - nothing to rescan"
+    exit 0
+fi
+
+# Count files in YouTube Downloads
+YOUTUBE_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" 2>/dev/null | wc -l)
+
+if [[ $YOUTUBE_FILE_COUNT -eq 0 ]]; then
+    log "No audio files in YouTube Downloads - nothing to rescan"
+    exit 0
+fi
+
+log "Found $YOUTUBE_FILE_COUNT files in YouTube Downloads to re-scan"
+
+# Run Beets re-import on YouTube Downloads using Docker
+log "Running Beets re-import on YouTube Downloads..."
+
+RESCAN_EXIT_CODE=0
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm beets \
+    beet --config /config/config.yaml import "/music/YouTube Downloads" --quiet --incremental 2>&1 | tee -a "$LOG_FILE"; then
+    log "Beets re-scan completed successfully"
+else
+    RESCAN_EXIT_CODE=$?
+    log "WARNING: Beets re-scan failed with exit code $RESCAN_EXIT_CODE"
+fi
+
+# Count remaining files after re-scan
+REMAINING_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" 2>/dev/null | wc -l)
+PROCESSED_COUNT=$((YOUTUBE_FILE_COUNT - REMAINING_FILE_COUNT))
+
+if [[ $PROCESSED_COUNT -gt 0 ]]; then
+    log "Successfully re-processed $PROCESSED_COUNT files from YouTube Downloads"
+    log "Remaining files in YouTube Downloads: $REMAINING_FILE_COUNT"
+else
+    log "No files were re-processed - they may still not be in MusicBrainz database"
+fi
+
+# Clean up old logs
+if [[ -f "$LOG_FILE" ]]; then
+    tail -n 200 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+fi
+
+log "=== Beets Re-scan Completed ==="
+
+exit $RESCAN_EXIT_CODE
