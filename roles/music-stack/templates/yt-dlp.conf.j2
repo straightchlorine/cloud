@@ -15,13 +15,12 @@
 # Clean output template with better organization  
 --output "{{ music_library_path }}/downloads/%(uploader)s/%(playlist_title|Unknown Album)s/%(playlist_index|00)s - %(title)s.%(ext)s"
 
-# Download archive and error handling
---download-archive "{{ music_stack_home }}/config/youtube-archive.txt"
+# Download archive and error handling  
+--download-archive "{{ music_library_path }}/youtube-archive.txt"
 --cache-dir "{{ music_stack_home }}/config/cache"
 --ignore-errors
 --continue
 --no-abort-on-error
---ignore-unavailable
 
 # Network and performance optimization
 --force-ipv4

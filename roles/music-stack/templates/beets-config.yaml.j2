@@ -12,15 +12,19 @@ import:
     log: {{ music_stack_home }}/logs/beets-import.log
     # Enhanced YouTube download handling
     from_scratch: no
-    group_albums: yes
+    group_albums: no
     # Set album threshold lower for YouTube content
     album_rec_thresh: 0.7
     # Allow duplicates for different qualities/versions
     duplicate_action: keep
     # Auto-tag YouTube singles as singletons
     autotag: yes
-    # Handle cases where no match is found
-    none_rec_action: ask
+    # Handle cases where no match is found - AUTOMATIC
+    none_rec_action: asis
+    # Automatically import as singletons when no album match
+    default_action: apply
+    # Handle timid imports automatically  
+    timid: no
 
 match:
     strong_rec_thresh: 0.04
@@ -55,7 +59,7 @@ paths:
     albumartist_sort:"": _Unknown/%if{$uploader,$uploader,Unknown}/%if{$album,$album,Singles}/%if{$track,${track}. }$title
 
 # Enhanced plugin list for better YouTube handling
-plugins: fetchart embedart lyrics lastgenre scrub replaygain zero inline acousticbrainz
+plugins: fetchart embedart lastgenre scrub replaygain zero inline
 
 fetchart:
     auto: yes
@@ -121,7 +125,6 @@ zero:
              website, contact, albumtype, label, catalognum, script,
              language, country, albumstatus, albumdisambig]
     update_database: yes
-    keep_fields: [artist, album, title, track, year, albumartist]
 
 # Inline plugin for custom field calculations
 inline:
@@ -160,7 +163,3 @@ inline:
         else:
             return None
 
-acousticbrainz:
-    auto: yes
-    force: no
-    tags: []

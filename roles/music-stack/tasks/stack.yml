@@ -193,6 +193,7 @@
       - pylast
       - beautifulsoup4
       - rarfile
+      - langdetect
     virtualenv: "{{ music_stack_home }}/venv"
   become_user: "{{ ansible_user }}"
 
