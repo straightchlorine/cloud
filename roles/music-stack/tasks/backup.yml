@@ -60,6 +60,13 @@
     - backup-remote-drives.sh
     - sync-backups.sh
 
+- name: Debug YouTube sync configuration
+  debug:
+    msg:
+      - "youtube_sync_enabled: {{ youtube_sync_enabled | default('UNDEFINED') }}"
+      - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
+  tags: [youtube, debug]
+
 - name: Create cron job for daily backup
   cron:
     name: "Music library backup"
@@ -69,16 +76,7 @@
     user: "{{ ansible_user }}"
   when: enable_backup_cron | default(true)
 
-- name: Add environment variables to crontab for YouTube sync
-  cron:
-    name: "PLAYLIST_URL"
-    env: yes
-    value: "{{ youtube_playlists[0] if youtube_playlists is defined and youtube_playlists | length > 0 else '' }}"
-    user: "{{ ansible_user }}"
-  when: youtube_sync_enabled | default(false) and youtube_playlists is defined and youtube_playlists | length > 0
-  tags: [youtube, cron]
-
-- name: Add music directories to crontab environment
+- name: Add basic environment variables to crontab for YouTube sync
   cron:
     name: "{{ item.name }}"
     env: yes
@@ -89,7 +87,7 @@
     - { name: "YTDLP_CACHE_DIRECTORY", value: "{{ music_stack_home }}/config" }
     - { name: "MUSIC_STACK_HOME", value: "{{ music_stack_home }}" }
     - { name: "PATH", value: "/usr/local/bin:/usr/bin:/bin" }
-  when: youtube_sync_enabled | default(false)
+  when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron]
 
 - name: Create cron job for daily YouTube playlist sync
@@ -99,16 +97,16 @@
     minute: "0"
     job: "{{ music_stack_home }}/scripts/youtube-cron.sh"
     user: "{{ ansible_user }}"
-  when: youtube_sync_enabled | default(false)
+  when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron]
 
 - name: Create cron job for weekly Beets rescan
   cron:
-    name: "Weekly Beets rescan of YouTube Downloads"
+    name: "Weekly Beets rescan of misc folder"
     hour: "3"
     minute: "0"
     weekday: "0"
     job: "{{ music_stack_home }}/scripts/beets-rescan.sh"
     user: "{{ ansible_user }}"
-  when: youtube_sync_enabled | default(false)
+  when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron, beets]
