@@ -25,6 +25,56 @@
     group: "{{ ansible_user }}"
     mode: '0644'
 
+- name: Create genres whitelist for Beets
+  copy:
+    content: |
+      Rock
+      Pop
+      Hip-Hop
+      Electronic
+      Jazz
+      Classical
+      Folk
+      Country
+      Blues
+      Reggae
+      Metal
+      Punk
+      Alternative
+      Indie
+      R&B
+      Soul
+      Funk
+      Disco
+      House
+      Techno
+      Trance
+      Drum & Bass
+      Dubstep
+      Ambient
+      World
+      Latin
+      Soundtrack
+      YouTube
+      Podcast
+      Speech
+    dest: "{{ music_stack_home }}/config/beets/genres.txt"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Create additional Beets directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "{{ music_stack_home }}/archive"
+    - "{{ music_library_path }}/downloads"
+    - "{{ music_library_path }}/processing"
+
 - name: Create Navidrome config directory
   file:
     path: "{{ music_stack_home }}/config/navidrome"
@@ -57,17 +107,40 @@
   vars:
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
 
-- name: Install yt-dlp and dependencies for YouTube playlist downloads
+- name: Remove apt-installed yt-dlp if present
+  apt:
+    name: yt-dlp
+    state: absent
+    purge: yes
+  become: yes
+  ignore_errors: yes
+
+- name: Install dependencies for YouTube playlist downloads
   apt:
     name:
-      - yt-dlp
       - python3-pip
       - python3-venv
       - python3-dev
       - build-essential
       - ffmpeg
+      - curl
+      - wget
     state: present
   become: yes
+
+- name: Download yt-dlp binary for ARM64
+  get_url:
+    url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
+    dest: /usr/local/bin/yt-dlp
+    mode: '0755'
+    owner: root
+    group: root
+  become: yes
+
+- name: Verify yt-dlp installation
+  command: /usr/local/bin/yt-dlp --version
+  register: ytdlp_version
+  changed_when: false
 
 - name: Create virtual environment for Beets
   command: python3 -m venv {{ music_stack_home }}/venv
@@ -75,12 +148,18 @@
     creates: "{{ music_stack_home }}/venv/bin/python"
   become_user: "{{ ansible_user }}"
 
-- name: Install Beets in virtual environment
+- name: Install Beets and plugins in virtual environment
   pip:
     name:
       - beets
       - requests
       - pillow
+      - python3-acoustid
+      - pyacoustid
+      - musicbrainzngs
+      - pylast
+      - beautifulsoup4
+      - rarfile
     virtualenv: "{{ music_stack_home }}/venv"
   become_user: "{{ ansible_user }}"
 
@@ -117,6 +196,14 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
+
+- name: Create simplified playlist-update script
+  template:
+    src: playlist-update.j2
+    dest: "{{ music_stack_home }}/scripts/playlist-update"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
 
 - name: Start music stack
   community.docker.docker_compose_v2:

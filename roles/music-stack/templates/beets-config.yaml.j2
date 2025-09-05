@@ -1,5 +1,6 @@
 directory: {{ music_library_path }}/music
 library: {{ music_stack_home }}/config/beets/library.db
+
 import:
     move: yes
     copy: no
@@ -8,53 +9,130 @@ import:
     incremental: yes
     quiet_fallback: skip
     timid: no
-    log: {{ music_stack_home }}/config/beets/import.log
-    # Better handling for YouTube downloads
+    log: {{ music_stack_home }}/logs/beets-import.log
+    # Enhanced YouTube download handling
     from_scratch: no
-    group_albums: no
+    group_albums: yes
+    # Set album threshold lower for YouTube content
+    album_rec_thresh: 0.7
+    # Allow duplicates for different qualities/versions
+    duplicate_action: keep
+    # Auto-tag YouTube singles as singletons
+    autotag: yes
+    # Handle cases where no match is found
+    none_rec_action: ask
 
 match:
-    strong_rec_thresh: 0.10
+    strong_rec_thresh: 0.04
     medium_rec_thresh: 0.25
-    # More lenient matching for YouTube content
-    ignored_media: ['Data CD', 'DVD-Video', 'Blu-ray']
+    # Very lenient matching for YouTube content
+    ignored_media: ['Data CD', 'DVD-Video', 'Blu-ray', 'Digital Media']
+    # Prefer certain sources for YouTube
+    preferred:
+        media: ['Digital Media', 'CD']
+    # Distance penalties for YouTube matching
+    distance_weights:
+        source: 0.1
+        album: 0.5
+        albumartist: 0.2
+        artist: 0.4
+        track: 0.4
     
 per_disc_numbering: yes
 
 paths:
-    default: $albumartist/$album%aunique{}/$track $title
-    singleton: YouTube Downloads/$artist - $title
-    comp: Compilations/$album%aunique{}/$track $title
-    # Special path for YouTube content
-    albumtype:youtube: YouTube/$uploader/$title
+    # Standard music organization
+    default: $albumartist/$album%aunique{}/%if{$track,${track}. }$title
+    # YouTube singles and unmatched content
+    singleton: YouTube Downloads/$artist/$title
+    # Compilation albums
+    comp: Compilations/$album%aunique{}/%if{$track,${track}. }$title
+    # Specific YouTube paths with better organization
+    genre:youtube: YouTube/$albumartist/$album%aunique{}/%if{$track,${track}. }$title
+    # Path for when uploader is the main identifier
+    albumtype:single: Singles/$artist - $title
+    # Cleanup for common YouTube naming
+    albumartist_sort:"": _Unknown/$album%aunique{}/%if{$track,${track}. }$title
 
-plugins: fetchart embedart lyrics lastgenre scrub replaygain zero
+# Enhanced plugin list for better YouTube handling
+plugins: fetchart embedart lyrics lastgenre scrub replaygain zero inline acousticbrainz
 
 fetchart:
     auto: yes
     cautious: yes
-    cover_names: cover folder
-
+    cover_names: cover folder album front
+    # Try multiple sources including YouTube thumbnails
+    sources: filesystem coverart itunes amazon albumart wikipedia google bing
+    google_key: ""
+    google_engine: ""
+    # Store original thumbnails
+    store_source: yes
+    # High quality preference
+    high_resolution: yes
+    max_filesize: 0
+    enforce_ratio: no
+    
 embedart:
     auto: yes
     maxwidth: 1000
+    # Prefer square images
+    quality: 95
+    # Remove original image files after embedding
+    remove_art_file: no
 
 lyrics:
     auto: yes
-    sources: genius google
+    sources: genius musixmatch google lyricwiki
+    # Fallback options for YouTube content
+    fallback: ""
+    force: no
+    # Clean up lyrics formatting
+    sanitize: yes
 
 lastgenre:
     auto: yes
     source: album
+    # More permissive genre detection
+    fallback: "Unknown"
+    canonical: yes
+    count: 1
+    # Whitelist common genres
+    whitelist: {{ music_stack_home }}/config/beets/genres.txt
 
 scrub:
     auto: yes
+    # Remove unwanted tags often found in YouTube downloads
+    fields: [comments, description, synopsis, website, contact, encoded_by, encoder, 
+             original_filename, youtube_id, uploader_id, format_id]
 
 replaygain:
     auto: yes
     backend: ffmpeg
+    targetlevel: 89
+    # Prevent clipping
+    peak_method: true
 
 zero:
     auto: yes
-    fields: comments
+    # Clean common junk fields from YouTube downloads
+    fields: [comments, grouping, lyrics, bpm, initial_key, media, genre, 
+             original_date, day, month, copyright, encodedby, composer, 
+             lyricist, arranger, publisher, description, synopsis, show, 
+             website, contact, albumtype, label, catalognum, script,
+             language, country, albumstatus, albumdisambig]
     update_database: yes
+    keep_fields: [artist, album, title, track, year, albumartist]
+
+# Inline plugin for custom field calculations
+inline:
+    # Add a YouTube flag for identification
+    is_youtube: "True if 'youtube' in path.lower() else False"
+    # Clean up common YouTube naming patterns
+    clean_title: "re.sub(r'\\[.*?\\]|\\(.*?\\)', '', title).strip()"
+    # Extract quality information if present
+    quality_info: "re.search(r'(\\d+)kbps', path or '').group(1) if re.search(r'(\\d+)kbps', path or '') else ''"
+
+acousticbrainz:
+    auto: yes
+    force: no
+    tags: []

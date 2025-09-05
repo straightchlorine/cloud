@@ -1,33 +1,65 @@
-# yt-dlp configuration for music downloads
-# Download best audio quality, preferably opus
---format "bestaudio[acodec=opus]/bestaudio/best"
+# yt-dlp configuration for music downloads optimized for Beets integration
+# Download best audio quality, preferably opus for better quality/size ratio
+--format "bestaudio[acodec=opus]/bestaudio[ext=m4a]/bestaudio/best"
 
-# Audio quality and format options
+# Audio extraction and quality settings
 --extract-audio
 --audio-format opus
 --audio-quality 0
+--keep-video
 
-# Metadata and thumbnail options
+# Comprehensive metadata embedding for better Beets compatibility
 --embed-thumbnail
 --embed-metadata
 --embed-subs
 --write-info-json
+--write-thumbnail
+--write-description
+--write-annotations
 
-# Output template for organized downloads
---output "{{ music_library_path }}/downloads/%(uploader)s - %(title)s.%(ext)s"
+# Enhanced output template with better organization
+--output "{{ music_library_path }}/downloads/%(uploader)s/%(playlist_title|Unknown Album)s/%(track_number|00)s - %(title)s.%(ext)s"
 
-# Download archive to avoid re-downloading
+# Download archive and error handling
 --download-archive "{{ music_stack_home }}/config/youtube-archive.txt"
-
-# Ignore errors and continue with playlist
 --ignore-errors
 --continue
+--no-abort-on-error
+--ignore-unavailable
 
-# Prefer IPv4 (helps with connectivity issues)
+# Network and performance optimization
 --force-ipv4
+--concurrent-fragments 10
+--retries 3
+--fragment-retries 3
+--file-access-retries 3
+--sleep-requests 1
+--sleep-interval 0
+--max-sleep-interval 5
 
-# Add metadata for better Beets integration
+# Rate limiting to be respectful
+--limit-rate 2M
+--throttled-rate 100K
+
+# Comprehensive metadata processing for Beets
 --add-metadata
+--parse-metadata "title:%(title)s"
+--parse-metadata "artist:%(uploader)s"
+--parse-metadata "album:%(playlist_title)s"
+--parse-metadata "albumartist:%(uploader)s"
+--parse-metadata "track:%(playlist_index)s"
 
-# Post-processing options
---postprocessor-args "ffmpeg:-metadata artist=%(uploader)s -metadata album=%(playlist_title)s -metadata title=%(title)s"
+# Post-processing with enhanced metadata
+--postprocessor-args "ffmpeg:-metadata title=%(title)s -metadata artist=%(uploader)s -metadata album=%(playlist_title)s -metadata albumartist=%(uploader)s -metadata date=%(upload_date>%Y)s -metadata track=%(playlist_index)s -metadata genre=YouTube -metadata comment=Downloaded from %(webpage_url)s"
+
+# Additional extractors for better metadata
+--write-auto-subs
+--sub-langs en,en-US
+--convert-subs srt
+
+# Sponsorship and unwanted content filtering
+--sponsorblock-mark all
+--sponsorblock-remove sponsor,selfpromo,interaction,intro,outro
+
+# Cookies and authentication (if needed)
+# --cookies-from-browser firefox
