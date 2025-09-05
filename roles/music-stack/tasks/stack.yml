@@ -204,6 +204,18 @@
     group: "{{ ansible_user }}"
     mode: '0755'
 
+- name: Debug vault variables before template generation
+  debug:
+    msg:
+      - "vault_youtube_playlists: {{ vault_youtube_playlists | default('UNDEFINED') }}"
+      - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
+      - "vault_youtube_playlists type: {{ vault_youtube_playlists | type_debug if vault_youtube_playlists is defined else 'undefined' }}"
+
+- name: Remove existing YouTube environment file to force regeneration
+  file:
+    path: "{{ music_stack_home }}/config/youtube.env"
+    state: absent
+
 - name: Create YouTube environment configuration file
   template:
     src: youtube.env.j2
@@ -211,7 +223,6 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
-    force: yes
 
 - name: Create simplified playlist-update script
   template:
