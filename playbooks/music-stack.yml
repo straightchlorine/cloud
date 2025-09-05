@@ -5,6 +5,8 @@
   hosts: pi-music
   become: yes
   gather_facts: yes
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/vault.yml"
   vars:
     # Ensure vault variables are available to roles
     youtube_playlists: "{{ vault_youtube_playlists | default([]) }}"
@@ -13,6 +15,14 @@
     youtube_extra_args: "{{ vault_youtube_extra_args | default('') }}"
   
   pre_tasks:
+    - name: Debug vault loading
+      debug:
+        msg:
+          - "Playbook dir: {{ playbook_dir }}"
+          - "Vault file path: {{ playbook_dir }}/../group_vars/vault.yml"
+          - "vault_youtube_playlists raw: {{ vault_youtube_playlists | default('NOT_FOUND') }}"
+          - "All vault vars starting with vault_youtube: {{ hostvars[inventory_hostname] | dict2items | selectattr('key', 'match', '^vault_youtube.*') | list }}"
+
     - name: Update package cache
       apt:
         update_cache: yes

@@ -114,6 +114,7 @@
     purge: yes
   become: yes
   ignore_errors: yes
+  tags: [youtube, ytdlp]
 
 - name: Install dependencies for YouTube playlist downloads
   apt:
@@ -127,6 +128,7 @@
       - wget
     state: present
   become: yes
+  tags: [youtube, ytdlp]
 
 - name: Download yt-dlp binary for ARM64
   get_url:
@@ -139,6 +141,7 @@
     backup: yes
   become: yes
   register: ytdlp_download
+  tags: [youtube, ytdlp]
 
 - name: Ensure yt-dlp binary is executable
   file:
@@ -147,16 +150,19 @@
     owner: root
     group: root
   become: yes
+  tags: [youtube, ytdlp]
 
 - name: Verify yt-dlp installation
   command: /usr/local/bin/yt-dlp --version
   register: ytdlp_version
   changed_when: false
   become: yes
+  tags: [youtube, ytdlp]
 
 - name: Display yt-dlp version
   debug:
     msg: "yt-dlp version installed: {{ ytdlp_version.stdout }}"
+  tags: [youtube, ytdlp]
 
 - name: Create virtual environment for Beets
   command: python3 -m venv {{ music_stack_home }}/venv
@@ -195,6 +201,7 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
+  tags: [youtube, ytdlp, config]
 
 - name: Create YouTube playlist download script
   template:
@@ -203,6 +210,7 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
+  tags: [youtube, ytdlp, scripts]
 
 - name: Debug vault variables before template generation
   debug:
@@ -210,11 +218,13 @@
       - "vault_youtube_playlists: {{ vault_youtube_playlists | default('UNDEFINED') }}"
       - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
       - "vault_youtube_playlists type: {{ vault_youtube_playlists | type_debug if vault_youtube_playlists is defined else 'undefined' }}"
+  tags: [youtube, debug]
 
 - name: Remove existing YouTube environment file to force regeneration
   file:
     path: "{{ music_stack_home }}/config/youtube.env"
     state: absent
+  tags: [youtube, config]
 
 - name: Create YouTube environment configuration file
   template:
@@ -223,6 +233,7 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
+  tags: [youtube, config]
 
 - name: Create simplified playlist-update script
   template:
@@ -231,6 +242,7 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
+  tags: [youtube, scripts]
 
 - name: Start music stack
   community.docker.docker_compose_v2:
