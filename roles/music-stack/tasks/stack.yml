@@ -130,8 +130,19 @@
 
 - name: Download yt-dlp binary for ARM64
   get_url:
-    url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
+    url: https://github.com/yt-dlp/yt-dlp/releases/download/2025.08.27/yt-dlp_linux_aarch64
     dest: /usr/local/bin/yt-dlp
+    mode: '0755'
+    owner: root
+    group: root
+    force: yes
+    backup: yes
+  become: yes
+  register: ytdlp_download
+
+- name: Ensure yt-dlp binary is executable
+  file:
+    path: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
     group: root
@@ -141,6 +152,11 @@
   command: /usr/local/bin/yt-dlp --version
   register: ytdlp_version
   changed_when: false
+  become: yes
+
+- name: Display yt-dlp version
+  debug:
+    msg: "yt-dlp version installed: {{ ytdlp_version.stdout }}"
 
 - name: Create virtual environment for Beets
   command: python3 -m venv {{ music_stack_home }}/venv
