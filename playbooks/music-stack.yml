@@ -5,6 +5,12 @@
   hosts: pi-music
   become: yes
   gather_facts: yes
+  vars:
+    # Ensure vault variables are available to roles
+    youtube_playlists: "{{ vault_youtube_playlists | default([]) }}"
+    youtube_quality: "{{ vault_youtube_quality | default('best') }}"
+    youtube_concurrent: "{{ vault_youtube_concurrent | default(10) }}"
+    youtube_extra_args: "{{ vault_youtube_extra_args | default('') }}"
   
   pre_tasks:
     - name: Update package cache
