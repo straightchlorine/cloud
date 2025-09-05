@@ -75,6 +75,18 @@
     - "{{ music_library_path }}/downloads"
     - "{{ music_library_path }}/processing"
 
+- name: Create YouTube cache and config directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "{{ music_stack_home }}/config/cache"
+    - "{{ music_stack_home }}/scripts"
+  tags: [youtube, config]
+
 - name: Create Navidrome config directory
   file:
     path: "{{ music_stack_home }}/config/navidrome"
@@ -243,6 +255,15 @@
     group: "{{ ansible_user }}"
     mode: '0755'
   tags: [youtube, scripts]
+
+- name: Create YouTube cron wrapper script
+  template:
+    src: youtube-cron.sh.j2
+    dest: "{{ music_stack_home }}/scripts/youtube-cron.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  tags: [youtube, scripts, cron]
 
 - name: Start music stack
   community.docker.docker_compose_v2:

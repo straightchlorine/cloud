@@ -74,6 +74,7 @@
     name: "Daily YouTube playlist sync"
     hour: "1"
     minute: "0"
-    job: "cd {{ music_stack_home }}/scripts && PLAYLIST_URL=\"${PLAYLIST_URL}\" ./youtube-sync.sh"
+    job: "{{ music_stack_home }}/scripts/youtube-cron.sh"
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled | default(false)
+  tags: [youtube, cron]

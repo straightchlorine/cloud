@@ -6,7 +6,6 @@
 --extract-audio
 --audio-format opus
 --audio-quality 0
---keep-video
 
 # Comprehensive metadata embedding for better Beets compatibility
 --embed-thumbnail
@@ -22,10 +21,10 @@
 
 # Download archive and error handling
 --download-archive "{{ music_stack_home }}/config/youtube-archive.txt"
+--cache-dir "{{ music_stack_home }}/config/cache"
 --ignore-errors
 --continue
 --no-abort-on-error
---ignore-unavailable
 
 # Network and performance optimization
 --force-ipv4
@@ -44,13 +43,13 @@
 # Comprehensive metadata processing for Beets
 --add-metadata
 --parse-metadata "title:%(title)s"
---parse-metadata "artist:%(uploader)s"
+--parse-metadata "uploader:%(uploader)s" 
 --parse-metadata "album:%(playlist_title)s"
---parse-metadata "albumartist:%(uploader)s"
 --parse-metadata "track:%(playlist_index)s"
+--parse-metadata "upload_date:%(upload_date)s"
 
-# Post-processing with enhanced metadata
---postprocessor-args "ffmpeg:-metadata title=%(title)s -metadata artist=%(uploader)s -metadata album=%(playlist_title)s -metadata albumartist=%(uploader)s -metadata date=%(upload_date>%Y)s -metadata track=%(playlist_index)s -metadata genre=YouTube -metadata comment=Downloaded from %(webpage_url)s"
+# Post-processing with basic metadata (let Beets handle artist extraction)
+--postprocessor-args "ffmpeg:-metadata title=%(title)s -metadata album=%(playlist_title)s -metadata track=%(playlist_index)s -metadata genre=YouTube -metadata date=%(upload_date)s -metadata uploader=%(uploader)s -metadata comment=Downloaded from %(webpage_url)s"
 
 # Additional extractors for better metadata
 --write-auto-subs
