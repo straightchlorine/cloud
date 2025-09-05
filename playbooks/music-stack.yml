@@ -13,6 +13,8 @@
     youtube_quality: "{{ vault_youtube_quality | default('best') }}"
     youtube_concurrent: "{{ vault_youtube_concurrent | default(10) }}"
     youtube_extra_args: "{{ vault_youtube_extra_args | default('') }}"
+    # Enable YouTube sync for this playbook (overrides host_vars if needed)
+    youtube_sync_enabled: true
   
   pre_tasks:
     - name: Debug vault loading
