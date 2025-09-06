@@ -85,16 +85,11 @@
     state: started
   become: true
 
-- name: Detect system architecture for Docker Compose
-  ansible.builtin.set_fact:
-    docker_compose_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'armv7l' }}"
-
-- name: Install Docker Compose plugin
-  ansible.builtin.get_url:
-    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-{{ docker_compose_arch }}"
-    dest: /usr/local/bin/docker-compose
-    mode: '0755'
-  become: true
+- name: Verify Docker Compose plugin installation
+  ansible.builtin.command: docker compose version
+  register: docker_compose_check
+  become_user: "{{ ansible_user }}"
+  changed_when: false
 
 - name: Create automation stack home directory
   ansible.builtin.file:
