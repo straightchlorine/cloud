@@ -73,8 +73,8 @@ services:
         condition: service_healthy
       shared-redis:
         condition: service_started
-      paperless-gotenberg:
-        condition: service_started
+      # paperless-gotenberg:
+      #   condition: service_started
     volumes:
       - paperless-data:/usr/src/paperless/data
       - paperless-media:/usr/src/paperless/media
