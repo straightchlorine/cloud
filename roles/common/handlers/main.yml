@@ -6,3 +6,9 @@
     name: fail2ban
     state: restarted
   become: true
+
+- name: restart rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted
+  become: true
