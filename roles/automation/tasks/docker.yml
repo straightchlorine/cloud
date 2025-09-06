@@ -16,16 +16,31 @@
         update_cache: true
       become: true
 
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+      become: true
+
     - name: Add Docker GPG key
-      ansible.builtin.apt_key:
+      ansible.builtin.get_url:
         url: https://download.docker.com/linux/debian/gpg
-        state: present
+        dest: /etc/apt/keyrings/docker.gpg
+        mode: '0644'
       become: true
 
     - name: Add Docker repository
       ansible.builtin.apt_repository:
         repo: "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release | default('bookworm') }} stable"
         state: present
+        update_cache: false
+      become: true
+
+    - name: Update apt cache after adding repository
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
       become: true
 
     - name: Install Docker packages
