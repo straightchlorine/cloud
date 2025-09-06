@@ -41,7 +41,7 @@ firewall_ports:
 
 # SSL configuration
 letsencrypt_email: "{{ vault_letsencrypt_email | default('admin@example.com') }}"
-letsencrypt_staging: false
+letsencrypt_staging: true  # Set to false for production certificates
 
 # Service configuration
 services_enabled:

@@ -95,13 +95,13 @@ vault_youtube_extra_args: "--ignore-errors"
 
 # Domain and SSL Configuration
 # CRITICAL: You need a real domain with proper DNS records pointing to your Pi
-vault_domain_name: "your-domain.com"
-vault_letsencrypt_email: "admin@your-domain.com"
+vault_domain_name: "codextechnologies.org"
+vault_letsencrypt_email: "admin@codextechnologies.org"
 
 # DNS Records required (point to 192.168.20.20 or your external IP):
-# - traefik.your-domain.com
-# - cloud.your-domain.com  
-# - docs.your-domain.com
+# - traefik.codextechnologies.org
+# - cloud.codextechnologies.org  
+# - docs.codextechnologies.org
 
 # Traefik Dashboard Authentication
 # Generate with: echo $(htpasswd -nb admin your-password) | sed 's/$//'
