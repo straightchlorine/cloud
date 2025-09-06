@@ -15,6 +15,11 @@
   become: true
   when: firewall_reset | default(false)
 
+- name: Reload systemd and ensure UFW is available
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
 - name: Set UFW default policies
   community.general.ufw:
     direction: "{{ item.direction }}"
@@ -24,11 +29,15 @@
     - { direction: outgoing, policy: "{{ firewall_policy_outgoing }}" }
     - { direction: routed, policy: "{{ firewall_policy_routed }}" }
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 - name: Configure UFW logging
   community.general.ufw:
     logging: "{{ firewall_logging }}"
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 - name: Allow SSH (always required)
   community.general.ufw:
@@ -36,6 +45,8 @@
     port: "22"
     comment: "SSH access"
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 - name: Configure common firewall ports
   community.general.ufw:
@@ -45,6 +56,8 @@
     proto: "{{ item.proto | default('tcp') }}"
   loop: "{{ common_firewall_ports | default([]) }}"
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: common_firewall_ports is defined and common_firewall_ports | length > 0
 
 - name: Configure host-specific firewall ports
@@ -54,6 +67,8 @@
     comment: "{{ item }} service"
   loop: "{{ firewall_ports | default([]) }}"
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: firewall_ports is defined and firewall_ports | length > 0
 
 - name: Configure advanced firewall rules
@@ -66,10 +81,14 @@
     comment: "{{ item.comment | default('Custom rule') }}"
   loop: "{{ firewall_rules | default([]) }}"
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: firewall_rules is defined and firewall_rules | length > 0
 
 - name: Enable UFW
   community.general.ufw:
     state: enabled
   become: true
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: firewall_enabled | default(true)
