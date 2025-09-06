@@ -53,13 +53,14 @@ providers:
     network: traefik-network
 
   file:
-    directory: /config/dynamic
+    filename: /config/dynamic.yml
     watch: true
 
 # API and dashboard
 api:
   dashboard: true
-  debug: false
+  debug: true
+  insecure: true
 
 # Metrics (optional)
 metrics:
