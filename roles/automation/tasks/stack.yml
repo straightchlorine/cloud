@@ -1,21 +1,6 @@
 ---
 # Automation stack deployment
 
-- name: Create shared database configuration directory
-  ansible.builtin.file:
-    path: "{{ automation_stack_home }}/config/shared-db/init"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-
-- name: Create Paperless database initialization script
-  ansible.builtin.template:
-    src: paperless-db-init.sh.j2
-    dest: "{{ automation_stack_home }}/config/shared-db/init/01-paperless-db.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
 
 - name: Create Docker Compose file
   ansible.builtin.template:

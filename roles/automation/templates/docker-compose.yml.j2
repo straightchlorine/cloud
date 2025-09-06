@@ -126,7 +126,7 @@ services:
     command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
     volumes:
       - shared-db:/var/lib/mysql
-      - ./config/shared-db/init:/docker-entrypoint-initdb.d:ro
+      - ./config/init-multiple-db.sql:/docker-entrypoint-initdb.d/init-multiple-db.sql:ro
     environment:
       - MYSQL_ROOT_PASSWORD={{ nextcloud_root_db_password }}
       - MYSQL_DATABASE=nextcloud
@@ -138,7 +138,7 @@ services:
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD", "sh", "-c", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5
