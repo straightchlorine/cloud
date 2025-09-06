@@ -1,10 +1,10 @@
 ---
-- name: restart pihole
-  systemd:
+- name: restart pihole-FTL
+  ansible.builtin.systemd:
     name: pihole-FTL
     state: restarted
-  become: yes
+  become: true
 
 - name: reload pihole
-  shell: pihole restartdns
-  become: yes
+  ansible.builtin.shell: pihole restartdns
+  become: true

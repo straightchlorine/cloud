@@ -2,61 +2,64 @@
 # DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
 - name: Update apt cache
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
-  become: yes
+  become: true
 
 - name: Install required packages for Pi-hole
-  apt:
-    name: "{{ common_packages | default([]) }}"
+  ansible.builtin.apt:
+    name: "{{ pihole_packages | default([]) }}"
     state: present
-  become: yes
+  become: true
 
 - name: Download Pi-hole installer
-  get_url:
+  ansible.builtin.get_url:
     url: https://install.pi-hole.net
     dest: /tmp/install-pihole.sh
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create Pi-hole setup vars file
-  template:
+  ansible.builtin.template:
     src: setupVars.conf.j2
     dest: /etc/pihole/setupVars.conf
     owner: root
     group: root
     mode: '0644'
-  become: yes
+  become: true
+  notify: restart pihole-FTL
 
 - name: Create Pi-hole directory
-  file:
+  ansible.builtin.file:
     path: /etc/pihole
     state: directory
     owner: root
     group: root
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Install Pi-hole (automated)
-  shell: |
+  ansible.builtin.shell: |
     bash /tmp/install-pihole.sh --unattended
-  become: yes
+  become: true
   args:
     creates: /usr/local/bin/pihole
+  notify: restart pihole-FTL
 
 - name: Set Pi-hole web admin password
-  shell: |
+  ansible.builtin.shell: |
     pihole -a -p "{{ pihole_webpassword }}"
-  become: yes
+  become: true
   when: pihole_webpassword is defined
+  no_log: true
 
 - name: Configure automatic updates
-  include_tasks: auto_updates.yml
+  ansible.builtin.include_tasks: auto_updates.yml
   when: auto_updates_enabled | default(false)
 
 - name: Configure Pi-hole specific firewall rules
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.port }}"
     comment: "{{ item.comment }}"
@@ -66,11 +69,11 @@
     - { port: "53", comment: "Pi-hole DNS", proto: "tcp" }
     - { port: "80", comment: "Pi-hole Web Interface" }
     - { port: "4711", comment: "Pi-hole FTL API" }
-  become: yes
+  become: true
 
 - name: Configure chrony NTP server
-  include_tasks: chrony.yml
+  ansible.builtin.include_tasks: chrony.yml
 
 - name: Install additional monitoring services
-  include_tasks: monitoring.yml
-  when: additional_services is defined
+  ansible.builtin.include_tasks: monitoring.yml
+  when: additional_services is defined and additional_services | length > 0

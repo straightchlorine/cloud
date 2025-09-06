@@ -1,0 +1,11 @@
+2025-09-06 12:09:17,510 p=22097 u=zweiss n=ansible INFO| playbook: playbooks/site.yml
+2025-09-06 12:09:20,252 p=22135 u=zweiss n=ansible INFO| playbook: playbooks/music-stack.yml
+2025-09-06 12:10:17,007 p=22282 u=zweiss n=ansible INFO| PLAY [Configure all hosts with common setup] ***********************************
+2025-09-06 12:10:17,017 p=22282 u=zweiss n=ansible INFO| TASK [Gathering Facts] *********************************************************
+2025-09-06 12:10:17,354 p=22282 u=zweiss n=ansible ERROR| [ERROR]: Task failed: Data could not be sent to remote host "192.168.20.10". Make sure this host can be reached over ssh: no such identity: /home/zweiss/.ssh/ansible_controller_key: No such file or directory
+rpi@192.168.20.10: Permission denied (publickey).
+
+
+2025-09-06 12:10:17,354 p=22282 u=zweiss n=ansible INFO| fatal: [pi-dns]: UNREACHABLE! => {"changed": false, "msg": "Task failed: Data could not be sent to remote host \"192.168.20.10\". Make sure this host can be reached over ssh: no such identity: /home/zweiss/.ssh/ansible_controller_key: No such file or directory\r\nrpi@192.168.20.10: Permission denied (publickey).", "unreachable": true}
+2025-09-06 12:10:17,355 p=22282 u=zweiss n=ansible INFO| PLAY RECAP *********************************************************************
+2025-09-06 12:10:17,355 p=22282 u=zweiss n=ansible INFO| pi-dns                     : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0   

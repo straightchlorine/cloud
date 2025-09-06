@@ -2,62 +2,62 @@
 # Firewall configuration tasks
 
 - name: Install UFW
-  apt:
+  ansible.builtin.apt:
     name: ufw
     state: present
-    update_cache: yes
+    update_cache: true
     cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
-  become: yes
+  become: true
 
 - name: Reset UFW to defaults
-  ufw:
+  community.general.ufw:
     state: reset
-  become: yes
+  become: true
   when: firewall_reset | default(false)
 
 - name: Set UFW default policies
-  ufw:
+  community.general.ufw:
     direction: "{{ item.direction }}"
     policy: "{{ item.policy }}"
   loop:
     - { direction: incoming, policy: "{{ firewall_policy_incoming }}" }
     - { direction: outgoing, policy: "{{ firewall_policy_outgoing }}" }
     - { direction: routed, policy: "{{ firewall_policy_routed }}" }
-  become: yes
+  become: true
 
 - name: Configure UFW logging
-  ufw:
+  community.general.ufw:
     logging: "{{ firewall_logging }}"
-  become: yes
+  become: true
 
 - name: Allow SSH (always required)
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "22"
     comment: "SSH access"
-  become: yes
+  become: true
 
 - name: Configure common firewall ports
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.port | string }}"
     comment: "{{ item.comment | default('Service port') }}"
     proto: "{{ item.proto | default('tcp') }}"
   loop: "{{ common_firewall_ports | default([]) }}"
-  become: yes
-  when: common_firewall_ports is defined
+  become: true
+  when: common_firewall_ports is defined and common_firewall_ports | length > 0
 
 - name: Configure host-specific firewall ports
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item | string }}"
     comment: "{{ item }} service"
   loop: "{{ firewall_ports | default([]) }}"
-  become: yes
-  when: firewall_ports is defined
+  become: true
+  when: firewall_ports is defined and firewall_ports | length > 0
 
 - name: Configure advanced firewall rules
-  ufw:
+  community.general.ufw:
     rule: "{{ item.rule | default('allow') }}"
     port: "{{ item.port | default(omit) }}"
     proto: "{{ item.proto | default('tcp') }}"
@@ -65,11 +65,11 @@
     dest: "{{ item.dest | default(omit) }}"
     comment: "{{ item.comment | default('Custom rule') }}"
   loop: "{{ firewall_rules | default([]) }}"
-  become: yes
+  become: true
   when: firewall_rules is defined and firewall_rules | length > 0
 
 - name: Enable UFW
-  ufw:
+  community.general.ufw:
     state: enabled
-  become: yes
+  become: true
   when: firewall_enabled | default(true)

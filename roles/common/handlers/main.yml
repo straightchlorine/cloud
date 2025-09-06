@@ -2,7 +2,7 @@
 # Handlers for common role
 
 - name: restart fail2ban
-  systemd:
+  ansible.builtin.systemd:
     name: fail2ban
     state: restarted
-  become: yes
+  become: true

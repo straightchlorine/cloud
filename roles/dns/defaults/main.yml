@@ -1,0 +1,24 @@
+---
+# Default values for DNS role (Pi-hole)
+
+# Pi-hole Configuration
+pihole_webpassword: ""  # Set in vault or host_vars
+pihole_interface: eth0
+pihole_dns_1: 1.1.1.1
+pihole_dns_2: 8.8.8.8
+pihole_domain: local
+pihole_ipv6: false
+
+# Package Configuration
+pihole_packages:
+  - curl
+  - ca-certificates
+  - dnsutils
+
+# Automatic Updates
+auto_updates_enabled: true
+auto_update_time: "2:00"
+auto_update_day: "Monday"
+
+# Additional Services
+additional_services: []

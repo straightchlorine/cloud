@@ -1,22 +1,48 @@
 ---
-- name: Configure all hosts
+- name: Configure all hosts with common setup
   hosts: all
-  become: yes
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Update package cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      tags: [always, packages]
+
   roles:
-    - common
-    - firewall
-    - prometheus-node-exporter
+    - role: common
+      tags: [common, base]
+    - role: firewall
+      tags: [firewall, security]
+    - role: prometheus-node-exporter
+      tags: [monitoring, prometheus]
+
+  post_tasks:
+    - name: Verify base system configuration
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - fail2ban
+        - prometheus-node-exporter
+      tags: [verification]
 
 - name: Configure DNS servers
   hosts: services
-  become: yes
+  become: true
+  gather_facts: true
   roles:
     - role: dns
       when: device_role == "dns"
+      tags: [dns, pihole]
 
 - name: Configure music stack
-  hosts: services
-  become: yes
+  hosts: services  
+  become: true
+  gather_facts: true
   roles:
     - role: music-stack
       when: device_role == "music" or music_stack_enabled | default(false)
+      tags: [music, docker]
