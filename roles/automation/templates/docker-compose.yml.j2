@@ -103,7 +103,7 @@ services:
       - "traefik.http.routers.nextcloud.rule=Host(`{{ subdomain_nextcloud }}.{{ domain_name }}`)"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
       - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.nextcloud.middlewares=default-headers@file,https-redirect@file"
+      # - "traefik.http.routers.nextcloud.middlewares=default-headers@file,https-redirect@file"
       - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
 
   # Paperless-ngx Database
@@ -176,5 +176,5 @@ services:
       - "traefik.http.routers.paperless.rule=Host(`{{ subdomain_paperless }}.{{ domain_name }}`)"
       - "traefik.http.routers.paperless.entrypoints=websecure"
       - "traefik.http.routers.paperless.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.paperless.middlewares=default-headers@file,https-redirect@file"
+      # - "traefik.http.routers.paperless.middlewares=default-headers@file,https-redirect@file"
       - "traefik.http.services.paperless.loadbalancer.server.port=8000"
