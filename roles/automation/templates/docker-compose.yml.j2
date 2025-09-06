@@ -128,7 +128,6 @@ services:
       - shared-db:/var/lib/mysql
       - ./config/shared-db/init:/docker-entrypoint-initdb.d:ro
     environment:
-      - MYSQL_ROOT_PASSWORD={{ nextcloud_db_password }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
       - MYSQL_PASSWORD={{ nextcloud_db_password }}
@@ -138,7 +137,7 @@ services:
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$MYSQL_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5
