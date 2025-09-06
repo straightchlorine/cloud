@@ -49,10 +49,11 @@
     group: "{{ ansible_user }}"
     mode: '0755'
 
-- name: Generate random passwords for NextCloud
+- name: Set NextCloud passwords from vault
   ansible.builtin.set_fact:
-    nextcloud_admin_password: "{{ vault_nextcloud_admin_password | default(ansible_date_time.epoch + ansible_hostname | hash('sha256') | truncate(16, True, '')) }}"
-    nextcloud_db_password: "{{ vault_nextcloud_db_password | default(ansible_date_time.epoch + 'nextcloud-db' | hash('sha256') | truncate(16, True, '')) }}"
+    nextcloud_admin_password: "{{ vault_nextcloud_admin_password }}"
+    nextcloud_db_password: "{{ vault_nextcloud_db_password }}"
+    redis_password: "{{ vault_redis_password }}"
   no_log: true
 
 - name: Create NextCloud environment file
