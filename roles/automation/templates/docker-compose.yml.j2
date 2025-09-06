@@ -56,14 +56,12 @@ services:
     volumes:
       - {{ automation_data_path }}/nextcloud/db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_USER=${MYSQL_USER}
+      - MARIADB_ROOT_PASSWORD={{ nextcloud_db_password }}
+      - MARIADB_PASSWORD={{ nextcloud_db_password }}
+      - MARIADB_DATABASE=nextcloud
+      - MARIADB_USER=nextcloud
       - MARIADB_AUTO_UPGRADE=1
       - MARIADB_DISABLE_UPGRADE_BACKUP=1
-    env_file:
-      - ./config/nextcloud/nextcloud.env
     networks:
       - nextcloud-network
 
@@ -72,9 +70,7 @@ services:
     image: redis:7-alpine
     container_name: nextcloud-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_HOST_PASSWORD}
-    env_file:
-      - ./config/nextcloud/nextcloud.env
+    command: redis-server --requirepass {{ redis_password }}
     networks:
       - nextcloud-network
 
@@ -88,17 +84,18 @@ services:
       - {{ automation_data_path }}/nextcloud/config:/var/www/html/config
       - {{ automation_data_path }}/nextcloud/apps:/var/www/html/custom_apps
     environment:
-      - MYSQL_HOST=${MYSQL_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_HOST_PASSWORD=${REDIS_HOST_PASSWORD}
-      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
-      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
-      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_TRUSTED_DOMAINS}
-      - OVERWRITEPROTOCOL=${OVERWRITEPROTOCOL}
-      - OVERWRITEHOST=${OVERWRITEHOST}
-      - OVERWRITECLIURL=${OVERWRITECLIURL}
-    env_file:
-      - ./config/nextcloud/nextcloud.env
+      - MYSQL_HOST=nextcloud-db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD={{ nextcloud_db_password }}
+      - REDIS_HOST=nextcloud-redis
+      - REDIS_HOST_PASSWORD={{ redis_password }}
+      - NEXTCLOUD_ADMIN_USER={{ nextcloud_admin_user }}
+      - NEXTCLOUD_ADMIN_PASSWORD={{ nextcloud_admin_password }}
+      - NEXTCLOUD_TRUSTED_DOMAINS={{ subdomain_nextcloud }}.{{ domain_name }}
+      - OVERWRITEPROTOCOL=https
+      - OVERWRITEHOST={{ subdomain_nextcloud }}.{{ domain_name }}
+      - OVERWRITECLIURL=https://{{ subdomain_nextcloud }}.{{ domain_name }}
     depends_on:
       - nextcloud-db
       - nextcloud-redis
@@ -145,7 +142,7 @@ services:
 
   # Paperless-ngx Tika (OCR)
   paperless-tika:
-    image: apache/tika:2.9.1.0
+    image: apache/tika:2.9.1.0-full
     container_name: paperless-tika
     restart: unless-stopped
     networks:
