@@ -112,6 +112,7 @@ vault_traefik_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5
 vault_nextcloud_admin_user: "admin"
 vault_nextcloud_admin_password: "your-secure-nextcloud-password"    # 16+ chars
 vault_nextcloud_db_password: "your-nextcloud-mariadb-password"     # 16+ chars
+vault_nextcloud_root_db_password: "your-nextcloud-mariadb-password"     # 16+ chars
 vault_redis_password: "your-nextcloud-redis-password"              # 16+ chars
 
 # Paperless-ngx Configuration
