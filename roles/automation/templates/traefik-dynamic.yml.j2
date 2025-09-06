@@ -44,6 +44,15 @@ http:
         scheme: https
         permanent: true
 
+    # Paperless-ngx middleware to prevent redirect loops
+    paperless-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-Host: "{{ subdomain_paperless }}.{{ domain_name }}"
+          X-Forwarded-For: ""
+          X-Real-IP: ""
+
 # TLS configuration
 tls:
   options:

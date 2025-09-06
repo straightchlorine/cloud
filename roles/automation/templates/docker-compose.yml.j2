@@ -224,4 +224,5 @@ services:
       - "traefik.http.routers.paperless.rule=Host(`{{ subdomain_paperless }}.{{ domain_name }}`)"
       - "traefik.http.routers.paperless.entrypoints=websecure"
       - "traefik.http.routers.paperless.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.paperless.middlewares=paperless-headers@file"
       - "traefik.http.services.paperless.loadbalancer.server.port=8000"
