@@ -24,12 +24,12 @@
     - "{{ automation_data_path }}/paperless/db"
     - "{{ automation_data_path }}/paperless/redis"
 
-- name: Generate random passwords for Paperless
+- name: Set Paperless passwords from vault
   ansible.builtin.set_fact:
-    paperless_secret_key: "{{ vault_paperless_secret_key | default(ansible_date_time.epoch + ansible_hostname | hash('sha256')) }}"
-    paperless_admin_password: "{{ vault_paperless_admin_password | default(ansible_date_time.epoch + 'paperless' | hash('sha256') | truncate(16, True, '')) }}"
-    paperless_db_password: "{{ vault_paperless_db_password | default(ansible_date_time.epoch + 'paperless-db' | hash('sha256') | truncate(16, True, '')) }}"
-    paperless_redis_password: "{{ vault_paperless_redis_password | default(ansible_date_time.epoch + 'paperless-redis' | hash('sha256') | truncate(16, True, '')) }}"
+    paperless_secret_key: "{{ vault_paperless_secret_key }}"
+    paperless_admin_password: "{{ vault_paperless_admin_password }}"
+    paperless_db_password: "{{ vault_paperless_db_password }}"
+    paperless_redis_password: "{{ vault_paperless_redis_password }}"
   no_log: true
 
 - name: Create Paperless environment file
