@@ -1,0 +1,68 @@
+---
+# Storage setup for automation stack
+
+- name: Install filesystem utilities
+  ansible.builtin.apt:
+    name: "{{ filesystem_utilities }}"
+    state: present
+  become: true
+  tags: [packages]
+
+- name: Check if SSD device exists
+  ansible.builtin.stat:
+    path: "{{ ssd_device }}"
+  register: ssd_exists
+
+- name: Fail if SSD device not found
+  ansible.builtin.fail:
+    msg: "SSD device {{ ssd_device }} not found. Please connect your SSD and update the ssd_device variable."
+  when: not ssd_exists.stat.exists
+
+- name: Format SSD filesystem
+  community.general.filesystem:
+    fstype: "{{ ssd_filesystem }}"
+    dev: "{{ ssd_device }}"
+  become: true
+  when: ssd_format | default(false)
+
+- name: Create automation data mount point
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Mount SSD
+  ansible.posix.mount:
+    path: "{{ automation_data_path }}"
+    src: "{{ ssd_device }}"
+    fstype: "{{ ssd_filesystem }}"
+    opts: "{{ ssd_mount_options }}"
+    state: mounted
+  become: true
+
+- name: Add SSD to fstab
+  ansible.posix.mount:
+    path: "{{ automation_data_path }}"
+    src: "{{ ssd_device }}"
+    fstype: "{{ ssd_filesystem }}"
+    opts: "{{ ssd_mount_options }}"
+    state: present
+  become: true
+
+- name: Set ownership of automation data directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: true
+  become: true
+
+- name: Create automation directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop: "{{ automation_directories }}"

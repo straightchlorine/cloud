@@ -1,21 +1,58 @@
-# Example vault file - copy to vault.yml and encrypt with ansible-vault
-# ansible-vault create group_vars/vault.yml
+# =============================================================================
+# RASPBERRY PI ANSIBLE INFRASTRUCTURE - VAULT CONFIGURATION
+# =============================================================================
+#
+# This file contains all sensitive configuration for the Pi infrastructure.
+# 
+# SETUP INSTRUCTIONS:
+# 1. Copy this file: cp group_vars/vault.yml.example group_vars/vault.yml
+# 2. Update all placeholder values with your actual credentials
+# 3. Encrypt the file: ansible-vault encrypt group_vars/vault.yml
+# 4. Edit when needed: ansible-vault edit group_vars/vault.yml
+#
+# SECURITY NOTES:
+# - Use strong, unique passwords for all services (16+ characters recommended)
+# - Store this file securely and never commit unencrypted version
+# - Regularly rotate credentials (every 3-6 months)
+# - Use different passwords for each service/database
+# - Test in staging environment first
+#
+# REQUIRED VARIABLES SUMMARY:
+# ✓ Pi-DNS: vault_pihole_admin_password, vault_pihole_webpassword
+# ✓ Pi-Music: vault_hetzner_* (if backups), vault_youtube_playlists (optional)
+# ✓ Pi-Automation: vault_domain_name, vault_letsencrypt_email, all service passwords
+#
+# =============================================================================
 
 ---
 # =============================================================================
 # DNS SERVER (Pi-hole) CONFIGURATION
 # =============================================================================
-# Required for pi-dns host
+# Required for pi-dns host (192.168.20.10)
+
+# Pi-hole web interface credentials
 vault_pihole_admin_password: "your-secure-admin-password"
 vault_pihole_webpassword: "your-secure-web-password"
 
+# NOTES:
+# - Both passwords should be strong (12+ characters)
+# - Admin password is for SSH/system access
+# - Web password is for Pi-hole web interface
+
 # =============================================================================
-# HETZNER STORAGE BOX CONFIGURATION
+# MUSIC SERVER (pi-music) CONFIGURATION
 # =============================================================================
-# Required for music server backup functionality
+# Required for pi-music host (192.168.20.15)
+
+# Hetzner Storage Box for backups
 vault_hetzner_host: "uXXXXXX.your-storagebox.de"
 vault_hetzner_username: "uXXXXXX"
 vault_hetzner_ssh_key_path: "/home/media/.ssh/hetzner_storage_box"
+
+# NOTES:
+# - Get these credentials from Hetzner Robot panel
+# - SSH key should be generated and uploaded to Hetzner
+# - Example: ssh-keygen -t rsa -b 4096 -f ~/.ssh/hetzner_storage_box
 
 # =============================================================================
 # BACKUP STORAGE PROVIDERS (Optional - only if using these services)
@@ -35,24 +72,157 @@ vault_gdrive_client_id: "your-google-drive-client-id"
 vault_gdrive_client_secret: "your-google-drive-client-secret"
 vault_gdrive_token: "your-google-drive-refresh-token"
 
-# =============================================================================
-# YOUTUBE PLAYLIST CONFIGURATION
-# =============================================================================
-# Required for music stack YouTube playlist downloads
+# YouTube Playlist Download Configuration
 vault_youtube_playlists:
   - "https://www.youtube.com/playlist?list=YOUR_FIRST_PLAYLIST_ID"
   # - "https://www.youtube.com/playlist?list=YOUR_SECOND_PLAYLIST_ID"
 
 # Optional YouTube download settings
-vault_youtube_quality: "best"
-vault_youtube_concurrent: 10
-vault_youtube_extra_args: ""
+vault_youtube_quality: "best[height<=720]/best"  # Max 720p to save space
+vault_youtube_concurrent: 3                      # Conservative for Pi 3B
+vault_youtube_extra_args: "--ignore-errors"
+
+# NOTES:
+# - Get playlist URLs from YouTube (make sure they're public/unlisted)
+# - Quality options: "worst", "best", "720p", "480p", etc.
+# - Keep concurrent downloads low (2-4) to avoid overwhelming the Pi
+# - Extra args: "--ignore-errors", "--no-playlist", etc.
 
 # =============================================================================
-# ADDITIONAL SECURITY CREDENTIALS (Add as needed)
+# AUTOMATION SERVER (pi-automation) CONFIGURATION  
+# =============================================================================
+# Required for pi-automation host (192.168.20.20)
+
+# Domain and SSL Configuration
+# CRITICAL: You need a real domain with proper DNS records pointing to your Pi
+vault_domain_name: "your-domain.com"
+vault_letsencrypt_email: "admin@your-domain.com"
+
+# DNS Records required (point to 192.168.20.20 or your external IP):
+# - traefik.your-domain.com
+# - cloud.your-domain.com  
+# - docs.your-domain.com
+
+# Traefik Dashboard Authentication
+# Generate with: echo $(htpasswd -nb admin your-password) | sed 's/$//'
+# Or use online generator: https://hostingcanada.org/htpasswd-generator/
+vault_traefik_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6"
+
+# NextCloud Configuration
+vault_nextcloud_admin_user: "admin"
+vault_nextcloud_admin_password: "your-secure-nextcloud-password"    # 16+ chars
+vault_nextcloud_db_password: "your-nextcloud-mariadb-password"     # 16+ chars
+vault_redis_password: "your-nextcloud-redis-password"              # 16+ chars
+
+# Paperless-ngx Configuration
+vault_paperless_admin_user: "admin"
+vault_paperless_admin_password: "your-secure-paperless-password"   # 16+ chars
+vault_paperless_secret_key: "your-very-long-secret-key-for-paperless-at-least-50-characters-long"
+vault_paperless_db_password: "your-paperless-postgresql-password"  # 16+ chars
+vault_paperless_redis_password: "your-paperless-redis-password"    # 16+ chars
+
+# SECURITY NOTES:
+# - Use different passwords for each service and database
+# - Secret key should be 50+ random characters
+# - Consider using a password manager to generate these
+# - Test Let's Encrypt in staging first (set letsencrypt_staging: true in host_vars)
+
+# =============================================================================
+# NETWORK CONFIGURATION  
 # =============================================================================
 
-# API Keys for monitoring/alerting services
-# vault_monitoring_api_key: "your-monitoring-service-api-key"
-# vault_telegram_bot_token: "your-telegram-bot-token"
-# vault_slack_webhook_url: "https://hooks.slack.com/services/xxx/xxx/xxx"
+# Router/Network Settings (if different from defaults)
+# vault_local_network: "192.168.20.0/24"
+# vault_gateway_ip: "192.168.20.1"
+# vault_dns_servers: ["1.1.1.1", "8.8.8.8"]
+
+# =============================================================================
+# SSH KEY MANAGEMENT
+# =============================================================================
+
+# SSH key locations (if different from defaults)
+# vault_ansible_ssh_private_key: "~/.ssh/id_rsa"
+# vault_ansible_ssh_public_key: "~/.ssh/id_rsa.pub"
+
+# =============================================================================
+# NOTIFICATION AND MONITORING (Optional)
+# =============================================================================
+
+# Email notifications (for system alerts)
+# vault_smtp_host: "smtp.gmail.com"
+# vault_smtp_port: 587
+# vault_smtp_username: "your-email@gmail.com"
+# vault_smtp_password: "your-app-password"
+# vault_admin_email: "admin@your-domain.com"
+
+# Telegram Bot (for alerts)
+# vault_telegram_bot_token: "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+# vault_telegram_chat_id: "123456789"
+
+# Slack Webhooks (for alerts)
+# vault_slack_webhook_url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+
+# API Keys for external monitoring services
+# vault_uptime_robot_api_key: "your-uptimerobot-api-key"
+# vault_healthchecks_io_key: "your-healthchecks-io-uuid"
+
+# =============================================================================
+# EXAMPLE PASSWORD GENERATION COMMANDS
+# =============================================================================
+#
+# Generate strong passwords using these commands:
+#
+# Random 20-character password:
+# openssl rand -base64 20
+#
+# Random 50-character string for secret keys:
+# openssl rand -base64 50
+#
+# Generate htpasswd for Traefik:
+# htpasswd -nb admin your-password
+#
+# Generate secure MariaDB passwords:
+# openssl rand -base64 32
+#
+# =============================================================================
+# DEPLOYMENT CHECKLIST
+# =============================================================================
+#
+# Before deploying, ensure you have:
+#
+# FOR ALL SERVICES:
+# ✓ Updated all placeholder passwords with strong, unique values
+# ✓ SSH key access configured to all Raspberry Pis
+# ✓ Static IP addresses configured on all Pis
+# ✓ Encrypted this file: ansible-vault encrypt group_vars/vault.yml
+#
+# FOR PI-DNS (192.168.20.10):
+# ✓ Pi-hole admin and web passwords set
+# ✓ Router configured to use Pi as DNS server
+#
+# FOR PI-MUSIC (192.168.20.15):  
+# ✓ External SSD connected and formatted
+# ✓ Hetzner Storage Box configured (if using backups)
+# ✓ YouTube playlist URLs added (if using)
+#
+# FOR PI-AUTOMATION (192.168.20.20):
+# ✓ External SSD connected and formatted  
+# ✓ Domain name registered and DNS configured
+# ✓ Port forwarding configured (80, 443) if accessing externally
+# ✓ All service credentials generated
+#
+# TESTING COMMANDS (run first):
+# ansible-playbook playbooks/site.yml --check --diff     # Dry run all
+# ansible-playbook playbooks/automation-stack.yml --check --diff  # Dry run automation
+#
+# DEPLOYMENT COMMANDS:
+# ansible-playbook playbooks/site.yml                    # Deploy all
+# ansible-playbook playbooks/site.yml --limit pi-dns    # DNS only  
+# ansible-playbook playbooks/music-stack.yml            # Music only
+# ansible-playbook playbooks/automation-stack.yml       # Automation only
+#
+# POST-DEPLOYMENT VERIFICATION:
+# ansible -m ping all                                    # Test connectivity
+# ansible-playbook playbooks/site.yml --tags verification  # Run health checks
+#
+# =============================================================================

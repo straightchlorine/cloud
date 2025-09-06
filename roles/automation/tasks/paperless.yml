@@ -1,0 +1,63 @@
+---
+# Paperless-ngx setup tasks
+
+- name: Create Paperless configuration directory
+  ansible.builtin.file:
+    path: "{{ automation_stack_home }}/config/paperless"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create Paperless data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "{{ automation_data_path }}/paperless/data"
+    - "{{ automation_data_path }}/paperless/media"
+    - "{{ automation_data_path }}/paperless/consume"
+    - "{{ automation_data_path }}/paperless/export"
+    - "{{ automation_data_path }}/paperless/db"
+    - "{{ automation_data_path }}/paperless/redis"
+
+- name: Generate random passwords for Paperless
+  ansible.builtin.set_fact:
+    paperless_secret_key: "{{ vault_paperless_secret_key | default(ansible_date_time.epoch + ansible_hostname | hash('sha256')) }}"
+    paperless_admin_password: "{{ vault_paperless_admin_password | default(ansible_date_time.epoch + 'paperless' | hash('sha256') | truncate(16, True, '')) }}"
+    paperless_db_password: "{{ vault_paperless_db_password | default(ansible_date_time.epoch + 'paperless-db' | hash('sha256') | truncate(16, True, '')) }}"
+    paperless_redis_password: "{{ vault_paperless_redis_password | default(ansible_date_time.epoch + 'paperless-redis' | hash('sha256') | truncate(16, True, '')) }}"
+  no_log: true
+
+- name: Create Paperless environment file
+  ansible.builtin.template:
+    src: paperless.env.j2
+    dest: "{{ automation_stack_home }}/config/paperless/paperless.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  notify: restart automation stack
+
+- name: Create Paperless consumption directory info
+  ansible.builtin.copy:
+    content: |
+      # Paperless-ngx Consume Directory
+      
+      This directory is monitored by Paperless-ngx for new documents.
+      Simply drop PDF files, images, or other documents here and they will be
+      automatically imported, processed with OCR, and organized.
+      
+      Supported formats:
+      - PDF files
+      - Images (PNG, JPG, TIFF)
+      - Office documents (DOC, DOCX, ODF)
+      - Plain text files
+      
+      Files will be automatically deleted from this directory after processing.
+    dest: "{{ automation_data_path }}/paperless/consume/README.txt"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'

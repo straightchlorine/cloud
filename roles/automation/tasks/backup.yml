@@ -1,0 +1,44 @@
+---
+# Backup configuration for automation stack
+
+- name: Create backup directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/backups"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create backup script
+  ansible.builtin.template:
+    src: backup-automation.sh.j2
+    dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create backup restoration script
+  ansible.builtin.template:
+    src: restore-automation.sh.j2
+    dest: "{{ automation_stack_home }}/scripts/restore-automation.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create cron job for automated backups
+  ansible.builtin.cron:
+    name: "Automation stack backup"
+    minute: "0"
+    hour: "3"
+    job: "{{ automation_stack_home }}/scripts/backup-automation.sh >> {{ automation_stack_home }}/logs/backup.log 2>&1"
+    user: "{{ ansible_user }}"
+  when: backup_enabled | default(true)
+
+- name: Create backup cleanup cron job
+  ansible.builtin.cron:
+    name: "Cleanup old backups"
+    minute: "30"
+    hour: "3"
+    job: "find {{ automation_data_path }}/backups -name '*.tar.gz' -mtime +{{ backup_retention_days | default(30) }} -delete"
+    user: "{{ ansible_user }}"
+  when: backup_enabled | default(true)

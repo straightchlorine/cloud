@@ -1,0 +1,19 @@
+---
+# Handlers for automation role
+
+- name: restart docker
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+
+- name: restart automation stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ automation_stack_home }}"
+    state: restarted
+  become_user: "{{ ansible_user }}"
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true

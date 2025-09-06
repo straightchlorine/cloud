@@ -1,0 +1,83 @@
+---
+# Docker setup tasks for automation stack
+
+- name: Check if Docker is already installed
+  ansible.builtin.command: docker --version
+  register: docker_check
+  failed_when: false
+  changed_when: false
+
+- name: Install Docker if not present
+  block:
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Add Docker GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+      become: true
+
+    - name: Add Docker repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=arm64] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        state: present
+      become: true
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+        state: present
+        update_cache: true
+      become: true
+      notify: restart docker
+
+  when: docker_check.rc != 0
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  become: true
+  notify: restart docker
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+  become: true
+
+- name: Detect system architecture for Docker Compose
+  ansible.builtin.set_fact:
+    docker_compose_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'armv7l' }}"
+
+- name: Install Docker Compose plugin
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-{{ docker_compose_arch }}"
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'
+  become: true
+
+- name: Create automation stack home directory
+  ansible.builtin.file:
+    path: "{{ automation_stack_home }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Test Docker installation
+  ansible.builtin.command: docker run --rm hello-world
+  register: docker_test
+  become_user: "{{ ansible_user }}"
+  changed_when: false

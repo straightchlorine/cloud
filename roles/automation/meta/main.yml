@@ -1,0 +1,37 @@
+---
+galaxy_info:
+  author: Ansible Admin
+  description: Automation stack for Raspberry Pi 4B with Traefik, NextCloud, and Paperless-ngx
+  company: Local
+  license: MIT
+  min_ansible_version: '2.12'
+  
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+
+  galaxy_tags:
+    - automation
+    - traefik
+    - nextcloud
+    - paperless
+    - docker
+    - raspberry-pi
+    - reverse-proxy
+    - ssl
+    - documents
+    - cloud-storage
+
+collections:
+  - community.docker
+  - community.general
+  - ansible.posix
+
+dependencies:
+  - role: common
+  - role: firewall
+  - role: prometheus-node-exporter

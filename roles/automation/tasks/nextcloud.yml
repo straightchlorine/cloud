@@ -1,0 +1,65 @@
+---
+# NextcloudPi setup tasks
+
+- name: Create NextCloud configuration directory
+  ansible.builtin.file:
+    path: "{{ automation_stack_home }}/config/nextcloud"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create NextCloud data directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/nextcloud"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create NextCloud database directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/nextcloud/db"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create NextCloud apps directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/nextcloud/apps"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create NextCloud config directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/nextcloud/config"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create NextCloud data files directory
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/nextcloud/data"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Generate random passwords for NextCloud
+  ansible.builtin.set_fact:
+    nextcloud_admin_password: "{{ vault_nextcloud_admin_password | default(ansible_date_time.epoch + ansible_hostname | hash('sha256') | truncate(16, True, '')) }}"
+    nextcloud_db_password: "{{ vault_nextcloud_db_password | default(ansible_date_time.epoch + 'nextcloud-db' | hash('sha256') | truncate(16, True, '')) }}"
+  no_log: true
+
+- name: Create NextCloud environment file
+  ansible.builtin.template:
+    src: nextcloud.env.j2
+    dest: "{{ automation_stack_home }}/config/nextcloud/nextcloud.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  notify: restart automation stack

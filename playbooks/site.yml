@@ -46,3 +46,12 @@
     - role: music-stack
       when: device_role == "music" or music_stack_enabled | default(false)
       tags: [music, docker]
+
+- name: Configure automation stack
+  hosts: services
+  become: true
+  gather_facts: true
+  roles:
+    - role: automation
+      when: device_role == "automation"
+      tags: [automation, traefik, nextcloud, paperless]

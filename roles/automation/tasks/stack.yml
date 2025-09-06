@@ -1,0 +1,81 @@
+---
+# Automation stack deployment
+
+- name: Create Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ automation_stack_home }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: restart automation stack
+
+- name: Create main environment file
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ automation_stack_home }}/.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  notify: restart automation stack
+
+- name: Create stack management script
+  ansible.builtin.template:
+    src: manage-automation.sh.j2
+    dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create stack backup script
+  ansible.builtin.template:
+    src: backup-automation.sh.j2
+    dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create Docker network for Traefik
+  community.docker.docker_network:
+    name: traefik-network
+    driver: bridge
+  become_user: "{{ ansible_user }}"
+
+- name: Start automation stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ automation_stack_home }}"
+    state: present
+    pull: always
+  become_user: "{{ ansible_user }}"
+  when: start_stack | default(true)
+
+- name: Wait for services to be ready
+  ansible.builtin.pause:
+    seconds: 30
+  when: start_stack | default(true)
+
+- name: Create symlinks for management scripts
+  ansible.builtin.file:
+    src: "{{ automation_stack_home }}/scripts/manage-automation.sh"
+    dest: "/usr/local/bin/manage-automation"
+    state: link
+  become: true
+
+- name: Display service information
+  ansible.builtin.debug:
+    msg: |
+      🤖 Automation Stack Deployment Complete!
+      
+      Services:
+      - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
+      - NextCloud: https://{{ subdomain_nextcloud }}.{{ domain_name }}
+      - Paperless-ngx: https://{{ subdomain_paperless }}.{{ domain_name }}
+      
+      Management:
+      - Stack control: manage-automation {start|stop|restart|status|logs}
+      - Backup: {{ automation_stack_home }}/scripts/backup-automation.sh
+      
+      Data locations:
+      - Traefik: {{ automation_data_path }}/traefik
+      - NextCloud: {{ automation_data_path }}/nextcloud
+      - Paperless: {{ automation_data_path }}/paperless

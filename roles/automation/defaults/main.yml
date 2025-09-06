@@ -1,0 +1,85 @@
+---
+# Default variables for automation role
+
+# Base system packages
+automation_base_packages:
+  - curl
+  - wget
+  - git
+  - rsync
+  - htop
+  - ncdu
+  - tree
+  - unzip
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Storage configuration
+filesystem_utilities:
+  - parted
+  - e2fsprogs
+  - ntfs-3g
+  - exfat-fuse
+  - exfatprogs
+
+# Docker configuration
+docker_compose_version: "v2.24.5"
+docker_packages:
+  - curl
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Automation stack configuration
+automation_stack_home: "/home/{{ ansible_user }}/automation-stack"
+automation_data_path: "/mnt/automation-data"
+
+# Default service ports
+traefik_web_port: 80
+traefik_websecure_port: 443
+traefik_dashboard_port: 8080
+nextcloud_port: 8081
+paperless_port: 8082
+
+# Network configuration
+domain_name: "local.example.com"
+subdomain_traefik: "traefik"
+subdomain_nextcloud: "cloud"
+subdomain_paperless: "docs"
+
+# SSL configuration
+letsencrypt_email: "admin@example.com"
+letsencrypt_staging: true
+
+# Service toggles
+services_enabled:
+  traefik: true
+  nextcloud: true
+  paperless: true
+
+# Storage configuration defaults
+ssd_device: "/dev/sda1"
+ssd_filesystem: "ext4"
+ssd_mount_options: "defaults,noatime,errors=remount-ro"
+ssd_format: false
+
+# Data directories to create
+automation_directories:
+  - "{{ automation_stack_home }}/config"
+  - "{{ automation_stack_home }}/scripts"
+  - "{{ automation_stack_home }}/logs"
+  - "{{ automation_data_path }}/traefik"
+  - "{{ automation_data_path }}/nextcloud"
+  - "{{ automation_data_path }}/paperless/data"
+  - "{{ automation_data_path }}/paperless/media"
+  - "{{ automation_data_path }}/paperless/consume"
+  - "{{ automation_data_path }}/paperless/export"
+
+# Backup configuration
+backup_enabled: true
+backup_schedule: "0 3 * * *"
+backup_retention_days: 30
+
+# Stack startup
+start_stack: true

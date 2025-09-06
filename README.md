@@ -17,6 +17,12 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
   - Automated backups to Hetzner Storage Box
   - Docker-based services with monitoring
 
+- **pi-automation** (192.168.20.20): Automation and document management server
+  - Traefik reverse proxy with automatic SSL certificates
+  - NextCloud for cloud storage and file synchronization
+  - Paperless-ngx for document management with OCR
+  - Automated backups and monitoring
+
 
 ### Structure
 ```
@@ -58,6 +64,9 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
    
    # Deploy music stack
    ansible-playbook playbooks/music-stack.yml
+   
+   # Deploy automation stack
+   ansible-playbook playbooks/automation-stack.yml
    ```
 
 ## Service Access
@@ -71,6 +80,11 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
 - **Navidrome**: http://192.168.20.15:4533
 - **Dozzle (Logs)**: http://192.168.20.15:8080
 
+### Automation Server (pi-automation)
+- **Traefik Dashboard**: https://traefik.your-domain.com
+- **NextCloud**: https://cloud.your-domain.com
+- **Paperless-ngx**: https://docs.your-domain.com
+
 ## Maintenance
 
 ### DNS Server
@@ -83,11 +97,17 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
 - Import music: `import-music`
 - View logs: `docker compose -f ~/compose/docker-compose.yml logs -f`
 
+### Automation Stack
+- Management script: `manage-automation {start|stop|restart|status|logs}`
+- Backup: `~/automation-stack/scripts/backup-automation.sh`
+- Upload documents: Drop files in `/mnt/automation-data/paperless/consume`
+
 ## Configuration
 
 ### Network Setup
 - DNS Server: 192.168.20.10
 - Music Server: 192.168.20.15
+- Automation Server: 192.168.20.20
 - Network: 192.168.20.0/24
 
 Configure devices to use `192.168.20.10` as DNS server for ad-blocking.

@@ -1,0 +1,96 @@
+#!/bin/bash
+# Automation stack management script for Raspberry Pi 4B
+
+AUTOMATION_HOME="{{ automation_stack_home }}"
+COMMAND="$1"
+SERVICE="$2"
+
+cd "$AUTOMATION_HOME"
+
+show_help() {
+    echo "Usage: $0 <command> [service]"
+    echo ""
+    echo "Commands:"
+    echo "  start     Start all services or specific service"
+    echo "  stop      Stop all services or specific service"
+    echo "  restart   Restart all services or specific service"
+    echo "  status    Show status of all services"
+    echo "  logs      Show logs (follow mode)"
+    echo "  update    Pull latest images and restart"
+    echo "  backup    Run backup script"
+    echo "  help      Show this help message"
+    echo ""
+    echo "Services:"
+    echo "  traefik      Reverse proxy with SSL"
+    echo "  nextcloud    Cloud storage and file sync"
+    echo "  paperless    Document management with OCR"
+    echo ""
+    echo "Examples:"
+    echo "  $0 start              # Start all services"
+    echo "  $0 restart nextcloud  # Restart only NextCloud"
+    echo "  $0 logs traefik       # Show Traefik logs"
+}
+
+case "$COMMAND" in
+    start)
+        if [ -n "$SERVICE" ]; then
+            echo "Starting $SERVICE..."
+            docker compose start "$SERVICE"
+        else
+            echo "Starting automation stack..."
+            docker compose up -d
+        fi
+        ;;
+    stop)
+        if [ -n "$SERVICE" ]; then
+            echo "Stopping $SERVICE..."
+            docker compose stop "$SERVICE"
+        else
+            echo "Stopping automation stack..."
+            docker compose down
+        fi
+        ;;
+    restart)
+        if [ -n "$SERVICE" ]; then
+            echo "Restarting $SERVICE..."
+            docker compose restart "$SERVICE"
+        else
+            echo "Restarting automation stack..."
+            docker compose restart
+        fi
+        ;;
+    status)
+        echo "Automation Stack Status:"
+        docker compose ps
+        echo ""
+        echo "Resource Usage:"
+        docker stats --no-stream
+        ;;
+    logs)
+        if [ -n "$SERVICE" ]; then
+            echo "Following logs for $SERVICE..."
+            docker compose logs -f "$SERVICE"
+        else
+            echo "Following logs for all services..."
+            docker compose logs -f
+        fi
+        ;;
+    update)
+        echo "Updating automation stack..."
+        docker compose pull
+        docker compose up -d
+        echo "Update complete!"
+        ;;
+    backup)
+        echo "Running backup script..."
+        ./scripts/backup-automation.sh
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "Unknown command: $COMMAND"
+        echo "Use '$0 help' for usage information."
+        exit 1
+        ;;
+esac

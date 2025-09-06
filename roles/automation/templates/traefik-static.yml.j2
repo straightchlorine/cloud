@@ -1,0 +1,77 @@
+---
+# Traefik static configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+serversTransport:
+  insecureSkipVerify: true
+
+# Entry points
+entryPoints:
+  web:
+    address: ":{{ traefik_web_port }}"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":{{ traefik_websecure_port }}"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+  traefik:
+    address: ":{{ traefik_dashboard_port }}"
+
+# Certificate resolvers
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: {{ letsencrypt_email }}
+      storage: /data/acme.json
+{% if letsencrypt_staging %}
+      caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+{% endif %}
+      httpChallenge:
+        entryPoint: web
+      # Alternative: DNS challenge (uncomment if needed)
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   resolvers:
+      #     - "1.1.1.1:53"
+      #     - "8.8.8.8:53"
+
+# Providers
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-network
+
+  file:
+    directory: /config/dynamic
+    watch: true
+
+# API and dashboard
+api:
+  dashboard: true
+  debug: false
+
+# Metrics (optional)
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    addRoutersLabels: true
+
+# Logging
+log:
+  level: INFO
+  filePath: /logs/traefik.log
+
+accessLog:
+  filePath: /logs/access.log

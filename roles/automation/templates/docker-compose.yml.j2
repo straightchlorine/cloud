@@ -1,0 +1,192 @@
+---
+# Automation Stack Docker Compose
+# Raspberry Pi 4B - Traefik + NextCloud + Paperless-ngx
+
+version: '3.8'
+
+networks:
+  traefik-network:
+    external: true
+  nextcloud-network:
+    internal: true
+  paperless-network:
+    internal: true
+
+volumes:
+  traefik-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: {{ automation_data_path }}/traefik
+
+services:
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "{{ traefik_web_port }}:80"
+      - "{{ traefik_websecure_port }}:443"
+      - "{{ traefik_dashboard_port }}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/config:ro
+      - {{ automation_data_path }}/traefik:/data
+      - ./logs:/logs
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_API_INSECURE=true
+    command:
+      - --configFile=/config/traefik.yml
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`{{ subdomain_traefik }}.{{ domain_name }}`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+
+  # NextCloud Database
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    volumes:
+      - {{ automation_data_path }}/nextcloud/db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MARIADB_AUTO_UPGRADE=1
+      - MARIADB_DISABLE_UPGRADE_BACKUP=1
+    env_file:
+      - ./config/nextcloud/nextcloud.env
+    networks:
+      - nextcloud-network
+
+  # NextCloud Redis
+  nextcloud-redis:
+    image: redis:7-alpine
+    container_name: nextcloud-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_HOST_PASSWORD}
+    env_file:
+      - ./config/nextcloud/nextcloud.env
+    networks:
+      - nextcloud-network
+
+  # NextCloud Application
+  nextcloud:
+    image: nextcloud:28-apache
+    container_name: nextcloud
+    restart: unless-stopped
+    volumes:
+      - {{ automation_data_path }}/nextcloud/data:/var/www/html/data
+      - {{ automation_data_path }}/nextcloud/config:/var/www/html/config
+      - {{ automation_data_path }}/nextcloud/apps:/var/www/html/custom_apps
+    environment:
+      - MYSQL_HOST=${MYSQL_HOST}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST_PASSWORD=${REDIS_HOST_PASSWORD}
+      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_TRUSTED_DOMAINS}
+      - OVERWRITEPROTOCOL=${OVERWRITEPROTOCOL}
+      - OVERWRITEHOST=${OVERWRITEHOST}
+      - OVERWRITECLIURL=${OVERWRITECLIURL}
+    env_file:
+      - ./config/nextcloud/nextcloud.env
+    depends_on:
+      - nextcloud-db
+      - nextcloud-redis
+    networks:
+      - nextcloud-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.rule=Host(`{{ subdomain_nextcloud }}.{{ domain_name }}`)"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
+
+  # Paperless-ngx Database
+  paperless-db:
+    image: postgres:15
+    container_name: paperless-db
+    restart: unless-stopped
+    volumes:
+      - {{ automation_data_path }}/paperless/db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=paperless
+      - POSTGRES_USER=paperless
+      - POSTGRES_PASSWORD=${PAPERLESS_DBPASS}
+    env_file:
+      - ./config/paperless/paperless.env
+    networks:
+      - paperless-network
+
+  # Paperless-ngx Redis
+  paperless-redis:
+    image: redis:7-alpine
+    container_name: paperless-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${PAPERLESS_REDIS_PASSWORD}
+    volumes:
+      - {{ automation_data_path }}/paperless/redis:/data
+    environment:
+      - PAPERLESS_REDIS_PASSWORD=${PAPERLESS_REDIS_PASSWORD}
+    env_file:
+      - ./config/paperless/paperless.env
+    networks:
+      - paperless-network
+
+  # Paperless-ngx Tika (OCR)
+  paperless-tika:
+    image: apache/tika:2.9.1.0
+    container_name: paperless-tika
+    restart: unless-stopped
+    networks:
+      - paperless-network
+
+  # Paperless-ngx Gotenberg (PDF conversion)
+  paperless-gotenberg:
+    image: gotenberg/gotenberg:7.10
+    container_name: paperless-gotenberg
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+    networks:
+      - paperless-network
+
+  # Paperless-ngx Application
+  paperless-web:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless-web
+    restart: unless-stopped
+    depends_on:
+      - paperless-db
+      - paperless-redis
+      - paperless-tika
+      - paperless-gotenberg
+    volumes:
+      - {{ automation_data_path }}/paperless/data:/usr/src/paperless/data
+      - {{ automation_data_path }}/paperless/media:/usr/src/paperless/media
+      - {{ automation_data_path }}/paperless/export:/usr/src/paperless/export
+      - {{ automation_data_path }}/paperless/consume:/usr/src/paperless/consume
+      - ./logs:/usr/src/paperless/logs
+    env_file:
+      - ./config/paperless/paperless.env
+    networks:
+      - paperless-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.paperless.rule=Host(`{{ subdomain_paperless }}.{{ domain_name }}`)"
+      - "traefik.http.routers.paperless.entrypoints=websecure"
+      - "traefik.http.routers.paperless.tls.certresolver=letsencrypt"
+      - "traefik.http.services.paperless.loadbalancer.server.port=8000"
