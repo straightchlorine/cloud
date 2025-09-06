@@ -10,16 +10,8 @@
     mode: '0755'
 
 - name: Create Paperless database initialization script
-  ansible.builtin.copy:
-    content: |
-      #!/bin/bash
-      # Create Paperless database and user
-      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<EOF
-      CREATE DATABASE IF NOT EXISTS paperless CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE USER IF NOT EXISTS 'paperless'@'%' IDENTIFIED BY '{{ paperless_db_password }}';
-      GRANT ALL PRIVILEGES ON paperless.* TO 'paperless'@'%';
-      FLUSH PRIVILEGES;
-      EOF
+  ansible.builtin.template:
+    src: paperless-db-init.sh.j2
     dest: "{{ automation_stack_home }}/config/shared-db/init/01-paperless-db.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"

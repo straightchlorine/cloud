@@ -128,7 +128,7 @@ services:
       - shared-db:/var/lib/mysql
       - ./config/shared-db/init:/docker-entrypoint-initdb.d:ro
     environment:
-      - MYSQL_ROOT_PASSWORD={{ nextcloud_db_password }}
+      - MYSQL_ROOT_PASSWORD={{ nextcloud_root_db_password }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
       - MYSQL_PASSWORD={{ nextcloud_db_password }}

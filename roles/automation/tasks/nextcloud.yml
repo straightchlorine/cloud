@@ -53,6 +53,7 @@
   ansible.builtin.set_fact:
     nextcloud_admin_password: "{{ vault_nextcloud_admin_password }}"
     nextcloud_db_password: "{{ vault_nextcloud_db_password }}"
+    nextcloud_root_db_password: "{{ vault_nextcloud_root_db_password }}"
     redis_password: "{{ vault_redis_password }}"
   no_log: true
 
