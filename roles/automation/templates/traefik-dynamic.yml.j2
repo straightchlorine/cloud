@@ -2,20 +2,6 @@
 # Traefik dynamic configuration
 
 http:
-  # Routers
-  routers:
-    # Traefik dashboard
-    dashboard:
-      rule: "Host(`{{ subdomain_traefik }}.{{ domain_name }}`)"
-      entryPoints:
-        - websecure
-      service: api@internal
-      middlewares:
-        - auth
-        - secure-headers
-      tls:
-        certResolver: letsencrypt
-
   # Middlewares
   middlewares:
     # Authentication middleware
