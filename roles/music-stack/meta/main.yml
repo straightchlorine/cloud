@@ -1,19 +1,17 @@
 ---
 galaxy_info:
-  author: Your Name
-  description: Music Stack for Raspberry Pi 3B with Navidrome, Beets, and backup synchronization
-  company: 
+  author: Ansible Admin
+  description: Music Stack for Raspberry Pi with Navidrome, Beets, YouTube downloading, and automated backups
+  company: Local
   license: MIT
-  min_ansible_version: '2.9'
+  min_ansible_version: '2.12'
   
   platforms:
     - name: Debian
       versions:
-        - bullseye
         - bookworm
     - name: Ubuntu
       versions:
-        - focal
         - jammy
 
   galaxy_tags:
@@ -23,5 +21,15 @@ galaxy_info:
     - beets
     - docker
     - raspberry-pi
+    - youtube-dl
+    - backup
 
-dependencies: []
+collections:
+  - community.docker
+  - community.general
+  - ansible.posix
+
+dependencies:
+  - role: common
+  - role: firewall
+  - role: prometheus-node-exporter

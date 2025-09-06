@@ -2,40 +2,40 @@
 # Music Stack setup tasks for Pi 3B
 
 - name: Update package cache
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     cache_valid_time: 3600
-  become: yes
+  become: true
 
 - name: Install base packages
-  apt:
-    name:
-      - curl
-      - wget
-      - git
-      - rsync
-      - htop
-      - ncdu
-      - tree
+  ansible.builtin.apt:
+    name: "{{ music_stack_base_packages }}"
     state: present
-  become: yes
+  become: true
 
 - name: Include Docker setup
-  include_tasks: docker.yml
+  ansible.builtin.include_tasks: docker.yml
+  tags: [docker]
 
 - name: Include SSD mounting
-  include_tasks: storage.yml
+  ansible.builtin.include_tasks: storage.yml
+  tags: [storage]
 
 - name: Include music stack deployment
-  include_tasks: stack.yml
+  ansible.builtin.include_tasks: stack.yml
+  tags: [stack, config]
 
 - name: Include backup configuration
-  include_tasks: backup.yml
+  ansible.builtin.include_tasks: backup.yml
+  tags: [backup]
+  when: backup_enabled | default(false)
 
 - name: Configure firewall rules for music stack
-  ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item }}"
     proto: tcp
+    comment: "Music stack service"
   loop: "{{ music_stack_ports }}"
-  become: yes
+  become: true
+  when: music_stack_ports is defined and music_stack_ports | length > 0

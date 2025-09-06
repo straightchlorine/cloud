@@ -1,30 +1,34 @@
 ---
 # Backup configuration and scripts
 
+- name: Detect system architecture for rclone
+  ansible.builtin.set_fact:
+    rclone_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'arm' }}"
+
 - name: Install rclone
-  get_url:
-    url: "https://downloads.rclone.org/v{{ rclone_version }}/rclone-v{{ rclone_version }}-linux-arm.zip"
+  ansible.builtin.get_url:
+    url: "https://downloads.rclone.org/v{{ rclone_version }}/rclone-v{{ rclone_version }}-linux-{{ rclone_arch }}.zip"
     dest: "/tmp/rclone.zip"
   register: rclone_download
 
 - name: Extract rclone
-  unarchive:
+  ansible.builtin.unarchive:
     src: "/tmp/rclone.zip"
     dest: "/tmp"
-    remote_src: yes
+    remote_src: true
   when: rclone_download.changed
 
 - name: Install rclone binary
-  copy:
-    src: "/tmp/rclone-v{{ rclone_version }}-linux-arm/rclone"
+  ansible.builtin.copy:
+    src: "/tmp/rclone-v{{ rclone_version }}-linux-{{ rclone_arch }}/rclone"
     dest: "/usr/local/bin/rclone"
     mode: '0755'
-    remote_src: yes
-  become: yes
+    remote_src: true
+  become: true
   when: rclone_download.changed
 
 - name: Create rclone config directory
-  file:
+  ansible.builtin.file:
     path: "/home/{{ ansible_user }}/.config/rclone"
     state: directory
     owner: "{{ ansible_user }}"
@@ -32,7 +36,7 @@
     mode: '0700'
 
 - name: Create rclone configuration
-  template:
+  ansible.builtin.template:
     src: rclone.conf.j2
     dest: "/home/{{ ansible_user }}/.config/rclone/rclone.conf"
     owner: "{{ ansible_user }}"
@@ -40,7 +44,7 @@
     mode: '0600'
 
 - name: Create backup scripts directory
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}/scripts"
     state: directory
     owner: "{{ ansible_user }}"
@@ -48,27 +52,23 @@
     mode: '0755'
 
 - name: Create backup scripts
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "{{ music_stack_home }}/scripts/{{ item }}"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
-  loop:
-    - backup-local.sh
-    - backup-hetzner.sh
-    - backup-remote-drives.sh
-    - sync-backups.sh
+  loop: "{{ backup_scripts }}"
 
 - name: Debug YouTube sync configuration
-  debug:
+  ansible.builtin.debug:
     msg:
       - "youtube_sync_enabled: {{ youtube_sync_enabled | default('UNDEFINED') }}"
       - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
   tags: [youtube, debug]
 
 - name: Create cron job for daily backup
-  cron:
+  ansible.builtin.cron:
     name: "Music library backup"
     minute: "0"
     hour: "2"
@@ -77,21 +77,17 @@
   when: enable_backup_cron | default(true)
 
 - name: Add basic environment variables to crontab for YouTube sync
-  cron:
+  ansible.builtin.cron:
     name: "{{ item.name }}"
-    env: yes
+    env: true
     value: "{{ item.value }}"
     user: "{{ ansible_user }}"
-  loop:
-    - { name: "MUSIC_DIRECTORY", value: "{{ music_library_path }}/downloads" }
-    - { name: "YTDLP_CACHE_DIRECTORY", value: "{{ music_stack_home }}/config" }
-    - { name: "MUSIC_STACK_HOME", value: "{{ music_stack_home }}" }
-    - { name: "PATH", value: "/usr/local/bin:/usr/bin:/bin" }
+  loop: "{{ youtube_cron_env_vars }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron]
 
 - name: Create cron job for daily YouTube playlist sync
-  cron:
+  ansible.builtin.cron:
     name: "Daily YouTube playlist sync"
     hour: "1"
     minute: "0"
@@ -101,7 +97,7 @@
   tags: [youtube, cron]
 
 - name: Create cron job for weekly Beets rescan
-  cron:
+  ansible.builtin.cron:
     name: "Weekly Beets rescan of misc folder"
     hour: "3"
     minute: "0"

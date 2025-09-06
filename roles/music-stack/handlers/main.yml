@@ -2,10 +2,10 @@
 # Handlers for music-stack role
 
 - name: restart docker
-  systemd:
+  ansible.builtin.systemd:
     name: docker
     state: restarted
-  become: yes
+  become: true
 
 - name: restart music stack
   community.docker.docker_compose_v2:
@@ -13,6 +13,6 @@
     state: restarted
 
 - name: reload systemd
-  systemd:
-    daemon_reload: yes
-  become: yes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true

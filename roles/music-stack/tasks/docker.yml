@@ -2,7 +2,7 @@
 # Docker setup tasks
 
 - name: Check if Docker is already installed
-  command: docker --version
+  ansible.builtin.command: docker --version
   register: docker_check
   failed_when: false
   changed_when: false
@@ -10,48 +10,58 @@
 - name: Install Docker if not present
   block:
     - name: Install Docker prerequisites
-      apt:
+      ansible.builtin.apt:
         name:
           - curl
           - ca-certificates
         state: present
-        update_cache: yes
-      become: yes
+        update_cache: true
+      become: true
 
     - name: Download and install Docker using convenience script
-      shell: |
+      ansible.builtin.shell: |
         curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
         sh /tmp/get-docker.sh
         rm -f /tmp/get-docker.sh
-      become: yes
+      become: true
       args:
         creates: /usr/bin/docker
+      notify: restart docker
 
   when: docker_check.rc != 0
 
 - name: Add user to docker group
-  user:
+  ansible.builtin.user:
     name: "{{ ansible_user }}"
     groups: docker
-    append: yes
-  become: yes
+    append: true
+  become: true
+  notify: restart docker
 
 - name: Enable and start Docker service
-  systemd:
+  ansible.builtin.systemd:
     name: docker
-    enabled: yes
+    enabled: true
     state: started
-  become: yes
+  become: true
+
+- name: Detect system architecture
+  ansible.builtin.setup:
+    filter: ansible_architecture
+
+- name: Set Docker Compose architecture
+  ansible.builtin.set_fact:
+    docker_compose_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'armv7' }}"
 
 - name: Install Docker Compose (standalone)
-  get_url:
-    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-armv7"
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-{{ docker_compose_arch }}"
     dest: /usr/local/bin/docker-compose
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create music stack directory
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}"
     state: directory
     owner: "{{ ansible_user }}"

@@ -1,6 +1,16 @@
 ---
 # Default variables for music-stack role
 
+# Base packages for music stack
+music_stack_base_packages:
+  - curl
+  - wget
+  - git
+  - rsync
+  - htop
+  - ncdu
+  - tree
+
 # Docker configuration
 docker_compose_version: "v2.20.2"
 
@@ -50,6 +60,92 @@ backup_remote_drives:
   #   client_secret: "your-client-secret"
   #   token: "your-token"
   #   path: "MusicLibrary"
+
+# Beets configuration
+beets_packages:
+  - beets
+  - requests
+  - pillow
+  - pyacoustid
+  - musicbrainzngs
+  - pylast
+  - beautifulsoup4
+  - rarfile
+  - langdetect
+
+beets_genres:
+  - Rock
+  - Pop
+  - Hip-Hop
+  - Electronic
+  - Jazz
+  - Classical
+  - Folk
+  - Country
+  - Blues
+  - Reggae
+  - Metal
+  - Punk
+  - Alternative
+  - Indie
+  - R&B
+  - Soul
+  - Funk
+  - Disco
+  - House
+  - Techno
+  - Trance
+  - Drum & Bass
+  - Dubstep
+  - Ambient
+  - World
+  - Latin
+  - Soundtrack
+  - YouTube
+  - Podcast
+  - Speech
+
+# YouTube download configuration
+ytdlp_version: "2025.08.27"
+ytdlp_dependencies:
+  - python3-pip
+  - python3-venv
+  - python3-dev
+  - build-essential
+  - ffmpeg
+  - curl
+  - wget
+
+# Storage configuration
+filesystem_utilities:
+  - parted
+  - e2fsprogs
+  - ntfs-3g
+  - exfat-fuse
+  - exfatprogs
+
+music_library_directories:
+  - music
+  - downloads
+  - processing
+  - backups
+
+# Backup configuration  
+backup_scripts:
+  - backup-local.sh
+  - backup-hetzner.sh
+  - backup-remote-drives.sh
+  - sync-backups.sh
+
+youtube_cron_env_vars:
+  - name: "MUSIC_DIRECTORY"
+    value: "{{ music_library_path }}/downloads"
+  - name: "YTDLP_CACHE_DIRECTORY" 
+    value: "{{ music_stack_home }}/config"
+  - name: "MUSIC_STACK_HOME"
+    value: "{{ music_stack_home }}"
+  - name: "PATH"
+    value: "/usr/local/bin:/usr/bin:/bin"
 
 # Stack startup
 start_stack: true

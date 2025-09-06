@@ -2,15 +2,16 @@
 # Music stack deployment
 
 - name: Create Docker Compose file
-  template:
+  ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "{{ music_stack_home }}/docker-compose.yml"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
+  notify: restart music stack
 
 - name: Create Beets config directory
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}/config/beets"
     state: directory
     owner: "{{ ansible_user }}"
@@ -18,7 +19,7 @@
     mode: '0755'
 
 - name: Create Beets configuration
-  template:
+  ansible.builtin.template:
     src: beets-config.yaml.j2
     dest: "{{ music_stack_home }}/config/beets/config.yaml"
     owner: "{{ ansible_user }}"
@@ -26,45 +27,15 @@
     mode: '0644'
 
 - name: Create genres whitelist for Beets
-  copy:
-    content: |
-      Rock
-      Pop
-      Hip-Hop
-      Electronic
-      Jazz
-      Classical
-      Folk
-      Country
-      Blues
-      Reggae
-      Metal
-      Punk
-      Alternative
-      Indie
-      R&B
-      Soul
-      Funk
-      Disco
-      House
-      Techno
-      Trance
-      Drum & Bass
-      Dubstep
-      Ambient
-      World
-      Latin
-      Soundtrack
-      YouTube
-      Podcast
-      Speech
+  ansible.builtin.copy:
+    content: "{{ beets_genres | join('\n') }}\n"
     dest: "{{ music_stack_home }}/config/beets/genres.txt"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
 
 - name: Create additional Beets directories
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
@@ -76,7 +47,7 @@
     - "{{ music_library_path }}/processing"
 
 - name: Create YouTube cache and config directories
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
@@ -88,7 +59,7 @@
   tags: [youtube, config]
 
 - name: Create Navidrome config directory
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}/config/navidrome"
     state: directory
     owner: "{{ ansible_user }}"
@@ -96,7 +67,7 @@
     mode: '0755'
 
 - name: Create logs directory
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}/logs"
     state: directory
     owner: "{{ ansible_user }}"
@@ -104,13 +75,13 @@
     mode: '0755'
 
 - name: Generate JWT secret for Navidrome
-  command: openssl rand -hex 32
+  ansible.builtin.command: openssl rand -hex 32
   register: jwt_secret
   changed_when: false
   no_log: true
 
 - name: Create .env file for Docker Compose
-  template:
+  ansible.builtin.template:
     src: env.j2
     dest: "{{ music_stack_home }}/.env"
     owner: "{{ ansible_user }}"
@@ -118,97 +89,87 @@
     mode: '0600'
   vars:
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
+  notify: restart music stack
 
 - name: Remove apt-installed yt-dlp if present
-  apt:
+  ansible.builtin.apt:
     name: yt-dlp
     state: absent
-    purge: yes
-  become: yes
-  ignore_errors: yes
+    purge: true
+  become: true
+  ignore_errors: true
   tags: [youtube, ytdlp]
 
 - name: Install dependencies for YouTube playlist downloads
-  apt:
-    name:
-      - python3-pip
-      - python3-venv
-      - python3-dev
-      - build-essential
-      - ffmpeg
-      - curl
-      - wget
+  ansible.builtin.apt:
+    name: "{{ ytdlp_dependencies }}"
     state: present
-  become: yes
+  become: true
   tags: [youtube, ytdlp]
 
-- name: Download yt-dlp binary for ARM64
-  get_url:
-    url: https://github.com/yt-dlp/yt-dlp/releases/download/2025.08.27/yt-dlp_linux_aarch64
+- name: Detect system architecture for yt-dlp
+  ansible.builtin.set_fact:
+    ytdlp_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'arm64' }}"
+  tags: [youtube, ytdlp]
+
+- name: Download yt-dlp binary
+  ansible.builtin.get_url:
+    url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/yt-dlp_linux_{{ ytdlp_arch }}"
     dest: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
     group: root
-    force: yes
-    backup: yes
-  become: yes
+    force: true
+    backup: true
+  become: true
   register: ytdlp_download
   tags: [youtube, ytdlp]
 
 - name: Ensure yt-dlp binary is executable
-  file:
+  ansible.builtin.file:
     path: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
     group: root
-  become: yes
+  become: true
   tags: [youtube, ytdlp]
 
 - name: Verify yt-dlp installation
-  command: /usr/local/bin/yt-dlp --version
-  register: ytdlp_version
+  ansible.builtin.command: /usr/local/bin/yt-dlp --version
+  register: ytdlp_version_check
   changed_when: false
-  become: yes
+  become: true
   tags: [youtube, ytdlp]
 
 - name: Display yt-dlp version
-  debug:
-    msg: "yt-dlp version installed: {{ ytdlp_version.stdout }}"
+  ansible.builtin.debug:
+    msg: "yt-dlp version installed: {{ ytdlp_version_check.stdout }}"
   tags: [youtube, ytdlp]
 
 - name: Create virtual environment for Beets
-  command: python3 -m venv {{ music_stack_home }}/venv
+  ansible.builtin.command: python3 -m venv {{ music_stack_home }}/venv
   args:
     creates: "{{ music_stack_home }}/venv/bin/python"
   become_user: "{{ ansible_user }}"
 
 - name: Install Beets and plugins in virtual environment
-  pip:
-    name:
-      - beets
-      - requests
-      - pillow
-      - pyacoustid
-      - musicbrainzngs
-      - pylast
-      - beautifulsoup4
-      - rarfile
-      - langdetect
+  ansible.builtin.pip:
+    name: "{{ beets_packages }}"
     virtualenv: "{{ music_stack_home }}/venv"
   become_user: "{{ ansible_user }}"
 
 - name: Create Beets wrapper script
-  copy:
+  ansible.builtin.copy:
     content: |
       #!/bin/bash
       source {{ music_stack_home }}/venv/bin/activate
       exec beet "$@"
     dest: /usr/local/bin/beet
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create YouTube download configuration
-  template:
+  ansible.builtin.template:
     src: yt-dlp.conf.j2
     dest: "{{ music_stack_home }}/config/yt-dlp.conf"
     owner: "{{ ansible_user }}"
@@ -217,7 +178,7 @@
   tags: [youtube, ytdlp, config]
 
 - name: Create YouTube playlist download script
-  template:
+  ansible.builtin.template:
     src: youtube-sync.sh.j2
     dest: "{{ music_stack_home }}/scripts/youtube-sync.sh"
     owner: "{{ ansible_user }}"
@@ -226,7 +187,7 @@
   tags: [youtube, ytdlp, scripts]
 
 - name: Debug vault variables before template generation
-  debug:
+  ansible.builtin.debug:
     msg:
       - "vault_youtube_playlists: {{ vault_youtube_playlists | default('UNDEFINED') }}"
       - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
@@ -234,13 +195,13 @@
   tags: [youtube, debug]
 
 - name: Remove existing YouTube environment file to force regeneration
-  file:
+  ansible.builtin.file:
     path: "{{ music_stack_home }}/config/youtube.env"
     state: absent
   tags: [youtube, config]
 
 - name: Create YouTube environment configuration file
-  template:
+  ansible.builtin.template:
     src: youtube.env.j2
     dest: "{{ music_stack_home }}/config/youtube.env"
     owner: "{{ ansible_user }}"
@@ -249,7 +210,7 @@
   tags: [youtube, config]
 
 - name: Create simplified playlist-update script
-  template:
+  ansible.builtin.template:
     src: playlist-update.j2
     dest: "{{ music_stack_home }}/scripts/playlist-update"
     owner: "{{ ansible_user }}"
@@ -258,7 +219,7 @@
   tags: [youtube, scripts]
 
 - name: Create YouTube cron wrapper script
-  template:
+  ansible.builtin.template:
     src: youtube-cron.sh.j2
     dest: "{{ music_stack_home }}/scripts/youtube-cron.sh"
     owner: "{{ ansible_user }}"
@@ -267,7 +228,7 @@
   tags: [youtube, scripts, cron]
 
 - name: Create Beets rescan script
-  template:
+  ansible.builtin.template:
     src: beets-rescan.sh.j2
     dest: "{{ music_stack_home }}/scripts/beets-rescan.sh"
     owner: "{{ ansible_user }}"

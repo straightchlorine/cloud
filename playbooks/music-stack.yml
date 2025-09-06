@@ -3,8 +3,8 @@
 
 - name: Deploy Music Stack on Raspberry Pi 3B
   hosts: pi-music
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
   vars_files:
     - "{{ playbook_dir }}/../group_vars/vault.yml"
   vars:
@@ -15,10 +15,11 @@
     youtube_extra_args: "{{ vault_youtube_extra_args | default('') }}"
     # Enable YouTube sync for this playbook (overrides host_vars if needed)
     youtube_sync_enabled: true
+  tags: [music-stack]
   
   pre_tasks:
     - name: Debug vault loading
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Playbook dir: {{ playbook_dir }}"
           - "Vault file path: {{ playbook_dir }}/../group_vars/vault.yml"
@@ -27,25 +28,31 @@
       tags: [youtube, debug, always]
 
     - name: Update package cache
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
         cache_valid_time: 3600
+      tags: [packages]
 
     - name: Install additional system packages
-      apt:
+      ansible.builtin.apt:
         name: "{{ additional_packages | default([]) }}"
         state: present
-      when: additional_packages is defined
+      when: additional_packages is defined and additional_packages | length > 0
+      tags: [packages]
 
   roles:
-    - common
-    - firewall
-    - prometheus-node-exporter
-    - music-stack
+    - role: common
+      tags: [common, base]
+    - role: firewall
+      tags: [firewall, security]
+    - role: prometheus-node-exporter
+      tags: [monitoring, prometheus]
+    - role: music-stack
+      tags: [music, docker, stack]
 
   post_tasks:
     - name: Display deployment information
-      debug:
+      ansible.builtin.debug:
         msg: |
           🎵 Music Stack Deployment Complete!
           
@@ -54,36 +61,58 @@
           - Dozzle (Logs): http://{{ ansible_default_ipv4.address }}:{{ dozzle_port }}
           
           Useful commands on the Pi:
-          - Manage stack: ~/music-stack/scripts/manage-stack.sh {start|stop|restart|status}
-          - Import music: ~/music-stack/scripts/import-music.sh
-          - Run backups: ~/music-stack/scripts/sync-backups.sh
-          - View logs: docker compose -f ~/music-stack/docker-compose.yml logs -f
+          - Manage stack: music-stack {start|stop|restart|status}
+          - Import music: import-music
+          - Run backups: ~/{{ music_stack_home | basename }}/scripts/sync-backups.sh
+          - View logs: docker compose -f ~/{{ music_stack_home | basename }}/docker-compose.yml logs -f
           
           Directory structure:
           - Music library: {{ music_library_path }}/music
           - Downloads: {{ music_library_path }}/downloads
           - Processing: {{ music_library_path }}/processing
-          - Config: ~/music-stack/config/
-          - Scripts: ~/music-stack/scripts/
-          - Logs: ~/music-stack/logs/
+          - Config: ~/{{ music_stack_home | basename }}/config/
+          - Scripts: ~/{{ music_stack_home | basename }}/scripts/
+          - Logs: ~/{{ music_stack_home | basename }}/logs/
+      tags: [info]
 
     - name: Check if management script exists
-      stat:
+      ansible.builtin.stat:
         path: "{{ music_stack_home }}/scripts/manage-stack.sh"
       register: manage_script_stat
+      tags: [shortcuts]
 
     - name: Create management script shortcuts
-      file:
+      ansible.builtin.file:
         src: "{{ music_stack_home }}/scripts/manage-stack.sh"
         dest: "/usr/local/bin/music-stack"
         state: link
-      become: yes
+      become: true
       when: manage_script_stat.stat.exists
+      tags: [shortcuts]
 
     - name: Create import script shortcut
-      file:
+      ansible.builtin.file:
         src: "{{ music_stack_home }}/scripts/import-music.sh"
         dest: "/usr/local/bin/import-music"
         state: link
-      become: yes
+      become: true
       when: manage_script_stat.stat.exists
+      tags: [shortcuts]
+
+    - name: Verify services are running
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:{{ item.port }}"
+        method: GET
+        timeout: 10
+      loop:
+        - { port: "{{ navidrome_port }}", service: "Navidrome" }
+        - { port: "{{ dozzle_port }}", service: "Dozzle" }
+      register: service_check
+      failed_when: false
+      tags: [verification]
+
+    - name: Display service status
+      ansible.builtin.debug:
+        msg: "{{ item.item.service }} on port {{ item.item.port }}: {{ 'UP' if item.status == 200 else 'DOWN' }}"
+      loop: "{{ service_check.results }}"
+      tags: [verification]

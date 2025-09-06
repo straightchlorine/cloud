@@ -2,75 +2,66 @@
 # SSD mounting and storage setup
 
 - name: Install filesystem utilities
-  apt:
-    name:
-      - parted
-      - e2fsprogs
-      - ntfs-3g
-      - exfat-fuse
-      - exfatprogs
+  ansible.builtin.apt:
+    name: "{{ filesystem_utilities }}"
     state: present
-  become: yes
+  become: true
 
 - name: Check if SSD device exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ ssd_device }}"
   register: ssd_exists
 
 - name: Fail if SSD device not found
-  fail:
+  ansible.builtin.fail:
     msg: "SSD device {{ ssd_device }} not found. Please connect your SSD and update the ssd_device variable."
   when: not ssd_exists.stat.exists
 
-- name: Get SSD filesystem info
-  filesystem:
+- name: Format SSD filesystem
+  community.general.filesystem:
     fstype: "{{ ssd_filesystem }}"
     dev: "{{ ssd_device }}"
-  become: yes
+  become: true
   when: ssd_format | default(false)
 
 - name: Create music library mount point
-  file:
+  ansible.builtin.file:
     path: "{{ music_library_path }}"
     state: directory
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Mount SSD
-  mount:
+  ansible.posix.mount:
     path: "{{ music_library_path }}"
     src: "{{ ssd_device }}"
     fstype: "{{ ssd_filesystem }}"
     opts: "{{ ssd_mount_options }}"
     state: mounted
-  become: yes
+  become: true
 
 - name: Add SSD to fstab
-  mount:
+  ansible.posix.mount:
     path: "{{ music_library_path }}"
     src: "{{ ssd_device }}"
     fstype: "{{ ssd_filesystem }}"
     opts: "{{ ssd_mount_options }}"
     state: present
-  become: yes
+  become: true
 
 - name: Set ownership of music library
-  file:
+  ansible.builtin.file:
     path: "{{ music_library_path }}"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
-    recurse: yes
-  become: yes
+    recurse: true
+  become: true
 
 - name: Create music library subdirectories
-  file:
+  ansible.builtin.file:
     path: "{{ music_library_path }}/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
-  loop:
-    - music
-    - downloads
-    - processing
-    - backups
+  loop: "{{ music_library_directories }}"
