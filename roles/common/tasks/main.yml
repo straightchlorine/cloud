@@ -13,31 +13,7 @@
     state: present
   become: true
 
-- name: Check if auth.log exists
-  ansible.builtin.stat:
-    path: /var/log/auth.log
-  register: auth_log_stat
-  become: true
-
-- name: Configure fail2ban for SSH protection (auth.log)
-  ansible.builtin.copy:
-    content: |
-      [sshd]
-      enabled = {{ fail2ban_enabled | default(true) | ternary('true', 'false') }}
-      port = ssh
-      filter = sshd
-      logpath = /var/log/auth.log
-      maxretry = {{ fail2ban_ssh_maxretry | default(3) }}
-      bantime = {{ fail2ban_ssh_bantime | default(600) }}
-    dest: /etc/fail2ban/jail.local
-    owner: root
-    group: root
-    mode: '0644'
-  become: true
-  when: auth_log_stat.stat.exists
-  notify: restart fail2ban
-
-- name: Configure fail2ban for SSH protection (systemd journal)
+- name: Configure fail2ban for SSH protection (systemd backend)
   ansible.builtin.copy:
     content: |
       [sshd]
@@ -52,27 +28,7 @@
     group: root
     mode: '0644'
   become: true
-  when: not auth_log_stat.stat.exists
   notify: restart fail2ban
-
-- name: Ensure rsyslog is configured to create auth.log
-  ansible.builtin.lineinfile:
-    path: /etc/rsyslog.conf
-    line: "auth,authpriv.*                 /var/log/auth.log"
-    state: present
-  become: true
-  when: not auth_log_stat.stat.exists
-  notify: restart rsyslog
-
-- name: Create auth.log if it doesn't exist
-  ansible.builtin.file:
-    path: /var/log/auth.log
-    state: touch
-    owner: syslog
-    group: adm
-    mode: '0640'
-  become: true
-  when: not auth_log_stat.stat.exists
 
 - name: Start and enable fail2ban
   ansible.builtin.systemd:
