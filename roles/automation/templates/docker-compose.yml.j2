@@ -1,33 +1,5 @@
----
 # Automation Stack Docker Compose
 # Raspberry Pi 4B - Traefik + NextCloud + Paperless-ngx
-
-
-networks:
-  traefik-network:
-    external: true
-  nextcloud-network:
-    internal: true
-  paperless-network:
-    internal: true
-
-volumes:
-  traefik-data:
-    driver: local
-    driver_opts:
-      o: bind
-      type: none
-      device: {{ automation_data_path }}/traefik
-  nextcloud-data:
-  nextcloud-config:
-  nextcloud-apps:
-  nextcloud-db:
-  paperless-data:
-  paperless-media:
-  paperless-export:
-  paperless-consume:
-  paperless-db:
-  paperless-redis:
 
 services:
   # Traefik Reverse Proxy
@@ -54,36 +26,6 @@ services:
     labels:
       - "traefik.enable=false"  # Dashboard accessed directly on port 8080
 
-  # NextCloud Database
-  nextcloud-db:
-    image: mariadb:10.11
-    container_name: nextcloud-db
-    restart: unless-stopped
-    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
-    volumes:
-      - nextcloud-db:/var/lib/mysql
-    environment:
-      - MYSQL_ROOT_PASSWORD={{ nextcloud_db_password }}
-      - MYSQL_PASSWORD={{ nextcloud_db_password }}
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=nextcloud
-      - MYSQL_INITDB_SKIP_TZINFO=1
-    networks:
-      - nextcloud-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-u", "root", "-p{{ nextcloud_db_password }}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # NextCloud Redis
-  nextcloud-redis:
-    image: redis:7-alpine
-    container_name: nextcloud-redis
-    restart: unless-stopped
-    command: redis-server --requirepass {{ redis_password }}
-    networks:
-      - nextcloud-network
 
   # NextCloud Application
   nextcloud:
@@ -95,28 +37,15 @@ services:
       - nextcloud-config:/var/www/html/config
       - nextcloud-apps:/var/www/html/custom_apps
       - {{ automation_data_path }}/nextcloud/data:/external-data
-    environment:
-      - MYSQL_HOST=nextcloud-db
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=nextcloud
-      - MYSQL_PASSWORD={{ nextcloud_db_password }}
-      - REDIS_HOST=nextcloud-redis
-      - REDIS_HOST_PASSWORD={{ redis_password }}
-      - NEXTCLOUD_ADMIN_USER={{ nextcloud_admin_user }}
-      - NEXTCLOUD_ADMIN_PASSWORD={{ nextcloud_admin_password }}
-      - NEXTCLOUD_TRUSTED_DOMAINS={{ subdomain_nextcloud }}.{{ domain_name }}
-      - OVERWRITEPROTOCOL=https
-      - OVERWRITEHOST={{ subdomain_nextcloud }}.{{ domain_name }}
-      - OVERWRITECLIURL=https://{{ subdomain_nextcloud }}.{{ domain_name }}
-      - APACHE_DISABLE_REWRITE_IP=1
-      - TRUSTED_PROXIES=172.16.0.0/12
+    env_file:
+      - ./config/paperless/paperless.env
     depends_on:
-      nextcloud-db:
+      shared-db:
         condition: service_healthy
-      nextcloud-redis:
+      shared-redis:
         condition: service_started
     networks:
-      - nextcloud-network
+      - backend-network
       - traefik-network
     healthcheck:
       test: curl -f http://localhost:80/status.php || exit 1
@@ -133,61 +62,6 @@ services:
       - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/remote.php/dav/"
       - "traefik.http.routers.nextcloud.middlewares=nextcloud-dav"
 
-  # Paperless-ngx Database
-  paperless-db:
-    image: postgres:15
-    container_name: paperless-db
-    restart: unless-stopped
-    volumes:
-      - paperless-db:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=paperless
-      - POSTGRES_USER=paperless
-      - POSTGRES_PASSWORD={{ paperless_db_password }}
-      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
-    networks:
-      - paperless-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d paperless -U paperless"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Paperless-ngx Redis
-  paperless-redis:
-    image: redis:7-alpine
-    container_name: paperless-redis
-    restart: unless-stopped
-    command: redis-server --requirepass {{ paperless_redis_password }}
-    volumes:
-      - paperless-redis:/data
-    networks:
-      - paperless-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "{{ paperless_redis_password }}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Paperless-ngx Tika (OCR) - Disabled due to ARM64 compatibility issues
-  # paperless-tika:
-  #   image: apache/tika:2.9.1.0-full
-  #   container_name: paperless-tika
-  #   restart: unless-stopped
-  #   networks:
-  #     - paperless-network
-
-  # Paperless-ngx Gotenberg (PDF conversion)
-  paperless-gotenberg:
-    image: gotenberg/gotenberg:7.10
-    container_name: paperless-gotenberg
-    restart: unless-stopped
-    command:
-      - "gotenberg"
-      - "--chromium-disable-javascript=true"
-      - "--chromium-allow-list=file:///tmp/.*"
-    networks:
-      - paperless-network
 
   # Paperless-ngx Application
   paperless-web:
@@ -195,10 +69,10 @@ services:
     container_name: paperless-web
     restart: unless-stopped
     depends_on:
-      paperless-db:
+      shared-db:
         condition: service_healthy
-      paperless-redis:
-        condition: service_healthy
+      shared-redis:
+        condition: service_started
       paperless-gotenberg:
         condition: service_started
     volumes:
@@ -212,7 +86,7 @@ services:
     env_file:
       - ./config/paperless/paperless.env
     networks:
-      - paperless-network
+      - backend-network
       - traefik-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000"]
@@ -226,3 +100,97 @@ services:
       - "traefik.http.routers.paperless.tls.certresolver=letsencrypt"
       - "traefik.http.routers.paperless.middlewares=paperless-headers@file"
       - "traefik.http.services.paperless.loadbalancer.server.port=8000"
+
+
+  # Shared Redis for NextCloud and Paperless
+  shared-redis:
+    image: redis:alpine
+    container_name: shared-redis
+    restart: unless-stopped
+    volumes:
+      - shared-redis:/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # Shared Database for NextCloud and Paperless
+  shared-db:
+    image: mariadb:lts
+    container_name: shared-db
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    volumes:
+      - shared-db:/var/lib/mysql
+      - ./config/shared-db/init:/docker-entrypoint-initdb.d:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD={{ nextcloud_db_password }}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD={{ nextcloud_db_password }}
+      - MARIADB_AUTO_UPGRADE=1
+      - MARIADB_DISABLE_UPGRADE_BACKUP=1
+      - MYSQL_INITDB_SKIP_TZINFO=1
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-u", "root", "-p{{ nextcloud_db_password }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+networks:
+  traefik-network:
+    external: true
+  backend-network:
+    internal: true
+
+
+volumes:
+  traefik-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: {{ automation_data_path }}/traefik
+
+  shared-db:
+  shared-redis:
+
+  nextcloud-data:
+  nextcloud-config:
+  nextcloud-apps:
+
+  paperless-data:
+  paperless-media:
+  paperless-export:
+  paperless-consume:
+
+
+# move those to a separate machine
+# Paperless-ngx Gotenberg (PDF conversion)
+# paperless-gotenberg:
+#   image: gotenberg/gotenberg:7.10
+#   container_name: paperless-gotenberg
+#   restart: unless-stopped
+#   command:
+#     - "gotenberg"
+#     - "--chromium-disable-javascript=true"
+#     - "--chromium-allow-list=file:///tmp/.*"
+#   networks:
+#     - backend-network
+
+
+# Paperless-ngx Tika (OCR) - Disabled due to ARM64 compatibility issues
+# paperless-tika:
+#   image: apache/tika:2.9.1.0-full
+#   container_name: paperless-tika
+#   restart: unless-stopped
+#   networks:
+#     - paperless-network
+
