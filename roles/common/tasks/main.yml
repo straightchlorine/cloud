@@ -36,7 +36,9 @@
     state: started
     enabled: true
   become: true
-  when: fail2ban_enabled | default(true)
+  when: 
+    - fail2ban_enabled | default(true)
+    - not ansible_check_mode
 
 - name: Set timezone
   community.general.timezone:
