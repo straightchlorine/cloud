@@ -37,7 +37,7 @@ domain_name: "local.example.com"
 subdomain_traefik: "traefik"
 
 letsencrypt_email: "admin@example.com"
-letsencrypt_staging: true
+letsencrypt_staging: false
 
 services_enabled:
   traefik: true

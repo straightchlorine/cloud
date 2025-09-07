@@ -20,7 +20,12 @@ services:
     networks:
       - traefik-network
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`{{ subdomain_traefik }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth@file"
 
 networks:
   traefik-network:
