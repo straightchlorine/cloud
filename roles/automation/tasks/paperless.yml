@@ -62,17 +62,5 @@
     group: "{{ ansible_user }}"
     mode: '0644'
 
-- name: Create multi-database initialization script
-  ansible.builtin.copy:
-    content: |
-      -- Create Paperless database and user (NextCloud is handled by env vars)
-      CREATE DATABASE IF NOT EXISTS paperless CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE USER IF NOT EXISTS 'paperless'@'%' IDENTIFIED BY '{{ paperless_db_password }}';
-      GRANT ALL PRIVILEGES ON paperless.* TO 'paperless'@'%';
-      FLUSH PRIVILEGES;
-    dest: "{{ automation_stack_home }}/config/init-multiple-db.sql"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
 
 

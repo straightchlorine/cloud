@@ -11,6 +11,25 @@
     mode: '0644'
   notify: restart automation stack
 
+- name: Create multi-database initialization script
+  ansible.builtin.copy:
+    content: |
+      -- Multi-database initialization for shared MariaDB
+      -- Create NextCloud database and user
+      CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE USER IF NOT EXISTS 'nextcloud'@'%' IDENTIFIED BY '{{ nextcloud_db_password }}';
+      GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'%';
+      
+      -- Create Paperless database and user
+      CREATE DATABASE IF NOT EXISTS paperless CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE USER IF NOT EXISTS 'paperless'@'%' IDENTIFIED BY '{{ paperless_db_password }}';
+      GRANT ALL PRIVILEGES ON paperless.* TO 'paperless'@'%';
+      
+      FLUSH PRIVILEGES;
+    dest: "{{ automation_stack_home }}/config/init-multiple-db.sql"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
 
 - name: Create stack management script
   ansible.builtin.template:
