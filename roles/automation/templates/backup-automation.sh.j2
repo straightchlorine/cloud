@@ -1,5 +1,4 @@
 #!/bin/bash
-# Automation Stack Backup Script
 
 BACKUP_DIR="{{ automation_data_path }}/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -9,65 +8,24 @@ DATA_PATH="{{ automation_data_path }}"
 
 echo "Starting automation stack backup at $(date)"
 
-# Stop services for consistent backup
 echo "Stopping services..."
 cd "$AUTOMATION_HOME"
 docker compose stop
 
-# Create backup
 echo "Creating backup archive..."
 tar -czf "$BACKUP_DIR/$BACKUP_FILE" \
     --exclude="$DATA_PATH/backups" \
-    --exclude="$DATA_PATH/nextcloud/db" \
-    --exclude="$DATA_PATH/paperless/db" \
-    --exclude="$DATA_PATH/paperless/redis" \
     -C / \
     "$(echo $DATA_PATH | sed 's|^/||')" \
     "$(echo $AUTOMATION_HOME | sed 's|^/||')"
 
-# Backup databases separately
-echo "Backing up databases..."
-cd "$AUTOMATION_HOME"
-
-# Start only database containers for backup
-docker compose start nextcloud-db paperless-db
-
-# Wait for databases to be ready
-sleep 10
-
-# Backup NextCloud database
-echo "Backing up NextCloud database..."
-docker compose exec -T nextcloud-db mysqldump \
-    -u nextcloud -p{{ nextcloud_db_password }} nextcloud \
-    > "$BACKUP_DIR/nextcloud_db_$TIMESTAMP.sql"
-
-# Backup Paperless database
-echo "Backing up Paperless database..."
-docker compose exec -T paperless-db pg_dump \
-    -U paperless paperless \
-    > "$BACKUP_DIR/paperless_db_$TIMESTAMP.sql"
-
-# Stop database containers
-docker compose stop nextcloud-db paperless-db
-
-# Start all services again
 echo "Starting services..."
 docker compose up -d
 
-# Compress database backups
-echo "Compressing database backups..."
-gzip "$BACKUP_DIR/nextcloud_db_$TIMESTAMP.sql"
-gzip "$BACKUP_DIR/paperless_db_$TIMESTAMP.sql"
-
-# Set permissions
 chown {{ ansible_user }}:{{ ansible_user }} "$BACKUP_DIR"/*
 
 echo "Backup completed successfully!"
-echo "Files created:"
-echo "  - $BACKUP_DIR/$BACKUP_FILE"
-echo "  - $BACKUP_DIR/nextcloud_db_$TIMESTAMP.sql.gz"
-echo "  - $BACKUP_DIR/paperless_db_$TIMESTAMP.sql.gz"
+echo "Files created: $BACKUP_DIR/$BACKUP_FILE"
 
-# Show disk usage
 echo "Backup directory usage:"
 du -sh "$BACKUP_DIR"

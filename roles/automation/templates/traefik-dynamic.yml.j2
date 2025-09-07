@@ -1,17 +1,11 @@
 ---
-# Traefik dynamic configuration
-
 http:
-  # Middlewares
   middlewares:
-    # Authentication middleware
     auth:
       basicAuth:
         users:
-          # Default: admin:admin (change in vault)
           - "{{ vault_traefik_basic_auth | default('admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
 
-    # Security headers
     secure-headers:
       headers:
         accessControlAllowMethods:
@@ -26,7 +20,6 @@ http:
         customRequestHeaders:
           X-Forwarded-Proto: "https"
 
-    # Default headers
     default-headers:
       headers:
         frameDeny: true
@@ -38,22 +31,11 @@ http:
         stsPreload: true
         stsSeconds: 31536000
 
-    # HTTPS redirect
     https-redirect:
       redirectScheme:
         scheme: https
         permanent: true
 
-    # Paperless-ngx middleware to prevent redirect loops
-    paperless-headers:
-      headers:
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
-          X-Forwarded-Host: "{{ subdomain_paperless }}.{{ domain_name }}"
-          X-Forwarded-For: ""
-          X-Real-IP: ""
-
-# TLS configuration
 tls:
   options:
     default:

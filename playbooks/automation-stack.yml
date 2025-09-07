@@ -1,33 +1,17 @@
 ---
-# Automation stack deployment playbook for Raspberry Pi 4B
-
-- name: Deploy Automation Stack on Raspberry Pi 4B
+- name: Deploy Automation Stack
   hosts: pi-automation
   become: true
   gather_facts: true
   vars_files:
     - "{{ playbook_dir }}/../group_vars/vault.yml"
   vars:
-    # Ensure vault variables are available to roles
     domain_name: "{{ vault_domain_name | default('local.example.com') }}"
     letsencrypt_email: "{{ vault_letsencrypt_email | default('admin@example.com') }}"
-    # Service credentials from vault
     traefik_basic_auth: "{{ vault_traefik_basic_auth | default('admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
-    nextcloud_admin_user: "{{ vault_nextcloud_admin_user | default('admin') }}"
-    nextcloud_admin_password: "{{ vault_nextcloud_admin_password | default('') }}"
-    paperless_admin_user: "{{ vault_paperless_admin_user | default('admin') }}"
-    paperless_admin_password: "{{ vault_paperless_admin_password | default('') }}"
   tags: [automation-stack]
   
   pre_tasks:
-    - name: Debug vault loading
-      ansible.builtin.debug:
-        msg:
-          - "Playbook dir: {{ playbook_dir }}"
-          - "Domain: {{ domain_name }}"
-          - "Let's Encrypt email: {{ letsencrypt_email }}"
-      tags: [debug, always]
-
     - name: Update package cache
       ansible.builtin.apt:
         update_cache: true
@@ -55,52 +39,26 @@
     - name: Display deployment information
       ansible.builtin.debug:
         msg: |
-          🤖 Automation Stack Deployment Complete!
+          Automation Stack Deployment Complete!
           
           Services:
           - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
-            (User: admin, check vault for password)
-          - NextCloud: https://{{ subdomain_nextcloud }}.{{ domain_name }}
-            (User: {{ vault_nextcloud_admin_user | default('admin') }})
-          - Paperless-ngx: https://{{ subdomain_paperless }}.{{ domain_name }}
-            (User: {{ vault_paperless_admin_user | default('admin') }})
           
           Management:
           - Stack control: manage-automation {start|stop|restart|status|logs}
-          - View services: docker compose -f ~/{{ automation_stack_home | basename }}/docker-compose.yml ps
-          - Backup: ~/{{ automation_stack_home | basename }}/scripts/backup-automation.sh
+          - Backup: {{ automation_stack_home }}/scripts/backup-automation.sh
           
           Data locations:
-          - Configuration: ~/{{ automation_stack_home | basename }}/
+          - Configuration: {{ automation_stack_home }}/
           - Data: {{ automation_data_path }}
           - Backups: {{ automation_data_path }}/backups
-          
-          Document Upload:
-          - Paperless consume dir: {{ automation_data_path }}/paperless/consume
       tags: [info]
-
-    - name: Check if management script exists
-      ansible.builtin.stat:
-        path: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-      register: manage_script_stat
-      tags: [shortcuts]
 
     - name: Verify Docker network exists
       community.docker.docker_network_info:
         name: traefik-network
       register: traefik_network_info
       become_user: "{{ ansible_user }}"
-      tags: [verification]
-
-    - name: Display network status
-      ansible.builtin.debug:
-        msg: "Traefik network status: {{ 'EXISTS' if traefik_network_info.exists else 'MISSING' }}"
-      tags: [verification]
-
-    - name: Wait for services to be ready
-      ansible.builtin.pause:
-        seconds: 15
-        prompt: "Waiting for services to start up..."
       tags: [verification]
 
     - name: Verify services are responding

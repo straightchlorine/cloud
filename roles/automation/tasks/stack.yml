@@ -1,7 +1,4 @@
 ---
-# Automation stack deployment
-
-
 - name: Create Docker Compose file
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -10,26 +7,6 @@
     group: "{{ ansible_user }}"
     mode: '0644'
   notify: restart automation stack
-
-- name: Create multi-database initialization script
-  ansible.builtin.copy:
-    content: |
-      -- Multi-database initialization for shared MariaDB
-      -- Create NextCloud database and user
-      CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE USER IF NOT EXISTS 'nextcloud'@'%' IDENTIFIED BY '{{ nextcloud_db_password }}';
-      GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'%';
-      
-      -- Create Paperless database and user  
-      CREATE DATABASE IF NOT EXISTS paperless CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE USER IF NOT EXISTS 'paperless'@'%' IDENTIFIED BY '{{ paperless_db_password }}';
-      GRANT ALL PRIVILEGES ON paperless.* TO 'paperless'@'%';
-      
-      FLUSH PRIVILEGES;
-    dest: "{{ automation_stack_home }}/config/init-multiple-db.sql"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
 
 - name: Create stack management script
   ansible.builtin.template:
@@ -56,10 +33,6 @@
 - name: Start automation stack
   ansible.builtin.shell: |
     cd "{{ automation_stack_home }}"
-    set -a  # Automatically export all variables
-    . config/nextcloud/nextcloud.env
-    . config/paperless/paperless.env
-    set +a  # Stop auto-exporting
     docker compose up -d
   become_user: "{{ ansible_user }}"
   args:
@@ -81,12 +54,10 @@
 - name: Display service information
   ansible.builtin.debug:
     msg: |
-      🤖 Automation Stack Deployment Complete!
+      Automation Stack Deployment Complete!
       
       Services:
       - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
-      - NextCloud: https://{{ subdomain_nextcloud }}.{{ domain_name }}
-      - Paperless-ngx: https://{{ subdomain_paperless }}.{{ domain_name }}
       
       Management:
       - Stack control: manage-automation {start|stop|restart|status|logs}
@@ -94,5 +65,3 @@
       
       Data locations:
       - Traefik: {{ automation_data_path }}/traefik
-      - NextCloud: {{ automation_data_path }}/nextcloud
-      - Paperless: {{ automation_data_path }}/paperless

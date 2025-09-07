@@ -1,5 +1,4 @@
 #!/bin/bash
-# Automation stack management script for Raspberry Pi 4B
 
 AUTOMATION_HOME="{{ automation_stack_home }}"
 COMMAND="$1"
@@ -9,7 +8,7 @@ cd "$AUTOMATION_HOME"
 
 show_help() {
     echo "Usage: $0 <command> [service]"
-    echo ""
+    echo
     echo "Commands:"
     echo "  start     Start all services or specific service"
     echo "  stop      Stop all services or specific service"
@@ -19,15 +18,13 @@ show_help() {
     echo "  update    Pull latest images and restart"
     echo "  backup    Run backup script"
     echo "  help      Show this help message"
-    echo ""
+    echo
     echo "Services:"
-    echo "  traefik      Reverse proxy with SSL"
-    echo "  nextcloud    Cloud storage and file sync"
-    echo "  paperless    Document management with OCR"
-    echo ""
+    echo "  traefik   Reverse proxy with SSL"
+    echo
     echo "Examples:"
     echo "  $0 start              # Start all services"
-    echo "  $0 restart nextcloud  # Restart only NextCloud"
+    echo "  $0 restart traefik    # Restart only Traefik"
     echo "  $0 logs traefik       # Show Traefik logs"
 }
 
@@ -62,7 +59,7 @@ case "$COMMAND" in
     status)
         echo "Automation Stack Status:"
         docker compose ps
-        echo ""
+        echo
         echo "Resource Usage:"
         docker stats --no-stream
         ;;

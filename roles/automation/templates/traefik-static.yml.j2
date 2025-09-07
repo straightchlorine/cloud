@@ -1,5 +1,4 @@
 ---
-# Traefik static configuration
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
@@ -7,7 +6,6 @@ global:
 serversTransport:
   insecureSkipVerify: true
 
-# Entry points
 entryPoints:
   web:
     address: ":{{ traefik_web_port }}"
@@ -27,7 +25,6 @@ entryPoints:
   traefik:
     address: ":{{ traefik_dashboard_port }}"
 
-# Certificate resolvers
 certificatesResolvers:
   letsencrypt:
     acme:
@@ -38,14 +35,7 @@ certificatesResolvers:
 {% endif %}
       httpChallenge:
         entryPoint: web
-      # Alternative: DNS challenge (uncomment if needed)
-      # dnsChallenge:
-      #   provider: cloudflare
-      #   resolvers:
-      #     - "1.1.1.1:53"
-      #     - "8.8.8.8:53"
 
-# Providers
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
@@ -56,20 +46,17 @@ providers:
     filename: /config/dynamic.yml
     watch: true
 
-# API and dashboard
 api:
   dashboard: true
   debug: true
   insecure: true
 
-# Metrics (optional)
 metrics:
   prometheus:
     addEntryPointsLabels: true
     addServicesLabels: true
     addRoutersLabels: true
 
-# Logging
 log:
   level: INFO
   filePath: /logs/traefik.log

@@ -1,6 +1,4 @@
 ---
-# Automation stack setup tasks for Raspberry Pi 4B
-
 - name: Update package cache
   ansible.builtin.apt:
     update_cache: true
@@ -27,16 +25,6 @@
   ansible.builtin.include_tasks: traefik.yml
   when: services_enabled.traefik | default(true)
   tags: [traefik, reverse-proxy]
-
-- name: Include NextcloudPi setup
-  ansible.builtin.include_tasks: nextcloud.yml
-  when: services_enabled.nextcloud | default(true)
-  tags: [nextcloud, cloud]
-
-- name: Include Paperless-ngx setup
-  ansible.builtin.include_tasks: paperless.yml
-  when: services_enabled.paperless | default(true)
-  tags: [paperless, documents]
 
 - name: Include stack deployment
   ansible.builtin.include_tasks: stack.yml

@@ -17,10 +17,8 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
   - Automated backups to Hetzner Storage Box
   - Docker-based services with monitoring
 
-- **pi-automation** (192.168.20.20): Automation and document management server
+- **pi-automation** (192.168.20.20): Automation server
   - Traefik reverse proxy with automatic SSL certificates
-  - NextCloud for cloud storage and file synchronization
-  - Paperless-ngx for document management with OCR
   - Automated backups and monitoring
 
 
@@ -82,8 +80,6 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
 
 ### Automation Server (pi-automation)
 - **Traefik Dashboard**: https://traefik.your-domain.com
-- **NextCloud**: https://cloud.your-domain.com
-- **Paperless-ngx**: https://docs.your-domain.com
 
 ## Maintenance
 
@@ -100,7 +96,6 @@ Ansible configuration for managing Raspberry Pi services including DNS filtering
 ### Automation Stack
 - Management script: `manage-automation {start|stop|restart|status|logs}`
 - Backup: `~/automation-stack/scripts/backup-automation.sh`
-- Upload documents: Drop files in `/mnt/automation-data/paperless/consume`
 
 ## Configuration
 

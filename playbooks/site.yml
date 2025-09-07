@@ -54,4 +54,4 @@
   roles:
     - role: automation
       when: device_role == "automation"
-      tags: [automation, traefik, nextcloud, paperless]
+      tags: [automation, traefik]

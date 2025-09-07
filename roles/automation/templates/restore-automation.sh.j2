@@ -1,5 +1,4 @@
 #!/bin/bash
-# Automation Stack Restore Script
 
 BACKUP_DIR="{{ automation_data_path }}/backups"
 AUTOMATION_HOME="{{ automation_stack_home }}"
@@ -14,8 +13,6 @@ fi
 
 TIMESTAMP="$1"
 BACKUP_FILE="automation_backup_$TIMESTAMP.tar.gz"
-NEXTCLOUD_DB_FILE="nextcloud_db_$TIMESTAMP.sql.gz"
-PAPERLESS_DB_FILE="paperless_db_$TIMESTAMP.sql.gz"
 
 if [ ! -f "$BACKUP_DIR/$BACKUP_FILE" ]; then
     echo "Error: Backup file $BACKUP_FILE not found!"
@@ -33,12 +30,10 @@ fi
 
 echo "Starting restore process..."
 
-# Stop services
 echo "Stopping services..."
 cd "$AUTOMATION_HOME"
 docker compose down
 
-# Backup current data (just in case)
 echo "Creating safety backup..."
 SAFETY_BACKUP="safety_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
 tar -czf "$BACKUP_DIR/$SAFETY_BACKUP" \
@@ -46,38 +41,9 @@ tar -czf "$BACKUP_DIR/$SAFETY_BACKUP" \
     "$(echo $DATA_PATH | sed 's|^/||')" \
     "$(echo $AUTOMATION_HOME | sed 's|^/||')"
 
-# Restore files
 echo "Restoring files..."
 tar -xzf "$BACKUP_DIR/$BACKUP_FILE" -C /
 
-# Restore databases if available
-if [ -f "$BACKUP_DIR/$NEXTCLOUD_DB_FILE" ]; then
-    echo "Restoring NextCloud database..."
-    cd "$AUTOMATION_HOME"
-    docker compose up -d nextcloud-db
-    sleep 10
-    
-    gunzip -c "$BACKUP_DIR/$NEXTCLOUD_DB_FILE" | \
-    docker compose exec -T nextcloud-db mysql \
-        -u nextcloud -p{{ nextcloud_db_password }} nextcloud
-    
-    docker compose stop nextcloud-db
-fi
-
-if [ -f "$BACKUP_DIR/$PAPERLESS_DB_FILE" ]; then
-    echo "Restoring Paperless database..."
-    cd "$AUTOMATION_HOME"
-    docker compose up -d paperless-db
-    sleep 10
-    
-    gunzip -c "$BACKUP_DIR/$PAPERLESS_DB_FILE" | \
-    docker compose exec -T paperless-db psql \
-        -U paperless -d paperless
-    
-    docker compose stop paperless-db
-fi
-
-# Start all services
 echo "Starting services..."
 docker compose up -d
 

@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: Ansible Admin
-  description: Automation stack for Raspberry Pi 4B with Traefik, NextCloud, and Paperless-ngx
+  description: Automation stack for Raspberry Pi 4B with Traefik reverse proxy
   company: Local
   license: MIT
   min_ansible_version: '2.12'
@@ -17,14 +17,10 @@ galaxy_info:
   galaxy_tags:
     - automation
     - traefik
-    - nextcloud
-    - paperless
     - docker
     - raspberry-pi
     - reverse-proxy
     - ssl
-    - documents
-    - cloud-storage
 
 collections:
   - community.docker
