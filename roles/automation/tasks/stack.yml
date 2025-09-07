@@ -20,7 +20,7 @@
       CREATE USER IF NOT EXISTS 'nextcloud'@'%' IDENTIFIED BY '{{ nextcloud_db_password }}';
       GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'%';
       
-      -- Create Paperless database and user
+      -- Create Paperless database and user  
       CREATE DATABASE IF NOT EXISTS paperless CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE USER IF NOT EXISTS 'paperless'@'%' IDENTIFIED BY '{{ paperless_db_password }}';
       GRANT ALL PRIVILEGES ON paperless.* TO 'paperless'@'%';
