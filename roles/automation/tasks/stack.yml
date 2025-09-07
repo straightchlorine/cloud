@@ -11,14 +11,6 @@
     mode: '0644'
   notify: restart automation stack
 
-- name: Create main environment file
-  ansible.builtin.template:
-    src: .env.j2
-    dest: "{{ automation_stack_home }}/.env"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0600'
-  notify: restart automation stack
 
 - name: Create stack management script
   ansible.builtin.template:
