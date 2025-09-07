@@ -38,7 +38,7 @@ services:
       - nextcloud-apps:/var/www/html/custom_apps
       - {{ automation_data_path }}/nextcloud/data:/external-data
     env_file:
-      - ./config/paperless/paperless.env
+      - ./config/nextcloud/nextcloud.env
     depends_on:
       shared-db:
         condition: service_healthy
