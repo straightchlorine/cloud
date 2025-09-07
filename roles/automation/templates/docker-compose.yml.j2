@@ -15,6 +15,7 @@ services:
     environment:
       - TRAEFIK_API_DASHBOARD=true
       - TRAEFIK_API_INSECURE=true
+      - CF_DNS_API_TOKEN={{ vault_cloudflare_api_token | default('') }}
     command:
       - --configFile=/config/traefik.yml
     networks:

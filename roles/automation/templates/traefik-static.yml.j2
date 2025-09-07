@@ -33,8 +33,11 @@ certificatesResolvers:
 {% if letsencrypt_staging %}
       caServer: https://acme-staging-v02.api.letsencrypt.org/directory
 {% endif %}
-      httpChallenge:
-        entryPoint: web
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
 
 providers:
   docker:
