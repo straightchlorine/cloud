@@ -1,5 +1,5 @@
-directory: {{ music_library_path }}/music
-library: {{ music_stack_home }}/config/beets/library.db
+directory: /music
+library: /config/beets/library.db
 
 import:
     move: yes
@@ -9,8 +9,8 @@ import:
     incremental: yes
     quiet_fallback: skip
     timid: no
-    log: {{ music_stack_home }}/logs/beets-import.log
-    # Enhanced YouTube download handling
+    log: /config/import.log
+    # Enhanced YouTube download handling - FULLY AUTOMATIC
     from_scratch: no
     group_albums: no
     # Allow duplicates for different qualities/versions
@@ -21,6 +21,8 @@ import:
     none_rec_action: asis
     # Automatically import as singletons when no album match
     default_action: apply
+    # Force automatic decisions to prevent any prompts
+    art: no
 
 match:
     strong_rec_thresh: 0.04

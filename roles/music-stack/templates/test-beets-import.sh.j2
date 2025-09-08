@@ -1,24 +1,76 @@
 #!/bin/bash
-# Test script for beets import functionality
-# Tests the fixed non-interactive beets import command
+# Enhanced Test Script for YouTube Cron Workflow
+# Tests the complete YouTube download -> Beets import -> Archiving process
+# Simulates the cron environment and validates all components
 
 set -euo pipefail
 
 # Configuration
 MUSIC_STACK_HOME="{{ music_stack_home }}"
 DOWNLOAD_DIR="{{ music_library_path }}/downloads"
-LOG_FILE="$MUSIC_STACK_HOME/logs/beets-test.log"
+PROCESSING_DIR="{{ music_library_path }}/processing"
+LIBRARY_DIR="{{ music_library_path }}/music"
+LOG_FILE="$MUSIC_STACK_HOME/logs/youtube-cron-test.log"
+CONFIG_DIR="$MUSIC_STACK_HOME/config"
+BEETS_CONFIG="$CONFIG_DIR/beets/config.yaml"
+
+# Test mode flags
+TEST_MODE="${1:-full}"  # full, beets-only, or setup-only
+CREATE_TEST_FILES="${CREATE_TEST_FILES:-true}"
+
+# Trap to cleanup test files on exit
+cleanup() {
+    local exit_code=$?
+    if [[ "$CREATE_TEST_FILES" == "true" && -d "$DOWNLOAD_DIR/test-files" ]]; then
+        log "Cleaning up test files..." "INFO"
+        rm -rf "$DOWNLOAD_DIR/test-files" 2>/dev/null || true
+    fi
+    exit $exit_code
+}
+trap cleanup EXIT INT TERM
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Logging function
+# Enhanced logging function
 log() {
     local level="${2:-INFO}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $1" | tee -a "$LOG_FILE"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $1" | tee -a "$LOG_FILE"
 }
 
-log "=== Beets Import Test Started ==="
+# Function to create test audio files for testing
+create_test_files() {
+    local test_dir="$DOWNLOAD_DIR/test-files"
+    mkdir -p "$test_dir"
+    
+    log "Creating test audio files for import testing..." "INFO"
+    
+    # Create dummy audio files that simulate YouTube downloads
+    cat > "$test_dir/Test Artist - Test Song.opus.info.json" << 'EOF'
+{
+  "title": "Test Song",
+  "uploader": "Test Artist",
+  "duration": 180,
+  "upload_date": "20240101"
+}
+EOF
+    
+    # Create a minimal opus file header (just enough for beets to recognize)
+    printf "OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00" > "$test_dir/Test Artist - Test Song.opus"
+    echo "OpusHead" >> "$test_dir/Test Artist - Test Song.opus"
+    
+    # Create another test file
+    printf "OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00" > "$test_dir/Another Artist - Another Song.opus"
+    echo "OpusHead" >> "$test_dir/Another Artist - Another Song.opus"
+    
+    log "Created 2 test audio files in $test_dir" "INFO"
+}
+
+log "=== YouTube Cron Workflow Test Started (mode: $TEST_MODE) ==="
+
+# Pre-flight checks
+log "Running pre-flight checks..." "INFO"
 
 # Check if docker-compose file exists
 if [[ ! -f "$MUSIC_STACK_HOME/docker-compose.yml" ]]; then
@@ -26,56 +78,171 @@ if [[ ! -f "$MUSIC_STACK_HOME/docker-compose.yml" ]]; then
     exit 1
 fi
 
-# Check if downloads directory exists and has audio files
-if [[ ! -d "$DOWNLOAD_DIR" ]]; then
-    log "ERROR: Downloads directory not found: $DOWNLOAD_DIR" "ERROR"
+# Check if beets config exists
+if [[ ! -f "$BEETS_CONFIG" ]]; then
+    log "ERROR: Beets configuration not found at $BEETS_CONFIG" "ERROR"
     exit 1
 fi
 
-# Count audio files in downloads
-AUDIO_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
-log "Found $AUDIO_COUNT audio files in downloads directory" "INFO"
+# Validate directory structure
+for dir in "$DOWNLOAD_DIR" "$PROCESSING_DIR" "$LIBRARY_DIR"; do
+    if [[ ! -d "$dir" ]]; then
+        log "WARNING: Directory $dir does not exist, creating..." "WARN"
+        mkdir -p "$dir"
+    fi
+done
 
-if [[ $AUDIO_COUNT -eq 0 ]]; then
-    log "WARNING: No audio files found to test import" "WARN"
-    log "Creating test directory structure for demo..."
-    
-    # Show what the command would do
-    log "Test command that would be executed:" "INFO"
-    echo "docker compose -f \"$MUSIC_STACK_HOME/docker-compose.yml\" run --rm -T beets bash -c \"echo 'Y' | beet --config /config/config.yaml import /downloads --quiet\""
+# Ensure beets database directory exists
+BEETS_DB_DIR="$CONFIG_DIR/beets"
+if [[ ! -d "$BEETS_DB_DIR" ]]; then
+    log "Creating beets database directory: $BEETS_DB_DIR" "INFO"
+    mkdir -p "$BEETS_DB_DIR"
+fi
+
+# Check Docker and compose availability
+if ! command -v docker >/dev/null 2>&1; then
+    log "ERROR: Docker is not available" "ERROR"
+    exit 1
+fi
+
+# Test docker compose connectivity
+if ! docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" config >/dev/null 2>&1; then
+    log "ERROR: Docker compose configuration is invalid" "ERROR"
+    exit 1
+fi
+
+log "✅ Pre-flight checks completed successfully" "INFO"
+
+if [[ "$TEST_MODE" == "setup-only" ]]; then
+    log "Setup-only mode completed" "INFO"
     exit 0
 fi
 
-# Test the beets import command (same as fixed youtube-sync.sh)
-log "Testing beets import with non-interactive mode..." "INFO"
-log "Command: docker compose -f \"$MUSIC_STACK_HOME/docker-compose.yml\" run --rm -T beets bash -c \"echo 'Y' | beet --config /config/config.yaml import /downloads --quiet\"" "INFO"
+# Test Environment Simulation
+log "Simulating cron environment..." "INFO"
 
-BEETS_EXIT_CODE=0
-if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-    bash -c "echo 'Y' | beet --config /config/config.yaml import /downloads --quiet" 2>&1 | tee -a "$LOG_FILE"; then
-    log "✅ Beets import test completed successfully" "INFO"
+# Source the YouTube environment file if it exists (like the cron would)
+YOUTUBE_ENV_FILE="$CONFIG_DIR/youtube.env"
+if [[ -f "$YOUTUBE_ENV_FILE" ]]; then
+    log "Loading YouTube environment variables from $YOUTUBE_ENV_FILE" "INFO"
+    set -a  # automatically export all variables
+    source "$YOUTUBE_ENV_FILE"
+    set +a
 else
-    BEETS_EXIT_CODE=$?
-    log "❌ Beets import test failed with exit code $BEETS_EXIT_CODE" "ERROR"
+    log "WARNING: YouTube environment file not found at $YOUTUBE_ENV_FILE" "WARN"
 fi
 
-# Alternative test command (if the above still has issues)
-if [[ $BEETS_EXIT_CODE -ne 0 ]]; then
-    log "Trying alternative approach with --yes flag..." "INFO"
+# Count existing audio files
+EXISTING_AUDIO_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
+log "Found $EXISTING_AUDIO_COUNT existing audio files in downloads directory" "INFO"
+
+# Create test files if none exist and we're in full test mode
+if [[ $EXISTING_AUDIO_COUNT -eq 0 && "$TEST_MODE" == "full" && "$CREATE_TEST_FILES" == "true" ]]; then
+    create_test_files
+    EXISTING_AUDIO_COUNT=2
+fi
+
+# Test beets container startup
+log "Testing beets container startup..." "INFO"
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+    beet --config /config/config.yaml version 2>&1 | tee -a "$LOG_FILE"; then
+    log "✅ Beets container startup successful" "INFO"
+else
+    log "❌ Beets container startup failed" "ERROR"
+    exit 1
+fi
+
+if [[ $EXISTING_AUDIO_COUNT -eq 0 ]]; then
+    log "WARNING: No audio files found to test import" "WARN"
+    log "To test with real files, place audio files in: $DOWNLOAD_DIR" "INFO"
+    log "Or run with CREATE_TEST_FILES=true to create dummy files" "INFO"
+    exit 0
+fi
+
+# Test the complete beets import workflow (matching youtube-sync.sh behavior)
+log "Testing complete beets import workflow..." "INFO"
+log "Files to process: $EXISTING_AUDIO_COUNT" "INFO"
+
+# Initialize beets database if needed
+log "Initializing beets database..." "INFO"
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+    bash -c "beet --config /config/config.yaml stats" >/dev/null 2>&1; then
+    log "✅ Beets database is accessible" "INFO"
+else
+    log "Initializing new beets database..." "INFO"
+    docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+        bash -c "beet --config /config/config.yaml import --help" >/dev/null 2>&1 || true
+fi
+
+# Test the exact import command used by youtube-sync.sh
+log "Running beets import (exact command from youtube-sync.sh)..." "INFO"
+log "Command: docker compose run --rm -T beets beet --config /config/config.yaml import /downloads --quiet --yes" "INFO"
+
+BEETS_EXIT_CODE=0
+IMPORT_START_TIME=$(date +%s)
+
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+    beet --config /config/config.yaml import /downloads --quiet --yes 2>&1 | tee -a "$LOG_FILE"; then
+    IMPORT_END_TIME=$(date +%s)
+    IMPORT_DURATION=$((IMPORT_END_TIME - IMPORT_START_TIME))
+    log "✅ Beets import completed successfully in ${IMPORT_DURATION}s" "INFO"
+else
+    BEETS_EXIT_CODE=$?
+    log "❌ Beets import failed with exit code $BEETS_EXIT_CODE" "ERROR"
+fi
+
+# Test archiving process (simulate what youtube-sync.sh does after successful import)
+if [[ $BEETS_EXIT_CODE -eq 0 && "$TEST_MODE" == "full" ]]; then
+    log "Testing archiving process..." "INFO"
+    ARCHIVE_DIR="$MUSIC_STACK_HOME/archive/test-$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$ARCHIVE_DIR"
     
-    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-        bash -c "beet --config /config/config.yaml import /downloads --quiet --yes" 2>&1 | tee -a "$LOG_FILE"; then
-        log "✅ Alternative beets import test completed successfully" "INFO"
-        BEETS_EXIT_CODE=0
+    # Find and archive processed files
+    FILES_TO_ARCHIVE=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" \) 2>/dev/null | wc -l)
+    if [[ $FILES_TO_ARCHIVE -gt 0 ]]; then
+        log "Archiving $FILES_TO_ARCHIVE processed files to $ARCHIVE_DIR..." "INFO"
+        find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" \) -exec cp {} "$ARCHIVE_DIR/" \; 2>&1 | tee -a "$LOG_FILE"
+        
+        # Archive metadata files too
+        find "$DOWNLOAD_DIR" -name "*.info.json" -exec cp {} "$ARCHIVE_DIR/" \; 2>/dev/null || true
+        
+        log "✅ Archiving completed successfully" "INFO"
     else
-        BEETS_EXIT_CODE=$?
-        log "❌ Alternative beets import test also failed with exit code $BEETS_EXIT_CODE" "ERROR"
+        log "No files found to archive" "INFO"
     fi
 fi
 
-# Show container status
-log "Checking beets container availability..." "INFO"
-docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" ps beets || true
+# Test library verification
+log "Verifying imported files in library..." "INFO"
+LIBRARY_COUNT=$(find "$LIBRARY_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
+log "Library now contains $LIBRARY_COUNT audio files" "INFO"
 
-log "=== Beets Import Test Finished (exit code: $BEETS_EXIT_CODE) ==="
+# Test beets database queries
+log "Testing beets database queries..." "INFO"
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+    beet --config /config/config.yaml stats 2>&1 | tee -a "$LOG_FILE"; then
+    log "✅ Beets database queries working" "INFO"
+else
+    log "❌ Beets database queries failed" "ERROR"
+    BEETS_EXIT_CODE=1
+fi
+
+# Show container status
+log "Current container status:" "INFO"
+docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" ps || true
+
+# Summary report
+log "=== Test Summary ===" "INFO"
+log "Test Mode: $TEST_MODE" "INFO"
+log "Audio files processed: $EXISTING_AUDIO_COUNT" "INFO"
+log "Files now in library: $LIBRARY_COUNT" "INFO"
+log "Beets exit code: $BEETS_EXIT_CODE" "INFO"
+
+if [[ $BEETS_EXIT_CODE -eq 0 ]]; then
+    log "🎵 YouTube Cron Workflow Test: SUCCESS" "INFO"
+else
+    log "❌ YouTube Cron Workflow Test: FAILED" "ERROR"
+fi
+
+log "=== YouTube Cron Workflow Test Finished ==="
 exit $BEETS_EXIT_CODE
