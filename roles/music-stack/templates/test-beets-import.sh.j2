@@ -1,0 +1,81 @@
+#!/bin/bash
+# Test script for beets import functionality
+# Tests the fixed non-interactive beets import command
+
+set -euo pipefail
+
+# Configuration
+MUSIC_STACK_HOME="{{ music_stack_home }}"
+DOWNLOAD_DIR="{{ music_library_path }}/downloads"
+LOG_FILE="$MUSIC_STACK_HOME/logs/beets-test.log"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Logging function
+log() {
+    local level="${2:-INFO}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Beets Import Test Started ==="
+
+# Check if docker-compose file exists
+if [[ ! -f "$MUSIC_STACK_HOME/docker-compose.yml" ]]; then
+    log "ERROR: docker-compose.yml not found at $MUSIC_STACK_HOME/docker-compose.yml" "ERROR"
+    exit 1
+fi
+
+# Check if downloads directory exists and has audio files
+if [[ ! -d "$DOWNLOAD_DIR" ]]; then
+    log "ERROR: Downloads directory not found: $DOWNLOAD_DIR" "ERROR"
+    exit 1
+fi
+
+# Count audio files in downloads
+AUDIO_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
+log "Found $AUDIO_COUNT audio files in downloads directory" "INFO"
+
+if [[ $AUDIO_COUNT -eq 0 ]]; then
+    log "WARNING: No audio files found to test import" "WARN"
+    log "Creating test directory structure for demo..."
+    
+    # Show what the command would do
+    log "Test command that would be executed:" "INFO"
+    echo "docker compose -f \"$MUSIC_STACK_HOME/docker-compose.yml\" run --rm -T beets bash -c \"echo 'Y' | beet --config /config/config.yaml import /downloads --quiet\""
+    exit 0
+fi
+
+# Test the beets import command (same as fixed youtube-sync.sh)
+log "Testing beets import with non-interactive mode..." "INFO"
+log "Command: docker compose -f \"$MUSIC_STACK_HOME/docker-compose.yml\" run --rm -T beets bash -c \"echo 'Y' | beet --config /config/config.yaml import /downloads --quiet\"" "INFO"
+
+BEETS_EXIT_CODE=0
+if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+    bash -c "echo 'Y' | beet --config /config/config.yaml import /downloads --quiet" 2>&1 | tee -a "$LOG_FILE"; then
+    log "✅ Beets import test completed successfully" "INFO"
+else
+    BEETS_EXIT_CODE=$?
+    log "❌ Beets import test failed with exit code $BEETS_EXIT_CODE" "ERROR"
+fi
+
+# Alternative test command (if the above still has issues)
+if [[ $BEETS_EXIT_CODE -ne 0 ]]; then
+    log "Trying alternative approach with --yes flag..." "INFO"
+    
+    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+        bash -c "beet --config /config/config.yaml import /downloads --quiet --yes" 2>&1 | tee -a "$LOG_FILE"; then
+        log "✅ Alternative beets import test completed successfully" "INFO"
+        BEETS_EXIT_CODE=0
+    else
+        BEETS_EXIT_CODE=$?
+        log "❌ Alternative beets import test also failed with exit code $BEETS_EXIT_CODE" "ERROR"
+    fi
+fi
+
+# Show container status
+log "Checking beets container availability..." "INFO"
+docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" ps beets || true
+
+log "=== Beets Import Test Finished (exit code: $BEETS_EXIT_CODE) ==="
+exit $BEETS_EXIT_CODE

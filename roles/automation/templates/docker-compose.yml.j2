@@ -33,7 +33,7 @@ services:
       - "traefik.http.routers.metrics.entrypoints=websecure"
       - "traefik.http.routers.metrics.tls.certresolver=letsencrypt"
       - "traefik.http.routers.metrics.service=prometheus@internal"
-      - "traefik.http.routers.metrics.middlewares=prometheus-metrics"
+      - "traefik.http.routers.metrics.middlewares=prometheus-metrics@file"
       - "traefik.http.middlewares.metrics-auth.basicauth.users={{ vault_traefik_metrics_auth | default('metrics:$$2y$$10$$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
 
 networks:

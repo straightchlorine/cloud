@@ -236,6 +236,15 @@
     mode: '0755'
   tags: [youtube, scripts, beets]
 
+- name: Create Beets import test script
+  ansible.builtin.template:
+    src: test-beets-import.sh.j2
+    dest: "{{ music_stack_home }}/scripts/test-beets-import.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  tags: [youtube, scripts, beets, test]
+
 - name: Start music stack
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"

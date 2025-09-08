@@ -105,10 +105,10 @@ touch "$TIMESTAMP_FILE"
 if [[ $DOWNLOAD_COUNT -gt 0 ]]; then
     log "Running Beets import on new downloads..." "INFO"
     
-    # Run Beets import using Docker container
+    # Run Beets import using Docker container (non-interactive mode)
     BEETS_EXIT_CODE=0
-    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm beets \
-        beet --config /config/config.yaml import /downloads --quiet 2>&1 | tee -a "$LOG_FILE"; then
+    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
+        bash -c "echo 'Y' | beet --config /config/config.yaml import /downloads --quiet" 2>&1 | tee -a "$LOG_FILE"; then
         log "Beets import completed successfully" "INFO"
     else
         BEETS_EXIT_CODE=$?
