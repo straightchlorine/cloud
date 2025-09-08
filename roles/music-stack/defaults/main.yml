@@ -9,7 +9,10 @@ music_stack_base_packages:
 # Docker configuration
 docker_compose_version: "v2.20.2"
 
-# Service ports (defaults)
+# Music stack configuration (defaults)
+music_stack_home: "/home/{{ ansible_user }}/music-stack"
+
+# Service ports (defaults) 
 navidrome_port: 4533
 dozzle_port: 8080
 
