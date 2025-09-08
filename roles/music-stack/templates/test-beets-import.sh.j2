@@ -92,11 +92,16 @@ for dir in "$DOWNLOAD_DIR" "$PROCESSING_DIR" "$LIBRARY_DIR"; do
     fi
 done
 
-# Ensure beets database directory exists
+# Ensure beets database directory exists (LinuxServer container expects this)
 BEETS_DB_DIR="$CONFIG_DIR/beets"
+BEETS_INTERNAL_DIR="$BEETS_DB_DIR/beets"
 if [[ ! -d "$BEETS_DB_DIR" ]]; then
     log "Creating beets database directory: $BEETS_DB_DIR" "INFO"
     mkdir -p "$BEETS_DB_DIR"
+fi
+if [[ ! -d "$BEETS_INTERNAL_DIR" ]]; then
+    log "Creating beets internal directory: $BEETS_INTERNAL_DIR" "INFO"
+    mkdir -p "$BEETS_INTERNAL_DIR"
 fi
 
 # Check Docker and compose availability
@@ -170,8 +175,13 @@ if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
     log "✅ Beets database is accessible" "INFO"
 else
     log "Initializing new beets database..." "INFO"
-    docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-        bash -c "beet --config /config/config.yaml import --help" >/dev/null 2>&1 || true
+    # Initialize database by answering 'Y' to directory creation prompt
+    if echo "Y" | docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -i beets \
+        bash -c "beet --config /config/config.yaml stats" >/dev/null 2>&1; then
+        log "✅ Beets database initialized successfully" "INFO"
+    else
+        log "WARNING: Database initialization may have failed, continuing..." "WARN"
+    fi
 fi
 
 # Test the exact import command used by youtube-sync.sh

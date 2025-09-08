@@ -46,6 +46,29 @@
     - "{{ music_library_path }}/downloads"
     - "{{ music_library_path }}/processing"
 
+- name: Create beets database directories with proper structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+    recurse: true
+  loop:
+    - "{{ music_stack_home }}/config/beets/beets"
+  tags: [beets, database]
+
+- name: Ensure beets database file permissions
+  ansible.builtin.file:
+    path: "{{ music_stack_home }}/config/beets/library.db"
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+    modification_time: preserve
+    access_time: preserve
+  tags: [beets, database]
+
 - name: Create YouTube cache and config directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -250,3 +273,12 @@
     project_src: "{{ music_stack_home }}"
     state: present
   when: start_stack | default(true)
+
+- name: Initialize beets database (prevent interactive prompts)
+  ansible.builtin.shell: |
+    cd "{{ music_stack_home }}"
+    echo "Y" | docker compose run --rm -i beets beet --config /config/config.yaml stats || true
+  become_user: "{{ ansible_user }}"
+  when: start_stack | default(true)
+  ignore_errors: true
+  tags: [beets, database]
