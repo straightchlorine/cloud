@@ -6,6 +6,30 @@ http:
         users:
           - "{{ vault_traefik_basic_auth | default('admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
 
+    metrics-auth:
+      basicAuth:
+        users:
+          - "{{ vault_traefik_metrics_auth | default('metrics:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
+
+    prometheus-metrics:
+      chain:
+        middlewares:
+          - metrics-auth
+          - prometheus-cors
+
+    prometheus-cors:
+      headers:
+        accessControlAllowOriginList:
+          - "http://{{ vault_prometheus_ip | default('192.168.100.10') }}"
+          - "https://{{ vault_prometheus_ip | default('192.168.100.10') }}"
+        accessControlAllowMethods:
+          - GET
+          - OPTIONS
+        accessControlAllowHeaders:
+          - "Authorization"
+          - "Content-Type"
+        accessControlMaxAge: 86400
+
     secure-headers:
       headers:
         accessControlAllowMethods:
