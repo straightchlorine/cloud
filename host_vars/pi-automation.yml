@@ -25,7 +25,6 @@ firewall_ports:
   - 22
   - 80
   - 443
-  - 8080
 
 letsencrypt_email: "{{ vault_letsencrypt_email | default('admin@example.com') }}"
 letsencrypt_staging: false

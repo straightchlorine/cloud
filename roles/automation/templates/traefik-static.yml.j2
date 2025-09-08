@@ -4,7 +4,7 @@ global:
   sendAnonymousUsage: false
 
 serversTransport:
-  insecureSkipVerify: true
+  insecureSkipVerify: false
 
 entryPoints:
   web:
@@ -51,8 +51,7 @@ providers:
 
 api:
   dashboard: true
-  debug: true
-  insecure: true
+  debug: false
 
 metrics:
   prometheus:
