@@ -26,7 +26,8 @@ case "$COMMAND" in
         docker compose ps
         ;;
     import)
-        ./scripts/import-music.sh
+        echo "Running YouTube sync to import new music..."
+        ./scripts/youtube-sync.sh
         ;;
     backup)
         ./scripts/sync-backups.sh

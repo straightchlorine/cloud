@@ -18,27 +18,12 @@
   tags: [music-stack]
   
   pre_tasks:
-    - name: Debug vault loading
-      ansible.builtin.debug:
-        msg:
-          - "Playbook dir: {{ playbook_dir }}"
-          - "Vault file path: {{ playbook_dir }}/../group_vars/vault.yml"
-          - "vault_youtube_playlists raw: {{ vault_youtube_playlists | default('NOT_FOUND') }}"
-          - "All vault vars starting with vault_youtube: {{ hostvars[inventory_hostname] | dict2items | selectattr('key', 'match', '^vault_youtube.*') | list }}"
-      tags: [youtube, debug, always]
-
     - name: Update package cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
       tags: [packages]
 
-    - name: Install additional system packages
-      ansible.builtin.apt:
-        name: "{{ additional_packages | default([]) }}"
-        state: present
-      when: additional_packages is defined and additional_packages | length > 0
-      tags: [packages]
 
   roles:
     - role: common
@@ -62,7 +47,7 @@
           
           Useful commands on the Pi:
           - Manage stack: music-stack {start|stop|restart|status}
-          - Import music: import-music
+          - Import music: music-stack import
           - Run backups: ~/{{ music_stack_home | basename }}/scripts/sync-backups.sh
           - View logs: docker compose -f ~/{{ music_stack_home | basename }}/docker-compose.yml logs -f
           
@@ -90,10 +75,10 @@
       when: manage_script_stat.stat.exists
       tags: [shortcuts]
 
-    - name: Create import script shortcut
+    - name: Create youtube sync script shortcut
       ansible.builtin.file:
-        src: "{{ music_stack_home }}/scripts/import-music.sh"
-        dest: "/usr/local/bin/import-music"
+        src: "{{ music_stack_home }}/scripts/youtube-sync.sh"
+        dest: "/usr/local/bin/youtube-sync"
         state: link
       become: true
       when: manage_script_stat.stat.exists

@@ -30,12 +30,3 @@
   tags: [backup]
   when: backup_enabled | default(false)
 
-- name: Configure firewall rules for music stack
-  community.general.ufw:
-    rule: allow
-    port: "{{ item }}"
-    proto: tcp
-    comment: "Music stack service"
-  loop: "{{ music_stack_ports }}"
-  become: true
-  when: music_stack_ports is defined and music_stack_ports | length > 0

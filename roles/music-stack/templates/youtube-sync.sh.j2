@@ -107,17 +107,15 @@ if [[ $DOWNLOAD_COUNT -gt 0 ]]; then
     
     # Run Beets import using Docker container (non-interactive mode)
     BEETS_EXIT_CODE=0
-    # First ensure beets database is initialized
+    # Check if beets database is accessible (should work since we pre-create it)
     if ! docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
         beet --config /config/config.yaml stats >/dev/null 2>&1; then
-        log "Initializing beets database..." "INFO"
-        echo "Y" | docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -i beets \
-            beet --config /config/config.yaml stats >/dev/null 2>&1 || true
+        log "WARNING: Beets database not accessible, continuing anyway..." "WARN"
     fi
     
     # Now run the import
     if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-        beet --config /config/config.yaml import /downloads --quiet --yes 2>&1 | tee -a "$LOG_FILE"; then
+        beet --config /config/config.yaml import -q /downloads 2>&1 | tee -a "$LOG_FILE"; then
         log "Beets import completed successfully" "INFO"
     else
         BEETS_EXIT_CODE=$?

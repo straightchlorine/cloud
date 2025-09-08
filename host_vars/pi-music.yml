@@ -6,13 +6,6 @@ device_type: rpi3b
 # Music stack configuration
 music_stack_enabled: true
 music_stack_home: "/home/media/compose"
-music_stack_ports:
-  - "4533" # Navidrome
-  - "8080" # Dozzle
-
-# Service configuration
-navidrome_port: 4533
-dozzle_port: 8080
 timezone: Europe/Warsaw
 
 # Storage configuration
@@ -56,7 +49,7 @@ docker_compose_version: "v2.20.2"
 
 # Firewall configuration for music stack
 firewall_ports:
-  - 22 # SSH
+  - 22   # SSH
   - 4533 # Navidrome
   - 8080 # Dozzle
 
@@ -66,13 +59,6 @@ docker_log_driver: "json-file"
 docker_log_max_size: "10m"
 docker_log_max_file: "3"
 
-# Additional system packages for music processing
-additional_packages:
-  - ffmpeg
-  - flac
-  - lame
-  - vorbis-tools
-  - opus-tools
 
 # YouTube playlist sync configuration
 youtube_sync_enabled: true

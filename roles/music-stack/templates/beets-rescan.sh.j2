@@ -45,8 +45,8 @@ if [[ ! -d "$YOUTUBE_DOWNLOADS_DIR" ]]; then
     exit 0
 fi
 
-# Count files in misc
-YOUTUBE_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" 2>/dev/null | wc -l)
+# Count files in misc directory  
+YOUTUBE_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -type f \( -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" \) 2>/dev/null | wc -l)
 
 if [[ $YOUTUBE_FILE_COUNT -eq 0 ]]; then
     log "No audio files in misc - nothing to rescan"
@@ -60,7 +60,7 @@ log "Running Beets re-import on misc..."
 
 RESCAN_EXIT_CODE=0
 if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm beets \
-    beet --config /config/config.yaml import "/music/misc" --quiet --incremental 2>&1 | tee -a "$LOG_FILE"; then
+    beet --config /config/config.yaml import -q -i "/music/misc" 2>&1 | tee -a "$LOG_FILE"; then
     log "Beets re-scan completed successfully"
 else
     RESCAN_EXIT_CODE=$?
@@ -68,7 +68,7 @@ else
 fi
 
 # Count remaining files after re-scan
-REMAINING_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" 2>/dev/null | wc -l)
+REMAINING_FILE_COUNT=$(find "$YOUTUBE_DOWNLOADS_DIR" -type f \( -name "*.opus" -o -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" \) 2>/dev/null | wc -l)
 PROCESSED_COUNT=$((YOUTUBE_FILE_COUNT - REMAINING_FILE_COUNT))
 
 if [[ $PROCESSED_COUNT -gt 0 ]]; then

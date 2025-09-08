@@ -29,10 +29,9 @@ services:
       - "{{ music_stack_home }}/config/beets:/config"
       - "{{ music_library_path }}/music:/music"
       - "{{ music_library_path }}/downloads:/downloads"
-      - "{{ music_library_path }}/processing:/processing"
-    restart: unless-stopped
+    restart: "no"  # Only run when needed
     profiles:
-      - tools  # Only start when specifically requested
+      - tools
 
   dozzle:
     image: amir20/dozzle:latest

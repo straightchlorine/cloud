@@ -46,27 +46,13 @@
     - "{{ music_library_path }}/downloads"
     - "{{ music_library_path }}/processing"
 
-- name: Create beets database directories with proper structure
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-    recurse: true
-  loop:
-    - "{{ music_stack_home }}/config/beets/beets"
-  tags: [beets, database]
-
-- name: Ensure beets database file permissions
+- name: Pre-create beets database file to avoid interactive prompts
   ansible.builtin.file:
     path: "{{ music_stack_home }}/config/beets/library.db"
     state: touch
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
-    modification_time: preserve
-    access_time: preserve
   tags: [beets, database]
 
 - name: Create YouTube cache and config directories
@@ -114,16 +100,7 @@
     navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
   notify: restart music stack
 
-- name: Remove apt-installed yt-dlp if present
-  ansible.builtin.apt:
-    name: yt-dlp
-    state: absent
-    purge: true
-  become: true
-  ignore_errors: true
-  tags: [youtube, ytdlp]
-
-- name: Install dependencies for YouTube playlist downloads
+- name: Install minimal dependencies for yt-dlp
   ansible.builtin.apt:
     name: "{{ ytdlp_dependencies }}"
     state: present
@@ -164,32 +141,7 @@
   become: true
   tags: [youtube, ytdlp]
 
-- name: Display yt-dlp version
-  ansible.builtin.debug:
-    msg: "yt-dlp version installed: {{ ytdlp_version_check.stdout }}"
-  tags: [youtube, ytdlp]
 
-- name: Create virtual environment for Beets
-  ansible.builtin.command: python3 -m venv {{ music_stack_home }}/venv
-  args:
-    creates: "{{ music_stack_home }}/venv/bin/python"
-  become_user: "{{ ansible_user }}"
-
-- name: Install Beets and plugins in virtual environment
-  ansible.builtin.pip:
-    name: "{{ beets_packages }}"
-    virtualenv: "{{ music_stack_home }}/venv"
-  become_user: "{{ ansible_user }}"
-
-- name: Create Beets wrapper script
-  ansible.builtin.copy:
-    content: |
-      #!/bin/bash
-      source {{ music_stack_home }}/venv/bin/activate
-      exec beet "$@"
-    dest: /usr/local/bin/beet
-    mode: '0755'
-  become: true
 
 - name: Create YouTube download configuration
   ansible.builtin.template:
@@ -209,19 +161,6 @@
     mode: '0755'
   tags: [youtube, ytdlp, scripts]
 
-- name: Debug vault variables before template generation
-  ansible.builtin.debug:
-    msg:
-      - "vault_youtube_playlists: {{ vault_youtube_playlists | default('UNDEFINED') }}"
-      - "youtube_playlists: {{ youtube_playlists | default('UNDEFINED') }}"
-      - "vault_youtube_playlists type: {{ vault_youtube_playlists | type_debug if vault_youtube_playlists is defined else 'undefined' }}"
-  tags: [youtube, debug]
-
-- name: Remove existing YouTube environment file to force regeneration
-  ansible.builtin.file:
-    path: "{{ music_stack_home }}/config/youtube.env"
-    state: absent
-  tags: [youtube, config]
 
 - name: Create YouTube environment configuration file
   ansible.builtin.template:
@@ -232,14 +171,6 @@
     mode: '0644'
   tags: [youtube, config]
 
-- name: Create simplified playlist-update script
-  ansible.builtin.template:
-    src: playlist-update.j2
-    dest: "{{ music_stack_home }}/scripts/playlist-update"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-  tags: [youtube, scripts]
 
 - name: Create YouTube cron wrapper script
   ansible.builtin.template:
@@ -274,11 +205,3 @@
     state: present
   when: start_stack | default(true)
 
-- name: Initialize beets database (prevent interactive prompts)
-  ansible.builtin.shell: |
-    cd "{{ music_stack_home }}"
-    echo "Y" | docker compose run --rm -i beets beet --config /config/config.yaml stats || true
-  become_user: "{{ ansible_user }}"
-  when: start_stack | default(true)
-  ignore_errors: true
-  tags: [beets, database]

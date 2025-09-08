@@ -76,22 +76,30 @@
     user: "{{ ansible_user }}"
   when: enable_backup_cron | default(true)
 
-- name: Add basic environment variables to crontab for YouTube sync
+- name: Add PATH environment variable to crontab
   ansible.builtin.cron:
-    name: "{{ item.name }}"
+    name: "PATH"
     env: true
-    value: "{{ item.value }}"
+    value: "/usr/local/bin:/usr/bin:/bin"
     user: "{{ ansible_user }}"
-  loop: "{{ youtube_cron_env_vars }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
+  tags: [youtube, cron]
+
+- name: Add PLAYLIST_URL environment variable to crontab for YouTube sync
+  ansible.builtin.cron:
+    name: "PLAYLIST_URL"
+    env: true
+    value: "{{ vault_youtube_playlist_url | default('') }}"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled is defined and youtube_sync_enabled and vault_youtube_playlist_url is defined
   tags: [youtube, cron]
 
 - name: Create cron job for daily YouTube playlist sync
   ansible.builtin.cron:
     name: "Daily YouTube playlist sync"
-    hour: "1"
-    minute: "0"
-    job: "{{ music_stack_home }}/scripts/youtube-cron.sh"
+    hour: "2"
+    minute: "30"
+    job: "{{ music_stack_home }}/scripts/youtube-cron.sh >> {{ music_stack_home }}/logs/youtube-cron.log 2>&1"
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron]
@@ -99,10 +107,10 @@
 - name: Create cron job for weekly Beets rescan
   ansible.builtin.cron:
     name: "Weekly Beets rescan of misc folder"
-    hour: "3"
-    minute: "0"
+    hour: "4"
+    minute: "15"
     weekday: "0"
-    job: "{{ music_stack_home }}/scripts/beets-rescan.sh"
+    job: "{{ music_stack_home }}/scripts/beets-rescan.sh >> {{ music_stack_home }}/logs/beets-rescan.log 2>&1"
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron, beets]

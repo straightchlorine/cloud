@@ -4,23 +4,12 @@
 # Base packages for music stack
 music_stack_base_packages:
   - curl
-  - wget
-  - git
   - rsync
-  - htop
-  - ncdu
-  - tree
 
 # Docker configuration
 docker_compose_version: "v2.20.2"
 
-# Music stack configuration
-music_stack_home: "/home/{{ ansible_user }}/music-stack"
-music_stack_ports:
-  - "4533"  # Navidrome
-  - "8080"  # Dozzle
-
-# Service ports
+# Service ports (defaults)
 navidrome_port: 4533
 dozzle_port: 8080
 
@@ -61,17 +50,6 @@ backup_remote_drives:
   #   token: "your-token"
   #   path: "MusicLibrary"
 
-# Beets configuration
-beets_packages:
-  - beets
-  - requests
-  - pillow
-  - pyacoustid
-  - musicbrainzngs
-  - pylast
-  - beautifulsoup4
-  - rarfile
-  - langdetect
 
 beets_genres:
   - Rock
@@ -109,12 +87,7 @@ beets_genres:
 ytdlp_version: "2025.08.27"
 ytdlp_dependencies:
   - python3-pip
-  - python3-venv
-  - python3-dev
-  - build-essential
   - ffmpeg
-  - curl
-  - wget
 
 # Storage configuration
 filesystem_utilities:
@@ -137,15 +110,6 @@ backup_scripts:
   - backup-remote-drives.sh
   - sync-backups.sh
 
-youtube_cron_env_vars:
-  - name: "MUSIC_DIRECTORY"
-    value: "{{ music_library_path }}/downloads"
-  - name: "YTDLP_CACHE_DIRECTORY" 
-    value: "{{ music_stack_home }}/config"
-  - name: "MUSIC_STACK_HOME"
-    value: "{{ music_stack_home }}"
-  - name: "PATH"
-    value: "/usr/local/bin:/usr/bin:/bin"
 
 # Stack startup
 start_stack: true

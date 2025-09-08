@@ -40,10 +40,15 @@ fi
 # Create lock file
 echo $$ > "$LOCK_FILE"
 
-# Check if sync script exists
+# Check if sync script exists and is executable
 if [[ ! -f "$SYNC_SCRIPT" ]]; then
     log "ERROR: Sync script not found: $SYNC_SCRIPT"
     exit 1
+fi
+
+if [[ ! -x "$SYNC_SCRIPT" ]]; then
+    log "ERROR: Sync script is not executable: $SYNC_SCRIPT"
+    chmod +x "$SYNC_SCRIPT" || exit 1
 fi
 
 # Verify playlist URL is set (should come from cron environment)
@@ -68,10 +73,22 @@ if [[ -z "${PLAYLIST_URL:-}" ]]; then
     fi
 fi
 
+# Verify Docker is available
+if ! command -v docker >/dev/null 2>&1; then
+    log "ERROR: Docker is not available in PATH"
+    exit 1
+fi
+
+# Check if Docker daemon is running
+if ! docker info >/dev/null 2>&1; then
+    log "ERROR: Docker daemon is not running"
+    exit 1
+fi
+
 log "Starting YouTube playlist sync for: $PLAYLIST_URL"
 
-# Run the sync script and capture output
-if "$SYNC_SCRIPT" >> "$LOG_FILE" 2>&1; then
+# Run the sync script (don't redirect here since cron job handles it)
+if "$SYNC_SCRIPT"; then
     log "YouTube sync completed successfully"
     exit_code=0
 else
