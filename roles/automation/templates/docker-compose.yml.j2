@@ -29,7 +29,7 @@ services:
       - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
       - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth | default('admin:$$2y$$10$$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
       # Metrics endpoint configuration
-      - "traefik.http.routers.metrics.rule=Host(`metrics.traefik.{{ domain_name }}`)"
+      - "traefik.http.routers.metrics.rule=Host(`metrics-traefik.{{ domain_name }}`)"
       - "traefik.http.routers.metrics.entrypoints=websecure"
       - "traefik.http.routers.metrics.tls.certresolver=letsencrypt"
       - "traefik.http.routers.metrics.service=prometheus@internal"
