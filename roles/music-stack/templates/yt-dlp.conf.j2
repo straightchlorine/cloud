@@ -16,16 +16,11 @@
 --embed-metadata
 --embed-thumbnail
 
-# Enhanced metadata parsing for proper music library organization
---parse-metadata "track:%(title)s"
---parse-metadata "artist:%(uploader)s" 
---parse-metadata "album:%(album|No Album)s"
---parse-metadata "album_artist:%(uploader)s"
---parse-metadata "track_number:%(track_number)d"
---parse-metadata "genre:Music"
+# Simple metadata parsing - set artist to uploader if no artist exists
+--parse-metadata "artist:%(uploader)s"
 
-# Music library optimized output template following yt-dlp best practices  
---output "{{ music_library_path }}/downloads/%(uploader|Unknown Artist).100s/%(playlist_title|Singles).100s/%(title).200s.%(ext)s"
+# Simple output template - artist/songs structure  
+--output "{{ music_library_path }}/downloads/%(uploader|Unknown Artist).100s/%(title).200s.%(ext)s"
 
 # Consistent placeholder for missing metadata
 --output-na-placeholder "Unknown"
@@ -55,7 +50,7 @@
 --throttled-rate 100K
 
 # Limit downloads for testing (remove this line for full sync)
---max-downloads 5
+# --max-downloads 5
 
 # Sponsorship and unwanted content filtering
 --sponsorblock-mark all
