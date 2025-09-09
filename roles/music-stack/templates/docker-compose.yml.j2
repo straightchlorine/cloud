@@ -3,7 +3,7 @@ services:
     image: deluan/navidrome:latest
     container_name: navidrome
     ports:
-      - "127.0.0.1:{{ navidrome_port }}:4533"  # Only bind to localhost for Traefik
+      - "{{ navidrome_port }}:4533"  # Expose for Traefik on pi-automation
     environment:
       ND_MUSICFOLDER: /music
       ND_DATAFOLDER: /data
@@ -40,16 +40,6 @@ services:
       - "{{ music_library_path }}/navidrome-data:/data"
     restart: unless-stopped
     user: "{{ ansible_uid }}:{{ ansible_gid }}"
-    networks:
-      - default
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-network"
-      - "traefik.http.routers.navidrome.rule=Host(`navidrome.codextechnologies.org`)"
-      - "traefik.http.routers.navidrome.entrypoints=websecure"
-      - "traefik.http.routers.navidrome.tls.certresolver=letsencrypt"
-      - "traefik.http.services.navidrome.loadbalancer.server.port=4533"
 
   beets:
     image: linuxserver/beets:latest
@@ -82,5 +72,3 @@ services:
 networks:
   default:
     name: music-stack
-  traefik-network:
-    external: true

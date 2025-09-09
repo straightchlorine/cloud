@@ -1,5 +1,22 @@
 ---
 http:
+  routers:
+    navidrome:
+      rule: "Host(`navidrome.codextechnologies.org`)"
+      entryPoints:
+        - websecure
+      service: navidrome
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - default-headers
+
+  services:
+    navidrome:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.20.20:4545"
+
   middlewares:
     auth:
       basicAuth:
