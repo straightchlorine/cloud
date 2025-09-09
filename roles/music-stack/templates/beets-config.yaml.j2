@@ -42,16 +42,16 @@ per_disc_numbering: yes
 paths:
     # Standard music organization
     default: $albumartist/$album%aunique{}/%if{$track,${track}. }$title
-    # YouTube singles and unmatched content (use uploader when no artist found)
-    singleton: YouTube Downloads/%if{$artist,$artist,$uploader}/$title
+    # YouTube singles and unmatched content (use extracted artist from title or uploader)
+    singleton: YouTube Downloads/%if{$title_artist,$title_artist,$uploader}/$clean_track_title
     # Compilation albums
     comp: Compilations/$album%aunique{}/%if{$track,${track}. }$title
-    # YouTube content with proper fallbacks
-    genre:youtube: YouTube/%if{$albumartist,$albumartist,$uploader}/$album%aunique{}/%if{$track,${track}. }$title
-    # Singles path
-    albumtype:single: Singles/%if{$artist,$artist,$uploader} - $title
-    # Fallback for unknown content
-    albumartist_sort:"": _Unknown/%if{$uploader,$uploader,Unknown}/%if{$album,$album,Singles}/%if{$track,${track}. }$title
+    # YouTube content with proper fallbacks using extracted metadata
+    genre:youtube: YouTube/%if{$title_artist,$title_artist,$uploader}/%if{$album,${album},Singles}/$clean_track_title
+    # Singles path with better title extraction
+    albumtype:single: Singles/%if{$title_artist,$title_artist,$uploader} - $clean_track_title
+    # Fallback for unknown content with title parsing
+    albumartist_sort:"": YouTube Downloads/%if{$title_artist,$title_artist,$uploader}/$clean_track_title
 
 # Essential plugins only (removed problematic ones)
 plugins: fetchart embedart inline web
@@ -77,25 +77,46 @@ web:
 inline:
     # Add a YouTube flag for identification
     is_youtube: "True if 'youtube' in path.lower() or uploader else False"
-    # Try to extract artist from title (common patterns: "Artist - Title", "Artist: Title")
+    # Enhanced artist extraction from title (common YouTube patterns)
     title_artist: |
         import re
-        if ' - ' in title and not artist:
-            parts = title.split(' - ', 1)
-            return parts[0].strip() if len(parts) > 1 else ''
-        elif ': ' in title and not artist:
-            parts = title.split(': ', 1)  
-            return parts[0].strip() if len(parts) > 1 else ''
-        else:
-            return artist or ''
-    # Clean title without artist prefix
+        # Return existing artist if available
+        if artist and artist != 'Unknown Artist':
+            return artist
+        # Try various separators: " - ", ": ", " by ", " | "
+        separators = [' - ', ': ', ' by ', ' | ', ' – ']
+        for sep in separators:
+            if sep in title:
+                parts = title.split(sep, 1)
+                potential_artist = parts[0].strip()
+                # Filter out common non-artist prefixes
+                if potential_artist and not potential_artist.lower().startswith(('official', 'music video', 'audio', 'hd')):
+                    return potential_artist
+        # Fallback to uploader if no artist found
+        return uploader or 'Unknown Artist'
+    
+    # Enhanced title cleaning with better pattern recognition
     clean_track_title: |
         import re
-        if ' - ' in title:
-            parts = title.split(' - ', 1)
-            return parts[1].strip() if len(parts) > 1 else title
-        elif ': ' in title:
-            parts = title.split(': ', 1)
-            return parts[1].strip() if len(parts) > 1 else title
-        else:
-            return title
+        clean_title = title
+        
+        # Remove common YouTube suffixes
+        suffixes = [r'\s*\(official.*?\)', r'\s*\[official.*?\]', r'\s*\(music video\)', 
+                   r'\s*\[music video\]', r'\s*\(audio\)', r'\s*\[audio\]', r'\s*\(hd\)', 
+                   r'\s*\[hd\]', r'\s*\(lyrics\)', r'\s*\[lyrics\]']
+        
+        for suffix in suffixes:
+            clean_title = re.sub(suffix, '', clean_title, flags=re.IGNORECASE)
+        
+        # Try various separators to extract just the song title
+        separators = [' - ', ': ', ' by ', ' | ', ' – ']
+        for sep in separators:
+            if sep in clean_title:
+                parts = clean_title.split(sep, 1)
+                if len(parts) > 1:
+                    song_part = parts[1].strip()
+                    if song_part:
+                        clean_title = song_part
+                        break
+        
+        return clean_title.strip() or title

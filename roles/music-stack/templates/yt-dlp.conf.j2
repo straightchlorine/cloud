@@ -7,13 +7,15 @@
 --audio-format opus
 --audio-quality 0
 
-# Essential metadata only (audio file + basic info)
+# Enhanced metadata extraction and embedding
 --embed-thumbnail
 --embed-metadata
 --write-info-json
+--write-description
+--write-annotations
 
 # Clean output template with better organization and Unicode normalization
---output "{{ music_library_path }}/downloads/%(uploader.100B|Unknown Artist)s/%(playlist_title.100B|Unknown Album)s/%(playlist_index|00)s - %(title.100B)s.%(ext)s"
+--output "{{ music_library_path }}/downloads/%(uploader.100B|Unknown Artist)s/%(playlist_title.100B|Unknown Album)s/%(title.100B)s.%(ext)s"
 
 # Restrict filename characters to ASCII only
 --restrict-filenames
