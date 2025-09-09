@@ -10,7 +10,7 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MUSIC_STACK_HOME="{{ music_stack_home }}"
-LOG_FILE="$MUSIC_STACK_HOME/logs/youtube-sync-cron.log"
+LOG_FILE="{{ music_library_path }}/logs/youtube-sync-cron.log"
 ENV_FILE="$MUSIC_STACK_HOME/config/youtube.env"
 SYNC_SCRIPT="$MUSIC_STACK_HOME/scripts/youtube-sync.sh"
 LOCK_FILE="/tmp/youtube-cron.lock"

@@ -4,7 +4,7 @@
 set -e
 
 SOURCE_DIR="{{ music_library_path }}/music"
-LOG_FILE="{{ music_stack_home }}/logs/backup-hetzner.log"
+LOG_FILE="{{ music_library_path }}/logs/backup-hetzner.log"
 BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
 
 echo "$(date): Starting Hetzner backup..." >> "$LOG_FILE"

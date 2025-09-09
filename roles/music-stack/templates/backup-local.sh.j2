@@ -6,7 +6,7 @@ set -e
 BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
 SOURCE_DIR="{{ music_library_path }}/music"
 BACKUP_DIR="{{ music_library_path }}/backups/local"
-LOG_FILE="{{ music_stack_home }}/logs/backup-local.log"
+LOG_FILE="{{ music_library_path }}/logs/backup-local.log"
 
 echo "$(date): Starting local backup..." >> "$LOG_FILE"
 

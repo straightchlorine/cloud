@@ -4,7 +4,7 @@
 set -e
 
 SOURCE_DIR="{{ music_library_path }}/music"
-LOG_FILE="{{ music_stack_home }}/logs/backup-remote.log"
+LOG_FILE="{{ music_library_path }}/logs/backup-remote.log"
 
 echo "$(date): Starting remote drives backup..." >> "$LOG_FILE"
 

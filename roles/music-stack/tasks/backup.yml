@@ -72,7 +72,7 @@
     name: "Music library backup"
     minute: "0"
     hour: "2"
-    job: "{{ music_stack_home }}/scripts/sync-backups.sh >> {{ music_stack_home }}/logs/backup.log 2>&1"
+    job: "{{ music_stack_home }}/scripts/sync-backups.sh >> {{ music_library_path }}/logs/backup.log 2>&1"
     user: "{{ ansible_user }}"
   when: enable_backup_cron | default(true)
 
@@ -99,7 +99,7 @@
     name: "Daily YouTube playlist sync"
     hour: "2"
     minute: "30"
-    job: "{{ music_stack_home }}/scripts/youtube-cron.sh >> {{ music_stack_home }}/logs/youtube-cron.log 2>&1"
+    job: "{{ music_stack_home }}/scripts/youtube-cron.sh >> {{ music_library_path }}/logs/youtube-cron.log 2>&1"
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron]
@@ -110,7 +110,7 @@
     hour: "4"
     minute: "15"
     weekday: "0"
-    job: "{{ music_stack_home }}/scripts/beets-rescan.sh >> {{ music_stack_home }}/logs/beets-rescan.log 2>&1"
+    job: "{{ music_stack_home }}/scripts/beets-rescan.sh >> {{ music_library_path }}/logs/beets-rescan.log 2>&1"
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron, beets]

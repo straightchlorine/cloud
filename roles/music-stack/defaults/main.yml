@@ -105,6 +105,7 @@ music_library_directories:
   - downloads
   - processing
   - backups
+  - logs
 
 # Backup configuration  
 backup_scripts:

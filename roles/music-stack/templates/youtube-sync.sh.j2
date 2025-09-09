@@ -12,7 +12,7 @@ DOWNLOAD_DIR="{{ music_library_path }}/downloads"
 PROCESSING_DIR="{{ music_library_path }}/processing"
 LIBRARY_DIR="{{ music_library_path }}/music"
 CONFIG_FILE="$MUSIC_STACK_HOME/config/yt-dlp.conf"
-LOG_FILE="$MUSIC_STACK_HOME/logs/youtube-sync.log"
+LOG_FILE="{{ music_library_path }}/logs/youtube-sync.log"
 YTDLP_BINARY="/usr/local/bin/yt-dlp"
 LOCK_FILE="/tmp/youtube-sync.lock"
 
@@ -89,7 +89,7 @@ else
 fi
 
 # Count downloaded files (include common audio formats and new files)
-TIMESTAMP_FILE="$MUSIC_STACK_HOME/.last_sync_timestamp"
+TIMESTAMP_FILE="{{ music_library_path }}/.last_sync_timestamp"
 if [[ -f "$TIMESTAMP_FILE" ]]; then
     DOWNLOAD_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) -newer "$TIMESTAMP_FILE" 2>/dev/null | wc -l)
 else
