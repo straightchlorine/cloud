@@ -5,7 +5,7 @@ type = sftp
 host = {{ hetzner_host }}
 user = {{ hetzner_username }}
 port = 23
-key_file = /home/{{ ansible_user }}/.ssh/hetzner
+key_file = {{ hetzner_ssh_key_path | default('/home/' + ansible_user + '/.ssh/hetzner') }}
 use_insecure_cipher = false
 disable_hashcheck = false
 

@@ -29,20 +29,16 @@ hetzner_host: "{{ vault_hetzner_host }}"
 hetzner_username: "{{ vault_hetzner_username }}"
 hetzner_ssh_key_path: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
 
-# Remote backup drives configuration
-backup_remote_drives:
-  - name: "hetzner-storage-box"
-    type: "sftp"
-    host: "{{ vault_hetzner_host }}"
-    username: "{{ vault_hetzner_username }}"
-    port: 23
-    path: "music-library"
-    key_file: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_storage_box') }}"
-    bandwidth_limit: "10M"
-    transfers: 2
-    # Additional Hetzner-specific options
-    host_key_check: false
-    shell_type: "unix"
+# Remote backup drives configuration (additional drives besides Hetzner)
+backup_remote_drives: []
+  # Example additional drive:
+  # - name: "backup-drive-1"
+  #   type: "sftp"
+  #   host: "192.168.1.100"
+  #   username: "backup"
+  #   port: 22
+  #   path: "music-library"
+  #   bandwidth_limit: "10M"
 
 # Docker configuration
 docker_compose_version: "v2.20.2"

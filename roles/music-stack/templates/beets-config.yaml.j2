@@ -54,7 +54,7 @@ paths:
     albumartist_sort:"": _Unknown/%if{$uploader,$uploader,Unknown}/%if{$album,$album,Singles}/%if{$track,${track}. }$title
 
 # Essential plugins only (removed problematic ones)
-plugins: fetchart embedart inline
+plugins: fetchart embedart inline web
 
 fetchart:
     auto: yes
@@ -66,6 +66,12 @@ embedart:
     maxwidth: 1000
     quality: 95
     remove_art_file: no
+
+web:
+    host: 0.0.0.0
+    port: 8337
+    cors: ''
+    reverse_proxy: false
 
 # Inline plugin for custom field calculations
 inline:

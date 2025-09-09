@@ -5,7 +5,7 @@ services:
     ports:
       - "{{ navidrome_port }}:4533"
     environment:
-      ND_MUSICFOLDER: /music
+      ND_MUSICFOLDER: /music:/archive
       ND_DATAFOLDER: /data
       ND_LOGLEVEL: info
       ND_BASEURL: ""
@@ -14,6 +14,7 @@ services:
       ND_SCANNER_INTERVAL: 0  # Disable auto-scanning
     volumes:
       - "{{ music_library_path }}/music:/music:ro"
+      - "{{ music_stack_home }}/archive:/archive:ro"
       - "{{ music_stack_home }}/config/navidrome:/data"
     restart: unless-stopped
     user: "{{ ansible_uid }}:{{ ansible_gid }}"
