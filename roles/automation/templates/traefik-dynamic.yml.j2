@@ -1,6 +1,18 @@
 ---
 http:
   routers:
+    grafana:
+      rule: "Host(`grafana.codextechnologies.org`)"
+      entryPoints:
+        - websecure
+      service: grafana
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
     navidrome:
       rule: "Host(`navidrome.codextechnologies.org`)"
       entryPoints:
@@ -9,15 +21,31 @@ http:
       tls:
         certResolver: letsencrypt
       middlewares:
+        - rate-limit
+        - body-limit
         - default-headers
 
   services:
     navidrome:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.20:4545"
+          - url: "http://192.168.20.5:3000"
+
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.20.15:4545"
 
   middlewares:
+    rate-limit:
+      rateLimit:
+        burst: 100
+        average: 50
+
+    body-limit:
+      buffering:
+        maxRequestBodyBytes: 1000000  # 1MB
+
     auth:
       basicAuth:
         users:
@@ -71,6 +99,9 @@ http:
         stsIncludeSubdomains: true
         stsPreload: true
         stsSeconds: 31536000
+        customResponseHeaders:
+          Permissions-Policy: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+          Referrer-Policy: "strict-origin-when-cross-origin"
 
     https-redirect:
       redirectScheme:
