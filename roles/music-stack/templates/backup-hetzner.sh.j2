@@ -4,6 +4,7 @@
 set -e
 
 SOURCE_DIR="{{ music_library_path }}/music"
+NAVIDROME_BACKUP_DIR="{{ music_library_path }}/navidrome-data/backups"
 LOG_FILE="{{ music_library_path }}/logs/backup-hetzner.log"
 BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
 
@@ -27,9 +28,29 @@ rclone copy "$SOURCE_DIR" "hetzner:music-library-backups/$BACKUP_DATE" \
     --exclude "*.part" \
     --exclude ".DS_Store"
 
-# Clean old backups (keep last 30 days)
+# Sync Navidrome database backups to Hetzner
+if [ -d "$NAVIDROME_BACKUP_DIR" ]; then
+    echo "$(date): Backing up Navidrome database backups..." >> "$LOG_FILE"
+    rclone sync "$NAVIDROME_BACKUP_DIR" "hetzner:navidrome-backups" \
+        --progress \
+        --log-file "$LOG_FILE" \
+        --log-level INFO \
+        --exclude "*.tmp" \
+        --exclude "*.part"
+    echo "$(date): Navidrome database backups synced successfully" >> "$LOG_FILE"
+else
+    echo "$(date): WARNING: Navidrome backup directory not found at $NAVIDROME_BACKUP_DIR" >> "$LOG_FILE"
+fi
+
+# Clean old backups (keep last 10 days)
 rclone delete "hetzner:music-library-backups" \
-    --min-age 30d \
+    --min-age 10d \
+    --log-file "$LOG_FILE" \
+    --log-level INFO
+
+# Clean old Navidrome backups (keep last 10 days)
+rclone delete "hetzner:navidrome-backups" \
+    --min-age 10d \
     --log-file "$LOG_FILE" \
     --log-level INFO
 

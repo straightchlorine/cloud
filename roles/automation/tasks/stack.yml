@@ -28,7 +28,10 @@
   community.docker.docker_network:
     name: traefik-network
     driver: bridge
+    state: present
+    scope: local
   become_user: "{{ ansible_user }}"
+  tags: [docker, network, traefik]
 
 - name: Start automation stack
   ansible.builtin.shell: |

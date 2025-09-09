@@ -3,21 +3,53 @@ services:
     image: deluan/navidrome:latest
     container_name: navidrome
     ports:
-      - "{{ navidrome_port }}:4533"
+      - "127.0.0.1:{{ navidrome_port }}:4533"  # Only bind to localhost for Traefik
     environment:
-      ND_MUSICFOLDER: /music:/archive
+      ND_MUSICFOLDER: /music
       ND_DATAFOLDER: /data
       ND_LOGLEVEL: info
-      ND_BASEURL: ""
+      ND_BASEURL: "https://navidrome.codextechnologies.org"
       ND_JWTKEY: "${NAVIDROME_JWT_SECRET}"
       ND_AUTOIMPORTPLAYLISTS: false
       ND_SCANNER_INTERVAL: 0  # Disable auto-scanning
+      ND_ENABLEINSIGHTSCOLLECTOR: false
+      # Backup configuration (daily at 1 AM, keep 7 local backups)
+      ND_BACKUP_PATH: "/data/backups"
+      ND_BACKUP_SCHEDULE: "0 1 * * *"  
+      ND_BACKUP_COUNT: 7
+      # Cache optimization for Raspberry Pi
+      ND_IMAGECACHESIZE: "250MB"
+      ND_TRANSCODINGCACHESIZE: "500MB" 
+      # Scanner optimizations
+      ND_SCANNER_WATCHERWAIT: "10s"
+      ND_SCANNER_SCANONSTARTUP: true
+      ND_SCANNER_PURGEMISSING: "full"
+      # Performance and security
+      ND_SESSIONTIMEOUT: "24h"
+      ND_DEFAULTUIVOLUME: 80
+      ND_ENABLELOGREDACTING: true
+      # Transcoding
+      ND_DEFAULTDOWNSAMPLINGFORMAT: "opus"
+      ND_ENABLETRANSCODINGCONFIG: true
+      # UI improvements
+      ND_DEFAULTTHEME: "Dark"
+      ND_ENABLECOVERANIMATION: false
+      ND_MAXSIDEBARPLAYLISTS: 50
     volumes:
       - "{{ music_library_path }}/music:/music:ro"
-      - "{{ music_stack_home }}/archive:/archive:ro"
-      - "{{ music_stack_home }}/config/navidrome:/data"
+      - "{{ music_library_path }}/navidrome-data:/data"
     restart: unless-stopped
     user: "{{ ansible_uid }}:{{ ansible_gid }}"
+    networks:
+      - default
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.navidrome.rule=Host(`navidrome.codextechnologies.org`)"
+      - "traefik.http.routers.navidrome.entrypoints=websecure"
+      - "traefik.http.routers.navidrome.tls.certresolver=letsencrypt"
+      - "traefik.http.services.navidrome.loadbalancer.server.port=4533"
 
   beets:
     image: linuxserver/beets:latest
@@ -50,3 +82,5 @@ services:
 networks:
   default:
     name: music-stack
+  traefik-network:
+    external: true
