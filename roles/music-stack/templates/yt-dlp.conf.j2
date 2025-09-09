@@ -1,21 +1,34 @@
-# yt-dlp configuration for music downloads optimized for Beets integration
-# Download best audio quality, preferably opus for better quality/size ratio
---format "bestaudio[acodec=opus]/bestaudio[ext=m4a]/bestaudio/best"
+# yt-dlp configuration for music downloads optimized for maximum audio quality
+# Extract audio only with best available quality
+-x
 
-# Audio extraction and quality settings
---extract-audio
---audio-format opus
+# Format selection: get the absolute best audio quality available
+--format "bestaudio/best"
+
+# Sort formats to prioritize highest quality
+--format-sort "abr,asr,+size"
+
+# Audio settings for maximum quality (keep original format when it's already high quality)
+--audio-format best
 --audio-quality 0
 
-# Enhanced metadata extraction and embedding
---embed-thumbnail
+# Comprehensive metadata embedding
 --embed-metadata
---write-info-json
---write-description
---write-annotations
+--embed-thumbnail
 
-# Clean output template with better organization and Unicode normalization
---output "{{ music_library_path }}/downloads/%(uploader.100B|Unknown Artist)s/%(playlist_title.100B|Unknown Album)s/%(title.100B)s.%(ext)s"
+# Enhanced metadata parsing for proper music library organization
+--parse-metadata "title:%(title)s"
+--parse-metadata "artist:%(uploader)s"
+--parse-metadata "album:%(playlist_title|%(uploader)s - Singles)s"
+--parse-metadata "album_artist:%(uploader)s"
+--parse-metadata "track_number:%(playlist_index)d"
+--parse-metadata "genre:Music"
+
+# Music library optimized output template following yt-dlp best practices
+--output "{{ music_library_path }}/downloads/%(uploader|Unknown Artist).100s/%(playlist_title|%(uploader)s - Singles).100s/%(title).200s.%(ext)s"
+
+# Consistent placeholder for missing metadata
+--output-na-placeholder "Unknown"
 
 # Restrict filename characters to ASCII only
 --restrict-filenames
@@ -41,8 +54,8 @@
 --limit-rate 2M
 --throttled-rate 100K
 
-# Basic metadata processing (keep it simple)
---add-metadata
+# Limit downloads for testing (remove this line for full sync)
+--max-downloads 5
 
 # Sponsorship and unwanted content filtering
 --sponsorblock-mark all
