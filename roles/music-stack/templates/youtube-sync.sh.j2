@@ -129,10 +129,10 @@ if [[ $DOWNLOAD_COUNT -gt 0 ]]; then
         mkdir -p "$ARCHIVE_DIR"
         
         log "Archiving processed downloads to $ARCHIVE_DIR..." "INFO"
-        find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" \) -exec mv {} "$ARCHIVE_DIR/" \; 2>&1 | tee -a "$LOG_FILE"
+        find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) -exec mv {} "$ARCHIVE_DIR/" \; 2>&1 | tee -a "$LOG_FILE"
         
-        # Clean up metadata files
-        find "$DOWNLOAD_DIR" -name "*.info.json" -o -name "*.description" -o -name "*.annotations.xml" -exec mv {} "$ARCHIVE_DIR/" \; 2>/dev/null || true
+        # Clean up any remaining files (thumbnails, etc.)
+        find "$DOWNLOAD_DIR" -name "*.webp" -o -name "*.jpg" -o -name "*.png" -exec mv {} "$ARCHIVE_DIR/" \; 2>/dev/null || true
         
         log "Processed files archived successfully" "INFO"
     else

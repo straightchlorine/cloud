@@ -40,18 +40,16 @@ match:
 per_disc_numbering: yes
 
 paths:
-    # Standard music organization
+    # Standard music organization (for properly tagged albums)
     default: $albumartist/$album%aunique{}/%if{$track,${track}. }$title
-    # YouTube singles and unmatched content (use extracted artist from title or uploader)
-    singleton: YouTube Downloads/%if{$title_artist,$title_artist,$uploader}/$clean_track_title
+    # YouTube content - now with proper metadata from yt-dlp
+    singleton: $artist/$title
     # Compilation albums
     comp: Compilations/$album%aunique{}/%if{$track,${track}. }$title
-    # YouTube content with proper fallbacks using extracted metadata
-    genre:youtube: YouTube/%if{$title_artist,$title_artist,$uploader}/%if{$album,${album},Singles}/$clean_track_title
-    # Singles path with better title extraction
-    albumtype:single: Singles/%if{$title_artist,$title_artist,$uploader} - $clean_track_title
-    # Fallback for unknown content with title parsing
-    albumartist_sort:"": YouTube Downloads/%if{$title_artist,$title_artist,$uploader}/$clean_track_title
+    # YouTube singles and playlists (leverages yt-dlp metadata)
+    genre:Music: $artist/$album/$title
+    # Fallback for any remaining unorganized content
+    albumartist_sort:"": YouTube Downloads/$artist/$title
 
 # Essential plugins only (removed problematic ones)
 plugins: fetchart embedart inline web
