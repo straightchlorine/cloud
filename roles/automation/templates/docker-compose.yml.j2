@@ -186,17 +186,12 @@ services:
       - SYS_ADMIN
     volumes:
       - {{ automation_data_path }}/ntopng:/var/lib/ntopng
-    command: >
-      --data-dir /var/lib/ntopng
-      --interface {{ vault_ntopng_interface }}
-      --http-port 3001
-      --P-db-file-path /var/lib/ntopng/ntopng.db
       - ./config/ntopng:/etc/ntopng
     command: >
       --data-dir /var/lib/ntopng
       --interface {{ vault_ntopng_interface }}
       --http-port 3001
-      --config-file /etc/ntopng/ntopng.conf
+      --P-db-file-path /var/lib/ntopng/ntopng.db
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ntopng.rule=Host(`{{ subdomain_ntopng }}.{{ domain_name }}`)"
