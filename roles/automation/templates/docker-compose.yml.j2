@@ -33,6 +33,7 @@ services:
     image: influxdb:3-core
     container_name: influxdb3-core
     restart: unless-stopped
+    user: "1000:1000"
     ports:
       - "8181:8181"
     command:
@@ -105,28 +106,6 @@ services:
       - "traefik.http.routers.vaultwarden-websocket.tls.certresolver=letsencrypt"
       - "traefik.http.routers.vaultwarden-websocket.service=vaultwarden-websocket"
       - "traefik.http.services.vaultwarden-websocket.loadbalancer.server.port=3012"
-
-  alertmanager:
-    image: prom/alertmanager:latest
-    container_name: alertmanager
-    restart: unless-stopped
-    volumes:
-      - ./config/alertmanager:/etc/alertmanager
-      - {{ automation_data_path }}/alertmanager:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-      - '--web.external-url=https://{{ subdomain_alertmanager }}.{{ domain_name }}'
-    networks:
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.alertmanager.rule=Host(`{{ subdomain_alertmanager }}.{{ domain_name }}`)"
-      - "traefik.http.routers.alertmanager.entrypoints=websecure"
-      - "traefik.http.routers.alertmanager.tls.certresolver=letsencrypt"
-      - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
-      - "traefik.http.routers.alertmanager.middlewares=alertmanager-auth"
-      - "traefik.http.middlewares.alertmanager-auth.basicauth.users={{ vault_alertmanager_basic_auth }}"
 
   watchtower:
     image: containrrr/watchtower:latest
