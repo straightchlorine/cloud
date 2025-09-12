@@ -1,6 +1,18 @@
 ---
 http:
   routers:
+    pihole:
+      rule: "Host(`pihole.codextechnologies.org`)"
+      entryPoints:
+        - websecure
+      service: pihole
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
     grafana:
       rule: "Host(`grafana.codextechnologies.org`)"
       entryPoints:
@@ -25,16 +37,23 @@ http:
         - body-limit
         - default-headers
 
+
   services:
-    navidrome:
+    pihole:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.15:4545"
+          - url: "https://192.168.20.10:80"
 
     grafana:
       loadBalancer:
         servers:
           - url: "http://192.168.20.5:3000"
+
+    navidrome:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.20.15:4545"
+
 
   middlewares:
     rate-limit:
