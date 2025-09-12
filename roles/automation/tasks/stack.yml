@@ -7,15 +7,6 @@
     mode: '0644'
   notify: restart automation stack
 
-- name: Create alertmanager config file
-  ansible.builtin.template:
-    src: alertmanager.yml.j2
-    dest: "{{ automation_stack_home }}/config/alertmanager/alertmanager.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
-  notify: restart automation stack
-
 - name: Create InfluxDB3 data directories
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
@@ -43,6 +34,15 @@
     - alertmanager
     - dozzle
     - influxdb3-explorer
+
+- name: Create alertmanager config file
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ automation_stack_home }}/config/alertmanager/alertmanager.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: restart automation stack
 
 - name: Create stack management script
   ansible.builtin.template:
