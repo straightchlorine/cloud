@@ -33,7 +33,6 @@ services:
     image: influxdb:3-core
     container_name: influxdb3-core
     restart: unless-stopped
-    user: "{{ automation_uid }}:{{ automation_gid }}"
     ports:
       - "8181:8181"
     command:
