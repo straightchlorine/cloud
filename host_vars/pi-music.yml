@@ -47,7 +47,8 @@ docker_compose_version: "v2.20.2"
 firewall_ports:
   - 22 # SSH
   - 4545 # Navidrome (changed for security)
-  - 8080 # Dozzle
+  - 9001 # Portainer Agent
+  - 2376 # Docker API (for remote monitoring)
 
 
 # Performance tuning for Pi 3B

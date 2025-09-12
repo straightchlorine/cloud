@@ -27,7 +27,166 @@ services:
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
-      - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth | default('admin:$$2y$$10$$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: unless-stopped
+    volumes:
+      - {{ automation_data_path }}/influxdb:/var/lib/influxdb2
+      - ./config/influxdb:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME={{ vault_influxdb_username }}
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password }}
+      - DOCKER_INFLUXDB_INIT_ORG={{ vault_influxdb_org }}
+      - DOCKER_INFLUXDB_INIT_BUCKET={{ vault_influxdb_bucket }}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token }}
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb.rule=Host(`{{ subdomain_influxdb }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb.entrypoints=websecure"
+      - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.influxdb.loadbalancer.server.port=8086"
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    volumes:
+      - {{ automation_data_path }}/vaultwarden:/data
+    environment:
+      - ADMIN_TOKEN={{ vault_vaultwarden_admin_token }}
+      - WEBSOCKET_ENABLED=true
+      - SIGNUPS_ALLOWED={{ vault_vaultwarden_signups_allowed }}
+      - DOMAIN=https://{{ subdomain_vaultwarden }}.{{ domain_name }}
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`{{ subdomain_vaultwarden }}.{{ domain_name }}`)"
+      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+      - "traefik.http.routers.vaultwarden-websocket.rule=Host(`{{ subdomain_vaultwarden }}.{{ domain_name }}`) && Path(`/notifications/hub`)"
+      - "traefik.http.routers.vaultwarden-websocket.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden-websocket.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vaultwarden-websocket.service=vaultwarden-websocket"
+      - "traefik.http.services.vaultwarden-websocket.loadbalancer.server.port=3012"
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./config/alertmanager:/etc/alertmanager
+      - {{ automation_data_path }}/alertmanager:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://{{ subdomain_alertmanager }}.{{ domain_name }}'
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alertmanager.rule=Host(`{{ subdomain_alertmanager }}.{{ domain_name }}`)"
+      - "traefik.http.routers.alertmanager.entrypoints=websecure"
+      - "traefik.http.routers.alertmanager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
+      - "traefik.http.routers.alertmanager.middlewares=alertmanager-auth"
+      - "traefik.http.middlewares.alertmanager-auth.basicauth.users={{ vault_alertmanager_basic_auth }}"
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8084:8080"  # HTTP API for remote triggers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE={{ vault_watchtower_schedule }}
+      - WATCHTOWER_NOTIFICATIONS=slack
+      - WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL={{ vault_watchtower_slack_webhook }}
+      - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token }}
+      - WATCHTOWER_HTTP_API=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.watchtower.rule=Host(`{{ subdomain_watchtower }}.{{ domain_name }}`)"
+      - "traefik.http.routers.watchtower.entrypoints=websecure"
+      - "traefik.http.routers.watchtower.tls.certresolver=letsencrypt"
+      - "traefik.http.services.watchtower.loadbalancer.server.port=8080"
+      - "traefik.http.routers.watchtower.middlewares=watchtower-auth"
+      - "traefik.http.middlewares.watchtower-auth.basicauth.users={{ vault_watchtower_basic_auth }}"
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/dozzle:/data
+    environment:
+      - DOZZLE_BASE=/dozzle
+      - DOZZLE_AUTH_PROVIDER=simple
+      - DOZZLE_AUTH_SIMPLE_USERNAME={{ vault_dozzle_username }}
+      - DOZZLE_AUTH_SIMPLE_PASSWORD={{ vault_dozzle_password }}
+      - DOZZLE_REMOTE_HOST=tcp://{{ ansible_default_ipv4.address | default('192.168.20.30') }}:2376
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dozzle.entrypoints=websecure"
+      - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+
+  ntopng:
+    image: lucaderi/ntopng:stable
+    container_name: ntopng
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      - {{ automation_data_path }}/ntopng:/var/lib/ntopng
+      - ./config/ntopng:/etc/ntopng
+    command: >
+      --data-dir /var/lib/ntopng
+      --interface {{ vault_ntopng_interface }}
+      --http-port 3001
+      --config-file /etc/ntopng/ntopng.conf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ntopng.rule=Host(`{{ subdomain_ntopng }}.{{ domain_name }}`)"
+      - "traefik.http.routers.ntopng.entrypoints=websecure"
+      - "traefik.http.routers.ntopng.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ntopng.loadbalancer.server.port=3001"
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ automation_data_path }}/portainer:/data
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`{{ subdomain_portainer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
 
 networks:
   traefik-network:
