@@ -1,6 +1,18 @@
 ---
 http:
   routers:
+    opnsense:
+      rule: "Host(`opnsense.codextechnologies.org`)"
+      entryPoints:
+        - websecure
+      service: pihole
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
     pihole:
       rule: "Host(`pihole.codextechnologies.org`)"
       entryPoints:
@@ -39,6 +51,11 @@ http:
 
 
   services:
+    opnsense:
+      loadBalancer:
+        servers:
+          - url: "https://192.168.20.1"
+
     pihole:
       loadBalancer:
         servers:
