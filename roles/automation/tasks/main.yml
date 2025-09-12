@@ -47,3 +47,22 @@
   become: true
   tags: [firewall, security]
 
+- name: Create systemd service for auto-start
+  ansible.builtin.template:
+    src: automation-stack.service.j2
+    dest: /etc/systemd/system/automation-stack.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: restart automation stack
+  tags: [systemd, auto-start]
+
+- name: Enable automation stack service for auto-start
+  ansible.builtin.systemd:
+    name: automation-stack
+    enabled: true
+    daemon_reload: true
+  become: true
+  tags: [systemd, auto-start]
+

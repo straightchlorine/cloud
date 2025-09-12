@@ -51,6 +51,30 @@ http:
         - body-limit
         - default-headers
 
+    euler:
+      rule: "Host(`euler.{{ domain_name }}`)"
+      entryPoints:
+        - websecure
+      service: euler
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
+    kepler:
+      rule: "Host(`kepler.{{ domain_name }}`)"
+      entryPoints:
+        - websecure
+      service: kepler
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
 
   services:
     opnsense:
@@ -72,6 +96,16 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.20.15:4545"
+
+    euler:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.115"
+
+    kepler:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.50.6"
 
 
   middlewares:

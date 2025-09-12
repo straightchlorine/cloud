@@ -104,18 +104,17 @@ services:
     image: containrrr/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
-    ports:
-      - "8084:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "192.168.20.20:8084:8080"
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 2 * * *
+      - WATCHTOWER_HTTP_API_METRICS=true
+      - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token | default('watchtower-metrics-token') }}
     networks:
       - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.watchtower.rule=Host(`{{ subdomain_watchtower }}.{{ domain_name }}`)"
-      - "traefik.http.routers.watchtower.entrypoints=websecure"
-      - "traefik.http.routers.watchtower.tls.certresolver=letsencrypt"
-      - "traefik.http.services.watchtower.loadbalancer.server.port=8080"
 
   dozzle:
     image: amir20/dozzle:latest
