@@ -2,10 +2,10 @@
 http:
   routers:
     opnsense:
-      rule: "Host(`opnsense.codextechnologies.org`)"
+      rule: "Host(`opnsense.{{ domain_name }}`)"
       entryPoints:
         - websecure
-      service: pihole
+      service: opnsense
       tls:
         certResolver: letsencrypt
       middlewares:
@@ -14,7 +14,7 @@ http:
         - default-headers
 
     pihole:
-      rule: "Host(`pihole.codextechnologies.org`)"
+      rule: "Host(`pihole.{{ domain_name }}`)"
       entryPoints:
         - websecure
       service: pihole
@@ -26,7 +26,7 @@ http:
         - default-headers
 
     grafana:
-      rule: "Host(`grafana.codextechnologies.org`)"
+      rule: "Host(`grafana.{{ domain_name }}`)"
       entryPoints:
         - websecure
       service: grafana
@@ -38,7 +38,7 @@ http:
         - default-headers
 
     navidrome:
-      rule: "Host(`navidrome.codextechnologies.org`)"
+      rule: "Host(`navidrome.{{ domain_name }}`)"
       entryPoints:
         - websecure
       service: navidrome
@@ -59,7 +59,7 @@ http:
     pihole:
       loadBalancer:
         servers:
-          - url: "https://192.168.20.10"
+          - url: "http://192.168.20.10"
 
     grafana:
       loadBalancer:
