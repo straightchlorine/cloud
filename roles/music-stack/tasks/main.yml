@@ -1,4 +1,3 @@
----
 # Music Stack setup tasks for Pi 3B
 
 - name: Update package cache

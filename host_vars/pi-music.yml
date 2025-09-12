@@ -31,21 +31,21 @@ hetzner_ssh_key_path: "{{ vault_hetzner_ssh_key_path | default('~/.ssh/hetzner_s
 
 # Remote backup drives configuration (additional drives besides Hetzner)
 backup_remote_drives: []
-  # Example additional drive:
-  # - name: "backup-drive-1"
-  #   type: "sftp"
-  #   host: "192.168.1.100"
-  #   username: "backup"
-  #   port: 22
-  #   path: "music-library"
-  #   bandwidth_limit: "10M"
+# Example additional drive:
+# - name: "backup-drive-1"
+#   type: "sftp"
+#   host: "192.168.1.100"
+#   username: "backup"
+#   port: 22
+#   path: "music-library"
+#   bandwidth_limit: "10M"
 
 # Docker configuration
 docker_compose_version: "v2.20.2"
 
 # Firewall configuration for music stack
 firewall_ports:
-  - 22   # SSH
+  - 22 # SSH
   - 4545 # Navidrome (changed for security)
   - 8080 # Dozzle
 
@@ -58,6 +58,3 @@ docker_log_max_file: "3"
 
 # YouTube playlist sync configuration
 youtube_sync_enabled: true
-# Set PLAYLIST_URL environment variable in your shell or systemd service
-# Example: PLAYLIST_URL="https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxx"
-

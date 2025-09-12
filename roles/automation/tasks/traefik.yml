@@ -1,4 +1,3 @@
----
 # Traefik reverse proxy setup
 
 - name: Create Traefik configuration directory
@@ -51,3 +50,4 @@
     group: "{{ ansible_user }}"
     mode: '0644'
   notify: restart automation stack
+

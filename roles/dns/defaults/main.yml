@@ -1,8 +1,7 @@
----
 # Default values for DNS role (Pi-hole)
 
 # Pi-hole Configuration
-pihole_webpassword: ""  # Set in vault or host_vars
+pihole_webpassword: "" # Set in vault or host_vars
 pihole_interface: eth0
 pihole_dns_1: 1.1.1.1
 pihole_dns_2: 8.8.8.8
@@ -22,3 +21,4 @@ auto_update_day: "Monday"
 
 # Additional Services
 additional_services: []
+

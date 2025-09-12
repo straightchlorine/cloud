@@ -1,4 +1,3 @@
----
 # DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
 - name: Update apt cache
@@ -65,10 +64,10 @@
     comment: "{{ item.comment }}"
     proto: "{{ item.proto | default('tcp') }}"
   loop:
-    - { port: "53", comment: "Pi-hole DNS", proto: "udp" }
-    - { port: "53", comment: "Pi-hole DNS", proto: "tcp" }
-    - { port: "80", comment: "Pi-hole Web Interface" }
-    - { port: "4711", comment: "Pi-hole FTL API" }
+    - {port: "53", comment: "Pi-hole DNS", proto: "udp"}
+    - {port: "53", comment: "Pi-hole DNS", proto: "tcp"}
+    - {port: "80", comment: "Pi-hole Web Interface"}
+    - {port: "4711", comment: "Pi-hole FTL API"}
   become: true
 
 - name: Configure chrony NTP server
@@ -77,3 +76,4 @@
 - name: Install additional monitoring services
   ansible.builtin.include_tasks: monitoring.yml
   when: additional_services is defined and additional_services | length > 0
+

@@ -1,4 +1,3 @@
----
 # Handlers for automation role
 
 - name: restart docker
@@ -17,3 +16,4 @@
   ansible.builtin.systemd:
     daemon_reload: true
   become: true
+

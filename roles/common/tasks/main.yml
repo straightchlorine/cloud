@@ -1,4 +1,3 @@
----
 # Common tasks for all hosts running Debian Bookworm
 
 - name: Update apt cache
@@ -36,7 +35,7 @@
     state: started
     enabled: true
   become: true
-  when: 
+  when:
     - fail2ban_enabled | default(true)
     - not ansible_check_mode
 
@@ -53,3 +52,4 @@
     group: root
     mode: '0644'
   become: true
+

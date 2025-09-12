@@ -1,11 +1,10 @@
----
 galaxy_info:
   author: Ansible Admin
   description: Automation stack for Raspberry Pi 4B with Traefik reverse proxy
   company: Local
   license: MIT
   min_ansible_version: '2.12'
-  
+
   platforms:
     - name: Debian
       versions:
@@ -31,3 +30,4 @@ dependencies:
   - role: common
   - role: firewall
   - role: prometheus-node-exporter
+

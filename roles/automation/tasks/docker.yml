@@ -1,4 +1,3 @@
----
 # Docker setup tasks for automation stack
 
 - name: Check if Docker is already installed
@@ -104,3 +103,4 @@
   register: docker_test
   become_user: "{{ ansible_user }}"
   changed_when: false
+

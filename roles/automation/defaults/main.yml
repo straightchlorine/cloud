@@ -1,4 +1,3 @@
----
 automation_base_packages:
   - curl
   - wget
@@ -33,7 +32,7 @@ traefik_web_port: 80
 traefik_websecure_port: 443
 traefik_dashboard_port: 8080
 
-domain_name: "local.example.com"
+domain_name: "codextechnologies.org"
 subdomain_traefik: "traefik"
 
 letsencrypt_email: "admin@example.com"
@@ -58,3 +57,4 @@ backup_schedule: "0 3 * * *"
 backup_retention_days: 30
 
 start_stack: true
+

@@ -1,4 +1,3 @@
----
 - name: Deploy Automation Stack
   hosts: pi-automation
   become: true
@@ -6,11 +5,11 @@
   vars_files:
     - "{{ playbook_dir }}/../group_vars/vault.yml"
   vars:
-    domain_name: "{{ vault_domain_name | default('local.example.com') }}"
-    letsencrypt_email: "{{ vault_letsencrypt_email | default('admin@example.com') }}"
-    traefik_basic_auth: "{{ vault_traefik_basic_auth | default('admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
+    domain_name: "{{ vault_domain_name }}"
+    letsencrypt_email: "{{ vault_letsencrypt_email }}"
+    traefik_basic_auth: "{{ vault_traefik_basic_auth }}"
   tags: [automation-stack]
-  
+
   pre_tasks:
     - name: Update package cache
       ansible.builtin.apt:
@@ -20,7 +19,7 @@
 
     - name: Install additional system packages
       ansible.builtin.apt:
-        name: "{{ additional_packages | default([]) }}"
+        name: "{{ additional_packages }}"
         state: present
       when: additional_packages is defined and additional_packages | length > 0
       tags: [packages]
@@ -40,14 +39,14 @@
       ansible.builtin.debug:
         msg: |
           Automation Stack Deployment Complete!
-          
+
           Services:
           - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
-          
+
           Management:
           - Stack control: manage-automation {start|stop|restart|status|logs}
           - Backup: {{ automation_stack_home }}/scripts/backup-automation.sh
-          
+
           Data locations:
           - Configuration: {{ automation_stack_home }}/
           - Data: {{ automation_data_path }}
@@ -69,8 +68,8 @@
         follow_redirects: none
         status_code: [200, 301, 302, 401, 403]
       loop:
-        - { port: "{{ traefik_web_port }}", service: "Traefik HTTP" }
-        - { port: "{{ traefik_dashboard_port }}", service: "Traefik Dashboard" }
+        - {port: "{{ traefik_web_port }}", service: "Traefik HTTP"}
+        - {port: "{{ traefik_dashboard_port }}", service: "Traefik Dashboard"}
       register: service_check
       failed_when: false
       tags: [verification]
@@ -80,3 +79,4 @@
         msg: "{{ item.item.service }}: {{ 'UP' if item.status in [200, 301, 302, 401, 403] else 'DOWN' }}"
       loop: "{{ service_check.results }}"
       tags: [verification]
+

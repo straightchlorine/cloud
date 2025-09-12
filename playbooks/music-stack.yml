@@ -1,4 +1,3 @@
----
 # Music stack deployment playbook for Raspberry Pi 3B
 
 - name: Deploy Music Stack on Raspberry Pi 3B
@@ -16,7 +15,7 @@
     # Enable YouTube sync for this playbook (overrides host_vars if needed)
     youtube_sync_enabled: true
   tags: [music-stack]
-  
+
   pre_tasks:
     - name: Update package cache
       ansible.builtin.apt:
@@ -40,17 +39,17 @@
       ansible.builtin.debug:
         msg: |
           🎵 Music Stack Deployment Complete!
-          
+
           Services:
           - Navidrome: http://{{ ansible_default_ipv4.address }}:{{ navidrome_port }}
           - Dozzle (Logs): http://{{ ansible_default_ipv4.address }}:{{ dozzle_port }}
-          
+
           Useful commands on the Pi:
           - Manage stack: music-stack {start|stop|restart|status}
           - Import music: music-stack import
           - Run backups: ~/{{ music_stack_home | basename }}/scripts/sync-backups.sh
           - View logs: docker compose -f ~/{{ music_stack_home | basename }}/docker-compose.yml logs -f
-          
+
           Directory structure:
           - Music library: {{ music_library_path }}/music
           - Downloads: {{ music_library_path }}/downloads
@@ -90,8 +89,8 @@
         method: GET
         timeout: 10
       loop:
-        - { port: "{{ navidrome_port }}", service: "Navidrome" }
-        - { port: "{{ dozzle_port }}", service: "Dozzle" }
+        - {port: "{{ navidrome_port }}", service: "Navidrome"}
+        - {port: "{{ dozzle_port }}", service: "Dozzle"}
       register: service_check
       failed_when: false
       tags: [verification]
@@ -101,3 +100,4 @@
         msg: "{{ item.item.service }} on port {{ item.item.port }}: {{ 'UP' if item.status == 200 else 'DOWN' }}"
       loop: "{{ service_check.results }}"
       tags: [verification]
+

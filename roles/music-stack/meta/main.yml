@@ -1,11 +1,10 @@
----
 galaxy_info:
   author: Ansible Admin
   description: Music Stack for Raspberry Pi with Navidrome, Beets, YouTube downloading, and automated backups
   company: Local
   license: MIT
   min_ansible_version: '2.12'
-  
+
   platforms:
     - name: Debian
       versions:
@@ -33,3 +32,4 @@ dependencies:
   - role: common
   - role: firewall
   - role: prometheus-node-exporter
+

@@ -1,4 +1,3 @@
----
 # Backup configuration and scripts
 
 - name: Detect system architecture for rclone
@@ -114,3 +113,4 @@
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled is defined and youtube_sync_enabled
   tags: [youtube, cron, beets]
+

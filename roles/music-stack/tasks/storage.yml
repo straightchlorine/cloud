@@ -1,4 +1,3 @@
----
 # SSD mounting and storage setup
 
 - name: Install filesystem utilities
@@ -65,3 +64,4 @@
     group: "{{ ansible_user }}"
     mode: '0755'
   loop: "{{ music_library_directories }}"
+

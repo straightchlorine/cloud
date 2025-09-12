@@ -1,4 +1,3 @@
----
 # DNS server specific configuration - Pi-hole on Debian Bookworm
 dns_service: pihole
 dns_port: 53
@@ -19,7 +18,7 @@ pihole_ipv6_address: ""
 
 # Automatic updates configuration
 auto_updates_enabled: true
-auto_updates_schedule: "0 2 * * 1"  # Monday 2 AM
+auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
 auto_updates_reboot_if_required: true
 
 # NTP server configuration
@@ -40,3 +39,4 @@ additional_services:
   - name: chrony
     description: "NTP server"
     port: 123
+

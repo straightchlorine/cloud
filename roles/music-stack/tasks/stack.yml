@@ -1,4 +1,3 @@
----
 # Music stack deployment
 
 - name: Create Docker Compose file

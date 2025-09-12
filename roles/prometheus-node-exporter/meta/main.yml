@@ -1,4 +1,3 @@
----
 # Meta information for prometheus-node-exporter role
 
 galaxy_info:
@@ -17,3 +16,4 @@ galaxy_info:
     - metrics
 
 dependencies: []
+

@@ -1,4 +1,3 @@
----
 # Default values for common role
 
 # System Configuration
@@ -30,3 +29,4 @@ common_packages:
   - ca-certificates
   - gnupg
   - lsb-release
+

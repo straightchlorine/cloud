@@ -1,4 +1,3 @@
----
 # Firewall configuration tasks
 
 - name: Install UFW
@@ -25,9 +24,9 @@
     direction: "{{ item.direction }}"
     policy: "{{ item.policy }}"
   loop:
-    - { direction: incoming, policy: "{{ firewall_policy_incoming }}" }
-    - { direction: outgoing, policy: "{{ firewall_policy_outgoing }}" }
-    - { direction: routed, policy: "{{ firewall_policy_routed }}" }
+    - {direction: incoming, policy: "{{ firewall_policy_incoming }}"}
+    - {direction: outgoing, policy: "{{ firewall_policy_outgoing }}"}
+    - {direction: routed, policy: "{{ firewall_policy_routed }}"}
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -92,3 +91,4 @@
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: firewall_enabled | default(true)
+

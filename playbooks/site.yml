@@ -1,4 +1,3 @@
----
 - name: Configure all hosts with common setup
   hosts: all
   become: true
@@ -39,7 +38,7 @@
       tags: [dns, pihole]
 
 - name: Configure music stack
-  hosts: services  
+  hosts: services
   become: true
   gather_facts: true
   roles:
@@ -55,3 +54,4 @@
     - role: automation
       when: device_role == "automation"
       tags: [automation, traefik]
+
