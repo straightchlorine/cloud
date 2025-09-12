@@ -99,11 +99,6 @@ services:
       - "traefik.http.routers.vaultwarden.entrypoints=websecure"
       - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
       - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
-      - "traefik.http.routers.vaultwarden-websocket.rule=Host(`{{ subdomain_vaultwarden }}.{{ domain_name }}`) && Path(`/notifications/hub`)"
-      - "traefik.http.routers.vaultwarden-websocket.entrypoints=websecure"
-      - "traefik.http.routers.vaultwarden-websocket.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.vaultwarden-websocket.service=vaultwarden-websocket"
-      - "traefik.http.services.vaultwarden-websocket.loadbalancer.server.port=3012"
 
   watchtower:
     image: containrrr/watchtower:latest
@@ -121,8 +116,6 @@ services:
       - "traefik.http.routers.watchtower.entrypoints=websecure"
       - "traefik.http.routers.watchtower.tls.certresolver=letsencrypt"
       - "traefik.http.services.watchtower.loadbalancer.server.port=8080"
-      - "traefik.http.routers.watchtower.middlewares=watchtower-auth"
-      - "traefik.http.middlewares.watchtower-auth.basicauth.users={{ vault_watchtower_basic_auth }}"
 
   dozzle:
     image: amir20/dozzle:latest

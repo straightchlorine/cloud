@@ -22,6 +22,7 @@ http:
       tls:
         certResolver: letsencrypt
       middlewares:
+        - pihole-redirect
         - rate-limit
         - body-limit
         - default-headers
@@ -60,7 +61,7 @@ http:
     pihole:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.10/admin"
+          - url: "http://192.168.20.10"
 
     grafana:
       loadBalancer:
@@ -82,6 +83,12 @@ http:
     body-limit:
       buffering:
         maxRequestBodyBytes: 1000000  # 1MB
+
+    pihole-redirect:
+      redirectRegex:
+        regex: "^https?://([^/]+)/?$"
+        replacement: "https://${1}/admin"
+        permanent: true
 
     auth:
       basicAuth:
