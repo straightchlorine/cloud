@@ -29,20 +29,26 @@ services:
       - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
       - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
 
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdb
+  influxdb3-core:
+    image: influxdb:3-core
+    container_name: influxdb3-core
     restart: unless-stopped
+    ports:
+      - "8181:8181"
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --plugin-dir=/var/lib/influxdb3/plugins
     volumes:
-      - {{ automation_data_path }}/influxdb:/var/lib/influxdb2
-      - ./config/influxdb:/etc/influxdb2
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME={{ vault_influxdb_username }}
-      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password }}
-      - DOCKER_INFLUXDB_INIT_ORG={{ vault_influxdb_org }}
-      - DOCKER_INFLUXDB_INIT_BUCKET={{ vault_influxdb_bucket }}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token }}
+      - type: bind
+        source: ~/.influxdb3/core/data
+        target: /var/lib/influxdb3/data
+      - type: bind
+        source: ~/.influxdb3/core/plugins
+        target: /var/lib/influxdb3/plugins
     networks:
       - traefik-network
     labels:
@@ -50,8 +56,35 @@ services:
       - "traefik.http.routers.influxdb.rule=Host(`{{ subdomain_influxdb }}.{{ domain_name }}`)"
       - "traefik.http.routers.influxdb.entrypoints=websecure"
       - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
-      - "traefik.http.services.influxdb.loadbalancer.server.port=8086"
+      # InfluxDB 3 listens on 8181; update Traefik service port accordingly:
+      - "traefik.http.services.influxdb.loadbalancer.server.port=8181"
 
+  influxdb3-explorer:
+    image: influxdata/influxdb3-ui:1.2.0
+    container_name: influxdb3-explorer
+    restart: unless-stopped
+    # Admin mode for full functionality; omit command for read-only (query) mode
+    command: ["--mode=admin"]
+    ports:
+      - "8888:80"
+    environment:
+      # persist sessions across restarts (set a strong value in prod)
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-changeme123456789012345678901234}
+    volumes:
+      # persist UI state (recommended)
+      - ./db:/db:rw
+      # optional: preconfigure connection (see config.json example below)
+      - ./config:/app-root/config:ro
+      # optional: enable HTTPS by mounting certs and publishing 443 instead of 80
+      # - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb-explorer.rule=Host(`{{ subdomain_explorer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb-explorer.entrypoints=websecure"
+      - "traefik.http.routers.influxdb-explorer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
   vaultwarden:
     image: vaultwarden/server:latest
     container_name: vaultwarden
@@ -148,7 +181,7 @@ services:
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
 
   ntopng:
-    image: lucaderi/ntopng:stable
+    image: ntop/ntopng
     container_name: ntopng
     restart: unless-stopped
     network_mode: host
