@@ -110,8 +110,6 @@ services:
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_SCHEDULE={{ vault_watchtower_schedule }}
-      - WATCHTOWER_NOTIFICATIONS=slack
-      - WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL={{ vault_watchtower_slack_webhook }}
       - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token }}
       - WATCHTOWER_HTTP_API=true
       - WATCHTOWER_HTTP_API_PERIODIC_POLLS=true
