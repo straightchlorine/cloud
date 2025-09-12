@@ -176,28 +176,6 @@ services:
       - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
 
-  ntopng:
-    build:
-      context: .
-      dockerfile: config/ntopng/Dockerfile
-    container_name: ntopng
-    restart: unless-stopped
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-    volumes:
-      - {{ automation_data_path }}/ntopng:/var/lib/ntopng
-      - ./config/ntopng:/etc/ntopng
-    environment:
-      - NTOP_CONFIG=--data-dir /var/lib/ntopng --interface {{ vault_ntopng_interface }} --http-port 3001 --P-db-file-path /var/lib/ntopng/ntopng.db
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ntopng.rule=Host(`{{ subdomain_ntopng }}.{{ domain_name }}`)"
-      - "traefik.http.routers.ntopng.entrypoints=websecure"
-      - "traefik.http.routers.ntopng.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ntopng.loadbalancer.server.port=3001"
-
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer

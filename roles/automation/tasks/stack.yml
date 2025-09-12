@@ -16,15 +16,6 @@
     mode: '0644'
   notify: restart automation stack
 
-- name: Create ntopng Dockerfile
-  ansible.builtin.template:
-    src: ntopng-Dockerfile.j2
-    dest: "{{ automation_stack_home }}/config/ntopng/Dockerfile"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
-  notify: restart automation stack
-
 - name: Create InfluxDB3 data directories
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
@@ -37,7 +28,6 @@
     - influxdb3/plugins
     - influxdb3-explorer
     - alertmanager
-    - ntopng
     - vaultwarden
     - portainer
   become: true
@@ -51,7 +41,6 @@
     mode: '0755'
   loop:
     - alertmanager
-    - ntopng
     - dozzle
     - influxdb3-explorer
 
