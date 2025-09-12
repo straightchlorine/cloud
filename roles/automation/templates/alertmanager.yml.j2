@@ -1,0 +1,27 @@
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alertmanager@{{ domain_name }}'
+  smtp_auth_username: ''
+  smtp_auth_password: ''
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+
+receivers:
+- name: 'web.hook'
+  slack_configs:
+  - api_url: '{{ vault_alertmanager_slack_webhook }}'
+    channel: '#alerts'
+    title: 'Alert: {{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
+    text: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']

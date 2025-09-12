@@ -32,6 +32,7 @@ vault_vaultwarden_signups_allowed: "false"
 
 # Alertmanager Configuration
 vault_alertmanager_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6"
+vault_alertmanager_slack_webhook: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
 
 # Watchtower Configuration
 vault_watchtower_schedule: "0 6 * * *"  # Daily at 6 AM

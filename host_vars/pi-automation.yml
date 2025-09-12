@@ -19,6 +19,7 @@ subdomain_dozzle: "logs"
 subdomain_ntopng: "ntopng"
 subdomain_portainer: "portainer"
 subdomain_watchtower: "watchtower"
+subdomain_explorer: "influxdb-ui"
 
 docker_compose_version: "v2.24.5"
 automation_stack_home: "/home/automation/automation-stack"
