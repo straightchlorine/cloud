@@ -1,6 +1,7 @@
 ---
 http:
   routers:
+
     opnsense:
       rule: "Host(`opnsense.{{ domain_name }}`)"
       entryPoints:
@@ -54,12 +55,12 @@ http:
     opnsense:
       loadBalancer:
         servers:
-          - url: "https://192.168.20.1"
+          - url: "http://192.168.20.1"
 
     pihole:
       loadBalancer:
         servers:
-          - url: "https://192.168.20.10/admin"
+          - url: "http://192.168.20.10/admin"
 
     grafana:
       loadBalancer:
@@ -85,12 +86,12 @@ http:
     auth:
       basicAuth:
         users:
-          - "{{ vault_traefik_basic_auth | default('admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
+          - "{{ vault_traefik_basic_auth }}"
 
     metrics-auth:
       basicAuth:
         users:
-          - "{{ vault_traefik_metrics_auth | default('metrics:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6') }}"
+          - "{{ vault_traefik_metrics_auth }}"
 
     prometheus-metrics:
       chain:
@@ -101,8 +102,8 @@ http:
     prometheus-cors:
       headers:
         accessControlAllowOriginList:
-          - "http://{{ vault_prometheus_ip | default('192.168.100.10') }}"
-          - "https://{{ vault_prometheus_ip | default('192.168.100.10') }}"
+          - "http://{{ vault_prometheus_ip }}"
+          - "https://{{ vault_prometheus_ip }}"
         accessControlAllowMethods:
           - GET
           - OPTIONS
