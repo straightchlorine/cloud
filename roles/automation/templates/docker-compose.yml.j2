@@ -33,6 +33,7 @@ services:
     image: influxdb:3-core
     container_name: influxdb3-core
     restart: unless-stopped
+    user: "{{ automation_uid }}:{{ automation_gid }}"
     ports:
       - "8181:8181"
     command:
@@ -177,7 +178,9 @@ services:
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
 
   ntopng:
-    image: ntop/ntopng:latest
+    build:
+      context: .
+      dockerfile: config/ntopng/Dockerfile
     container_name: ntopng
     restart: unless-stopped
     network_mode: host
@@ -187,11 +190,8 @@ services:
     volumes:
       - {{ automation_data_path }}/ntopng:/var/lib/ntopng
       - ./config/ntopng:/etc/ntopng
-    command: >
-      --data-dir /var/lib/ntopng
-      --interface {{ vault_ntopng_interface }}
-      --http-port 3001
-      --P-db-file-path /var/lib/ntopng/ntopng.db
+    environment:
+      - NTOP_CONFIG=--data-dir /var/lib/ntopng --interface {{ vault_ntopng_interface }} --http-port 3001 --P-db-file-path /var/lib/ntopng/ntopng.db
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ntopng.rule=Host(`{{ subdomain_ntopng }}.{{ domain_name }}`)"
