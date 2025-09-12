@@ -82,6 +82,7 @@ services:
       - "traefik.http.routers.influxdb-explorer.entrypoints=websecure"
       - "traefik.http.routers.influxdb-explorer.tls.certresolver=letsencrypt"
       - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
+
   vaultwarden:
     image: vaultwarden/server:latest
     container_name: vaultwarden
@@ -89,9 +90,6 @@ services:
     volumes:
       - {{ automation_data_path }}/vaultwarden:/data
     environment:
-      - ADMIN_TOKEN={{ vault_vaultwarden_admin_token }}
-      - WEBSOCKET_ENABLED=true
-      - SIGNUPS_ALLOWED={{ vault_vaultwarden_signups_allowed }}
       - DOMAIN=https://{{ subdomain_vaultwarden }}.{{ domain_name }}
     networks:
       - traefik-network
@@ -112,16 +110,9 @@ services:
     container_name: watchtower
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8084:8080"  # HTTP API for remote triggers
+      - "8084:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_SCHEDULE={{ vault_watchtower_schedule }}
-      - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token }}
-      - WATCHTOWER_HTTP_API=true
-      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=true
-      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - traefik-network
     labels:
@@ -140,12 +131,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/dozzle:/data
-    environment:
-      - DOZZLE_BASE=/dozzle
-      - DOZZLE_AUTH_PROVIDER=simple
-      - DOZZLE_AUTH_SIMPLE_USERNAME={{ vault_dozzle_username }}
-      - DOZZLE_AUTH_SIMPLE_PASSWORD={{ vault_dozzle_password }}
-      - DOZZLE_REMOTE_HOST=tcp://{{ ansible_default_ipv4.address | default('192.168.20.30') }}:2376
     networks:
       - traefik-network
     labels:
@@ -160,7 +145,7 @@ services:
     container_name: portainer
     restart: unless-stopped
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ automation_data_path }}/portainer:/data
     networks:
       - traefik-network
