@@ -11,14 +11,6 @@ route:
   repeat_interval: 1h
   receiver: 'web.hook'
 
-receivers:
-- name: 'web.hook'
-  slack_configs:
-  - api_url: '{{ vault_alertmanager_slack_webhook }}'
-    channel: '#alerts'
-    title: 'Alert: {{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
-    text: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
-
 inhibit_rules:
   - source_match:
       severity: 'critical'
