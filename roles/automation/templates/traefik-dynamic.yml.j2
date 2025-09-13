@@ -11,7 +11,7 @@ http:
         certResolver: letsencrypt
 
     pihole:
-      rule: "Host(`pihole.{{ domain_name }}`)"
+      rule: "Host(`dns.{{ domain_name }}`)"
       entryPoints:
         - websecure
       service: pihole
