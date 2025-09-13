@@ -1,4 +1,5 @@
 services:
+
   traefik:
     image: traefik:v3.0
     container_name: traefik
@@ -29,6 +30,40 @@ services:
       - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
       - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
 
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/dozzle:/data
+    networks:
+      - traefik-network
+    environment:
+      DOZZLE_REMOTE_HOST: tcp://media:2375
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dozzle.entrypoints=websecure"
+      - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ automation_data_path }}/portainer:/data
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`{{ subdomain_portainer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
   influxdb3-core:
     image: influxdb:3-core
     container_name: influxdb3-core
@@ -53,27 +88,20 @@ services:
       - "traefik.http.routers.influxdb.rule=Host(`{{ subdomain_influxdb }}.{{ domain_name }}`)"
       - "traefik.http.routers.influxdb.entrypoints=websecure"
       - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
-      # InfluxDB 3 listens on 8181; update Traefik service port accordingly:
       - "traefik.http.services.influxdb.loadbalancer.server.port=8181"
 
   influxdb3-explorer:
     image: influxdata/influxdb3-ui:1.2.0
     container_name: influxdb3-explorer
     restart: unless-stopped
-    # Admin mode for full functionality; omit command for read-only (query) mode
     command: ["--mode=admin"]
     ports:
       - "8888:80"
     environment:
-      # persist sessions across restarts (set a strong value in prod)
-      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-changeme123456789012345678901234}
+      SESSION_SECRET_KEY: {{ vault_influxdb3_session_secret_key }}
     volumes:
-      # persist UI state (recommended)
       - {{ automation_data_path }}/influxdb3-explorer:/db:rw
-      # optional: preconfigure connection (see config.json example below)
       - ./config/influxdb3-explorer:/app-root/config:ro
-      # optional: enable HTTPS by mounting certs and publishing 443 instead of 80
-      # - ./ssl:/etc/nginx/ssl:ro
     networks:
       - traefik-network
     labels:
@@ -115,38 +143,6 @@ services:
       - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token | default('watchtower-metrics-token') }}
     networks:
       - traefik-network
-
-  dozzle:
-    image: amir20/dozzle:latest
-    container_name: dozzle
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./config/dozzle:/data
-    networks:
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
-      - "traefik.http.routers.dozzle.entrypoints=websecure"
-      - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
-      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
-
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - {{ automation_data_path }}/portainer:/data
-    networks:
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`{{ subdomain_portainer }}.{{ domain_name }}`)"
-      - "traefik.http.routers.portainer.entrypoints=websecure"
-      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
-      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
 
 networks:
   traefik-network:

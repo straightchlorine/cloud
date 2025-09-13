@@ -8,3 +8,65 @@
   become: yes
   when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
 
+# Pi-hole exporter setup
+- name: Create pihole-exporter user
+  ansible.builtin.user:
+    name: "{{ pihole_exporter_user }}"
+    system: yes
+    shell: /bin/false
+    home: "{{ pihole_exporter_install_dir }}"
+    create_home: no
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+
+- name: Create pihole-exporter installation directory
+  ansible.builtin.file:
+    path: "{{ pihole_exporter_install_dir }}"
+    state: directory
+    owner: "{{ pihole_exporter_user }}"
+    group: "{{ pihole_exporter_user }}"
+    mode: '0755'
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+
+- name: Download pihole-exporter binary
+  ansible.builtin.get_url:
+    url: "{{ pihole_exporter_binary_url }}"
+    dest: "{{ pihole_exporter_install_dir }}/pihole_exporter"
+    owner: "{{ pihole_exporter_user }}"
+    group: "{{ pihole_exporter_user }}"
+    mode: '0755'
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+  notify: restart pihole-exporter
+
+- name: Create pihole-exporter systemd service
+  ansible.builtin.template:
+    src: pihole-exporter.service.j2
+    dest: /etc/systemd/system/pihole-exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+  notify: 
+    - reload systemd
+    - restart pihole-exporter
+
+- name: Enable and start pihole-exporter service
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+
+- name: Configure firewall for pihole-exporter
+  community.general.ufw:
+    rule: allow
+    port: "{{ pihole_exporter_port }}"
+    comment: "Pi-hole Prometheus exporter"
+  become: yes
+  when: pihole_exporter_enabled | default(false)
+

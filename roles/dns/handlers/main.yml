@@ -8,3 +8,14 @@
   ansible.builtin.shell: pihole restartdns
   become: true
 
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  become: true
+
+- name: restart pihole-exporter
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    state: restarted
+  become: true
+

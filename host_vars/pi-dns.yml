@@ -39,4 +39,15 @@ additional_services:
   - name: chrony
     description: "NTP server"
     port: 123
+  - name: pihole-exporter
+    description: "Pi-hole metrics exporter"
+    port: 9617
+
+# Pi-hole exporter configuration
+pihole_exporter_enabled: true
+pihole_exporter_port: 9617
+pihole_exporter_version: "v1.2.0"
+pihole_exporter_binary_url: "https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/pihole_exporter-linux-arm"
+pihole_exporter_install_dir: "/opt/pihole-exporter"
+pihole_exporter_user: "pihole-exporter"
 

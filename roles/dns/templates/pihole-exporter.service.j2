@@ -1,0 +1,31 @@
+[Unit]
+Description=Pi-hole Prometheus Exporter
+Documentation=https://github.com/eko/pihole-exporter
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User={{ pihole_exporter_user }}
+Group={{ pihole_exporter_user }}
+ExecStart={{ pihole_exporter_install_dir }}/pihole_exporter \
+  -pihole_hostname {{ ansible_default_ipv4.address }} \
+  -pihole_password {{ pihole_webpassword }} \
+  -port {{ pihole_exporter_port }}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pihole-exporter
+KillMode=mixed
+TimeoutStopSec=5
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={{ pihole_exporter_install_dir }}
+
+[Install]
+WantedBy=multi-user.target

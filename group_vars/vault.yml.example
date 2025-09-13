@@ -40,3 +40,5 @@ vault_watchtower_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv
 vault_dozzle_username: "admin"
 vault_dozzle_password: "your-dozzle-password"
 
+# InfluxDB 3 Configuration
+vault_influxdb3_session_secret_key: "example-session-secret-key"
