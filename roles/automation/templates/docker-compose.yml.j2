@@ -40,7 +40,7 @@ services:
     networks:
       - traefik-network
     environment:
-      DOZZLE_REMOTE_HOST: tcp://media:2375
+      - DOZZLE_REMOTE_AGENT=media:7007
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
