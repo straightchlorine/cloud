@@ -1,0 +1,104 @@
+#!/bin/bash
+# DNS server backup script with Hetzner integration
+
+set -e
+
+BACKUP_DIR="/home/{{ ansible_user }}/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="dns_backup_$TIMESTAMP.tar.gz"
+LOG_FILE="/var/log/backups/dns-backup.log"
+HETZNER_PATH="pi-dns/backups"
+
+echo "$(date): Starting DNS server backup..." >> "$LOG_FILE"
+
+# Ensure backup directory exists
+mkdir -p "$BACKUP_DIR"
+
+echo "$(date): Creating backup archive..." >> "$LOG_FILE"
+
+# Create comprehensive backup including:
+# - Pi-hole configuration
+# - System configuration
+# - Log files (recent ones)
+# - Cron jobs
+# - SSH keys and configs
+tar -czf "$BACKUP_DIR/$BACKUP_FILE" \
+    --exclude="/etc/pihole/pihole-FTL.log*" \
+    --exclude="/etc/pihole/pihole.log*" \
+    -C / \
+    etc/pihole \
+    etc/dnsmasq.d \
+    etc/chrony \
+    etc/crontab \
+    var/spool/cron/crontabs \
+    home/{{ ansible_user }}/.ssh \
+    home/{{ ansible_user }}/.config \
+    etc/netdata \
+    etc/prometheus \
+    >> "$LOG_FILE" 2>&1
+
+# Set correct ownership
+chown {{ ansible_user }}:{{ ansible_user }} "$BACKUP_DIR"/*
+
+# Upload to Hetzner storage box
+echo "$(date): Uploading backup to Hetzner storage box..." >> "$LOG_FILE"
+if command -v rclone &> /dev/null; then
+    # Upload current backup
+    rclone copy "$BACKUP_DIR/$BACKUP_FILE" "hetzner:$HETZNER_PATH" \
+        --progress \
+        --log-file "$LOG_FILE" \
+        --log-level INFO
+    
+    # Sync entire backup directory for redundancy
+    rclone sync "$BACKUP_DIR" "hetzner:$HETZNER_PATH" \
+        --progress \
+        --log-file "$LOG_FILE" \
+        --log-level INFO \
+        --exclude "*.tmp" \
+        --exclude "*.part"
+    
+    # Backup Pi-hole logs separately (last 7 days)
+    if [ -f "/var/log/pihole.log" ]; then
+        echo "$(date): Backing up Pi-hole logs..." >> "$LOG_FILE"
+        find /var/log -name "pihole.log*" -mtime -7 -exec rclone copy {} "hetzner:$HETZNER_PATH/logs/" \; \
+            >> "$LOG_FILE" 2>&1
+    fi
+    
+    # Backup system metrics if available
+    if [ -d "/var/lib/prometheus" ]; then
+        echo "$(date): Backing up Prometheus metrics..." >> "$LOG_FILE"
+        rclone copy "/var/lib/prometheus" "hetzner:$HETZNER_PATH/metrics/" \
+            --progress \
+            --log-file "$LOG_FILE" \
+            --log-level INFO \
+            --max-age 7d
+    fi
+    
+    # Clean old backups on Hetzner (keep last 30 days)
+    rclone delete "hetzner:$HETZNER_PATH" \
+        --min-age {{ backup_retention_days | default(30) }}d \
+        --log-file "$LOG_FILE" \
+        --log-level INFO
+    
+    echo "$(date): Backup successfully uploaded to Hetzner" >> "$LOG_FILE"
+else
+    echo "$(date): WARNING: rclone not found, backup only stored locally" >> "$LOG_FILE"
+fi
+
+# Clean local old backups
+find "$BACKUP_DIR" -name "*.tar.gz" -mtime +{{ backup_retention_days | default(30) }} -delete
+
+echo "$(date): DNS server backup completed successfully" >> "$LOG_FILE"
+echo "$(date): Local: $BACKUP_FILE" >> "$LOG_FILE"
+echo "$(date): Hetzner: $HETZNER_PATH/$BACKUP_FILE" >> "$LOG_FILE"
+
+# Display backup directory usage
+echo "$(date): Local backup directory usage:" >> "$LOG_FILE"
+du -sh "$BACKUP_DIR" >> "$LOG_FILE" 2>&1
+
+# Verify Pi-hole service is running after backup
+if systemctl is-active --quiet pihole-FTL; then
+    echo "$(date): Pi-hole service is running normally" >> "$LOG_FILE"
+else
+    echo "$(date): WARNING: Pi-hole service is not running!" >> "$LOG_FILE"
+fi

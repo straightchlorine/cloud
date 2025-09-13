@@ -51,3 +51,8 @@ pihole_exporter_binary_url: "https://github.com/eko/pihole-exporter/releases/dow
 pihole_exporter_install_dir: "/opt/pihole-exporter"
 pihole_exporter_user: "pihole-exporter"
 
+# Backup configuration
+backup_enabled: true
+backup_retention_days: 30
+rclone_version: "1.63.1"
+

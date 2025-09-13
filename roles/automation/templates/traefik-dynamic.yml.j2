@@ -9,10 +9,6 @@ http:
       service: opnsense
       tls:
         certResolver: letsencrypt
-      middlewares:
-        - rate-limit
-        - body-limit
-        - default-headers
 
     pihole:
       rule: "Host(`pihole.{{ domain_name }}`)"
@@ -75,12 +71,17 @@ http:
         - body-limit
         - default-headers
 
+  serversTransports:
+    opnsense-transport:
+      insecureSkipVerify: false
+      serverName: "opnsense.codextechnologies.org"
 
   services:
     opnsense:
       loadBalancer:
+        serversTransport: opnsense-transport
         servers:
-          - url: "http://192.168.20.1"
+          - url: "https://192.168.20.1"
 
     pihole:
       loadBalancer:

@@ -77,3 +77,8 @@
   ansible.builtin.include_tasks: monitoring.yml
   when: additional_services is defined and additional_services | length > 0
 
+- name: Configure backup for DNS server
+  ansible.builtin.include_tasks: backup.yml
+  when: backup_enabled | default(true)
+  tags: [backup]
+

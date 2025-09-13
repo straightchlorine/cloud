@@ -11,7 +11,7 @@ BACKUP_DATE=$(date +"%Y%m%d_%H%M%S")
 echo "$(date): Starting Hetzner backup..." >> "$LOG_FILE"
 
 # Sync to Hetzner Storage Box
-rclone sync "$SOURCE_DIR" hetzner:music-library \
+rclone sync "$SOURCE_DIR" hetzner:pi-music/music-library \
     --progress \
     --log-file "$LOG_FILE" \
     --log-level INFO \
@@ -20,7 +20,7 @@ rclone sync "$SOURCE_DIR" hetzner:music-library \
     --exclude ".DS_Store"
 
 # Create a timestamped backup
-rclone copy "$SOURCE_DIR" "hetzner:music-library-backups/$BACKUP_DATE" \
+rclone copy "$SOURCE_DIR" "hetzner:pi-music/backups/$BACKUP_DATE" \
     --progress \
     --log-file "$LOG_FILE" \
     --log-level INFO \
@@ -31,7 +31,7 @@ rclone copy "$SOURCE_DIR" "hetzner:music-library-backups/$BACKUP_DATE" \
 # Sync Navidrome database backups to Hetzner
 if [ -d "$NAVIDROME_BACKUP_DIR" ]; then
     echo "$(date): Backing up Navidrome database backups..." >> "$LOG_FILE"
-    rclone sync "$NAVIDROME_BACKUP_DIR" "hetzner:navidrome-backups" \
+    rclone sync "$NAVIDROME_BACKUP_DIR" "hetzner:pi-music/navidrome-backups" \
         --progress \
         --log-file "$LOG_FILE" \
         --log-level INFO \
@@ -43,13 +43,13 @@ else
 fi
 
 # Clean old backups (keep last 10 days)
-rclone delete "hetzner:music-library-backups" \
+rclone delete "hetzner:pi-music/backups" \
     --min-age 10d \
     --log-file "$LOG_FILE" \
     --log-level INFO
 
 # Clean old Navidrome backups (keep last 10 days)
-rclone delete "hetzner:navidrome-backups" \
+rclone delete "hetzner:pi-music/navidrome-backups" \
     --min-age 10d \
     --log-file "$LOG_FILE" \
     --log-level INFO

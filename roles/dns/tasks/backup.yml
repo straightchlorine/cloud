@@ -1,4 +1,4 @@
-# Backup configuration for automation stack
+# Backup configuration for DNS server (Pi-hole)
 
 - name: Detect system architecture for rclone
   ansible.builtin.set_fact:
@@ -28,59 +28,54 @@
 
 - name: Create rclone config directory
   ansible.builtin.file:
-    path: "/home/{{ automation_user }}/.config/rclone"
+    path: "/home/{{ ansible_user }}/.config/rclone"
     state: directory
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0700'
 
 - name: Create rclone configuration
   ansible.builtin.template:
     src: rclone.conf.j2
-    dest: "/home/{{ automation_user }}/.config/rclone/rclone.conf"
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    dest: "/home/{{ ansible_user }}/.config/rclone/rclone.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0600'
 
-- name: Create backup directory
+- name: Create backup directories
   ansible.builtin.file:
-    path: "{{ automation_data_path }}/backups"
+    path: "{{ item }}"
     state: directory
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
+  loop:
+    - "/home/{{ ansible_user }}/backups"
+    - "/home/{{ ansible_user }}/scripts"
+    - "/var/log/backups"
 
-- name: Create backup script
+- name: Create DNS backup script
   ansible.builtin.template:
-    src: backup-automation.sh.j2
-    dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
+    src: backup-dns.sh.j2
+    dest: "/home/{{ ansible_user }}/scripts/backup-dns.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
 
-- name: Create backup restoration script
-  ansible.builtin.template:
-    src: restore-automation.sh.j2
-    dest: "{{ automation_stack_home }}/scripts/restore-automation.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-
-- name: Create cron job for automated backups
+- name: Create cron job for DNS backup
   ansible.builtin.cron:
-    name: "Automation stack backup"
-    minute: "0"
-    hour: "3"
-    job: "{{ automation_stack_home }}/scripts/backup-automation.sh >> {{ automation_stack_home }}/logs/backup.log 2>&1"
+    name: "DNS server backup"
+    minute: "30"
+    hour: "1"
+    job: "/home/{{ ansible_user }}/scripts/backup-dns.sh >> /var/log/backups/dns-backup.log 2>&1"
     user: "{{ ansible_user }}"
   when: backup_enabled | default(true)
 
 - name: Create backup cleanup cron job
   ansible.builtin.cron:
-    name: "Cleanup old backups"
-    minute: "30"
-    hour: "3"
-    job: "find {{ automation_data_path }}/backups -name '*.tar.gz' -mtime +{{ backup_retention_days | default(30) }} -delete"
+    name: "Cleanup old DNS backups"
+    minute: "0"
+    hour: "4"
+    job: "find /home/{{ ansible_user }}/backups -name '*.tar.gz' -mtime +{{ backup_retention_days | default(30) }} -delete"
     user: "{{ ansible_user }}"
   when: backup_enabled | default(true)
-

@@ -1,0 +1,10 @@
+# Rclone configuration for DNS server backups
+
+[hetzner]
+type = sftp
+host = {{ vault_hetzner_host }}
+user = {{ vault_hetzner_username }}
+port = 23
+key_file = {{ vault_hetzner_ssh_key_path | default('/home/' + ansible_user + '/.ssh/hetzner') }}
+use_insecure_cipher = false
+disable_hashcheck = false

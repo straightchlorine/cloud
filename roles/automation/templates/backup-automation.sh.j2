@@ -1,31 +1,74 @@
 #!/bin/bash
+# Automation stack backup script with Hetzner integration
+
+set -e
 
 BACKUP_DIR="{{ automation_data_path }}/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="automation_backup_$TIMESTAMP.tar.gz"
 AUTOMATION_HOME="{{ automation_stack_home }}"
 DATA_PATH="{{ automation_data_path }}"
+LOG_FILE="{{ automation_stack_home }}/logs/backup.log"
+HETZNER_PATH="pi-automation/backups"
 
-echo "Starting automation stack backup at $(date)"
+echo "$(date): Starting automation stack backup..." >> "$LOG_FILE"
 
-echo "Stopping services..."
+# Ensure backup directory exists
+mkdir -p "$BACKUP_DIR"
+
+echo "$(date): Stopping services..." >> "$LOG_FILE"
 cd "$AUTOMATION_HOME"
 docker compose stop
 
-echo "Creating backup archive..."
+echo "$(date): Creating backup archive..." >> "$LOG_FILE"
 tar -czf "$BACKUP_DIR/$BACKUP_FILE" \
     --exclude="$DATA_PATH/backups" \
     -C / \
     "$(echo $DATA_PATH | sed 's|^/||')" \
-    "$(echo $AUTOMATION_HOME | sed 's|^/||')"
+    "$(echo $AUTOMATION_HOME | sed 's|^/||')" \
+    >> "$LOG_FILE" 2>&1
 
-echo "Starting services..."
+echo "$(date): Starting services..." >> "$LOG_FILE"
 docker compose up -d
 
-chown {{ ansible_user }}:{{ ansible_user }} "$BACKUP_DIR"/*
+# Set correct ownership
+chown {{ automation_user }}:{{ automation_user }} "$BACKUP_DIR"/*
 
-echo "Backup completed successfully!"
-echo "Files created: $BACKUP_DIR/$BACKUP_FILE"
+# Upload to Hetzner storage box
+echo "$(date): Uploading backup to Hetzner storage box..." >> "$LOG_FILE"
+if command -v rclone &> /dev/null; then
+    # Upload current backup
+    rclone copy "$BACKUP_DIR/$BACKUP_FILE" "hetzner:$HETZNER_PATH" \
+        --progress \
+        --log-file "$LOG_FILE" \
+        --log-level INFO
+    
+    # Sync entire backup directory for redundancy
+    rclone sync "$BACKUP_DIR" "hetzner:$HETZNER_PATH" \
+        --progress \
+        --log-file "$LOG_FILE" \
+        --log-level INFO \
+        --exclude "*.tmp" \
+        --exclude "*.part"
+    
+    # Clean old backups on Hetzner (keep last 30 days)
+    rclone delete "hetzner:$HETZNER_PATH" \
+        --min-age {{ backup_retention_days | default(30) }}d \
+        --log-file "$LOG_FILE" \
+        --log-level INFO
+    
+    echo "$(date): Backup successfully uploaded to Hetzner" >> "$LOG_FILE"
+else
+    echo "$(date): WARNING: rclone not found, backup only stored locally" >> "$LOG_FILE"
+fi
 
-echo "Backup directory usage:"
-du -sh "$BACKUP_DIR"
+# Clean local old backups
+find "$BACKUP_DIR" -name "*.tar.gz" -mtime +{{ backup_retention_days | default(30) }} -delete
+
+echo "$(date): Automation stack backup completed successfully" >> "$LOG_FILE"
+echo "$(date): Local: $BACKUP_FILE" >> "$LOG_FILE"
+echo "$(date): Hetzner: $HETZNER_PATH/$BACKUP_FILE" >> "$LOG_FILE"
+
+# Display backup directory usage
+echo "$(date): Local backup directory usage:" >> "$LOG_FILE"
+du -sh "$BACKUP_DIR" >> "$LOG_FILE" 2>&1

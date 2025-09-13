@@ -25,9 +25,9 @@ echo "$(date): Verifying backup synchronization..." >> "$LOG_FILE"
 
 # Check if Hetzner and local backups match
 LOCAL_SIZE=$(du -s "{{ music_library_path }}/music" | cut -f1)
-HETZNER_SIZE=$(rclone size hetzner:music-library --json | jq -r '.bytes')
+HETZNER_SIZE=$(rclone size hetzner:pi-music/music-library --json | jq -r '.bytes' 2>/dev/null || echo "0")
 
-if [ "$LOCAL_SIZE" -ne "$((HETZNER_SIZE / 1024))" ]; then
+if [ "$HETZNER_SIZE" != "0" ] && [ "$LOCAL_SIZE" -ne "$((HETZNER_SIZE / 1024))" ]; then
     echo "$(date): WARNING: Local and Hetzner backups size mismatch!" >> "$LOG_FILE"
     echo "$(date): Local: ${LOCAL_SIZE}KB, Hetzner: $((HETZNER_SIZE / 1024))KB" >> "$LOG_FILE"
 fi
@@ -35,10 +35,17 @@ fi
 # Verify remote drives
 {% for drive in backup_remote_drives %}
 REMOTE_SIZE=$(rclone size "{{ drive.name }}:{{ drive.path | default('music-library') }}" --json | jq -r '.bytes' 2>/dev/null || echo "0")
-if [ "$REMOTE_SIZE" != "$HETZNER_SIZE" ] && [ "$REMOTE_SIZE" != "0" ]; then
+if [ "$REMOTE_SIZE" != "$HETZNER_SIZE" ] && [ "$REMOTE_SIZE" != "0" ] && [ "$HETZNER_SIZE" != "0" ]; then
     echo "$(date): WARNING: {{ drive.name }} and Hetzner backups size mismatch!" >> "$LOG_FILE"
     echo "$(date): {{ drive.name }}: $((REMOTE_SIZE / 1024))KB, Hetzner: $((HETZNER_SIZE / 1024))KB" >> "$LOG_FILE"
 fi
 {% endfor %}
+
+# Additional verification - check if backups were uploaded successfully
+if [ "$HETZNER_SIZE" == "0" ]; then
+    echo "$(date): WARNING: No data found in Hetzner backup location!" >> "$LOG_FILE"
+else
+    echo "$(date): Hetzner backup verification successful" >> "$LOG_FILE"
+fi
 
 echo "$(date): Backup synchronization completed" >> "$LOG_FILE"
