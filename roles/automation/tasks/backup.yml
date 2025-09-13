@@ -28,26 +28,26 @@
 
 - name: Create rclone config directory
   ansible.builtin.file:
-    path: "/home/{{ automation_user }}/.config/rclone"
+    path: "/home/{{ ansible_user }}/.config/rclone"
     state: directory
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0700'
 
 - name: Create rclone configuration
   ansible.builtin.template:
     src: rclone.conf.j2
-    dest: "/home/{{ automation_user }}/.config/rclone/rclone.conf"
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    dest: "/home/{{ ansible_user }}/.config/rclone/rclone.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0600'
 
 - name: Create backup directory
   ansible.builtin.file:
     path: "{{ automation_data_path }}/backups"
     state: directory
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create backup script
