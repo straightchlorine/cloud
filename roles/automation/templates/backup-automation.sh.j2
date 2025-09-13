@@ -32,7 +32,7 @@ echo "$(date): Starting services..." >> "$LOG_FILE"
 docker compose up -d
 
 # Set correct ownership
-chown {{ automation_user }}:{{ automation_user }} "$BACKUP_DIR"/*
+chown {{ ansible_user }}:{{ ansible_user }} "$BACKUP_DIR"/*
 
 # Upload to Hetzner storage box
 echo "$(date): Uploading backup to Hetzner storage box..." >> "$LOG_FILE"
