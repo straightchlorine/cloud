@@ -3,7 +3,7 @@ services:
   traefik:
     image: traefik:v3.0
     container_name: traefik
-    restart: unless-stopped
+    restart: always
     ports:
       - "{{ traefik_web_port }}:80"
       - "{{ traefik_websecure_port }}:443"
@@ -33,7 +33,7 @@ services:
   dozzle:
     image: amir20/dozzle:latest
     container_name: dozzle
-    restart: unless-stopped
+    restart: always
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/dozzle:/data
@@ -51,7 +51,7 @@ services:
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
-    restart: unless-stopped
+    restart: always
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ automation_data_path }}/portainer:/data
@@ -67,7 +67,7 @@ services:
   influxdb3-core:
     image: influxdb:3-core
     container_name: influxdb3-core
-    restart: unless-stopped
+    restart: always
     user: "1000:1000"
     ports:
       - "8181:8181"
@@ -93,7 +93,7 @@ services:
   influxdb3-explorer:
     image: influxdata/influxdb3-ui:1.2.0
     container_name: influxdb3-explorer
-    restart: unless-stopped
+    restart: always
     command: ["--mode=admin"]
     ports:
       - "8888:80"
@@ -114,7 +114,7 @@ services:
   vaultwarden:
     image: vaultwarden/server:latest
     container_name: vaultwarden
-    restart: unless-stopped
+    restart: always
     volumes:
       - {{ automation_data_path }}/vaultwarden:/data
     environment:
@@ -131,7 +131,7 @@ services:
   watchtower:
     image: containrrr/watchtower:latest
     container_name: watchtower
-    restart: unless-stopped
+    restart: always
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:

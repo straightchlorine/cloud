@@ -76,6 +76,14 @@ http:
       insecureSkipVerify: false
       serverName: "opnsense.codextechnologies.org"
 
+    euler-transport:
+      insecureSkipVerify: false
+      serverName: "euler.codextechnologies.org"
+
+    kepler-transport:
+      insecureSkipVerify: false
+      serverName: "kepler.codextechnologies.org"
+
   services:
     opnsense:
       loadBalancer:
@@ -100,13 +108,15 @@ http:
 
     euler:
       loadBalancer:
+        serversTransport: euler-transport
         servers:
-          - url: "http://192.168.100.115"
+          - url: "https://192.168.100.115:8006"
 
     kepler:
       loadBalancer:
+        serversTransport: kepler-transport
         servers:
-          - url: "http://192.168.50.6"
+          - url: "https://192.168.50.6:8006"
 
 
   middlewares:
