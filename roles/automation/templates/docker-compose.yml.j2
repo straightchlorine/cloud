@@ -7,7 +7,15 @@ services:
     ports:
       - "{{ traefik_web_port }}:80"
       - "{{ traefik_websecure_port }}:443"
-      - "192.168.20.20:{{ traefik_dashboard_port }}:8080"
+      - "127.0.0.1:{{ traefik_dashboard_port }}:8080"
+    deploy:
+      resources:
+        limits:
+          memory: {{ hardware_limits.traefik.memory }}
+          cpus: '{{ hardware_limits.traefik.cpus }}'
+        reservations:
+          memory: {{ hardware_limits.traefik.memory_reservation }}
+          cpus: '{{ hardware_limits.traefik.cpus_reservation }}'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/config:ro
@@ -34,13 +42,21 @@ services:
     image: amir20/dozzle:latest
     container_name: dozzle
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/dozzle:/data
     networks:
       - traefik-network
     environment:
-      - DOZZLE_REMOTE_AGENT=media:7007
+      - DOZZLE_REMOTE_AGENT=media:7007,pascal:7007,kepler-services-lxc:7007
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
@@ -52,6 +68,14 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: {{ hardware_limits.portainer.memory }}
+          cpus: '{{ hardware_limits.portainer.cpus }}'
+        reservations:
+          memory: {{ hardware_limits.portainer.memory_reservation }}
+          cpus: '{{ hardware_limits.portainer.cpus_reservation }}'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ automation_data_path }}/portainer:/data
@@ -68,7 +92,15 @@ services:
     image: influxdb:3-core
     container_name: influxdb3-core
     restart: always
-    user: "1000:1000"
+    user: "{{ automation_uid }}:{{ automation_gid }}"
+    deploy:
+      resources:
+        limits:
+          memory: {{ hardware_limits.influxdb3.memory }}
+          cpus: '{{ hardware_limits.influxdb3.cpus }}'
+        reservations:
+          memory: {{ hardware_limits.influxdb3.memory_reservation }}
+          cpus: '{{ hardware_limits.influxdb3.cpus_reservation }}'
     ports:
       - "8181:8181"
     command:
@@ -95,6 +127,14 @@ services:
     container_name: influxdb3-explorer
     restart: always
     command: ["--mode=admin"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
     ports:
       - "8888:80"
     environment:
@@ -115,6 +155,14 @@ services:
     image: vaultwarden/server:latest
     container_name: vaultwarden
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: {{ hardware_limits.vaultwarden.memory }}
+          cpus: '{{ hardware_limits.vaultwarden.cpus }}'
+        reservations:
+          memory: {{ hardware_limits.vaultwarden.memory_reservation }}
+          cpus: '{{ hardware_limits.vaultwarden.cpus_reservation }}'
     volumes:
       - {{ automation_data_path }}/vaultwarden:/data
     environment:
@@ -132,15 +180,24 @@ services:
     image: containrrr/watchtower:latest
     container_name: watchtower
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "192.168.20.20:8084:8080"
+      - "127.0.0.1:8084:8080"
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_SCHEDULE=0 0 2 * * *
       - WATCHTOWER_HTTP_API_METRICS=true
-      - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token | default('watchtower-metrics-token') }}
+      - WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token | default('') }}
+      - WATCHTOWER_HTTP_API_UPDATE=true
     networks:
       - traefik-network
 

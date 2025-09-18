@@ -1,16 +1,9 @@
-automation_base_packages:
-  - curl
-  - wget
-  - git
-  - rsync
-  - htop
+# Automation-specific packages (common packages inherited from common role)
+automation_specific_packages:
   - ncdu
   - tree
-  - unzip
-  - ca-certificates
-  - gnupg
-  - lsb-release
 
+# Filesystem utilities for automation storage
 filesystem_utilities:
   - parted
   - e2fsprogs
@@ -18,43 +11,53 @@ filesystem_utilities:
   - exfat-fuse
   - exfatprogs
 
-docker_compose_version: "v2.24.5"
-docker_packages:
-  - curl
-  - ca-certificates
-  - gnupg
-  - lsb-release
-
-automation_stack_home: "/home/{{ ansible_user }}/automation-stack"
-automation_data_path: "/mnt/automation-data"
 
 traefik_web_port: 80
 traefik_websecure_port: 443
 traefik_dashboard_port: 8080
 
-domain_name: "codextechnologies.org"
+domain_name: "{{ vault_domain_name }}"
 subdomain_traefik: "traefik"
 
-letsencrypt_email: "admin@example.com"
+letsencrypt_email: "{{ vault_letsencrypt_email }}"
 letsencrypt_staging: false
 
 services_enabled:
   traefik: true
 
-ssd_device: "/dev/sda1"
 ssd_filesystem: "ext4"
 ssd_mount_options: "defaults,noatime,errors=remount-ro"
 ssd_format: false
 
-automation_directories:
-  - "{{ automation_stack_home }}/config"
-  - "{{ automation_stack_home }}/scripts"
-  - "{{ automation_stack_home }}/logs"
-  - "{{ automation_data_path }}/traefik"
 
-backup_enabled: true
-backup_schedule: "0 3 * * *"
-backup_retention_days: 30
+# Restic backup configuration (replaces old backup system)
+restic_enabled: true
+restic_repository: "sftp:u489999@u489999.your-server.de:/home/infrastructure/automation-stack"
+restic_password: "{{ vault_restic_automation_password | default('CHANGEME-GENERATE-SECURE-PASSWORD') }}"
+hetzner_ssh_host: "u489999.your-server.de"
+hetzner_ssh_port: 23
+hetzner_ssh_user: "u489999"
+hetzner_ssh_key_path: "/opt/backup/.ssh/hetzner_backup"
+
+# Restic retention policy
+restic_retention:
+  daily: 30
+  weekly: 8
+  monthly: 12
+  yearly: 3
+
+# Services to backup
+automation_services:
+  - traefik
+  - portainer
+  - influxdb3
+  - influxdb3-explorer
+  - vaultwarden
 
 start_stack: true
+
+# Binary checksums for verification (optional - validates if provided)
+restic_checksums:
+  aarch64: "" # sha256 checksum for aarch64 binary
+  x86_64: "" # sha256 checksum for amd64 binary
 

@@ -19,3 +19,28 @@
     state: restarted
   become: true
 
+- name: rollback pihole
+  block:
+    - name: Stop Pi-hole service
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: stopped
+      become: true
+      ignore_errors: true
+
+    - name: Restore configuration from backup if available
+      ansible.builtin.shell: |
+        if [ -d "/etc/pihole.backup" ]; then
+          rm -rf /etc/pihole
+          mv /etc/pihole.backup /etc/pihole
+        fi
+      become: true
+      ignore_errors: true
+
+    - name: Start Pi-hole service
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: started
+      become: true
+      ignore_errors: true
+

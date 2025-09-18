@@ -16,3 +16,24 @@
     daemon_reload: true
   become: true
 
+- name: rollback music stack
+  block:
+    - name: Stop current stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ music_stack_home }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Restore from backup if available
+      ansible.builtin.shell: |
+        if [ -f "{{ music_stack_home }}/docker-compose.yml.backup" ]; then
+          mv "{{ music_stack_home }}/docker-compose.yml.backup" "{{ music_stack_home }}/docker-compose.yml"
+        fi
+      ignore_errors: true
+
+    - name: Start restored stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ music_stack_home }}"
+        state: present
+      ignore_errors: true
+

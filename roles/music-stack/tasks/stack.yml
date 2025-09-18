@@ -82,10 +82,31 @@
     group: "{{ ansible_user }}"
     mode: '0755'
 
-- name: Generate JWT secret for Navidrome
+- name: Check if JWT secret file exists
+  ansible.builtin.stat:
+    path: "{{ music_stack_home }}/.navidrome_jwt_secret"
+  register: jwt_secret_file
+
+- name: Generate JWT secret for Navidrome if not exists
   ansible.builtin.command: openssl rand -hex 32
-  register: jwt_secret
-  changed_when: false
+  register: jwt_secret_generated
+  when: not jwt_secret_file.stat.exists
+  no_log: true
+
+- name: Store JWT secret persistently
+  ansible.builtin.copy:
+    content: "{{ jwt_secret_generated.stdout }}"
+    dest: "{{ music_stack_home }}/.navidrome_jwt_secret"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  when: not jwt_secret_file.stat.exists
+  no_log: true
+
+- name: Read existing JWT secret
+  ansible.builtin.slurp:
+    src: "{{ music_stack_home }}/.navidrome_jwt_secret"
+  register: jwt_secret_content
   no_log: true
 
 - name: Create .env file for Docker Compose
@@ -96,7 +117,7 @@
     group: "{{ ansible_user }}"
     mode: '0600'
   vars:
-    navidrome_jwt_secret: "{{ jwt_secret.stdout }}"
+    navidrome_jwt_secret: "{{ jwt_secret_content.content | b64decode | trim }}"
   notify: restart music stack
 
 - name: Install minimal dependencies for yt-dlp
@@ -111,17 +132,70 @@
     ytdlp_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'arm64' }}"
   tags: [youtube, ytdlp]
 
+- name: Import yt-dlp GPG public key
+  ansible.builtin.shell: |
+    curl -L https://github.com/yt-dlp/yt-dlp/raw/master/public.key | gpg --import
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [youtube, ytdlp, security]
+
+- name: Download yt-dlp checksums and signature
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "/tmp/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - {url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS", dest: "SHA2-256SUMS"}
+    - {url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS.sig", dest: "SHA2-256SUMS.sig"}
+  become_user: "{{ ansible_user }}"
+  tags: [youtube, ytdlp, security]
+
+- name: Verify checksums signature
+  ansible.builtin.shell: |
+    cd /tmp
+    gpg --verify SHA2-256SUMS.sig SHA2-256SUMS
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [youtube, ytdlp, security]
+
 - name: Download yt-dlp binary
   ansible.builtin.get_url:
     url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/yt-dlp_linux_{{ ytdlp_arch }}"
+    dest: /tmp/yt-dlp_binary
+    mode: '0755'
+  become_user: "{{ ansible_user }}"
+  tags: [youtube, ytdlp]
+
+- name: Verify yt-dlp binary checksum
+  ansible.builtin.shell: |
+    cd /tmp
+    grep "yt-dlp_linux_{{ ytdlp_arch }}$" SHA2-256SUMS | sha256sum -c -
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [youtube, ytdlp, security]
+
+- name: Install verified yt-dlp binary
+  ansible.builtin.copy:
+    src: /tmp/yt-dlp_binary
     dest: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
     group: root
-    force: true
+    remote_src: true
     backup: true
   become: true
   register: ytdlp_download
+  tags: [youtube, ytdlp]
+
+- name: Cleanup temporary files
+  ansible.builtin.file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - SHA2-256SUMS
+    - SHA2-256SUMS.sig
+    - yt-dlp_binary
+  become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp]
 
 - name: Ensure yt-dlp binary is executable
@@ -202,5 +276,16 @@
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"
     state: present
-  when: start_stack | default(true)
+  when: start_stack
+
+- name: Verify Navidrome is responding
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ navidrome_port }}/app"
+    method: GET
+  register: navidrome_health
+  until: navidrome_health.status == 200
+  retries: 30
+  delay: 2
+  when: start_stack
+  failed_when: false
 

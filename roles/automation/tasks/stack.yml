@@ -59,18 +59,54 @@
   tags: [docker, network, traefik]
 
 - name: Start automation stack
-  ansible.builtin.shell: |
-    cd "{{ automation_stack_home }}"
-    docker compose up -d
+  community.docker.docker_compose_v2:
+    project_src: "{{ automation_stack_home }}"
+    state: present
   become_user: "{{ ansible_user }}"
-  args:
-    executable: /bin/bash
-  when: start_stack | default(true)
+  when: start_stack
 
-- name: Wait for services to be ready
-  ansible.builtin.pause:
-    seconds: 30
-  when: start_stack | default(true)
+- name: Verify Traefik is responding
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ traefik_dashboard_port }}/api/rawdata"
+    method: GET
+  register: traefik_health
+  until: traefik_health.status == 200
+  retries: 30
+  delay: 2
+  when: start_stack
+
+- name: Verify InfluxDB3 is responding
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8181/health"
+    method: GET
+  register: influxdb_health
+  until: influxdb_health.status == 200
+  retries: 30
+  delay: 2
+  when: start_stack
+  failed_when: false
+
+- name: Verify Vaultwarden is responding
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:80/alive"
+    method: GET
+  register: vaultwarden_health
+  until: vaultwarden_health.status == 200
+  retries: 30
+  delay: 2
+  when: start_stack
+  failed_when: false
+
+- name: Verify Portainer is responding
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9000/api/status"
+    method: GET
+  register: portainer_health
+  until: portainer_health.status == 200
+  retries: 30
+  delay: 2
+  when: start_stack
+  failed_when: false
 
 - name: Create symlinks for management scripts
   ansible.builtin.file:

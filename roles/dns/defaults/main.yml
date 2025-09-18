@@ -1,10 +1,11 @@
 # Default values for DNS role (Pi-hole)
 
 # Pi-hole Configuration
-pihole_webpassword: "" # Set in vault or host_vars
+# pihole_webpassword: MUST be set in vault or host_vars - no default
 pihole_interface: eth0
-pihole_dns_1: 1.1.1.1
-pihole_dns_2: 8.8.8.8
+pihole_dns_servers:
+  - 9.9.9.9
+  - 149.112.112.112
 pihole_domain: local
 pihole_ipv6: false
 

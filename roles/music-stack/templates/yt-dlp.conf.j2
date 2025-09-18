@@ -2,6 +2,8 @@
 # Extract audio only with best available quality
 -x
 
+--downloader aria2c
+
 # Format selection: get the absolute best audio quality available
 --format "bestaudio/best"
 
@@ -30,7 +32,7 @@
 
 # Download archive and error handling
 --download-archive "{{ music_library_path }}/youtube-archive.txt"
---cache-dir "{{ music_stack_home }}/config/cache"
+--cache-dir "{{ music_library_path }}/cache"
 --ignore-errors
 --continue
 --no-abort-on-error
@@ -48,9 +50,6 @@
 # Rate limiting to be respectful
 --limit-rate 2M
 --throttled-rate 100K
-
-# Limit downloads for testing (remove this line for full sync)
-# --max-downloads 5
 
 # Sponsorship and unwanted content filtering
 --sponsorblock-mark all

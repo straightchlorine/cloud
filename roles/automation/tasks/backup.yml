@@ -1,86 +1,122 @@
-# Backup configuration for automation stack
+# Restic backup configuration for automation stack
 
-- name: Detect system architecture for rclone
-  ansible.builtin.set_fact:
-    rclone_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'arm' }}"
-
-- name: Install rclone
+- name: Install restic
   ansible.builtin.get_url:
-    url: "https://downloads.rclone.org/v{{ rclone_version | default('1.63.1') }}/rclone-v{{ rclone_version | default('1.63.1') }}-linux-{{ rclone_arch }}.zip"
-    dest: "/tmp/rclone.zip"
-  register: rclone_download
-
-- name: Extract rclone
-  ansible.builtin.unarchive:
-    src: "/tmp/rclone.zip"
-    dest: "/tmp"
-    remote_src: true
-  when: rclone_download.changed
-
-- name: Install rclone binary
-  ansible.builtin.copy:
-    src: "/tmp/rclone-v{{ rclone_version | default('1.63.1') }}-linux-{{ rclone_arch }}/rclone"
-    dest: "/usr/local/bin/rclone"
+    url: "https://github.com/restic/restic/releases/latest/download/restic_{{ ansible_system | lower }}_{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    dest: /usr/local/bin/restic
     mode: '0755'
-    remote_src: true
+    backup: true
+    checksum: "{{ restic_checksums[ansible_architecture] | default(omit) }}"
   become: true
-  when: rclone_download.changed
 
-- name: Create rclone config directory
+- name: Verify restic installation
+  ansible.builtin.command: restic version
+  register: restic_version_check
+  changed_when: false
+
+- name: Display restic version
+  ansible.builtin.debug:
+    msg: "Restic installed: {{ restic_version_check.stdout }}"
+
+- name: Create backup user
+  ansible.builtin.user:
+    name: backup
+    system: true
+    shell: /bin/bash
+    home: /opt/backup
+    create_home: true
+    groups: "automation,docker"
+    append: true
+  become: true
+
+- name: Create restic directories
   ansible.builtin.file:
-    path: "/home/{{ ansible_user }}/.config/rclone"
+    path: "{{ item }}"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: backup
+    group: backup
     mode: '0700'
+  become: true
+  loop:
+    - /opt/backup/.ssh
+    - /opt/backup/cache
+    - /opt/backup/logs
+    - /opt/backup/scripts
 
-- name: Create rclone configuration
-  ansible.builtin.template:
-    src: rclone.conf.j2
-    dest: "/home/{{ ansible_user }}/.config/rclone/rclone.conf"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+- name: Generate SSH key for Hetzner access
+  ansible.builtin.openssh_keypair:
+    path: "{{ hetzner_ssh_key_path }}"
+    type: ed25519
+    owner: backup
+    group: backup
     mode: '0600'
+  become: true
 
-- name: Create backup directory
+- name: Validate restic password is set
+  ansible.builtin.fail:
+    msg: "restic_password must be set to a secure value. Current value suggests it needs to be changed."
+  when: restic_password == 'CHANGEME-GENERATE-SECURE-PASSWORD'
+
+- name: Create restic password file
+  ansible.builtin.template:
+    src: restic-password.j2
+    dest: /opt/backup/restic-password
+    owner: backup
+    group: backup
+    mode: '0600'
+  become: true
+
+- name: Create restic repository initialization script
+  ansible.builtin.template:
+    src: restic-init.sh.j2
+    dest: /opt/backup/scripts/restic-init.sh
+    owner: backup
+    group: backup
+    mode: '0755'
+  become: true
+
+- name: Create main restic backup script
+  ansible.builtin.template:
+    src: backup-automation-restic.sh.j2
+    dest: /opt/backup/scripts/backup-automation-restic.sh
+    owner: backup
+    group: backup
+    mode: '0755'
+  become: true
+
+- name: Create systemd service for restic backup
+  ansible.builtin.template:
+    src: backup-automation.service.j2
+    dest: /etc/systemd/system/backup-automation.service
+    mode: '0644'
+  become: true
+  notify: reload systemd
+
+- name: Create systemd timer for restic backup
+  ansible.builtin.template:
+    src: backup-automation.timer.j2
+    dest: /etc/systemd/system/backup-automation.timer
+    mode: '0644'
+  become: true
+  notify: reload systemd
+
+- name: Set permissions on automation directories for backup user
   ansible.builtin.file:
-    path: "{{ automation_data_path }}/backups"
+    path: "{{ item }}"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
+    mode: "g+rx"
+    recurse: false
+  become: true
+  loop:
+    - "{{ automation_stack_home }}"
+    - "{{ automation_data_path }}"
 
-- name: Create backup script
-  ansible.builtin.template:
-    src: backup-automation.sh.j2
-    dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-
-- name: Create backup restoration script
-  ansible.builtin.template:
-    src: restore-automation.sh.j2
-    dest: "{{ automation_stack_home }}/scripts/restore-automation.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0755'
-
-- name: Create cron job for automated backups
-  ansible.builtin.cron:
-    name: "Automation stack backup"
-    minute: "0"
-    hour: "3"
-    job: "{{ automation_stack_home }}/scripts/backup-automation.sh >> {{ automation_stack_home }}/logs/backup.log 2>&1"
-    user: "{{ ansible_user }}"
-  when: backup_enabled | default(true)
-
-- name: Create backup cleanup cron job
-  ansible.builtin.cron:
-    name: "Cleanup old backups"
-    minute: "30"
-    hour: "3"
-    job: "find {{ automation_data_path }}/backups -name '*.tar.gz' -mtime +{{ backup_retention_days | default(30) }} -delete"
-    user: "{{ ansible_user }}"
-  when: backup_enabled | default(true)
+- name: Enable and start backup timer
+  ansible.builtin.systemd:
+    name: backup-automation.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: restic_enabled | default(true)
 

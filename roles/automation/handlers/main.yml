@@ -17,3 +17,27 @@
     daemon_reload: true
   become: true
 
+- name: rollback automation stack
+  block:
+    - name: Stop current stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ automation_stack_home }}"
+        state: absent
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+
+    - name: Restore from backup if available
+      ansible.builtin.shell: |
+        if [ -f "{{ automation_stack_home }}/docker-compose.yml.backup" ]; then
+          mv "{{ automation_stack_home }}/docker-compose.yml.backup" "{{ automation_stack_home }}/docker-compose.yml"
+        fi
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+
+    - name: Start restored stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ automation_stack_home }}"
+        state: present
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+

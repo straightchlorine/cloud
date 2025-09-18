@@ -1,3 +1,13 @@
+- name: Run automation stack deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
+- name: Detect hardware for resource allocation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: detect_hardware
+  tags: [hardware, validation]
+
 - name: Update package cache
   ansible.builtin.apt:
     update_cache: true
@@ -5,9 +15,16 @@
   become: true
   tags: [packages]
 
-- name: Install base packages
+- name: Install common packages
   ansible.builtin.apt:
-    name: "{{ automation_base_packages }}"
+    name: "{{ common_packages }}"
+    state: present
+  become: true
+  tags: [packages]
+
+- name: Install automation-specific packages
+  ansible.builtin.apt:
+    name: "{{ automation_specific_packages }}"
     state: present
   become: true
   tags: [packages]
@@ -22,7 +39,7 @@
 
 - name: Include Traefik setup
   ansible.builtin.include_tasks: traefik.yml
-  when: services_enabled.traefik | default(true)
+  when: services_enabled.traefik
   tags: [traefik, reverse-proxy]
 
 - name: Include stack deployment
@@ -31,19 +48,16 @@
 
 - name: Include backup configuration
   ansible.builtin.include_tasks: backup.yml
-  when: backup_enabled | default(true)
+  when: restic_enabled
   tags: [backup]
 
 - name: Configure firewall rules for automation stack
   community.general.ufw:
     rule: allow
-    port: "{{ item }}"
+    port: "{{ item.port }}"
     proto: tcp
-    comment: "Automation stack service"
-  loop:
-    - "{{ traefik_web_port }}"
-    - "{{ traefik_websecure_port }}"
-    - "{{ traefik_dashboard_port }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ firewall_ports }}"
   become: true
   tags: [firewall, security]
 

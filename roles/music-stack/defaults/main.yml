@@ -1,56 +1,22 @@
 # Default variables for music-stack role
 
-# Base packages for music stack
-music_stack_base_packages:
-  - curl
-  - rsync
+# Music-specific packages (common packages inherited from common role)
+music_stack_specific_packages:
+  - python3-pip
+  - ffmpeg
 
 # Docker configuration
-docker_compose_version: "v2.20.2"
+docker_compose_version: "v2.24.5"
 
-# Music stack configuration (defaults)
-music_stack_home: "/home/{{ ansible_user }}/music-stack"
-
-# Service ports (defaults) 
+# Service ports (defaults)
 navidrome_port: 4545
 dozzle_port: 8080
 
-# System configuration
-timezone: "UTC"
-ansible_uid: 1000
-ansible_gid: 1000
-
-# SSD configuration
-ssd_device: "/dev/sda1"
+# SSD configuration defaults
 ssd_filesystem: "ext4"
 ssd_mount_options: "defaults,noatime"
-ssd_format: false # Set to true to format the SSD (WARNING: This will erase all data!)
-music_library_path: "/mnt/music"
+ssd_format: false
 
-# Backup configuration
-rclone_version: "1.63.1"
-enable_backup_cron: true
-
-# Hetzner Storage Box configuration
-hetzner_host: "your-storage-box.your-server.de"
-hetzner_username: "your-username"
-
-# Remote backup drives (example configurations)
-backup_remote_drives:
-  - name: "backup-drive-1"
-    type: "sftp"
-    host: "192.168.1.100"
-    username: "backup"
-    port: 22
-    path: "music-library"
-    bandwidth_limit: "10M"
-    transfers: 1
-    # - name: "gdrive-backup"
-    #   type: "gdrive"
-    #   client_id: "your-client-id"
-    #   client_secret: "your-client-secret"
-    #   token: "your-token"
-    #   path: "MusicLibrary"
 
 
 beets_genres:
@@ -106,13 +72,6 @@ music_library_directories:
   - backups
   - logs
   - navidrome-data
-
-# Backup configuration  
-backup_scripts:
-  - backup-local.sh
-  - backup-hetzner.sh
-  - backup-remote-drives.sh
-  - sync-backups.sh
 
 
 # Stack startup

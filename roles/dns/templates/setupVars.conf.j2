@@ -1,9 +1,10 @@
 # Pi-hole Setup Variables
-PIHOLE_INTERFACE={{ pihole_interface | default('eth0') }}
-IPV4_ADDRESS={{ pihole_ipv4_address | default(ansible_default_ipv4.address + '/24') }}
-IPV6_ADDRESS={{ pihole_ipv6_address | default('') }}
-PIHOLE_DNS_1={{ pihole_dns_1 | default('1.1.1.1') }}
-PIHOLE_DNS_2={{ pihole_dns_2 | default('8.8.8.8') }}
+PIHOLE_INTERFACE={{ pihole_interface }}
+IPV4_ADDRESS={{ pihole_ipv4_address }}
+IPV6_ADDRESS={{ pihole_ipv6_address }}
+{% for dns_server in pihole_dns_servers %}
+PIHOLE_DNS_{{ loop.index }}={{ dns_server }}
+{% endfor %}
 QUERY_LOGGING=true
 INSTALL_WEB_SERVER=true
 INSTALL_WEB_INTERFACE=true
@@ -12,5 +13,5 @@ CACHE_SIZE=10000
 DNS_FQDN_REQUIRED=true
 DNS_BOGUS_PRIV=true
 DNSMASQ_LISTENING=single
-WEBPASSWORD={{ pihole_webpassword | default('') }}
+WEBPASSWORD={{ pihole_webpassword }}
 BLOCKING_ENABLED=true

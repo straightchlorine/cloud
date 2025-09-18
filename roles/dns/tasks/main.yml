@@ -1,14 +1,18 @@
 # DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
+- name: Run Pi-hole deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
-    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
+    cache_valid_time: "{{ package_cache_valid_time }}"
   become: true
 
 - name: Install required packages for Pi-hole
   ansible.builtin.apt:
-    name: "{{ pihole_packages | default([]) }}"
+    name: "{{ pihole_packages }}"
     state: present
   become: true
 
@@ -37,14 +41,6 @@
   become: true
   notify: restart pihole-FTL
 
-- name: Create Pi-hole directory
-  ansible.builtin.file:
-    path: /etc/pihole
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  become: true
 
 - name: Install Pi-hole
   ansible.builtin.shell: |
@@ -63,18 +59,18 @@
 
 - name: Configure automatic updates
   ansible.builtin.include_tasks: auto_updates.yml
-  when: auto_updates_enabled | default(false)
+  when: auto_updates_enabled
 
 - name: Configure Pi-hole specific firewall rules
   community.general.ufw:
     rule: allow
     port: "{{ item.port }}"
     comment: "{{ item.comment }}"
-    proto: "{{ item.proto | default('tcp') }}"
+    proto: "{{ item.proto }}"
   loop:
     - {port: "53", comment: "Pi-hole DNS", proto: "udp"}
     - {port: "53", comment: "Pi-hole DNS", proto: "tcp"}
-    - {port: "80", comment: "Pi-hole Web Interface"}
+    - {port: "80", comment: "Pi-hole Web Interface", proto: "tcp"}
   become: true
 
 - name: Configure chrony NTP server
