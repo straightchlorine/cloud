@@ -15,9 +15,17 @@
 - name: Download Pi-hole installer
   ansible.builtin.get_url:
     url: https://install.pi-hole.net
-    dest: /tmp/install-pihole.sh
+    dest: /tmp/basic-install.sh
     mode: '0755'
+    backup: true
   become: true
+  register: pihole_download
+
+- name: Verify Pi-hole installer download
+  ansible.builtin.stat:
+    path: /tmp/basic-install.sh
+  register: pihole_installer
+  failed_when: not pihole_installer.stat.exists or pihole_installer.stat.size < 1000
 
 - name: Create Pi-hole setup vars file
   ansible.builtin.template:
@@ -38,9 +46,9 @@
     mode: '0755'
   become: true
 
-- name: Install Pi-hole (automated)
+- name: Install Pi-hole
   ansible.builtin.shell: |
-    bash /tmp/install-pihole.sh --unattended
+    bash /tmp/basic-install.sh --unattended
   become: true
   args:
     creates: /usr/local/bin/pihole
@@ -67,7 +75,6 @@
     - {port: "53", comment: "Pi-hole DNS", proto: "udp"}
     - {port: "53", comment: "Pi-hole DNS", proto: "tcp"}
     - {port: "80", comment: "Pi-hole Web Interface"}
-    - {port: "4711", comment: "Pi-hole FTL API"}
   become: true
 
 - name: Configure chrony NTP server
@@ -76,9 +83,3 @@
 - name: Install additional monitoring services
   ansible.builtin.include_tasks: monitoring.yml
   when: additional_services is defined and additional_services | length > 0
-
-- name: Configure backup for DNS server
-  ansible.builtin.include_tasks: backup.yml
-  when: backup_enabled | default(true)
-  tags: [backup]
-
