@@ -3,13 +3,21 @@ services:
     image: deluan/navidrome:latest
     container_name: navidrome
     ports:
-      # it's exposed for traefik on pi-automation deployment
+      # exposed for traefik on pi-automation deployment
       - "{{ navidrome_port }}:4533"
+    deploy:
+      resources:
+        limits:
+          memory: {{ hardware_limits.navidrome.memory }}
+          cpus: '{{ hardware_limits.navidrome.cpus }}'
+        reservations:
+          memory: {{ hardware_limits.navidrome.memory_reservation }}
+          cpus: '{{ hardware_limits.navidrome.cpus_reservation }}'
     environment:
       ND_MUSICFOLDER: /music
       ND_DATAFOLDER: /data
       ND_LOGLEVEL: info
-      ND_BASEURL: "https://navidrome.codextechnologies.org"
+      ND_BASEURL: "https://{{ subdomain_navidrome }}.{{ domain_name }}"
       ND_JWTKEY: "${NAVIDROME_JWT_SECRET}"
       ND_AUTOIMPORTPLAYLISTS: false
       ND_SCANNER_INTERVAL: 0
@@ -52,6 +60,14 @@ services:
   beets:
     image: linuxserver/beets:latest
     container_name: beets
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
     environment:
       PUID: {{ ansible_uid }}
       PGID: {{ ansible_gid }}
@@ -60,7 +76,7 @@ services:
       - "{{ music_stack_home }}/config/beets:/config"
       - "{{ music_library_path }}/music:/music"
       - "{{ music_library_path }}/downloads:/downloads"
-    restart: "no"  # Only run when needed
+    restart: "no"
     profiles:
       - tools
 
@@ -69,16 +85,31 @@ services:
     container_name: dozzle-agent
     restart: always
     command: agent
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
     ports:
       - "7007:7007"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
 
   portainer-agent:
     image: portainer/agent:latest
     container_name: portainer-agent
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
     ports:
       - "9001:9001"
     volumes:
