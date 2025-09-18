@@ -1,200 +1,185 @@
 #!/bin/bash
-# YouTube Playlist Sync Script for Music Library
-# Downloads playlist from environment variable PLAYLIST_URL
-# Optimized for Raspberry Pi ARM64 with enhanced error handling
+# YouTube Playlist Download Script
+# Downloads playlists from YOUTUBE_PLAYLISTS environment variable
+# Focused on reliable downloading only - no post-processing
 
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MUSIC_STACK_HOME="{{ music_stack_home }}"
-DOWNLOAD_DIR="{{ music_library_path }}/downloads"
-PROCESSING_DIR="{{ music_library_path }}/processing"
-LIBRARY_DIR="{{ music_library_path }}/music"
-CONFIG_FILE="$MUSIC_STACK_HOME/config/yt-dlp.conf"
-LOG_FILE="{{ music_library_path }}/logs/youtube-sync.log"
-YTDLP_BINARY="/usr/local/bin/yt-dlp"
-LOCK_FILE="/tmp/youtube-sync.lock"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly MUSIC_STACK_HOME="{{ music_stack_home }}"
+readonly DOWNLOAD_DIR="{{ music_library_path }}/downloads"
+readonly CONFIG_FILE="$MUSIC_STACK_HOME/config/yt-dlp.conf"
+readonly LOG_FILE="{{ music_library_path }}/logs/youtube-sync.log"
+readonly YTDLP_BINARY="/usr/local/bin/yt-dlp"
+readonly LOCK_FILE="/tmp/youtube-sync.lock"
 
-# Trap to cleanup on exit
+# Global variables
+YTDLP_EXIT_CODE=0
+TOTAL_PLAYLISTS=0
+FAILED_PLAYLISTS=0
+
+# Logging function
+log() {
+    local message="$1"
+    local level="${2:-INFO}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" | tee -a "$LOG_FILE"
+}
+
+# Cleanup function
 cleanup() {
     local exit_code=$?
     [[ -f "$LOCK_FILE" ]] && rm -f "$LOCK_FILE"
     if [[ $exit_code -ne 0 ]]; then
-        log "Script exited with error code: $exit_code"
+        log "Script exited with error code: $exit_code" "ERROR"
     fi
     exit $exit_code
 }
-trap cleanup EXIT INT TERM
 
-# Check for existing lock file to prevent concurrent runs
-if [[ -f "$LOCK_FILE" ]]; then
-    log "ERROR: Another instance of youtube-sync is already running (lock file exists: $LOCK_FILE)"
-    exit 1
-fi
+# Setup function
+setup() {
+    trap cleanup EXIT INT TERM
 
-# Create lock file
-echo $$ > "$LOCK_FILE"
+    # Check for existing lock file
+    if [[ -f "$LOCK_FILE" ]]; then
+        log "Another instance is already running (lock file: $LOCK_FILE)" "ERROR"
+        exit 1
+    fi
 
-# Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
-
-# Enhanced logging function with levels
-log() {
-    local level="${2:-INFO}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $1" | tee -a "$LOG_FILE"
+    echo $$ > "$LOCK_FILE"
+    mkdir -p "$(dirname "$LOG_FILE")" "$DOWNLOAD_DIR"
 }
 
-# Check dependencies
-if [[ ! -x "$YTDLP_BINARY" ]]; then
-    log "ERROR: yt-dlp binary not found at $YTDLP_BINARY" "ERROR"
-    exit 1
-fi
-
-# Check if PLAYLIST_URL is set
-if [[ -z "${PLAYLIST_URL:-}" ]]; then
-    log "ERROR: PLAYLIST_URL environment variable not set" "ERROR"
-    log "Usage: PLAYLIST_URL='https://youtube.com/playlist?list=...' $0" "ERROR"
-    exit 1
-fi
-
-# Validate URL format
-if [[ ! "$PLAYLIST_URL" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]; then
-    log "ERROR: Invalid YouTube URL format: $PLAYLIST_URL" "ERROR"
-    exit 1
-fi
-
-log "Starting YouTube playlist sync for: $PLAYLIST_URL" "INFO"
-log "yt-dlp version: $($YTDLP_BINARY --version)" "INFO"
-
-# Create directories if they don't exist
-mkdir -p "$DOWNLOAD_DIR" "$PROCESSING_DIR" "$LIBRARY_DIR"
-
-# Check available disk space (warn if less than 1GB)
-AVAILABLE_SPACE=$(df "$DOWNLOAD_DIR" | awk 'NR==2 {print $4}')
-if [[ $AVAILABLE_SPACE -lt 1048576 ]]; then  # 1GB in KB
-    log "WARNING: Low disk space available: $(($AVAILABLE_SPACE / 1024))MB" "WARN"
-fi
-
-# Download playlist using yt-dlp with enhanced error handling
-log "Downloading playlist with yt-dlp..." "INFO"
-YTDLP_EXIT_CODE=0
-"$YTDLP_BINARY" --config-location "$CONFIG_FILE" "$PLAYLIST_URL" 2>&1 | tee -a "$LOG_FILE" || YTDLP_EXIT_CODE=$?
-
-if [[ $YTDLP_EXIT_CODE -eq 0 ]]; then
-    log "Download completed successfully" "INFO"
-else
-    log "ERROR: Download failed with exit code $YTDLP_EXIT_CODE" "ERROR"
-    # Don't exit immediately, still try to process any files that might have been downloaded
-fi
-
-# Count downloaded files (include common audio formats and new files)
-TIMESTAMP_FILE="{{ music_library_path }}/.last_sync_timestamp"
-if [[ -f "$TIMESTAMP_FILE" ]]; then
-    DOWNLOAD_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) -newer "$TIMESTAMP_FILE" 2>/dev/null | wc -l)
-else
-    DOWNLOAD_COUNT=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
-fi
-
-log "Found $DOWNLOAD_COUNT new audio files" "INFO"
-
-# Update timestamp file
-touch "$TIMESTAMP_FILE"
-
-# Enhanced Beets import with better error handling
-if [[ $DOWNLOAD_COUNT -gt 0 ]]; then
-    log "Running Beets import on new downloads..." "INFO"
-    
-    # Run Beets import using Docker container (non-interactive mode)
-    BEETS_EXIT_CODE=0
-    # Check if beets database is accessible (should work since we pre-create it)
-    if ! docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-        beet --config /config/config.yaml stats >/dev/null 2>&1; then
-        log "WARNING: Beets database not accessible, continuing anyway..." "WARN"
+# Validate dependencies and environment
+validate_environment() {
+    if [[ ! -x "$YTDLP_BINARY" ]]; then
+        log "yt-dlp binary not found at $YTDLP_BINARY" "ERROR"
+        exit 1
     fi
-    
-    # Now run the import
-    if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
-        beet --config /config/config.yaml import -q /downloads 2>&1 | tee -a "$LOG_FILE"; then
-        log "Beets import completed successfully" "INFO"
+
+    if [[ -z "${YOUTUBE_PLAYLISTS:-}" ]]; then
+        log "YOUTUBE_PLAYLISTS environment variable not set" "ERROR"
+        log "Configure vault_youtube_playlists in your host_vars" "ERROR"
+        exit 1
+    fi
+
+    log "yt-dlp version: $($YTDLP_BINARY --version)" "INFO"
+}
+
+# Check disk space
+check_disk_space() {
+    local available_space
+    available_space=$(df "$DOWNLOAD_DIR" | awk 'NR==2 {print $4}')
+
+    if [[ $available_space -lt 1048576 ]]; then  # 1GB in KB
+        log "Low disk space available: $(($available_space / 1024))MB" "WARN"
+    fi
+}
+
+# Validate YouTube URL format
+validate_url() {
+    local url="$1"
+    [[ "$url" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]
+}
+
+# Download single playlist
+download_playlist() {
+    local playlist_url="$1"
+
+    log "Downloading playlist: $playlist_url" "INFO"
+
+    if "$YTDLP_BINARY" --config-location "$CONFIG_FILE" "$playlist_url" 2>&1 | tee -a "$LOG_FILE"; then
+        log "Successfully downloaded: $playlist_url" "INFO"
+        return 0
     else
-        BEETS_EXIT_CODE=$?
-        log "WARNING: Beets import failed with exit code $BEETS_EXIT_CODE" "WARN"
+        log "Download failed: $playlist_url" "ERROR"
+        return 1
     fi
-    
-    
-    if [[ $BEETS_EXIT_CODE -eq 0 ]]; then
-        # Archive processed files instead of deleting
-        ARCHIVE_DIR="$MUSIC_STACK_HOME/archive/$(date +%Y-%m-%d_%H-%M-%S)"
-        mkdir -p "$ARCHIVE_DIR"
-        
-        log "Archiving processed downloads to $ARCHIVE_DIR..." "INFO"
-        find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) -exec mv {} "$ARCHIVE_DIR/" \; 2>&1 | tee -a "$LOG_FILE"
-        
-        # Clean up any remaining files (thumbnails, etc.)
-        find "$DOWNLOAD_DIR" -name "*.webp" -o -name "*.jpg" -o -name "*.png" -exec mv {} "$ARCHIVE_DIR/" \; 2>/dev/null || true
-        
-        log "Processed files archived successfully" "INFO"
-    else
-        log "WARNING: Beets import failed, files remain in downloads directory" "WARN"
-    fi
-else
-    log "No new files to import" "INFO"
-fi
+}
 
-# Disk usage report
-TOTAL_USAGE=$(du -sh "$MUSIC_STACK_HOME" 2>/dev/null | cut -f1)
-log "Total music stack disk usage: $TOTAL_USAGE" "INFO"
+# Process all playlists
+process_playlists() {
+    log "Processing playlists: $YOUTUBE_PLAYLISTS" "INFO"
 
-# Cleanup old log entries (keep last 500 lines for better debugging)
-if [[ -f "$LOG_FILE" ]]; then
-    tail -n 500 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
-fi
+    IFS=':' read -ra PLAYLIST_ARRAY <<< "$YOUTUBE_PLAYLISTS"
 
-# Cleanup old archives (keep last 7 days)
-find "$MUSIC_STACK_HOME/archive" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    for playlist_url in "${PLAYLIST_ARRAY[@]}"; do
+        [[ -z "$playlist_url" ]] && continue
 
-# Update yt-dlp if it's more than a week old
-YTDLP_AGE=$(find "$YTDLP_BINARY" -mtime +7 2>/dev/null | wc -l)
-if [[ $YTDLP_AGE -gt 0 ]] && command -v wget >/dev/null 2>&1; then
-    log "yt-dlp binary is more than a week old, updating..." "INFO"
-    if wget -q -O "/tmp/yt-dlp_new" "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64"; then
-        chmod +x "/tmp/yt-dlp_new"
-        if sudo mv "/tmp/yt-dlp_new" "$YTDLP_BINARY"; then
-            log "yt-dlp updated successfully to version: $($YTDLP_BINARY --version)" "INFO"
-        else
-            log "WARNING: Failed to update yt-dlp (permission denied)" "WARN"
+        TOTAL_PLAYLISTS=$((TOTAL_PLAYLISTS + 1))
+
+        if ! validate_url "$playlist_url"; then
+            log "Invalid YouTube URL format: $playlist_url" "ERROR"
+            FAILED_PLAYLISTS=$((FAILED_PLAYLISTS + 1))
+            continue
         fi
+
+        if ! download_playlist "$playlist_url"; then
+            FAILED_PLAYLISTS=$((FAILED_PLAYLISTS + 1))
+            YTDLP_EXIT_CODE=1
+        fi
+    done
+
+    if [[ $FAILED_PLAYLISTS -eq 0 ]]; then
+        log "All $TOTAL_PLAYLISTS playlists downloaded successfully" "INFO"
     else
-        log "WARNING: Failed to download yt-dlp update" "WARN"
+        log "$FAILED_PLAYLISTS out of $TOTAL_PLAYLISTS playlists failed" "WARN"
     fi
-fi
+}
 
-log "YouTube playlist sync completed" "INFO"
+# Generate reports
+generate_reports() {
+    local download_count
+    download_count=$(find "$DOWNLOAD_DIR" -type f \( -name "*.opus" -o -name "*.m4a" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" \) 2>/dev/null | wc -l)
 
-# Enhanced Navidrome integration
-if command -v curl >/dev/null 2>&1; then
-    log "Triggering Navidrome library scan..." "INFO"
-    
-    # Try to get Navidrome API credentials from environment
-    NAVIDROME_URL="http://localhost:{{ navidrome_port }}"
-    
-    # Simple ping to check if Navidrome is running
-    if curl -f -s "$NAVIDROME_URL/ping" >/dev/null 2>&1; then
-        # Try to trigger scan (this might require authentication in production)
-        curl -f -X POST "$NAVIDROME_URL/api/scanner/scan" >/dev/null 2>&1 && \
-            log "Navidrome library scan triggered successfully" "INFO" || \
-            log "WARNING: Could not trigger Navidrome rescan (authentication might be required)" "WARN"
+    log "Total files in downloads directory: $download_count" "INFO"
+
+    local total_usage
+    total_usage=$(du -sh "$MUSIC_STACK_HOME" 2>/dev/null | cut -f1)
+    log "Total music stack disk usage: $total_usage" "INFO"
+}
+
+# Update yt-dlp using built-in updater
+update_ytdlp() {
+    log "Checking for yt-dlp updates..." "INFO"
+    if "$YTDLP_BINARY" -U 2>&1 | tee -a "$LOG_FILE"; then
+        log "yt-dlp update check completed" "INFO"
     else
-        log "WARNING: Navidrome appears to be offline" "WARN"
+        log "yt-dlp update check failed" "WARN"
     fi
-fi
+}
 
-# Final status report
-if [[ $YTDLP_EXIT_CODE -eq 0 ]]; then
-    log "Script completed successfully" "INFO"
-    exit 0
-else
-    log "Script completed with warnings/errors" "WARN"
-    exit $YTDLP_EXIT_CODE
-fi
+# Cleanup logs and archives
+cleanup_old_files() {
+    # Keep last 500 log lines
+    if [[ -f "$LOG_FILE" ]]; then
+        tail -n 500 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+    fi
+
+    # Remove old archives (7+ days)
+    find "{{ music_library_path }}/archive" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+}
+
+# Main execution
+main() {
+    setup
+    validate_environment
+    check_disk_space
+    update_ytdlp
+    process_playlists
+    generate_reports
+    cleanup_old_files
+
+    log "YouTube playlist download completed" "INFO"
+
+    if [[ $YTDLP_EXIT_CODE -eq 0 ]]; then
+        log "Script completed successfully - processed $TOTAL_PLAYLISTS playlists" "INFO"
+        exit 0
+    else
+        log "Script completed with errors - $FAILED_PLAYLISTS out of $TOTAL_PLAYLISTS playlists failed" "WARN"
+        exit $YTDLP_EXIT_CODE
+    fi
+}
+
+# Run main function
+main "$@"
