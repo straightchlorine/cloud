@@ -1,0 +1,35 @@
+[Unit]
+Description=Promtail log shipping agent
+Documentation=https://grafana.com/docs/loki/latest/clients/promtail/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=promtail
+Group=promtail
+ExecStart=/usr/local/bin/promtail -config.file=/etc/promtail/promtail.yml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=promtail
+KillMode=mixed
+KillSignal=SIGINT
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/promtail
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

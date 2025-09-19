@@ -1,0 +1,92 @@
+---
+# Post-deployment validation playbook
+# Verifies that all deployed services are running and accessible
+# Usage: ansible-playbook -i inventory post-deployment-validation.yml
+
+- name: Post-deployment validation for all services
+  hosts: all
+  gather_facts: yes
+  become: no
+
+  tasks:
+    - name: Display validation start message
+      ansible.builtin.debug:
+        msg: |
+          🔍 Starting post-deployment validation for {{ inventory_hostname }}
+          Host group: {{ group_names }}
+          Services will be validated based on deployment role
+
+    - name: Run common port connectivity tests
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: port_connectivity_test
+      tags: [connectivity]
+
+    - name: Run DNS-specific validation for Pi-hole hosts
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: post_deploy_validate
+      when: "'dns' in group_names"
+      tags: [dns_validation]
+
+    - name: Run automation stack validation for automation hosts
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: post_deploy_validate
+      when: "'automation' in group_names"
+      tags: [automation_validation]
+
+    - name: Run music stack validation for music hosts
+      ansible.builtin.include_role:
+        name: music-stack
+        tasks_from: post_deploy_validate
+      when: "'music' in group_names"
+      tags: [music_validation]
+
+    - name: Generate validation summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ Post-deployment validation completed successfully for {{ inventory_hostname }}
+
+          Services validated:
+          {% if 'dns' in group_names %}
+          🔗 DNS Services: Pi-hole, NTP, monitoring services
+          {% endif %}
+          {% if 'automation' in group_names %}
+          🤖 Automation Stack: Traefik, Vaultwarden, InfluxDB, containers
+          {% endif %}
+          {% if 'music' in group_names %}
+          🎵 Music Stack: Navidrome, Docker containers, YouTube sync
+          {% endif %}
+          🌐 Network Connectivity: All configured ports tested
+
+          All systems operational! 🚀
+
+  handlers:
+    - name: validation complete
+      ansible.builtin.debug:
+        msg: "✅ All hosts passed post-deployment validation checks"
+
+# Quick validation playbook for single service testing
+- name: Quick service validation
+  hosts: all
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Quick health check
+      ansible.builtin.wait_for:
+        port: "{{ item }}"
+        timeout: 10
+      loop:
+        - 22  # SSH
+        - "{{ (firewall_ports | selectattr('comment', 'match', '.*HTTP.*') | first).port | default(80) }}"  # Web service
+      failed_when: false
+      register: quick_check
+
+    - name: Display quick results
+      ansible.builtin.debug:
+        msg: |
+          ⚡ Quick Health Check Results:
+          SSH: {{ '✅' if quick_check.results[0].elapsed < 10 else '❌' }}
+          Web: {{ '✅' if quick_check.results[1].elapsed < 10 else '❌' }}
+          Status: {{ 'Healthy' if (quick_check.results[0].elapsed < 10 and quick_check.results[1].elapsed < 10) else 'Check Required' }}

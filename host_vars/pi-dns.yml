@@ -9,11 +9,15 @@ device_type: rpi3b
 # Pi-hole configuration
 pihole_admin_password: "{{ vault_pihole_admin_password }}"
 pihole_webpassword: "{{ vault_pihole_webpassword }}"
-pihole_dns_1: 1.1.1.1
-pihole_dns_2: 8.8.8.8
-pihole_interface: eth0
-pihole_ipv4_address: 192.168.20.10/24
+pihole_dns_servers:
+  - 192.168.20.1#53
+pihole_interface: "{{ primary_interface }}"
+pihole_ipv4_address: "{{ host_ip_cidr }}"
 pihole_ipv6_address: ""
+pihole_packages:
+  - curl
+  - ca-certificates
+  - dnsutils
 
 
 # Automatic updates configuration
@@ -27,6 +31,17 @@ ntp_allowed_networks:
   - "10.0.0.0/8"
   - "192.168.0.0/16"
   - "172.16.0.0/12"
+
+# Firewall configuration for DNS services
+firewall_ports:
+  - {port: 22, comment: "SSH"}
+  - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
+  - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
+  - {port: 80, comment: "Pi-hole Web Interface"}
+  - {port: 123, comment: "NTP server", proto: "udp"}
+  - {port: 9100, comment: "Node Exporter"}
+  - {port: 9617, comment: "Pi-hole Exporter"}
+  - {port: 19999, comment: "Netdata",}
 
 # Additional services for Pi 3B
 additional_services:
@@ -43,16 +58,22 @@ additional_services:
     description: "Pi-hole metrics exporter"
     port: 9617
 
-# Pi-hole exporter configuration
+# Prometheus exporters configuration
 pihole_exporter_enabled: true
-pihole_exporter_port: 9617
-pihole_exporter_version: "v1.2.0"
-pihole_exporter_binary_url: "https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/pihole_exporter-linux-arm"
-pihole_exporter_install_dir: "/opt/pihole-exporter"
-pihole_exporter_user: "pihole-exporter"
+prometheus_role: "dns"
 
-# Backup configuration
-backup_enabled: true
-backup_retention_days: 30
-rclone_version: "1.63.1"
+# Enterprise backup configuration
+restic_enabled: true
+restic_repository: "{{ vault_backup_repository_base }}/dns"
+restic_password: "{{ vault_restic_dns_password }}"
+backup_directories:
+  - "/etc/pihole"
+  - "/etc/chrony"
+  - "/var/log/pihole"
+  - "/opt/pihole"
+backup_exclude_patterns:
+  - "*.tmp"
+  - "*.log.1*"
+  - "/var/log/pihole/pihole.log.*"
+
 

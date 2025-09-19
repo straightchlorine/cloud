@@ -1,0 +1,62 @@
+# Common setup for Prometheus exporters
+
+- name: Create prometheus user and group
+  ansible.builtin.group:
+    name: "{{ prometheus_exporters_group }}"
+    system: yes
+  become: yes
+
+- name: Create prometheus user
+  ansible.builtin.user:
+    name: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    system: yes
+    shell: /bin/false
+    home: "{{ prometheus_exporters_base_dir }}"
+    create_home: no
+  become: yes
+
+- name: Create Prometheus exporters directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0755'
+  become: yes
+  loop:
+    - "{{ prometheus_exporters_base_dir }}"
+    - "{{ prometheus_exporters_base_dir }}/bin"
+    - "{{ prometheus_exporters_base_dir }}/scripts"
+    - "{{ prometheus_exporters_base_dir }}/logs"
+    - "{{ prometheus_exporters_config_dir }}"
+    - "{{ node_exporter_textfile_dir }}"
+
+- name: Install required packages for exporters
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - tar
+      - gzip
+      - jq
+      - bc
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create systemd service template directory
+  ansible.builtin.file:
+    path: /etc/systemd/system
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Set up logrotate for exporter logs
+  ansible.builtin.template:
+    src: prometheus-exporters-logrotate.j2
+    dest: /etc/logrotate.d/prometheus-exporters
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes

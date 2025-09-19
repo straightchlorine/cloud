@@ -14,6 +14,20 @@ ssd_format: false
 ansible_uid: 1000
 ansible_gid: 1000
 
+# Stack management
+start_stack: true
+
+# Required variables for validation
+ytdlp_dependencies:
+  - python3-pip
+  - ffmpeg
+ytdlp_version: "2025.08.27"
+beets_genres:
+  - Rock
+  - Pop
+  - Electronic
+  - YouTube
+
 firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
@@ -25,3 +39,23 @@ docker_log_max_size: "10m"
 docker_log_max_file: "3"
 
 youtube_sync_enabled: true
+
+# Prometheus exporters configuration
+docker_exporter_enabled: true
+prometheus_role: "music"
+
+# Enterprise backup configuration
+restic_enabled: true
+restic_repository: "{{ vault_backup_repository_base }}/music"
+restic_password: "{{ vault_restic_music_password }}"
+backup_directories:
+  - "{{ music_stack_home }}"
+  - "{{ music_library_path }}"
+  - "/var/lib/docker/volumes"
+  - "/etc/docker"
+backup_exclude_patterns:
+  - "*.tmp"
+  - "*.log.1*"
+  - "**/logs/*"
+  - "docker/overlay2/*"
+  - "**/*.cache"

@@ -1,0 +1,28 @@
+# Prometheus exporters group variables
+
+# Global Prometheus configuration
+prometheus_exporters_enabled: true
+prometheus_environment: "production"
+
+# Node Exporter (enabled on all hosts)
+node_exporter_enabled: true
+node_exporter_install_method: "binary"
+
+# Pi Hardware Metrics (enabled on ARM hosts)
+pi_hardware_metrics_enabled: true
+pi_hardware_metrics_interval: 30
+
+# Service discovery labels
+prometheus_instance_labels:
+  environment: "{{ prometheus_environment }}"
+  site: "home-lab"
+  project: "raspberry-pi-cluster"
+
+# Firewall configuration
+prometheus_exporters_ufw_enabled: true
+prometheus_exporters_firewall_source: "192.168.20.0/24" # Adjust to your Prometheus server network
+
+# Health check configuration
+prometheus_exporters_health_check_enabled: true
+prometheus_exporters_health_check_timeout: 10
+

@@ -1,0 +1,37 @@
+[Unit]
+Description=Prometheus Node Exporter
+Documentation=https://prometheus.io/docs/guides/node-exporter/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ prometheus_exporters_user }}
+Group={{ prometheus_exporters_group }}
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart={{ prometheus_exporters_base_dir }}/bin/node_exporter \
+{% for collector in node_exporter_enabled_collectors %}
+  --collector.{{ collector }} \
+{% endfor %}
+  --collector.textfile.directory={{ node_exporter_textfile_dir }} \
+  --web.listen-address=0.0.0.0:{{ node_exporter_port }} \
+  --web.telemetry-path=/metrics \
+  --log.level=info \
+  --log.format=logfmt
+
+SyslogIdentifier=node_exporter
+Restart=always
+RestartSec=1
+StartLimitInterval=0
+
+# Security settings
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ReadWritePaths={{ node_exporter_textfile_dir }}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,77 @@
+# Docker metrics via Node Exporter (no separate exporter needed)
+
+- name: Enable Docker metrics in Docker daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "metrics-addr": "127.0.0.1:9323",
+        "experimental": true
+      }
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes
+  become: yes
+  notify: restart docker
+  when: docker_exporter_enabled
+
+- name: Create Docker metrics collection script
+  ansible.builtin.template:
+    src: docker_metrics.sh.j2
+    dest: "{{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh"
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0755'
+  become: yes
+
+- name: Create systemd service for Docker metrics collection
+  ansible.builtin.template:
+    src: docker-metrics.service.j2
+    dest: /etc/systemd/system/docker-metrics.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart docker-metrics
+
+- name: Create systemd timer for Docker metrics collection
+  ansible.builtin.template:
+    src: docker-metrics.timer.j2
+    dest: /etc/systemd/system/docker-metrics.timer
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart docker-metrics-timer
+
+- name: Enable and start Docker metrics timer
+  ansible.builtin.systemd:
+    name: docker-metrics.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+  when: docker_exporter_enabled
+
+- name: Test Docker metrics endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:9323/metrics"
+    method: GET
+    timeout: 5
+  register: docker_metrics_test
+  failed_when: false
+  when: docker_exporter_enabled
+
+- name: Docker metrics setup status
+  ansible.builtin.debug:
+    msg: |
+      ✅ Docker Metrics Setup:
+      - Docker daemon metrics: {{ 'Enabled' if docker_exporter_enabled else 'Disabled' }}
+      - Metrics endpoint: {{ 'Accessible' if docker_metrics_test.status == 200 else 'Not accessible' }}
+      - Collection script: {{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh
+  when: docker_exporter_enabled

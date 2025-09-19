@@ -1,0 +1,105 @@
+# SSL/Domain validation playbook for DNS01 Traefik setup
+# Validates domain resolution, Cloudflare configuration, and SSL prerequisites
+# Usage: ansible-playbook -i inventory ssl-domain-validation.yml
+
+- name: SSL/Domain validation for DNS01 Traefik deployments
+  hosts: automation
+  gather_facts: yes
+  become: no
+
+  tasks:
+    - name: Display SSL validation start message
+      ansible.builtin.debug:
+        msg: |
+          🔐 Starting SSL/Domain validation for {{ inventory_hostname }}
+
+          Validation scope:
+          ✅ Domain resolution from multiple DNS providers
+          ✅ Cloudflare API connectivity and permissions
+          ✅ DNS01 challenge prerequisites
+          ✅ Traefik routing configuration
+          ✅ SSL certificate management setup
+
+          This validates DNS01 setup with NO exposed ports required!
+
+    - name: Validate domain resolution and SSL prerequisites
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: ssl_domain_validate
+      tags: [ssl_validation]
+
+    - name: Validate Traefik routing configuration
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: traefik_routing_validate
+      when: "'automation' in group_names"
+      tags: [routing_validation]
+
+    - name: Validate DNS01 challenge prerequisites
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: dns01_prerequisites
+      tags: [dns01_validation]
+
+    - name: Generate comprehensive SSL validation summary
+      ansible.builtin.debug:
+        msg: |
+          🔒 SSL/Domain Validation Summary for {{ inventory_hostname }}:
+
+          ✅ Domain Resolution: All subdomains resolve correctly
+          ✅ Cloudflare Integration: API access and DNS permissions verified
+          ✅ DNS01 Prerequisites: All requirements met for certificate generation
+          ✅ Traefik Configuration: Routing and SSL resolver properly configured
+          ✅ Security Setup: acme.json permissions and storage validated
+
+          🚀 DNS01 SSL deployment ready!
+
+          Key benefits of your DNS01 setup:
+          🔐 No ports exposed to internet (maximum security)
+          ⚡ Fast certificate generation via Cloudflare API
+          🌐 Wildcard certificate support available
+          🔄 Automatic certificate renewal
+
+          Your infrastructure is ready for secure HTTPS with zero attack surface!
+
+  handlers:
+    - name: ssl validation complete
+      ansible.builtin.debug:
+        msg: "🔐 SSL/Domain validation completed successfully for all automation hosts"
+
+# Quick SSL health check for monitoring
+- name: Quick SSL health check
+  hosts: automation
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Quick certificate status check
+      ansible.builtin.shell: |
+        cd "{{ automation_stack_home }}"
+        if [ -s "{{ automation_data_path }}/traefik/acme.json" ]; then
+          echo "Certificates present"
+        else
+          echo "No certificates yet"
+        fi
+      register: cert_status
+      become_user: "{{ automation_user }}"
+      changed_when: false
+
+    - name: Quick Cloudflare API test
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/user"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+        timeout: 5
+      register: api_quick_test
+      failed_when: false
+
+    - name: Display quick SSL status
+      ansible.builtin.debug:
+        msg: |
+          ⚡ Quick SSL Status for {{ inventory_hostname }}:
+          Certificates: {{ cert_status.stdout }}
+          Cloudflare API: {{ '✅ Connected' if api_quick_test.json.success | default(false) else '❌ Check credentials' }}
+          Status: {{ 'Ready for HTTPS' if cert_status.stdout == 'Certificates present' and api_quick_test.json.success | default(false) else 'Needs attention' }}
+

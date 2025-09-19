@@ -10,23 +10,19 @@
     tasks_from: detect_hardware
   tags: [hardware, validation]
 
-- name: Update package cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
+- name: Gather network facts for dynamic configuration
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+  tags: [network, facts]
 
-- name: Install common packages
-  ansible.builtin.apt:
-    name: "{{ common_packages }}"
-    state: present
-  become: true
-
-- name: Install music-specific packages
-  ansible.builtin.apt:
-    name: "{{ music_stack_specific_packages }}"
-    state: present
-  become: true
+- name: Include common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages: "{{ music_stack_specific_packages }}"
+  tags: [packages]
 
 - name: Include Docker setup
   ansible.builtin.include_tasks: docker.yml
@@ -45,3 +41,11 @@
   tags: [youtube]
   when: youtube_sync_enabled
 
+- name: Configure firewall
+  ansible.builtin.include_role:
+    name: firewall
+  tags: [firewall, security]
+
+- name: Run post-deployment validation
+  ansible.builtin.include_tasks: post_deploy_validate.yml
+  tags: [post_validation, never]

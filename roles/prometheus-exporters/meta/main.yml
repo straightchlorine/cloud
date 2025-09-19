@@ -1,0 +1,35 @@
+# Meta information for prometheus-exporters role
+
+galaxy_info:
+  author: Claude Code Assistant
+  description: Comprehensive Prometheus exporters for Raspberry Pi infrastructure
+  company: Infrastructure Automation
+  license: MIT
+  min_ansible_version: '2.14'
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - '22.04'
+        - '24.04'
+
+  galaxy_tags:
+    - prometheus
+    - monitoring
+    - metrics
+    - exporters
+    - raspberry-pi
+    - pi-hole
+    - docker
+    - hardware
+
+dependencies:
+  - role: common
+    tasks_from: detect_hardware
+    when: pi_hardware_metrics_enabled
+
+collections:
+  - community.general

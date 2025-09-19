@@ -1,0 +1,11 @@
+[Unit]
+Description=Docker Extended Metrics Collection Timer
+Requires=docker-metrics.service
+
+[Timer]
+OnBootSec=60sec
+OnUnitActiveSec=60sec
+AccuracySec=5sec
+
+[Install]
+WantedBy=timers.target

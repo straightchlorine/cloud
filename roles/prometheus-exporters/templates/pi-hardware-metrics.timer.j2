@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Hardware Metrics Collection Timer
+Requires=pi-hardware-metrics.service
+
+[Timer]
+OnBootSec=30sec
+OnUnitActiveSec={{ pi_hardware_metrics_interval }}sec
+AccuracySec=5sec
+
+[Install]
+WantedBy=timers.target

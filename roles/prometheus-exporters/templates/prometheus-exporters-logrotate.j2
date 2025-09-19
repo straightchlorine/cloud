@@ -1,0 +1,13 @@
+{{ prometheus_exporters_base_dir }}/logs/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 644 {{ prometheus_exporters_user }} {{ prometheus_exporters_group }}
+    postrotate
+        systemctl reload-or-restart node-exporter >/dev/null 2>&1 || true
+        systemctl reload-or-restart pihole-exporter >/dev/null 2>&1 || true
+    endscript
+}

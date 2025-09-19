@@ -1,0 +1,72 @@
+# Post-deployment validation for DNS services
+# Verifies Pi-hole and related services are working correctly
+
+- name: Wait for Pi-hole service to be ready
+  ansible.builtin.wait_for:
+    port: 80
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 60
+  tags: [post_validation]
+
+- name: Test Pi-hole DNS resolution
+  ansible.builtin.command: |
+    nslookup google.com {{ ansible_default_ipv4.address }}
+  register: dns_test
+  failed_when: dns_test.rc != 0
+  changed_when: false
+  tags: [post_validation]
+
+- name: Verify Pi-hole web interface is accessible
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}/admin/"
+    method: GET
+    timeout: 10
+  register: pihole_web
+  tags: [post_validation]
+
+- name: Test Pi-hole API response
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}/admin/api.php?summary"
+    method: GET
+    timeout: 10
+  register: pihole_api
+  tags: [post_validation]
+
+- name: Verify Pi-hole is blocking ads
+  ansible.builtin.command: |
+    nslookup doubleclick.net {{ ansible_default_ipv4.address }}
+  register: ad_block_test
+  failed_when: false
+  changed_when: false
+  tags: [post_validation]
+
+- name: Check NTP service if enabled
+  ansible.builtin.systemd:
+    name: chrony
+  register: ntp_status
+  when: ntp_server_enabled | default(false)
+  tags: [post_validation]
+
+- name: Verify monitoring services if enabled
+  ansible.builtin.wait_for:
+    port: "{{ item.port }}"
+    timeout: 30
+  loop: "{{ additional_services | default([]) }}"
+  when: additional_services is defined
+  tags: [post_validation]
+
+- name: Display DNS validation results
+  ansible.builtin.debug:
+    msg: |
+      ✅ Pi-hole Post-Deployment Validation Results:
+
+      Pi-hole Service: {{ 'Running' if pihole_web.status == 200 else 'Failed' }}
+      DNS Resolution: {{ 'Working' if dns_test.rc == 0 else 'Failed' }}
+      Web Interface: {{ 'Accessible' if pihole_web.status == 200 else 'Failed' }}
+      API Response: {{ 'Working' if pihole_api.status == 200 else 'Failed' }}
+      Ad Blocking: {{ 'Active' if ad_block_test.rc != 0 else 'Check Required' }}
+      NTP Service: {{ ntp_status.status.ActiveState if ntp_server_enabled | default(false) else 'Disabled' }}
+
+      Pi-hole deployment validated successfully!
+  tags: [post_validation]
+

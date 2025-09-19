@@ -1,0 +1,94 @@
+# Prometheus exporters deployment playbook
+# Deploys and configures Prometheus exporters across all infrastructure
+# Usage: ansible-playbook -i inventory prometheus-exporters.yml
+
+- name: Deploy Prometheus exporters on all hosts
+  hosts: prometheus
+  gather_facts: yes
+  become: yes
+
+  tasks:
+    - name: Display Prometheus exporters deployment start
+      ansible.builtin.debug:
+        msg: |
+          📊 Starting Prometheus exporters deployment for {{ inventory_hostname }}
+
+          Deployment scope:
+          ✅ Node Exporter for system metrics
+          ✅ Pi-specific hardware metrics (temperature, voltage, frequency)
+          ✅ Service-specific exporters (Pi-hole, Docker)
+          ✅ Firewall configuration and health checks
+          ✅ Automated service management and log rotation
+
+          Target services based on host role:
+          {% if 'dns' in group_names %}
+          - DNS: Node Exporter + Pi-hole Exporter + Pi Hardware Metrics
+          {% endif %}
+          {% if 'automation' in group_names %}
+          - Automation: Node Exporter + Docker Metrics + Pi Hardware Metrics
+          {% endif %}
+          {% if 'music' in group_names %}
+          - Music: Node Exporter + Docker Metrics + Pi Hardware Metrics
+          {% endif %}
+
+    - name: Deploy Prometheus exporters
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+      tags: [prometheus, exporters, monitoring]
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ Prometheus Exporters Deployment Complete for {{ inventory_hostname }}:
+
+          Deployed Exporters:
+          {% if node_exporter_enabled %}
+          - Node Exporter: http://{{ ansible_default_ipv4.address }}:{{ node_exporter_port }}/metrics
+          {% endif %}
+          {% if pihole_exporter_enabled %}
+          - Pi-hole Exporter: http://{{ ansible_default_ipv4.address }}:{{ pihole_exporter_port }}/metrics
+          {% endif %}
+          {% if docker_exporter_enabled %}
+          - Docker Metrics: http://{{ ansible_default_ipv4.address }}:9323/metrics
+          {% endif %}
+          {% if pi_hardware_metrics_enabled %}
+          - Pi Hardware Metrics: {{ node_exporter_textfile_dir }}/pi_hardware.prom
+          {% endif %}
+
+          Service Status:
+          📊 All exporters configured and running
+          🔥 Firewall rules applied
+          🏥 Health checks enabled
+          📋 Log rotation configured
+
+  handlers:
+    - name: prometheus exporters deployment complete
+      ansible.builtin.debug:
+        msg: "📊 All Prometheus exporters deployed successfully"
+
+# Validation and health check play
+- name: Validate Prometheus exporters health
+  hosts: prometheus
+  gather_facts: no
+  become: no
+
+  tasks:
+    - name: Run exporters health checks
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: health_checks
+      tags: [health_check, validation]
+
+    - name: Display final validation results
+      ansible.builtin.debug:
+        msg: |
+          🏥 Prometheus Exporters Health Validation Complete:
+
+          All enabled exporters have been validated and are responding correctly.
+          Your monitoring infrastructure is ready for Prometheus scraping!
+
+          Next steps:
+          1. Configure your Prometheus server to scrape these endpoints
+          2. Set up Grafana dashboards for visualization
+          3. Configure alerting rules based on these metrics
+

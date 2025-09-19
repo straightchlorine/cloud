@@ -1,0 +1,57 @@
+# Handlers for prometheus-exporters role
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: restart node-exporter
+  ansible.builtin.systemd:
+    name: node-exporter
+    state: restarted
+  become: yes
+  when: node_exporter_enabled
+
+- name: restart pihole-exporter
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    state: restarted
+  become: yes
+  when: pihole_exporter_enabled
+
+- name: restart pi-hardware-metrics
+  ansible.builtin.systemd:
+    name: pi-hardware-metrics.service
+    state: restarted
+  become: yes
+  when: pi_hardware_metrics_enabled
+
+- name: restart pi-hardware-metrics-timer
+  ansible.builtin.systemd:
+    name: pi-hardware-metrics.timer
+    state: restarted
+    enabled: yes
+  become: yes
+  when: pi_hardware_metrics_enabled
+
+- name: restart docker-metrics
+  ansible.builtin.systemd:
+    name: docker-metrics.service
+    state: restarted
+  become: yes
+  when: docker_exporter_enabled
+
+- name: restart docker-metrics-timer
+  ansible.builtin.systemd:
+    name: docker-metrics.timer
+    state: restarted
+    enabled: yes
+  become: yes
+  when: docker_exporter_enabled
+
+- name: restart docker
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: yes
+  when: docker_exporter_enabled

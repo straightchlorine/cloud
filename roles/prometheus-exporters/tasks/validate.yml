@@ -1,0 +1,138 @@
+# Prometheus exporters validation tasks
+
+- name: Validate required variables are defined
+  ansible.builtin.fail:
+    msg: "Required Prometheus exporters variable '{{ item }}' is not defined"
+  when: vars[item] is not defined
+  loop:
+    - prometheus_exporters_enabled
+    - prometheus_exporters_base_dir
+    - node_exporter_enabled
+  tags: [validation]
+
+- name: Validate architecture is supported
+  ansible.builtin.fail:
+    msg: "Architecture {{ ansible_architecture }} is not supported by Prometheus exporters"
+  when: ansible_architecture not in prometheus_arch_map.keys()
+  tags: [validation]
+
+- name: Validate port ranges
+  ansible.builtin.fail:
+    msg: "{{ item.name }} port {{ item.port }} is outside valid range (1024-65535)"
+  when:
+    - item.enabled
+    - item.port < 1024 or item.port > 65535
+  loop:
+    - { name: "Node Exporter", port: "{{ node_exporter_port }}", enabled: "{{ node_exporter_enabled }}" }
+    - { name: "Pi-hole Exporter", port: "{{ pihole_exporter_port }}", enabled: "{{ pihole_exporter_enabled }}" }
+    - { name: "Docker Exporter", port: "{{ docker_exporter_port }}", enabled: "{{ docker_exporter_enabled }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [validation]
+
+- name: Check for port conflicts
+  ansible.builtin.wait_for:
+    port: "{{ item.port }}"
+    timeout: 1
+  register: port_check
+  failed_when: false
+  when: item.enabled
+  loop:
+    - { name: "Node Exporter", port: "{{ node_exporter_port }}", enabled: "{{ node_exporter_enabled }}" }
+    - { name: "Pi-hole Exporter", port: "{{ pihole_exporter_port }}", enabled: "{{ pihole_exporter_enabled }}" }
+    - { name: "Docker Exporter", port: "{{ docker_exporter_port }}", enabled: "{{ docker_exporter_enabled }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [validation]
+
+- name: Warn about port conflicts
+  ansible.builtin.debug:
+    msg: "WARNING: {{ item.item.name }} port {{ item.item.port }} appears to be in use. This may cause conflicts."
+  when:
+    - item.item.enabled
+    - item.elapsed is defined
+    - item.elapsed < 1
+  loop: "{{ port_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags: [validation]
+
+- name: Validate Pi-hole Exporter dependencies
+  block:
+    - name: Check if Pi-hole is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/pihole
+      register: pihole_binary_check
+
+    - name: Warn if Pi-hole not found
+      ansible.builtin.debug:
+        msg: "WARNING: Pi-hole Exporter enabled but Pi-hole binary not found at /usr/local/bin/pihole"
+      when: not pihole_binary_check.stat.exists
+
+    - name: Check Pi-hole web interface
+      ansible.builtin.uri:
+        url: "http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/"
+        method: HEAD
+        timeout: 5
+      register: pihole_web_check
+      failed_when: false
+
+    - name: Warn if Pi-hole web interface unreachable
+      ansible.builtin.debug:
+        msg: "WARNING: Pi-hole web interface not accessible at http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/"
+      when: pihole_web_check.status != 200
+  when:
+    - pihole_exporter_enabled
+    - "'dns' in group_names"
+  tags: [validation]
+
+- name: Validate Docker Exporter dependencies
+  block:
+    - name: Check Docker service status
+      ansible.builtin.systemd:
+        name: docker
+      register: docker_service_status
+
+    - name: Fail if Docker required but not available
+      ansible.builtin.fail:
+        msg: "Docker Exporter enabled but Docker service is not active"
+      when: docker_service_status.status.ActiveState != "active"
+  when:
+    - docker_exporter_enabled
+    - "'automation' in group_names or 'music' in group_names"
+  tags: [validation]
+
+- name: Validate filesystem permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  become: yes
+  check_mode: yes
+  register: dir_permission_check
+  failed_when: false
+  loop:
+    - "{{ prometheus_exporters_base_dir }}"
+    - "{{ prometheus_exporters_config_dir }}"
+    - "{{ node_exporter_textfile_dir }}"
+  tags: [validation]
+
+- name: Fail if directories cannot be created
+  ansible.builtin.fail:
+    msg: "Cannot create directory {{ item.item }}. Check parent directory permissions."
+  when: item is failed
+  loop: "{{ dir_permission_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [validation]
+
+- name: Prometheus exporters validation completed
+  ansible.builtin.debug:
+    msg: |
+      ✅ Prometheus Exporters Validation Complete:
+      - Architecture: {{ ansible_architecture }} → {{ prometheus_arch_map[ansible_architecture] }}
+      - Enabled exporters: {{ [('node' if node_exporter_enabled else ''), ('pihole' if pihole_exporter_enabled else ''), ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
+      - Base directory: {{ prometheus_exporters_base_dir }}
+      - Port validation: Completed
+      - Dependencies: Verified
+  tags: [validation]

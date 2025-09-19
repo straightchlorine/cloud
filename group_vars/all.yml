@@ -1,0 +1,34 @@
+# Global configuration variables for all hosts
+
+# Common system settings
+timezone: Europe/Warsaw
+
+# Standardized Docker Compose version
+docker_compose_version: "v2.24.5"
+
+# Common security settings
+ssh_port: 22
+enable_ufw: true
+
+# Common package cache settings
+package_cache_valid_time: 3600
+backup_retention_days: 30
+
+# Common filesystem utilities (used by all roles with storage)
+filesystem_utilities:
+  - parted
+  - e2fsprogs
+  - ntfs-3g
+  - exfat-fuse
+  - exfatprogs
+
+# Domain configuration (must be set in vault)
+domain_name: "{{ vault_domain_name }}"
+letsencrypt_email: "{{ vault_letsencrypt_email }}"
+
+# Validation checks - these variables MUST be defined in host_vars
+required_vars:
+  - domain_name
+  - vault_domain_name
+  - vault_letsencrypt_email
+

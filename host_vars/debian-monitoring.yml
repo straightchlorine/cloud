@@ -1,0 +1,94 @@
+# Monitoring Infrastructure Host Configuration
+# Dedicated Debian host for centralized monitoring stack
+
+# Host identification
+device_role: monitoring
+device_type: debian_vm
+
+# Monitoring path configuration (required for validation)
+monitoring_data_path: "/var/lib/monitoring"
+monitoring_config_path: "/etc/monitoring"
+monitoring_log_path: "/var/log/monitoring"
+monitoring_stack_home: "/opt/monitoring"
+
+# Monitoring user configuration
+monitoring_user: "monitoring"
+monitoring_uid: 1001
+monitoring_gid: 1001
+
+# Service ports (required for validation)
+grafana_port: 3000
+prometheus_port: 9090
+loki_port: 3100
+uptime_kuma_port: 3001
+alertmanager_port: 9093
+
+# Grafana configuration
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+grafana_domain: "monitoring.{{ domain_name }}"
+
+# Prometheus configuration
+prometheus_retention: "30d"
+prometheus_storage_path: "/var/lib/prometheus"
+
+# Loki configuration
+loki_retention: "30d"
+loki_storage_path: "/var/lib/loki"
+
+# Alertmanager configuration
+alertmanager_email: "{{ vault_alertmanager_email }}"
+alertmanager_smtp_host: "{{ vault_smtp_host }}"
+alertmanager_smtp_port: "{{ vault_smtp_port }}"
+
+# Network and security
+firewall_monitoring_ports:
+  - port: 3000
+    comment: "Grafana web interface"
+  - port: 9090
+    comment: "Prometheus web interface"
+  - port: 3100
+    comment: "Loki HTTP API"
+  - port: 9093
+    comment: "Alertmanager web interface"
+
+# Storage requirements
+monitoring_storage_requirements:
+  prometheus: "10GB"
+  loki: "20GB"
+  grafana: "1GB"
+
+# Backup configuration for monitoring data
+monitoring_backup_enabled: true
+monitoring_backup_directories:
+  - "/var/lib/prometheus"
+  - "/var/lib/loki"
+  - "/var/lib/grafana"
+  - "/etc/prometheus"
+  - "/etc/grafana"
+
+# Enterprise backup configuration
+restic_enabled: true
+restic_repository: "{{ vault_backup_repository_base }}/monitoring"
+restic_password: "{{ vault_restic_monitoring_password }}"
+backup_directories:
+  - "{{ monitoring_data_path }}"
+  - "{{ monitoring_config_path }}"
+  - "/var/lib/prometheus"
+  - "/var/lib/loki"
+  - "/var/lib/grafana"
+  - "/etc/grafana"
+  - "/etc/prometheus"
+backup_exclude_patterns:
+  - "*.tmp"
+  - "*.log.1*"
+  - "**/logs/*"
+  - "**/*.cache"
+
+# Required vault variables for validation
+required_monitoring_vars:
+  - vault_grafana_admin_password
+  - vault_alertmanager_email
+  - vault_smtp_host
+  - vault_smtp_port
+  - vault_restic_monitoring_password
+

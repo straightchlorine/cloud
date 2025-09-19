@@ -1,0 +1,176 @@
+# SSL/Domain validation for DNS01 Traefik setup
+# Validates domain resolution, Cloudflare prerequisites, and SSL certificate health
+
+- name: Validate required SSL/domain variables
+  ansible.builtin.fail:
+    msg: "Required SSL variable '{{ item }}' is not defined"
+  when: vars[item] is not defined or vars[item] == ""
+  loop:
+    - domain_name
+    - vault_domain_name
+    - vault_letsencrypt_email
+    - vault_cloudflare_api_token
+  tags: [ssl_validation]
+
+- name: Test domain resolution from external resolvers
+  ansible.builtin.command: |
+    nslookup {{ domain_name }} {{ item }}
+  loop:
+    - "1.1.1.1" # Cloudflare
+    - "9.9.9.9" # Quad9
+  register: domain_resolution
+  changed_when: false
+  failed_when: false
+  tags: [ssl_validation]
+
+- name: Validate domain resolves from all resolvers
+  ansible.builtin.fail:
+    msg: "Domain {{ domain_name }} failed to resolve from {{ item.item }}"
+  when: item.rc != 0
+  loop: "{{ domain_resolution.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [ssl_validation]
+
+- name: Test subdomain resolution for all configured services
+  ansible.builtin.command: |
+    nslookup {{ item }}.{{ domain_name }} 1.1.1.1
+  loop:
+    - "{{ subdomain_traefik  }}"
+    - "{{ subdomain_influxdb }}"
+    - "{{ subdomain_explorer }}"
+    - "{{ subdomain_dozzle }}"
+    - "{{ subdomain_portainer }}"
+    - "{{ subdomain_vaultwarden }}"
+  register: subdomain_resolution
+  changed_when: false
+  failed_when: false
+  tags: [ssl_validation]
+
+- name: Check Cloudflare API connectivity
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/user"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+      Content-Type: "application/json"
+    timeout: 10
+  register: cloudflare_api_test
+  tags: [ssl_validation]
+
+- name: Validate Cloudflare API response
+  ansible.builtin.fail:
+    msg: "Cloudflare API authentication failed: {{ cloudflare_api_test.json.errors | default('Unknown error') }}"
+  when: not cloudflare_api_test.json.success | default(false)
+  tags: [ssl_validation]
+
+- name: Check if acme.json exists and validate permissions
+  ansible.builtin.stat:
+    path: "{{ automation_data_path }}/traefik/acme.json"
+  register: acme_file
+  tags: [ssl_validation]
+
+- name: Validate acme.json file security
+  ansible.builtin.fail:
+    msg: "acme.json has insecure permissions ({{ acme_file.stat.mode }}). Should be 0600."
+  when: acme_file.stat.exists and acme_file.stat.mode != "0600"
+  tags: [ssl_validation]
+
+- name: Check acme.json for existing certificates
+  ansible.builtin.shell: |
+    if [ -s "{{ automation_data_path }}/traefik/acme.json" ]; then
+      cat "{{ automation_data_path }}/traefik/acme.json" | jq -r '.letsencrypt.Certificates[]?.domain.main // empty' 2>/dev/null || echo "no-certificates"
+    else
+      echo "empty-file"
+    fi
+  register: existing_certificates
+  changed_when: false
+  become_user: "{{ automation_user }}"
+  tags: [ssl_validation]
+
+- name: Validate Traefik configuration files exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: traefik_configs
+  loop:
+    - "{{ automation_data_path }}/traefik/traefik.yml"
+    - "{{ automation_data_path }}/traefik/dynamic.yml"
+  tags: [ssl_validation]
+
+- name: Fail if Traefik configuration missing
+  ansible.builtin.fail:
+    msg: "Missing Traefik configuration: {{ item.item }}"
+  when: not item.stat.exists
+  loop: "{{ traefik_configs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [ssl_validation]
+
+- name: Test Traefik DNS resolvers from configuration
+  ansible.builtin.command: |
+    nslookup {{ domain_name }} {{ item }}
+  loop:
+    - "9.9.9.9"
+    - "149.112.112.112"
+  register: traefik_resolver_test
+  changed_when: false
+  failed_when: false
+  tags: [ssl_validation]
+
+- name: Check DNS propagation delay (important for DNS01)
+  ansible.builtin.command: |
+    dig +short TXT _acme-challenge.{{ domain_name }} @1.1.1.1
+  register: acme_challenge_test
+  changed_when: false
+  failed_when: false
+  tags: [ssl_validation]
+
+- name: Validate email format for Let's Encrypt
+  ansible.builtin.fail:
+    msg: "Invalid email format for Let's Encrypt: {{ vault_letsencrypt_email }}"
+  when: not (vault_letsencrypt_email | regex_search('^[\\w\\.-]+@[\\w\\.-]+\\.[a-zA-Z]{2,}$'))
+  tags: [ssl_validation]
+
+- name: Check Let's Encrypt staging vs production
+  ansible.builtin.debug:
+    msg: |
+      ⚠️  Let's Encrypt Configuration:
+      Staging Mode: {{ letsencrypt_staging | default(false) }}
+      {% if letsencrypt_staging | default(false) %}
+      🔸 Using staging environment - certificates will NOT be trusted by browsers
+      {% else %}
+      ✅ Using production environment - certificates will be trusted
+      {% endif %}
+  tags: [ssl_validation]
+
+- name: Display SSL/Domain validation results
+  ansible.builtin.debug:
+    msg: |
+      ✅ SSL/Domain Validation Results for DNS01 Setup:
+
+      Domain Resolution:
+      Primary Domain ({{ domain_name }}): ✅ Resolves from all resolvers
+      {% for subdomain in ['traefik', 'influxdb', 'vault', 'portainer', 'dozzle'] %}
+      {{ subdomain }}.{{ domain_name }}: {{ '✅ Resolves' if subdomain_resolution.results[loop.index0].rc == 0 else '❌ Failed' }}
+      {% endfor %}
+
+      DNS01 Prerequisites:
+      Cloudflare API: {{ '✅ Connected' if cloudflare_api_test.json.success else '❌ Failed' }}
+      Cloudflare User: {{ cloudflare_api_test.json.result.email | default('Unknown') }}
+      DNS Resolvers: {{ '✅ Working' if traefik_resolver_test.results | selectattr('rc', 'equalto', 0) | list | length == 2 else '❌ Issues detected' }}
+
+      Certificate Management:
+      acme.json: {{ '✅ Exists' if acme_file.stat.exists else '❌ Missing' }}
+      File Permissions: {{ '✅ Secure (0600)' if acme_file.stat.mode == '0600' else '⚠️  Check permissions' }}
+      Existing Certificates: {{ existing_certificates.stdout if existing_certificates.stdout != 'empty-file' else 'None yet' }}
+
+      Traefik Configuration:
+      Static Config: {{ '✅ Present' if traefik_configs.results[0].stat.exists else '❌ Missing' }}
+      Dynamic Config: {{ '✅ Present' if traefik_configs.results[1].stat.exists else '❌ Missing' }}
+      Let's Encrypt Email: {{ vault_letsencrypt_email }}
+      Staging Mode: {{ letsencrypt_staging | default(false) }}
+
+      🔒 DNS01 SSL setup validated successfully!
+      No ports need to be exposed for certificate generation.
+  tags: [ssl_validation]
+

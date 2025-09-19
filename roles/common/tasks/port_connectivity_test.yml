@@ -1,0 +1,51 @@
+# Common port connectivity tests for post-deployment validation
+# Tests that configured firewall ports are actually accessible
+
+- name: Test SSH connectivity (always required)
+  ansible.builtin.wait_for:
+    port: 22
+    timeout: 10
+  tags: [post_validation, connectivity]
+
+- name: Test configured firewall ports
+  ansible.builtin.wait_for:
+    port: "{{ item.port }}"
+    timeout: 30
+  loop: "{{ firewall_ports | default([]) }}"
+  when:
+    - firewall_ports is defined
+    - item.port != 22 # Skip SSH as it's tested separately
+  loop_control:
+    label: "{{ item.comment }} ({{ item.port }})"
+  tags: [post_validation, connectivity]
+
+- name: Test internal connectivity between services
+  ansible.builtin.command: |
+    nc -z {{ ansible_default_ipv4.address }} {{ item.port }}
+  loop: "{{ firewall_ports | default([]) }}"
+  when:
+    - firewall_ports is defined
+    - item.port != 22
+  failed_when: false
+  register: port_tests
+  changed_when: false
+  loop_control:
+    label: "{{ item.comment }} ({{ item.port }})"
+  tags: [post_validation, connectivity]
+
+- name: Display port connectivity results
+  ansible.builtin.debug:
+    msg: |
+      🔗 Port Connectivity Test Results:
+
+      SSH (22): ✅ Accessible
+      {% for result in port_tests.results | default([]) %}
+      {% if result.item is defined %}
+      {{ result.item.comment }} ({{ result.item.port }}): {{ '✅ Accessible' if result.rc == 0 else '❌ Failed' }}
+      {% endif %}
+      {% endfor %}
+
+      Network connectivity validation complete!
+  when: port_tests.results is defined
+  tags: [post_validation, connectivity]
+

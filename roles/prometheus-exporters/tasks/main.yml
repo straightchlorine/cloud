@@ -1,0 +1,49 @@
+# Main tasks for prometheus-exporters role
+
+- name: Include validation tasks
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
+- name: Include common setup tasks
+  ansible.builtin.include_tasks: common_setup.yml
+  when: prometheus_exporters_enabled
+
+- name: Include Node Exporter setup
+  ansible.builtin.include_tasks: node_exporter.yml
+  when:
+    - prometheus_exporters_enabled
+    - node_exporter_enabled
+
+- name: Include Pi hardware metrics setup
+  ansible.builtin.include_tasks: pi_hardware_metrics.yml
+  when:
+    - prometheus_exporters_enabled
+    - pi_hardware_metrics_enabled
+    - ansible_architecture in ['armv7l', 'aarch64']
+
+- name: Include Pi-hole Exporter setup
+  ansible.builtin.include_tasks: pihole_exporter.yml
+  when:
+    - prometheus_exporters_enabled
+    - pihole_exporter_enabled
+    - "'dns' in group_names"
+
+- name: Include Docker Exporter setup
+  ansible.builtin.include_tasks: docker_exporter.yml
+  when:
+    - prometheus_exporters_enabled
+    - docker_exporter_enabled
+    - "'automation' in group_names or 'music' in group_names"
+
+- name: Include firewall configuration
+  ansible.builtin.include_tasks: firewall.yml
+  when:
+    - prometheus_exporters_enabled
+    - prometheus_exporters_ufw_enabled
+
+- name: Include health checks
+  ansible.builtin.include_tasks: health_checks.yml
+  when:
+    - prometheus_exporters_enabled
+    - prometheus_exporters_health_check_enabled
+  tags: [health_check, post_validation]

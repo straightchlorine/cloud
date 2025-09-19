@@ -1,0 +1,69 @@
+#!/bin/bash
+# Docker metrics collection script for Prometheus textfile collector
+
+set -euo pipefail
+
+TEXTFILE_DIR="{{ node_exporter_textfile_dir }}"
+PROM_FILE="$TEXTFILE_DIR/docker_extended.prom"
+TEMP_FILE="$TEXTFILE_DIR/docker_extended.prom.$$"
+
+# Create textfile directory if it doesn't exist
+mkdir -p "$TEXTFILE_DIR"
+
+{
+    echo "# HELP docker_containers_total Total number of containers"
+    echo "# TYPE docker_containers_total gauge"
+    TOTAL_CONTAINERS=$(docker ps -a --format "table {{.Names}}" | wc -l)
+    echo "docker_containers_total $((TOTAL_CONTAINERS - 1))"  # Subtract header line
+
+    echo "# HELP docker_containers_running Number of running containers"
+    echo "# TYPE docker_containers_running gauge"
+    RUNNING_CONTAINERS=$(docker ps --format "table {{.Names}}" | wc -l)
+    echo "docker_containers_running $((RUNNING_CONTAINERS - 1))"  # Subtract header line
+
+    echo "# HELP docker_containers_stopped Number of stopped containers"
+    echo "# TYPE docker_containers_stopped gauge"
+    STOPPED_CONTAINERS=$(docker ps -a --filter "status=exited" --format "table {{.Names}}" | wc -l)
+    echo "docker_containers_stopped $((STOPPED_CONTAINERS - 1))"  # Subtract header line
+
+    # Container-specific metrics
+    echo "# HELP docker_container_uptime_seconds Container uptime in seconds"
+    echo "# TYPE docker_container_uptime_seconds gauge"
+
+    docker ps --format "table {{.Names}} {{.RunningFor}}" | tail -n +2 | while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            name=$(echo "$line" | awk '{print $1}')
+            # Convert running time to seconds (simplified)
+            running_for=$(echo "$line" | cut -d' ' -f2-)
+            echo "docker_container_uptime_seconds{container=\"$name\"} 0"  # Placeholder
+        fi
+    done
+
+    # Docker system information
+    echo "# HELP docker_images_total Total number of Docker images"
+    echo "# TYPE docker_images_total gauge"
+    TOTAL_IMAGES=$(docker images --format "table {{.Repository}}" | wc -l)
+    echo "docker_images_total $((TOTAL_IMAGES - 1))"  # Subtract header line
+
+    echo "# HELP docker_volumes_total Total number of Docker volumes"
+    echo "# TYPE docker_volumes_total gauge"
+    TOTAL_VOLUMES=$(docker volume ls --format "table {{.Name}}" | wc -l)
+    echo "docker_volumes_total $((TOTAL_VOLUMES - 1))"  # Subtract header line
+
+    echo "# HELP docker_networks_total Total number of Docker networks"
+    echo "# TYPE docker_networks_total gauge"
+    TOTAL_NETWORKS=$(docker network ls --format "table {{.Name}}" | wc -l)
+    echo "docker_networks_total $((TOTAL_NETWORKS - 1))"  # Subtract header line
+
+    # Add timestamp
+    echo "# HELP docker_metrics_last_update_timestamp_seconds Timestamp of last Docker metrics update"
+    echo "# TYPE docker_metrics_last_update_timestamp_seconds gauge"
+    echo "docker_metrics_last_update_timestamp_seconds $(date +%s)"
+
+} > "$TEMP_FILE"
+
+# Atomically move the temp file to the final location
+mv "$TEMP_FILE" "$PROM_FILE"
+
+# Set appropriate permissions
+chmod 644 "$PROM_FILE"

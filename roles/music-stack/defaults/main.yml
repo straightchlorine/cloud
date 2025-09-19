@@ -5,12 +5,8 @@ music_stack_specific_packages:
   - python3-pip
   - ffmpeg
 
-# Docker configuration
-docker_compose_version: "v2.24.5"
-
 # Service ports (defaults)
 navidrome_port: 4545
-dozzle_port: 8080
 
 # SSD configuration defaults
 ssd_filesystem: "ext4"
@@ -56,14 +52,6 @@ ytdlp_version: "2025.08.27"
 ytdlp_dependencies:
   - python3-pip
   - ffmpeg
-
-# Storage configuration
-filesystem_utilities:
-  - parted
-  - e2fsprogs
-  - ntfs-3g
-  - exfat-fuse
-  - exfatprogs
 
 music_library_directories:
   - music

@@ -1,0 +1,76 @@
+# Prometheus exporters role default variables
+
+# Global exporter configuration
+prometheus_exporters_enabled: true
+prometheus_exporters_user: "prometheus"
+prometheus_exporters_group: "prometheus"
+prometheus_exporters_base_dir: "/opt/prometheus-exporters"
+prometheus_exporters_config_dir: "/etc/prometheus/exporters"
+
+# Architecture mapping for binary downloads
+prometheus_arch_map:
+  x86_64: "amd64"
+  armv7l: "armv7"
+  aarch64: "arm64"
+
+# Node Exporter configuration
+node_exporter_enabled: true
+node_exporter_version: "1.8.2"
+node_exporter_port: 9100
+node_exporter_install_method: "binary"  # 'binary' or 'package'
+node_exporter_binary_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz"
+node_exporter_checksum_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/sha256sums.txt"
+
+# Node Exporter advanced configuration
+node_exporter_enabled_collectors:
+  - systemd
+  - textfile
+  - filesystem
+  - cpu
+  - meminfo
+  - loadavg
+  - diskstats
+  - netdev
+  - netstat
+  - stat
+  - time
+  - uname
+  - vmstat
+
+# Pi-specific hardware metrics
+node_exporter_textfile_dir: "{{ prometheus_exporters_base_dir }}/textfiles"
+pi_hardware_metrics_enabled: true
+pi_hardware_metrics_script: "{{ prometheus_exporters_base_dir }}/scripts/pi_hardware_metrics.sh"
+pi_hardware_metrics_interval: 30  # seconds
+
+# Pi-hole Exporter configuration
+pihole_exporter_enabled: false  # Enable only on DNS hosts
+pihole_exporter_version: "v1.2.0"
+pihole_exporter_port: 9617
+pihole_exporter_binary_url: "https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/pihole_exporter-linux-{{ prometheus_arch_map[ansible_architecture] }}"
+pihole_exporter_pihole_hostname: "localhost"
+pihole_exporter_pihole_port: 80
+
+# Docker Exporter configuration (for container hosts)
+docker_exporter_enabled: false  # Enable only on container hosts
+docker_exporter_version: "v1.3.0"
+docker_exporter_port: 9323
+
+# Blackbox Exporter for connectivity monitoring
+blackbox_exporter_enabled: false
+blackbox_exporter_version: "0.24.0"
+blackbox_exporter_port: 9115
+
+# Service discovery labels
+prometheus_instance_labels:
+  environment: "{{ prometheus_environment | default('production') }}"
+  role: "{{ prometheus_role | default(group_names | first) }}"
+  device_type: "{{ device_type | default('unknown') }}"
+
+# Firewall configuration
+prometheus_exporters_ufw_enabled: true
+prometheus_exporters_firewall_source: "{{ prometheus_server_ip | default('any') }}"
+
+# Health check configuration
+prometheus_exporters_health_check_enabled: true
+prometheus_exporters_health_check_timeout: 10

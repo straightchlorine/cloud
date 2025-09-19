@@ -1,0 +1,11 @@
+[Unit]
+Description=Docker Extended Metrics Collection
+Documentation=https://prometheus.io/docs/guides/node-exporter/
+
+[Service]
+Type=oneshot
+User={{ prometheus_exporters_user }}
+Group={{ prometheus_exporters_group }}
+ExecStart={{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh
+StandardOutput=journal
+StandardError=journal

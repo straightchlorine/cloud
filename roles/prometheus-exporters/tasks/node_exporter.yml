@@ -1,0 +1,115 @@
+# Node Exporter setup tasks
+
+- name: Install Node Exporter via binary (recommended)
+  block:
+    - name: Check current Node Exporter version
+      ansible.builtin.shell: |
+        if [ -f "{{ prometheus_exporters_base_dir }}/bin/node_exporter" ]; then
+          {{ prometheus_exporters_base_dir }}/bin/node_exporter --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
+        else
+          echo "not_installed"
+        fi
+      register: current_node_exporter_version
+      changed_when: false
+
+    - name: Download and install Node Exporter
+      block:
+        - name: Download Node Exporter checksums
+          ansible.builtin.get_url:
+            url: "{{ node_exporter_checksum_url }}"
+            dest: "/tmp/node_exporter_checksums.txt"
+            timeout: 30
+
+        - name: Extract expected checksum
+          ansible.builtin.shell: |
+            grep "node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz" /tmp/node_exporter_checksums.txt | cut -d' ' -f1
+          register: expected_checksum
+          changed_when: false
+
+        - name: Download Node Exporter archive
+          ansible.builtin.get_url:
+            url: "{{ node_exporter_binary_url }}"
+            dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+            checksum: "sha256:{{ expected_checksum.stdout }}"
+            timeout: 60
+
+        - name: Extract Node Exporter archive
+          ansible.builtin.unarchive:
+            src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+            dest: "/tmp"
+            remote_src: yes
+
+        - name: Install Node Exporter binary
+          ansible.builtin.copy:
+            src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}/node_exporter"
+            dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
+            owner: "{{ prometheus_exporters_user }}"
+            group: "{{ prometheus_exporters_group }}"
+            mode: '0755'
+            remote_src: yes
+          become: yes
+          notify: restart node-exporter
+
+        - name: Clean up downloaded files
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+            - "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}"
+            - "/tmp/node_exporter_checksums.txt"
+
+      when:
+        - node_exporter_install_method == "binary"
+        - current_node_exporter_version.stdout != node_exporter_version
+
+  when: node_exporter_install_method == "binary"
+
+- name: Install Node Exporter via package manager (fallback)
+  ansible.builtin.apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: yes
+  become: yes
+  when: node_exporter_install_method == "package"
+
+- name: Create Node Exporter service file
+  ansible.builtin.template:
+    src: node-exporter.service.j2
+    dest: /etc/systemd/system/node-exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart node-exporter
+  when: node_exporter_install_method == "binary"
+
+- name: Create Node Exporter configuration file
+  ansible.builtin.template:
+    src: node-exporter.conf.j2
+    dest: "{{ prometheus_exporters_config_dir }}/node-exporter.conf"
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0644'
+  become: yes
+  notify: restart node-exporter
+
+- name: Enable and start Node Exporter service
+  ansible.builtin.systemd:
+    name: "{{ 'node-exporter' if node_exporter_install_method == 'binary' else 'prometheus-node-exporter' }}"
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: Verify Node Exporter is responding
+  ansible.builtin.uri:
+    url: "http://localhost:{{ node_exporter_port }}/metrics"
+    method: GET
+    timeout: 10
+  register: node_exporter_health
+  retries: 3
+  delay: 5
+  until: node_exporter_health.status == 200

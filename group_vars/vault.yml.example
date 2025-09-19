@@ -4,10 +4,6 @@ vault_pihole_admin_password: "your-secure-admin-password"
 vault_pihole_webpassword: "your-secure-web-password"
 
 # Music Server (pi-music)
-vault_hetzner_host: "uXXXXXX.your-storagebox.de"
-vault_hetzner_username: "uXXXXXX"
-vault_hetzner_ssh_key_path: "/home/media/.ssh/hetzner_storage_box"
-
 vault_youtube_playlists:
   - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
 
@@ -15,6 +11,9 @@ vault_youtube_playlists:
 vault_domain_name: "codextechnologies.org"
 vault_letsencrypt_email: "admin@codextechnologies.org"
 vault_traefik_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6"
+
+# Restic Backup Configuration
+vault_restic_automation_password: "your-32-character-secure-restic-password"
 
 # CloudFlare DNS Challenge
 vault_cloudflare_api_token: "your-cloudflare-api-token-here"
@@ -42,3 +41,17 @@ vault_dozzle_password: "your-dozzle-password"
 
 # InfluxDB 3 Configuration
 vault_influxdb3_session_secret_key: "example-session-secret-key"
+
+# Monitoring Infrastructure (debian-monitoring)
+vault_grafana_admin_password: "your-secure-grafana-admin-password"
+vault_alertmanager_email: "admin@codextechnologies.org"
+vault_smtp_host: "smtp.gmail.com"
+vault_smtp_port: "587"
+vault_smtp_username: "admin@codextechnologies.org"
+vault_smtp_password: "your-smtp-app-password"
+
+# Enterprise Backup Configuration (all hosts)
+vault_restic_dns_password: "your-32-character-secure-restic-password-dns"
+vault_restic_music_password: "your-32-character-secure-restic-password-music"
+vault_restic_monitoring_password: "your-32-character-secure-restic-password-monitoring"
+vault_backup_repository_base: "sftp:backup-server:/backup/repositories"

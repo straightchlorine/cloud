@@ -1,0 +1,65 @@
+# Pi-hole Exporter setup tasks
+
+- name: Download Pi-hole Exporter binary
+  ansible.builtin.get_url:
+    url: "{{ pihole_exporter_binary_url }}"
+    dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0755'
+    timeout: 60
+  become: yes
+  notify: restart pihole-exporter
+
+- name: Create Pi-hole Exporter configuration file
+  ansible.builtin.template:
+    src: pihole-exporter.conf.j2
+    dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0644'
+  become: yes
+  notify: restart pihole-exporter
+
+- name: Create Pi-hole Exporter systemd service
+  ansible.builtin.template:
+    src: pihole-exporter.service.j2
+    dest: /etc/systemd/system/pihole-exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart pihole-exporter
+
+- name: Enable and start Pi-hole Exporter service
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: Verify Pi-hole Exporter is responding
+  ansible.builtin.uri:
+    url: "http://localhost:{{ pihole_exporter_port }}/metrics"
+    method: GET
+    timeout: 10
+  register: pihole_exporter_health
+  retries: 3
+  delay: 5
+  until: pihole_exporter_health.status == 200
+
+- name: Test Pi-hole connectivity from exporter
+  ansible.builtin.uri:
+    url: "http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/api.php"
+    method: GET
+    timeout: 5
+  register: pihole_api_test
+  failed_when: false
+
+- name: Warn if Pi-hole API not accessible
+  ansible.builtin.debug:
+    msg: "WARNING: Pi-hole API not accessible. Pi-hole Exporter may not collect all metrics."
+  when: pihole_api_test.status != 200

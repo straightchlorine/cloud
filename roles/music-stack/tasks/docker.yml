@@ -1,48 +1,9 @@
 # Docker setup tasks
 
-- name: Check if Docker is already installed
-  ansible.builtin.command: docker --version
-  register: docker_check
-  failed_when: false
-  changed_when: false
-
-- name: Install Docker if not present
-  block:
-    - name: Install Docker prerequisites
-      ansible.builtin.apt:
-        name:
-          - curl
-          - ca-certificates
-        state: present
-        update_cache: true
-      become: true
-
-    - name: Download and install Docker using convenience script
-      ansible.builtin.shell: |
-        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-        sh /tmp/get-docker.sh
-        rm -f /tmp/get-docker.sh
-      become: true
-      args:
-        creates: /usr/bin/docker
-      notify: restart docker
-
-  when: docker_check.rc != 0
-
-- name: Add user to docker group
-  ansible.builtin.user:
-    name: "{{ ansible_user }}"
-    groups: docker
-    append: true
-  become: true
-  notify: restart docker
-
-- name: Enable and start Docker service
-  ansible.builtin.systemd:
-    name: docker
-    enabled: true
-    state: started
-  become: true
+- name: Include common Docker setup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker
 
 - name: Detect system architecture
   ansible.builtin.setup:

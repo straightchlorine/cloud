@@ -10,8 +10,8 @@ ansible_python_interpreter: /usr/bin/python3
 os_type: debian_bookworm
 timezone: Europe/Warsaw
 
-# Network Configuration
-local_network: 192.168.20.0/24
+# Network Configuration (dynamically detected)
+local_network: "{{ primary_network_cidr }}"
 
 # Common Firewall Ports (SSH always allowed)
 common_firewall_ports:

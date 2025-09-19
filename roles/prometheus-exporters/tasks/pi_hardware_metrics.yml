@@ -1,0 +1,75 @@
+# Pi-specific hardware metrics collection
+
+- name: Create Pi hardware metrics collection script
+  ansible.builtin.template:
+    src: pi_hardware_metrics.sh.j2
+    dest: "{{ pi_hardware_metrics_script }}"
+    owner: "{{ prometheus_exporters_user }}"
+    group: "{{ prometheus_exporters_group }}"
+    mode: '0755'
+  become: yes
+  notify: restart pi-hardware-metrics
+
+- name: Create systemd service for Pi hardware metrics
+  ansible.builtin.template:
+    src: pi-hardware-metrics.service.j2
+    dest: /etc/systemd/system/pi-hardware-metrics.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart pi-hardware-metrics
+
+- name: Create systemd timer for Pi hardware metrics
+  ansible.builtin.template:
+    src: pi-hardware-metrics.timer.j2
+    dest: /etc/systemd/system/pi-hardware-metrics.timer
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+    - restart pi-hardware-metrics-timer
+
+- name: Enable and start Pi hardware metrics timer
+  ansible.builtin.systemd:
+    name: pi-hardware-metrics.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: Create initial hardware metrics
+  ansible.builtin.command:
+    cmd: "{{ pi_hardware_metrics_script }}"
+  become_user: "{{ prometheus_exporters_user }}"
+  become: yes
+  changed_when: false
+
+- name: Verify Pi hardware metrics file creation
+  ansible.builtin.stat:
+    path: "{{ node_exporter_textfile_dir }}/pi_hardware.prom"
+  register: pi_metrics_file
+
+- name: Display Pi hardware metrics sample
+  ansible.builtin.shell: head -n 5 "{{ node_exporter_textfile_dir }}/pi_hardware.prom"
+  register: pi_metrics_sample
+  changed_when: false
+  when: pi_metrics_file.stat.exists
+
+- name: Pi hardware metrics setup completed
+  ansible.builtin.debug:
+    msg: |
+      ✅ Pi Hardware Metrics Setup Complete:
+      - Metrics script: {{ pi_hardware_metrics_script }}
+      - Collection interval: {{ pi_hardware_metrics_interval }} seconds
+      - Textfile output: {{ node_exporter_textfile_dir }}/pi_hardware.prom
+      - Service: pi-hardware-metrics.timer
+      {% if pi_metrics_sample.stdout is defined %}
+
+      Sample metrics:
+      {{ pi_metrics_sample.stdout }}
+      {% endif %}

@@ -1,0 +1,147 @@
+#!/bin/bash
+# Pi Hardware Metrics Collection Script for Prometheus Node Exporter
+# Collects Raspberry Pi specific hardware metrics
+
+set -euo pipefail
+
+TEXTFILE_DIR="{{ node_exporter_textfile_dir }}"
+PROM_FILE="$TEXTFILE_DIR/pi_hardware.prom"
+TEMP_FILE="$TEXTFILE_DIR/pi_hardware.prom.$$"
+
+# Create textfile directory if it doesn't exist
+mkdir -p "$TEXTFILE_DIR"
+
+# Function to safely read values with fallback
+safe_read() {
+    local file="$1"
+    local fallback="${2:-0}"
+    if [ -r "$file" ]; then
+        cat "$file" 2>/dev/null || echo "$fallback"
+    else
+        echo "$fallback"
+    fi
+}
+
+# Collect metrics
+{
+    echo "# HELP pi_temperature_celsius Raspberry Pi CPU temperature in Celsius"
+    echo "# TYPE pi_temperature_celsius gauge"
+    CPU_TEMP=$(safe_read "/sys/class/thermal/thermal_zone0/temp")
+    echo "pi_temperature_celsius $(echo "scale=3; $CPU_TEMP / 1000" | bc)"
+
+    # CPU frequency
+    echo "# HELP pi_cpu_frequency_hz Raspberry Pi CPU frequency in Hz"
+    echo "# TYPE pi_cpu_frequency_hz gauge"
+    CPU_FREQ=$(safe_read "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+    echo "pi_cpu_frequency_hz $(echo "$CPU_FREQ * 1000" | bc)"
+
+    # GPU temperature (if available)
+    if command -v vcgencmd >/dev/null 2>&1; then
+        echo "# HELP pi_gpu_temperature_celsius Raspberry Pi GPU temperature in Celsius"
+        echo "# TYPE pi_gpu_temperature_celsius gauge"
+        GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        echo "pi_gpu_temperature_celsius $GPU_TEMP"
+
+        # Voltages
+        echo "# HELP pi_voltage_volts Raspberry Pi voltage readings"
+        echo "# TYPE pi_voltage_volts gauge"
+        CORE_VOLT=$(vcgencmd measure_volts core 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        echo "pi_voltage_volts{component=\"core\"} $CORE_VOLT"
+
+        SDRAM_C_VOLT=$(vcgencmd measure_volts sdram_c 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        echo "pi_voltage_volts{component=\"sdram_c\"} $SDRAM_C_VOLT"
+
+        SDRAM_I_VOLT=$(vcgencmd measure_volts sdram_i 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        echo "pi_voltage_volts{component=\"sdram_i\"} $SDRAM_I_VOLT"
+
+        SDRAM_P_VOLT=$(vcgencmd measure_volts sdram_p 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        echo "pi_voltage_volts{component=\"sdram_p\"} $SDRAM_P_VOLT"
+
+        # Clock frequencies
+        echo "# HELP pi_clock_frequency_hz Raspberry Pi clock frequencies"
+        echo "# TYPE pi_clock_frequency_hz gauge"
+
+        ARM_FREQ=$(vcgencmd measure_clock arm 2>/dev/null | cut -d= -f2 || echo "0")
+        echo "pi_clock_frequency_hz{clock=\"arm\"} $ARM_FREQ"
+
+        CORE_FREQ=$(vcgencmd measure_clock core 2>/dev/null | cut -d= -f2 || echo "0")
+        echo "pi_clock_frequency_hz{clock=\"core\"} $CORE_FREQ"
+
+        GPU_FREQ=$(vcgencmd measure_clock v3d 2>/dev/null | cut -d= -f2 || echo "0")
+        echo "pi_clock_frequency_hz{clock=\"gpu\"} $GPU_FREQ"
+
+        # Memory split
+        echo "# HELP pi_memory_split_bytes Memory split between CPU and GPU"
+        echo "# TYPE pi_memory_split_bytes gauge"
+        GPU_MEM=$(vcgencmd get_mem gpu 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+        echo "pi_memory_split_bytes{component=\"gpu\"} $(echo "$GPU_MEM * 1024 * 1024" | bc)"
+
+        ARM_MEM=$(vcgencmd get_mem arm 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+        echo "pi_memory_split_bytes{component=\"arm\"} $(echo "$ARM_MEM * 1024 * 1024" | bc)"
+
+        # Throttle status
+        echo "# HELP pi_throttled Pi throttling status bitmask"
+        echo "# TYPE pi_throttled gauge"
+        THROTTLED=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2 || echo "0x0")
+        echo "pi_throttled $(echo "ibase=16; ${THROTTLED#0x}" | bc 2>/dev/null || echo "0")"
+    fi
+
+    # System uptime
+    echo "# HELP pi_uptime_seconds System uptime in seconds"
+    echo "# TYPE pi_uptime_seconds counter"
+    UPTIME=$(awk '{print $1}' /proc/uptime)
+    echo "pi_uptime_seconds $UPTIME"
+
+    # System load average
+    echo "# HELP pi_load_average System load average"
+    echo "# TYPE pi_load_average gauge"
+    read -r LOAD1 LOAD5 LOAD15 _ < /proc/loadavg
+    echo "pi_load_average{period=\"1m\"} $LOAD1"
+    echo "pi_load_average{period=\"5m\"} $LOAD5"
+    echo "pi_load_average{period=\"15m\"} $LOAD15"
+
+    # Memory information
+    echo "# HELP pi_memory_bytes Memory information from /proc/meminfo"
+    echo "# TYPE pi_memory_bytes gauge"
+    while IFS=: read -r key value; do
+        case $key in
+            MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree)
+                # Convert kB to bytes
+                value_bytes=$(echo "$value" | awk '{print $1 * 1024}')
+                echo "pi_memory_bytes{type=\"$(echo "$key" | tr '[:upper:]' '[:lower:]')\"} $value_bytes"
+                ;;
+        esac
+    done < /proc/meminfo
+
+    # Disk usage for root filesystem
+    echo "# HELP pi_disk_usage_bytes Disk usage for root filesystem"
+    echo "# TYPE pi_disk_usage_bytes gauge"
+    df -B1 / | awk 'NR==2 {
+        print "pi_disk_usage_bytes{type=\"total\"} " $2
+        print "pi_disk_usage_bytes{type=\"used\"} " $3
+        print "pi_disk_usage_bytes{type=\"available\"} " $4
+    }'
+
+    # Boot partition information
+    if mountpoint -q /boot; then
+        echo "# HELP pi_boot_disk_usage_bytes Boot partition disk usage"
+        echo "# TYPE pi_boot_disk_usage_bytes gauge"
+        df -B1 /boot | awk 'NR==2 {
+            print "pi_boot_disk_usage_bytes{type=\"total\"} " $2
+            print "pi_boot_disk_usage_bytes{type=\"used\"} " $3
+            print "pi_boot_disk_usage_bytes{type=\"available\"} " $4
+        }'
+    fi
+
+    # Add timestamp
+    echo "# HELP pi_metrics_last_update_timestamp_seconds Timestamp of last metrics update"
+    echo "# TYPE pi_metrics_last_update_timestamp_seconds gauge"
+    echo "pi_metrics_last_update_timestamp_seconds $(date +%s)"
+
+} > "$TEMP_FILE"
+
+# Atomically move the temp file to the final location
+mv "$TEMP_FILE" "$PROM_FILE"
+
+# Set appropriate permissions
+chmod 644 "$PROM_FILE"

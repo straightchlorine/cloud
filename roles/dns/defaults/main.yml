@@ -1,5 +1,10 @@
 # Default values for DNS role (Pi-hole)
 
+# Pi-hole Installation Security
+pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
+pihole_version: "v5.18.3" # Pin to verified release version
+pihole_verify_commit: true
+
 # Pi-hole Configuration
 # pihole_webpassword: MUST be set in vault or host_vars - no default
 pihole_interface: eth0
@@ -11,6 +16,7 @@ pihole_ipv6: false
 
 # Package Configuration
 pihole_packages:
+  - git
   - curl
   - ca-certificates
   - dnsutils

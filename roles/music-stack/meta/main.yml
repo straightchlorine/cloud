@@ -31,5 +31,5 @@ collections:
 dependencies:
   - role: common
   - role: firewall
-  - role: prometheus-node-exporter
+  - role: prometheus-exporters
 

@@ -1,0 +1,34 @@
+# Network facts collection for dynamic IP configuration
+# Provides standardized network variables for all roles
+
+- name: Gather network facts
+  ansible.builtin.setup:
+    gather_subset:
+      - network
+      - hardware
+
+- name: Set primary network interface fact
+  ansible.builtin.set_fact:
+    primary_interface: "{{ ansible_default_ipv4.interface }}"
+
+- name: Set primary IP address fact
+  ansible.builtin.set_fact:
+    primary_ip: "{{ ansible_default_ipv4.address }}"
+
+- name: Set network CIDR fact
+  ansible.builtin.set_fact:
+    primary_network_cidr: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask | ansible.utils.ipaddr('prefix') }}"
+
+- name: Set host IP with CIDR notation
+  ansible.builtin.set_fact:
+    host_ip_cidr: "{{ primary_ip }}/{{ ansible_default_ipv4.netmask | ansible.utils.ipaddr('prefix') }}"
+
+- name: Display detected network configuration
+  ansible.builtin.debug:
+    msg: |
+      Network Configuration Detected:
+      - Primary Interface: {{ primary_interface }}
+      - Primary IP: {{ primary_ip }}
+      - Network CIDR: {{ primary_network_cidr }}
+      - Host IP/CIDR: {{ host_ip_cidr }}
+

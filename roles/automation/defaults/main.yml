@@ -3,28 +3,21 @@ automation_specific_packages:
   - ncdu
   - tree
 
-# Filesystem utilities for automation storage
-filesystem_utilities:
-  - parted
-  - e2fsprogs
-  - ntfs-3g
-  - exfat-fuse
-  - exfatprogs
-
-
+# Traefik ports
 traefik_web_port: 80
 traefik_websecure_port: 443
 traefik_dashboard_port: 8080
 
-domain_name: "{{ vault_domain_name }}"
+# Default subdomain
 subdomain_traefik: "traefik"
 
-letsencrypt_email: "{{ vault_letsencrypt_email }}"
+# SSL configuration
 letsencrypt_staging: false
 
 services_enabled:
   traefik: true
 
+# SSD configuration defaults
 ssd_filesystem: "ext4"
 ssd_mount_options: "defaults,noatime,errors=remount-ro"
 ssd_format: false
@@ -55,9 +48,4 @@ automation_services:
   - vaultwarden
 
 start_stack: true
-
-# Binary checksums for verification (optional - validates if provided)
-restic_checksums:
-  aarch64: "" # sha256 checksum for aarch64 binary
-  x86_64: "" # sha256 checksum for amd64 binary
 

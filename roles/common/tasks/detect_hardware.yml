@@ -1,0 +1,122 @@
+# Hardware detection for Pi models
+# Sets hardware-appropriate resource limits based on detected Pi model
+
+- name: Detect Raspberry Pi model
+  ansible.builtin.shell: |
+    if [ -f /proc/device-tree/model ]; then
+      cat /proc/device-tree/model
+    else
+      echo "unknown"
+    fi
+  register: pi_model_raw
+  changed_when: false
+
+- name: Parse Pi model information
+  ansible.builtin.set_fact:
+    pi_model_detected: >-
+      {%- if 'Raspberry Pi 4' in pi_model_raw.stdout -%}
+        rpi4
+      {%- elif 'Raspberry Pi 3' in pi_model_raw.stdout -%}
+        rpi3
+      {%- elif 'Raspberry Pi 2' in pi_model_raw.stdout -%}
+        rpi2
+      {%- else -%}
+        unknown
+      {%- endif -%}
+
+- name: Set hardware-specific resource limits for Pi 4
+  ansible.builtin.set_fact:
+    hardware_limits:
+      traefik:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+      influxdb3:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      vaultwarden:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+      navidrome:
+        memory: "512M"
+        cpus: "1.5"
+        memory_reservation: "256M"
+        cpus_reservation: "0.75"
+      portainer:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+  when: pi_model_detected == "rpi4"
+
+- name: Set hardware-specific resource limits for Pi 3
+  ansible.builtin.set_fact:
+    hardware_limits:
+      traefik:
+        memory: "256M"
+        cpus: "0.75"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      influxdb3:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.75"
+      vaultwarden:
+        memory: "256M"
+        cpus: "0.75"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      navidrome:
+        memory: "256M"
+        cpus: "1.0"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      portainer:
+        memory: "256M"
+        cpus: "0.75"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+  when: pi_model_detected == "rpi3"
+
+- name: Set conservative resource limits for unknown hardware
+  ansible.builtin.set_fact:
+    hardware_limits:
+      traefik:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+      influxdb3:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+      vaultwarden:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+      navidrome:
+        memory: "256M"
+        cpus: "0.75"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      portainer:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+  when: pi_model_detected == "unknown"
+
+- name: Display detected hardware and resource limits
+  ansible.builtin.debug:
+    msg: |
+      Detected Pi Model: {{ pi_model_detected }}
+      Hardware Resource Limits: {{ hardware_limits }}
+

@@ -1,0 +1,109 @@
+# Common service startup order validation
+# Validates Docker Compose service definitions and startup requirements
+
+- name: Validate Docker Compose file exists
+  ansible.builtin.stat:
+    path: "{{ item }}/docker-compose.yml"
+  register: compose_file_check
+  loop:
+    - "{{ automation_stack_home | default('/nonexistent') }}"
+    - "{{ music_stack_home | default('/nonexistent') }}"
+  when: item != '/nonexistent'
+  tags: [service_startup_validation]
+
+- name: Check Docker service availability
+  ansible.builtin.systemd:
+    name: docker
+  register: docker_service_status
+  tags: [service_startup_validation]
+
+- name: Validate Docker service is running
+  ansible.builtin.fail:
+    msg: "Docker service is not active. Service startup validation requires Docker to be running."
+  when: docker_service_status.status.ActiveState != "active"
+  tags: [service_startup_validation]
+
+- name: Check if Docker networks exist or can be created
+  ansible.builtin.shell: docker network ls --format '{{ "{{" }}.Name{{ "}}" }}' | grep -E '^(traefik-network|music-stack)$' || echo "missing"
+  register: network_check
+  changed_when: false
+  tags: [service_startup_validation]
+
+- name: Validate required Docker networks
+  block:
+    - name: Test creating traefik-network if needed
+      ansible.builtin.shell: docker network create traefik-network --driver bridge || docker network inspect traefik-network >/dev/null
+      register: traefik_network_test
+      changed_when: false
+      when: "'automation' in group_names"
+
+    - name: Test creating music-stack network if needed
+      ansible.builtin.shell: docker network create music-stack --driver bridge || docker network inspect music-stack >/dev/null
+      register: music_network_test
+      changed_when: false
+      when: "'music' in group_names"
+
+    - name: Remove test networks if they were created
+      ansible.builtin.shell: |
+        if docker network inspect traefik-network --format '{{ "{{" }}.Created{{ "}}" }}' | grep -q "$(date '+%Y-%m-%d')"; then
+          docker network rm traefik-network 2>/dev/null || true
+        fi
+        if docker network inspect music-stack --format '{{ "{{" }}.Created{{ "}}" }}' | grep -q "$(date '+%Y-%m-%d')"; then
+          docker network rm music-stack 2>/dev/null || true
+        fi
+      changed_when: false
+  tags: [service_startup_validation]
+
+- name: Validate service restart policies
+  ansible.builtin.shell: |
+    if [ -f "{{ item.stack }}/docker-compose.yml" ]; then
+      grep -c "restart:" "{{ item.stack }}/docker-compose.yml" || echo "0"
+    else
+      echo "missing"
+    fi
+  register: restart_policy_check
+  changed_when: false
+  loop:
+    - {stack: "{{ automation_stack_home | default('/nonexistent') }}", name: "automation"}
+    - {stack: "{{ music_stack_home | default('/nonexistent') }}", name: "music"}
+  when:
+    - item.stack != '/nonexistent'
+    - item.name in group_names
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [service_startup_validation]
+
+- name: Check resource limits in compose files
+  ansible.builtin.shell: |
+    if [ -f "{{ item.stack }}/docker-compose.yml" ]; then
+      if grep -q "deploy:" "{{ item.stack }}/docker-compose.yml" && grep -q "resources:" "{{ item.stack }}/docker-compose.yml"; then
+        echo "present"
+      else
+        echo "missing"
+      fi
+    else
+      echo "file_missing"
+    fi
+  register: resource_limits_check
+  changed_when: false
+  loop:
+    - {stack: "{{ automation_stack_home | default('/nonexistent') }}", name: "automation"}
+    - {stack: "{{ music_stack_home | default('/nonexistent') }}", name: "music"}
+  when:
+    - item.stack != '/nonexistent'
+    - item.name in group_names
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [service_startup_validation]
+
+- name: Common service startup validation completed
+  ansible.builtin.debug:
+    msg: |
+      ✅ Common service startup requirements validated:
+      - Docker service: {{ 'active' if docker_service_status.status.ActiveState == 'active' else 'inactive' }}
+      - Network connectivity: Available for Docker network creation
+      - Compose file structure: Validated where applicable
+
+      Service startup validation ensures proper dependency ordering during deployment.
+  tags: [service_startup_validation]
+
