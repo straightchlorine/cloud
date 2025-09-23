@@ -1,0 +1,126 @@
+# Unified validation framework for all infrastructure components
+# Replaces all role-specific validation files to eliminate redundancy
+# Supports all validation types: backup, vault, service_startup, variables
+
+- name: Validate required validation parameters
+  ansible.builtin.fail:
+    msg: "validation_context, validation_type, and role_name must be explicitly set when calling unified_validation"
+  when:
+    - validation_context is not defined or validation_type is not defined or role_name is not defined
+  tags: [validation]
+
+# Variable validation
+- name: Validate required variables are defined
+  ansible.builtin.fail:
+    msg: "Required {{ validation_context }} variable '{{ item }}' is not defined or empty"
+  when:
+    - required_variables is defined
+    - vars[item] is not defined or vars[item] == ""
+  loop: "{{ required_variables }}"
+  no_log: true
+  tags: [validation, variable_validation]
+
+# Vault validation
+- name: Validate vault variables are properly set
+  ansible.builtin.fail:
+    msg: "Vault variable '{{ item.var }}' contains placeholder value. Please set a real value in vault.yml."
+  when:
+    - validation_type in ['full', 'vault']
+    - vault_placeholders is defined
+    - vars[item.var] is defined
+    - (vars[item.var] | string) == item.value
+  loop: "{{ vault_placeholders }}"
+  no_log: true
+  tags: [validation, vault_validation]
+
+# Backup path validation
+- name: Validate backup directories exist and are accessible
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: backup_path_check
+  when:
+    - validation_type in ['full', 'backup']
+    - backup_directories is defined
+  loop: "{{ backup_directories }}"
+  tags: [validation, backup_validation]
+
+- name: Fail if critical backup directories are missing
+  ansible.builtin.fail:
+    msg: "Critical backup directory '{{ item.item }}' does not exist or is not accessible"
+  when:
+    - validation_type in ['full', 'backup']
+    - backup_path_check.results is defined
+    - not item.stat.exists
+    - critical_backup_paths is defined
+    - item.item in critical_backup_paths
+  loop: "{{ backup_path_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [validation, backup_validation]
+
+# Service startup validation
+- name: Check Docker Compose file exists
+  ansible.builtin.stat:
+    path: "{{ stack_home }}/docker-compose.yml"
+  register: compose_file_check
+  when:
+    - validation_type in ['full', 'service_startup']
+    - stack_home is defined
+  tags: [validation, service_startup_validation]
+
+- name: Validate Docker Compose file exists
+  ansible.builtin.fail:
+    msg: "Docker Compose file not found at {{ stack_home }}/docker-compose.yml"
+  when:
+    - validation_type in ['full', 'service_startup']
+    - compose_file_check is defined
+    - not compose_file_check.stat.exists
+  tags: [validation, service_startup_validation]
+
+- name: Check for required services in Docker Compose
+  ansible.builtin.shell: |
+    cd "{{ stack_home }}"
+    services_found=""
+    for service in {{ required_services | join(' ') }}; do
+      if grep -q "^  ${service}:" docker-compose.yml; then
+        services_found="${services_found}${service},"
+      fi
+    done
+    echo "${services_found%,}"
+  register: service_analysis
+  changed_when: false
+  when:
+    - validation_type in ['full', 'service_startup']
+    - compose_file_check is defined
+    - compose_file_check.stat.exists
+    - required_services is defined
+  tags: [validation, service_startup_validation]
+
+- name: Validate required services are defined in compose file
+  ansible.builtin.fail:
+    msg: "Required service '{{ item }}' not found in Docker Compose file"
+  when:
+    - validation_type in ['full', 'service_startup']
+    - service_analysis is defined
+    - required_services is defined
+    - item not in service_analysis.stdout
+  loop: "{{ required_services }}"
+  tags: [validation, service_startup_validation]
+
+# Display validation results
+- name: Display validation completion
+  ansible.builtin.debug:
+    msg: |
+      ✅ {{ validation_context | title }} validation completed successfully
+      Role: {{ role_name }}
+      Type: {{ validation_type }}
+      {% if required_variables is defined %}
+      Variables validated: {{ required_variables | length }}
+      {% endif %}
+      {% if backup_directories is defined %}
+      Backup paths checked: {{ backup_directories | length }}
+      {% endif %}
+      {% if required_services is defined %}
+      Services validated: {{ required_services | length }}
+      {% endif %}
+  tags: [validation]

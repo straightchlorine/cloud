@@ -1,0 +1,84 @@
+# Directory management for monitoring stack
+# Creates necessary directories with proper ownership and permissions
+
+- name: Create monitoring data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: yes
+  loop:
+    - "{{ monitoring_data_path }}"
+    - "{{ monitoring_log_path }}"
+    - "{{ monitoring_config_path }}"
+
+- name: Create service-specific data directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  become: yes
+  loop:
+    - { path: "/var/lib/prometheus", owner: "prometheus", group: "prometheus", mode: "0755" }
+    - { path: "/var/lib/grafana", owner: "grafana", group: "grafana", mode: "0755" }
+    - { path: "/var/lib/loki", owner: "loki", group: "loki", mode: "0755" }
+    - { path: "/var/lib/alertmanager", owner: "prometheus", group: "prometheus", mode: "0755" }
+    - { path: "/opt/uptime-kuma", owner: "uptime-kuma", group: "uptime-kuma", mode: "0755" }
+    - { path: "/opt/uptime-kuma/data", owner: "uptime-kuma", group: "uptime-kuma", mode: "0755" }
+
+- name: Create log directories for services
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "0755"
+  become: yes
+  loop:
+    - { path: "/var/log/prometheus", owner: "prometheus", group: "prometheus" }
+    - { path: "/var/log/grafana", owner: "grafana", group: "grafana" }
+    - { path: "/var/log/loki", owner: "loki", group: "loki" }
+    - { path: "/var/log/alertmanager", owner: "prometheus", group: "prometheus" }
+    - { path: "/var/log/uptime-kuma", owner: "uptime-kuma", group: "uptime-kuma" }
+
+- name: Set up log rotation directories
+  ansible.builtin.file:
+    path: /etc/logrotate.d
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Verify directory permissions
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: dir_stats
+  loop:
+    - "/var/lib/prometheus"
+    - "/var/lib/grafana"
+    - "/var/lib/loki"
+    - "/opt/uptime-kuma"
+
+- name: Display directory setup summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Monitoring Directories Created:
+
+      Data Directories:
+      📁 /var/lib/prometheus (prometheus:prometheus)
+      📁 /var/lib/grafana (grafana:grafana)
+      📁 /var/lib/loki (loki:loki)
+      📁 /var/lib/alertmanager (prometheus:prometheus)
+      📁 /opt/uptime-kuma (uptime-kuma:uptime-kuma)
+
+      Log Directories:
+      📝 /var/log/prometheus
+      📝 /var/log/grafana
+      📝 /var/log/loki
+      📝 /var/log/alertmanager
+      📝 /var/log/uptime-kuma
+
+      All directories ready for monitoring services!

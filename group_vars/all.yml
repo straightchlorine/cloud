@@ -14,6 +14,10 @@ enable_ufw: true
 package_cache_valid_time: 3600
 backup_retention_days: 30
 
+# Standardized backup configuration paths
+backup_base_path: "/opt/backup"
+backup_password_file: "{{ backup_base_path }}/restic-password"
+
 # Common filesystem utilities (used by all roles with storage)
 filesystem_utilities:
   - parted
@@ -21,6 +25,32 @@ filesystem_utilities:
   - ntfs-3g
   - exfat-fuse
   - exfatprogs
+
+# Common System Packages
+common_packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - vim
+  - ufw
+  - fail2ban
+  - logrotate
+  - rsync
+  - unzip
+  - software-properties-common
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# Log Management
+log_rotation_days: 30
+log_compression: true
+
+# Security Configuration
+fail2ban_enabled: true
+fail2ban_ssh_maxretry: 3
+fail2ban_ssh_bantime: 600
 
 # Domain configuration (must be set in vault)
 domain_name: "{{ vault_domain_name }}"

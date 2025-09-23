@@ -1,0 +1,36 @@
+# Grafana datasource provisioning
+# Automatically configures Prometheus and Loki datasources
+
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource for metrics
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:{{ prometheus_port }}
+    isDefault: true
+    jsonData:
+      timeInterval: "{{ prometheus_scrape_interval }}"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+    editable: false
+
+  # Loki datasource for logs
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://localhost:{{ loki_port }}
+    jsonData:
+      maxLines: 1000
+      timeout: "60s"
+    editable: false
+
+  # Alertmanager datasource for alert management
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://localhost:{{ alertmanager_port }}
+    jsonData:
+      implementation: "prometheus"
+    editable: false

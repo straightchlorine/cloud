@@ -1,0 +1,181 @@
+# Common Systemd Service Template
+# Standardized service definition with security hardening
+# Managed by Ansible - Do not edit manually
+
+[Unit]
+Description={{ service_description }}
+{% if service_requires is defined %}
+{% for req in service_requires %}
+Requires={{ req }}
+{% endfor %}
+{% endif %}
+{% if service_after is defined %}
+{% for after in service_after %}
+After={{ after }}
+{% endfor %}
+{% endif %}
+{% if service_wants is defined %}
+{% for want in service_wants %}
+Wants={{ want }}
+{% endfor %}
+{% endif %}
+{% if service_before is defined %}
+{% for before in service_before %}
+Before={{ before }}
+{% endfor %}
+{% endif %}
+
+[Service]
+Type={{ service_type }}
+{% if service_type == 'oneshot' %}
+RemainAfterExit={{ remain_after_exit }}
+{% endif %}
+{% if service_user is defined %}
+User={{ service_user }}
+{% endif %}
+{% if service_group is defined %}
+Group={{ service_group }}
+{% endif %}
+{% if working_directory is defined %}
+WorkingDirectory={{ working_directory }}
+{% endif %}
+
+# Command configuration
+{% if exec_start is defined %}
+ExecStart={{ exec_start }}
+{% endif %}
+{% if exec_stop is defined %}
+ExecStop={{ exec_stop }}
+{% endif %}
+{% if exec_reload is defined %}
+ExecReload={{ exec_reload }}
+{% endif %}
+{% if exec_start_pre is defined %}
+{% for pre_cmd in exec_start_pre %}
+ExecStartPre={{ pre_cmd }}
+{% endfor %}
+{% endif %}
+{% if exec_start_post is defined %}
+{% for post_cmd in exec_start_post %}
+ExecStartPost={{ post_cmd }}
+{% endfor %}
+{% endif %}
+
+# Environment variables
+{% if service_environment is defined %}
+{% for env_var in service_environment %}
+Environment="{{ env_var }}"
+{% endfor %}
+{% endif %}
+{% if environment_file is defined %}
+EnvironmentFile={{ environment_file }}
+{% endif %}
+
+# Logging configuration
+StandardOutput={{ standard_output }}
+StandardError={{ standard_error }}
+{% if syslog_identifier is defined %}
+SyslogIdentifier={{ syslog_identifier }}
+{% endif %}
+
+# Restart configuration
+Restart={{ restart_policy }}
+RestartSec={{ restart_sec }}
+{% if timeout_start_sec is defined %}
+TimeoutStartSec={{ timeout_start_sec }}
+{% endif %}
+{% if timeout_stop_sec is defined %}
+TimeoutStopSec={{ timeout_stop_sec }}
+{% endif %}
+{% if kill_mode is defined %}
+KillMode={{ kill_mode }}
+{% endif %}
+
+# Security hardening (configurable)
+{% if enable_security_hardening %}
+# Process security
+NoNewPrivileges={{ no_new_privileges }}
+{% if protect_system is defined %}
+ProtectSystem={{ protect_system }}
+{% endif %}
+{% if protect_home is defined %}
+ProtectHome={{ protect_home }}
+{% endif %}
+{% if private_tmp is defined %}
+PrivateTmp={{ private_tmp }}
+{% endif %}
+{% if read_only_paths is defined %}
+{% for path in read_only_paths %}
+ReadOnlyPaths={{ path }}
+{% endfor %}
+{% endif %}
+{% if read_write_paths is defined %}
+{% for path in read_write_paths %}
+ReadWritePaths={{ path }}
+{% endfor %}
+{% endif %}
+
+# Network security
+{% if private_network is defined %}
+PrivateNetwork={{ private_network }}
+{% endif %}
+{% if restrict_address_families is defined %}
+RestrictAddressFamilies={{ restrict_address_families | join(' ') }}
+{% endif %}
+
+# Capability restrictions
+{% if capability_bounding_set is defined %}
+CapabilityBoundingSet={{ capability_bounding_set | join(' ') }}
+{% endif %}
+{% if ambient_capabilities is defined %}
+AmbientCapabilities={{ ambient_capabilities | join(' ') }}
+{% endif %}
+
+# Advanced security options
+{% if protect_kernel_tunables is defined %}
+ProtectKernelTunables={{ protect_kernel_tunables }}
+{% endif %}
+{% if protect_kernel_modules is defined %}
+ProtectKernelModules={{ protect_kernel_modules }}
+{% endif %}
+{% if protect_control_groups is defined %}
+ProtectControlGroups={{ protect_control_groups }}
+{% endif %}
+{% if restrict_suid_sgid is defined %}
+RestrictSUIDSGID={{ restrict_suid_sgid }}
+{% endif %}
+{% if restrict_realtime is defined %}
+RestrictRealtime={{ restrict_realtime }}
+{% endif %}
+{% if restrict_namespaces is defined %}
+RestrictNamespaces={{ restrict_namespaces }}
+{% endif %}
+
+# Memory and resource limits
+{% if memory_max is defined %}
+MemoryMax={{ memory_max }}
+{% endif %}
+{% if memory_high is defined %}
+MemoryHigh={{ memory_high }}
+{% endif %}
+{% if cpu_quota is defined %}
+CPUQuota={{ cpu_quota }}
+{% endif %}
+{% if tasks_max is defined %}
+TasksMax={{ tasks_max }}
+{% endif %}
+{% if limit_nofile is defined %}
+LimitNOFILE={{ limit_nofile }}
+{% endif %}
+
+# Start limit configuration
+{% if start_limit_burst is defined %}
+StartLimitBurst={{ start_limit_burst }}
+{% endif %}
+{% if start_limit_interval_sec is defined %}
+StartLimitIntervalSec={{ start_limit_interval_sec }}
+{% endif %}
+{% endif %}
+
+[Install]
+WantedBy={{ wanted_by }}

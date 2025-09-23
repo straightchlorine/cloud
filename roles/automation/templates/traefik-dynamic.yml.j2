@@ -89,34 +89,35 @@ http:
       loadBalancer:
         serversTransport: opnsense-transport
         servers:
-          - url: "https://192.168.20.1"
+          - url: "https://{{ hostvars['firewall']['primary_ip'] }}"
 
     pihole:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.10:80"
+          - url: "http://{{ hostvars['pi-dns']['primary_ip'] }}:80"
 
     grafana:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.5:3000"
+          - url: "http://{{ hostvars['debian-monitoring']['primary_ip'] }}:3000"
 
     navidrome:
       loadBalancer:
         servers:
-          - url: "http://192.168.20.15:4545"
+          - url: "http://{{ hostvars['pi-music']['primary_ip'] }}:4545"
 
+    # External infrastructure hosts (not managed by this Ansible setup)
     euler:
       loadBalancer:
         serversTransport: euler-transport
         servers:
-          - url: "https://192.168.100.115:8006"
+          - url: "https://192.168.100.115:8006"  # External host IP
 
     kepler:
       loadBalancer:
         serversTransport: kepler-transport
         servers:
-          - url: "https://192.168.50.6:8006"
+          - url: "https://192.168.50.6:8006"  # External host IP
 
 
   middlewares:

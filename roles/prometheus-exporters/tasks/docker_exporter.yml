@@ -27,11 +27,24 @@
 
 - name: Create systemd service for Docker metrics collection
   ansible.builtin.template:
-    src: docker-metrics.service.j2
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/docker-metrics.service
     owner: root
     group: root
     mode: '0644'
+  vars:
+    service_description: "Docker Metrics Collection"
+    service_after: ["network.target", "docker.service"]
+    service_wants: ["docker.service"]
+    service_type: "oneshot"
+    service_user: "{{ prometheus_exporters_user }}"
+    service_group: "{{ prometheus_exporters_group }}"
+    exec_start: "{{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh"
+    remain_after_exit: "false"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["{{ node_exporter_textfile_dir }}"]
   become: yes
   notify:
     - reload systemd

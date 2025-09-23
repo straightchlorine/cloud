@@ -84,6 +84,25 @@ backup_exclude_patterns:
   - "**/logs/*"
   - "**/*.cache"
 
+# Monitoring stack configuration
+ansible_fqdn: "{{ inventory_hostname }}.{{ domain_name }}"
+monitoring_network: "monitoring-network"
+prometheus_role: "monitoring"
+
+# Grafana configuration
+grafana_database_type: "sqlite3"
+grafana_allow_embedding: "false"
+
+# Backup script configuration
+backup_service_name: "monitoring"
+backup_cache_dir: "{{ backup_base_path }}/cache"
+backup_log_dir: "{{ backup_base_path }}/logs"
+retention_policy:
+  daily: "7"
+  weekly: "4"
+  monthly: "6"
+  yearly: "1"
+
 # Required vault variables for validation
 required_monitoring_vars:
   - vault_grafana_admin_password

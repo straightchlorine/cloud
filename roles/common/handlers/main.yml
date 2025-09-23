@@ -12,3 +12,54 @@
     state: restarted
   become: true
 
+- name: restart docker
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+
+# Common systemd handler - used by multiple roles
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# Generic systemd service restart handler - parameterized for any service
+- name: restart systemd service
+  ansible.builtin.systemd:
+    name: "{{ service_name }}"
+    state: restarted
+  become: true
+
+# Common Docker Compose stack restart handler - parameterized for different stacks
+- name: restart docker compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_home }}"
+    state: restarted
+  become_user: "{{ ansible_user }}"
+
+# Common Docker Compose stack rollback handler - parameterized for different stacks
+- name: rollback docker compose stack
+  block:
+    - name: Stop current stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_home }}"
+        state: absent
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+
+    - name: Restore from backup if available
+      ansible.builtin.shell: |
+        if [ -f "{{ stack_home }}/docker-compose.yml.backup" ]; then
+          mv "{{ stack_home }}/docker-compose.yml.backup" "{{ stack_home }}/docker-compose.yml"
+        fi
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+
+    - name: Start restored stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_home }}"
+        state: present
+      become_user: "{{ ansible_user }}"
+      ignore_errors: true
+

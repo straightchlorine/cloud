@@ -1,27 +1,18 @@
 # Common tasks for all hosts running Debian Bookworm
 
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
-  become: true
-
-- name: Install essential packages
-  ansible.builtin.apt:
-    name: "{{ common_packages | default([]) }}"
-    state: present
-  become: true
+- name: Install essential packages using common package management
+  ansible.builtin.include_tasks: packages.yml
 
 - name: Configure fail2ban for SSH protection (systemd backend)
   ansible.builtin.copy:
     content: |
       [sshd]
-      enabled = {{ fail2ban_enabled | default(true) | ternary('true', 'false') }}
+      enabled = {{ fail2ban_enabled | ternary('true', 'false') }}
       port = ssh
       filter = sshd
       backend = systemd
-      maxretry = {{ fail2ban_ssh_maxretry | default(3) }}
-      bantime = {{ fail2ban_ssh_bantime | default(600) }}
+      maxretry = {{ fail2ban_ssh_maxretry }}
+      bantime = {{ fail2ban_ssh_bantime }}
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
@@ -36,12 +27,12 @@
     enabled: true
   become: true
   when:
-    - fail2ban_enabled | default(true)
+    - fail2ban_enabled
     - not ansible_check_mode
 
 - name: Set timezone
   community.general.timezone:
-    name: "{{ timezone | default('UTC') }}"
+    name: "{{ timezone }}"
   become: true
 
 - name: Configure log rotation

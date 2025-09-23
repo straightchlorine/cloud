@@ -20,7 +20,7 @@ scrape_configs:
         labels:
           job: syslog
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /var/log/syslog
 
   # Authentication logs
@@ -31,7 +31,7 @@ scrape_configs:
         labels:
           job: auth
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /var/log/auth.log
 
   # Kernel logs
@@ -42,7 +42,7 @@ scrape_configs:
         labels:
           job: kernel
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /var/log/kern.log
 
 {% if prometheus_role == 'dns' %}
@@ -195,7 +195,7 @@ scrape_configs:
           job: backup
           service: backup
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /opt/backup/logs/*.log
 
   # Ansible logs
@@ -207,7 +207,7 @@ scrape_configs:
           job: ansible
           service: deployment
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /var/log/ansible.log
 
   # Application-specific logs based on role
@@ -217,7 +217,7 @@ scrape_configs:
           - localhost
         labels:
           job: application
-          service: {{ prometheus_role | default('unknown') }}
+          service: {{ prometheus_role }}
           host: {{ inventory_hostname }}
-          role: {{ prometheus_role | default('unknown') }}
+          role: {{ prometheus_role }}
           __path__: /var/log/{{ prometheus_role | default('application') }}/*.log

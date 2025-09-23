@@ -1,0 +1,329 @@
+#!/bin/bash
+# Enterprise Backup Repository Initialization Script
+# {{ ansible_managed }}
+# Service: {{ device_role }} ({{ inventory_hostname }})
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_BASE="{{ enterprise_backup_base_path }}"
+BACKUP_USER="{{ backup_user | default('backup') }}"
+LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "${LOG_FILE}"
+}
+
+# Error handling
+error_exit() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+    exit 1
+}
+
+# Success message
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+# Warning message
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+# Info message
+info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+    log "INFO: $1"
+}
+
+# Check if running as backup user
+check_user() {
+    if [[ $(whoami) != "${BACKUP_USER}" ]]; then
+        error_exit "This script must be run as the ${BACKUP_USER} user"
+    fi
+}
+
+# Create log directory
+setup_logging() {
+    mkdir -p "${BACKUP_BASE}/logs"
+    log "Repository initialization started for {{ inventory_hostname }}"
+}
+
+# Validate environment
+validate_environment() {
+    info "Validating backup environment..."
+
+    # Check restic is installed
+    if ! command -v restic &> /dev/null; then
+        error_exit "restic is not installed or not in PATH"
+    fi
+
+    # Check repository password is set
+    if [[ -z "${RESTIC_PASSWORD:-}" ]]; then
+        error_exit "RESTIC_PASSWORD environment variable is not set"
+    fi
+
+    # Check repository URL is set
+    if [[ -z "${RESTIC_REPOSITORY:-}" ]]; then
+        error_exit "RESTIC_REPOSITORY environment variable is not set"
+    fi
+
+    # Check connectivity to repository backend
+    info "Testing connectivity to repository backend..."
+    if [[ "${RESTIC_REPOSITORY}" =~ ^sftp: ]]; then
+        # Test SFTP connectivity
+        SFTP_HOST=$(echo "${RESTIC_REPOSITORY}" | sed 's|sftp:\([^:]*\):.*|\1|')
+        if ! ssh -o ConnectTimeout=10 -o BatchMode=yes "${SFTP_HOST}" exit &>/dev/null; then
+            error_exit "Cannot connect to SFTP host: ${SFTP_HOST}"
+        fi
+    fi
+
+    success "Environment validation passed"
+}
+
+# Initialize repository if it doesn't exist
+initialize_repository() {
+    info "Checking repository status..."
+
+    if restic snapshots &>/dev/null; then
+        warning "Repository already exists and is accessible"
+        return 0
+    fi
+
+    info "Initializing new repository..."
+    if restic init; then
+        success "Repository initialized successfully"
+    else
+        error_exit "Failed to initialize repository"
+    fi
+}
+
+# Test repository operations
+test_repository() {
+    info "Testing repository operations..."
+
+    # Create test data
+    TEST_DIR=$(mktemp -d)
+    TEST_FILE="${TEST_DIR}/test-backup-$(date +%s).txt"
+    echo "Test backup data for {{ inventory_hostname }}" > "${TEST_FILE}"
+
+    # Test backup
+    info "Testing backup operation..."
+    if restic backup "${TEST_FILE}" --tag "init-test"; then
+        success "Test backup completed successfully"
+    else
+        rm -rf "${TEST_DIR}"
+        error_exit "Test backup failed"
+    fi
+
+    # Test list snapshots
+    info "Testing snapshot listing..."
+    if restic snapshots --tag "init-test" &>/dev/null; then
+        success "Snapshot listing works"
+    else
+        rm -rf "${TEST_DIR}"
+        error_exit "Cannot list snapshots"
+    fi
+
+    # Test restore
+    info "Testing restore operation..."
+    RESTORE_DIR=$(mktemp -d)
+    if restic restore latest --target "${RESTORE_DIR}" --include "${TEST_FILE}"; then
+        if [[ -f "${RESTORE_DIR}${TEST_FILE}" ]]; then
+            success "Test restore completed successfully"
+        else
+            rm -rf "${TEST_DIR}" "${RESTORE_DIR}"
+            error_exit "Restored file not found"
+        fi
+    else
+        rm -rf "${TEST_DIR}" "${RESTORE_DIR}"
+        error_exit "Test restore failed"
+    fi
+
+    # Cleanup test data
+    info "Cleaning up test data..."
+    restic forget --tag "init-test" --prune
+    rm -rf "${TEST_DIR}" "${RESTORE_DIR}"
+
+    success "Repository operations test completed"
+}
+
+# Create repository health check script
+create_health_check() {
+    info "Creating repository health check script..."
+
+    cat > "${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh" << 'EOF'
+#!/bin/bash
+# Repository Health Check Script for {{ device_role }}
+# {{ ansible_managed }}
+
+set -euo pipefail
+
+export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+
+# Check repository integrity
+echo "Checking repository integrity..."
+if restic check --read-data-subset=5%; then
+    echo "✅ Repository integrity check passed"
+else
+    echo "❌ Repository integrity check failed"
+    exit 1
+fi
+
+# Check recent snapshots
+echo "Checking recent snapshots..."
+RECENT_SNAPSHOTS=$(restic snapshots --latest 1 --json | jq length)
+if [[ ${RECENT_SNAPSHOTS} -gt 0 ]]; then
+    echo "✅ Recent snapshots found"
+    restic snapshots --latest 5
+else
+    echo "⚠️  No recent snapshots found"
+fi
+
+echo "Repository health check completed for {{ device_role }}"
+EOF
+
+    chmod +x "${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh"
+    success "Health check script created"
+}
+
+# Create backup validation script
+create_backup_validation() {
+    info "Creating backup validation script..."
+
+    cat > "${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh" << 'EOF'
+#!/bin/bash
+# Backup Validation Script for {{ device_role }}
+# {{ ansible_managed }}
+
+set -euo pipefail
+
+export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+
+# Validate backup directories exist and are accessible
+{% for dir in backup_directories %}
+if [[ ! -d "{{ dir }}" ]]; then
+    echo "❌ Backup directory does not exist: {{ dir }}"
+    exit 1
+fi
+
+if [[ ! -r "{{ dir }}" ]]; then
+    echo "❌ Backup directory is not readable: {{ dir }}"
+    exit 1
+fi
+{% endfor %}
+
+echo "✅ All backup directories are accessible"
+
+# Check repository is accessible
+if restic snapshots &>/dev/null; then
+    echo "✅ Repository is accessible"
+else
+    echo "❌ Repository is not accessible"
+    exit 1
+fi
+
+echo "Backup validation completed for {{ device_role }}"
+EOF
+
+    chmod +x "${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh"
+    success "Backup validation script created"
+}
+
+# Create systemd service for health monitoring
+create_monitoring_service() {
+    info "Creating systemd monitoring service..."
+
+    cat > "/tmp/backup-health-{{ device_role }}.service" << EOF
+[Unit]
+Description=Backup Health Check for {{ device_role }}
+After=network.target
+
+[Service]
+Type=oneshot
+User=${BACKUP_USER}
+ExecStart=${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    cat > "/tmp/backup-health-{{ device_role }}.timer" << EOF
+[Unit]
+Description=Run backup health check for {{ device_role }}
+Requires=backup-health-{{ device_role }}.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    success "Monitoring service files created (requires sudo to install)"
+}
+
+# Main execution
+main() {
+    echo "🚀 Enterprise Backup Repository Initialization"
+    echo "=============================================="
+    echo "Host: {{ inventory_hostname }}"
+    echo "Service: {{ device_role }}"
+    echo "Repository: ${RESTIC_REPOSITORY:-Not Set}"
+    echo "=============================================="
+
+    check_user
+    setup_logging
+    validate_environment
+    initialize_repository
+    test_repository
+    create_health_check
+    create_backup_validation
+    create_monitoring_service
+
+    echo
+    success "Repository initialization completed successfully!"
+    echo
+    echo "Next steps:"
+    echo "1. Install systemd services: sudo systemctl enable backup-health-{{ device_role }}.timer"
+    echo "2. Start health monitoring: sudo systemctl start backup-health-{{ device_role }}.timer"
+    echo "3. Run first backup: ${BACKUP_BASE}/scripts/backup-{{ device_role }}.sh"
+    echo "4. Verify with: ${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh"
+    echo
+    echo "Log file: ${LOG_FILE}"
+}
+
+# Handle script arguments
+case "${1:-}" in
+    --check-only)
+        check_user
+        setup_logging
+        validate_environment
+        ;;
+    --test-only)
+        check_user
+        setup_logging
+        validate_environment
+        test_repository
+        ;;
+    *)
+        main
+        ;;
+esac

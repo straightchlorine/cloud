@@ -17,27 +17,14 @@ letsencrypt_staging: false
 services_enabled:
   traefik: true
 
-# SSD configuration defaults
-ssd_filesystem: "ext4"
-ssd_mount_options: "defaults,noatime,errors=remount-ro"
-ssd_format: false
+# SSD configuration (common variables inherited from common role)
 
 
-# Restic backup configuration (replaces old backup system)
-restic_enabled: true
-restic_repository: "sftp:u489999@u489999.your-server.de:/home/infrastructure/automation-stack"
-restic_password: "{{ vault_restic_automation_password | default('CHANGEME-GENERATE-SECURE-PASSWORD') }}"
-hetzner_ssh_host: "u489999.your-server.de"
-hetzner_ssh_port: 23
-hetzner_ssh_user: "u489999"
-hetzner_ssh_key_path: "/opt/backup/.ssh/hetzner_backup"
-
-# Restic retention policy
-restic_retention:
-  daily: 30
-  weekly: 8
-  monthly: 12
-  yearly: 3
+# Backup configuration now handled by unified backup system
+# restic_enabled: must be set in host_vars - no default
+# restic_repository: must be set in host_vars - no default
+# restic_password: must be set in host_vars - no default
+# backup_ssh_* variables: must be set in host_vars - no default
 
 # Services to backup
 automation_services:
@@ -47,5 +34,222 @@ automation_services:
   - influxdb3-explorer
   - vaultwarden
 
-start_stack: true
+# start_stack: inherited from common role
+
+# Docker Compose services configuration
+automation_compose_services:
+  traefik:
+    image: "traefik:v3.0"
+    container_name: "traefik"
+    restart: "always"
+    ports:
+      - "{{ traefik_web_port }}:80"
+      - "{{ traefik_websecure_port }}:443"
+      - "127.0.0.1:{{ traefik_dashboard_port }}:8080"
+    deploy:
+      resources:
+        limits:
+          memory: "{{ hardware_limits.traefik.memory }}"
+          cpus: "{{ hardware_limits.traefik.cpus }}"
+        reservations:
+          memory: "{{ hardware_limits.traefik.memory_reservation }}"
+          cpus: "{{ hardware_limits.traefik.cpus_reservation }}"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./config/traefik:/config:ro"
+      - "{{ automation_data_path }}/traefik:/data"
+      - "./logs:/logs"
+    environment:
+      - "TRAEFIK_API_DASHBOARD=true"
+      - "TRAEFIK_API_INSECURE=true"
+      - "CF_DNS_API_TOKEN={{ vault_cloudflare_api_token }}"
+    command:
+      - "--configFile=/config/traefik.yml"
+    networks:
+      - "traefik-network"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`{{ subdomain_traefik }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
+
+  dozzle:
+    image: "amir20/dozzle:latest"
+    container_name: "dozzle"
+    restart: "always"
+    deploy:
+      resources:
+        limits:
+          memory: "256M"
+          cpus: "0.5"
+        reservations:
+          memory: "128M"
+          cpus: "0.25"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./config/dozzle:/data"
+    networks:
+      - "traefik-network"
+    environment:
+      - "DOZZLE_REMOTE_AGENT=media:7007,pascal:7007,kepler-services-lxc:7007"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dozzle.entrypoints=websecure"
+      - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+
+  portainer:
+    image: "portainer/portainer-ce:latest"
+    container_name: "portainer"
+    restart: "always"
+    deploy:
+      resources:
+        limits:
+          memory: "{{ hardware_limits.portainer.memory }}"
+          cpus: "{{ hardware_limits.portainer.cpus }}"
+        reservations:
+          memory: "{{ hardware_limits.portainer.memory_reservation }}"
+          cpus: "{{ hardware_limits.portainer.cpus_reservation }}"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "{{ automation_data_path }}/portainer:/data"
+    networks:
+      - "traefik-network"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`{{ subdomain_portainer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  influxdb3-core:
+    image: "influxdb:3-core"
+    container_name: "influxdb3-core"
+    restart: "always"
+    user: "{{ automation_uid }}:{{ automation_gid }}"
+    deploy:
+      resources:
+        limits:
+          memory: "{{ hardware_limits.influxdb3.memory }}"
+          cpus: "{{ hardware_limits.influxdb3.cpus }}"
+        reservations:
+          memory: "{{ hardware_limits.influxdb3.memory_reservation }}"
+          cpus: "{{ hardware_limits.influxdb3.cpus_reservation }}"
+    ports:
+      - "8181:8181"
+    command:
+      - "influxdb3"
+      - "serve"
+      - "--node-id=node0"
+      - "--object-store=file"
+      - "--data-dir=/var/lib/influxdb3/data"
+      - "--plugin-dir=/var/lib/influxdb3/plugins"
+    volumes:
+      - "{{ automation_data_path }}/influxdb3/data:/var/lib/influxdb3/data"
+      - "{{ automation_data_path }}/influxdb3/plugins:/var/lib/influxdb3/plugins"
+    networks:
+      - "traefik-network"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb.rule=Host(`{{ subdomain_influxdb }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb.entrypoints=websecure"
+      - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.influxdb.loadbalancer.server.port=8181"
+
+  influxdb3-explorer:
+    image: "influxdata/influxdb3-ui:1.2.0"
+    container_name: "influxdb3-explorer"
+    restart: "always"
+    command: ["--mode=admin"]
+    deploy:
+      resources:
+        limits:
+          memory: "256M"
+          cpus: "0.5"
+        reservations:
+          memory: "128M"
+          cpus: "0.25"
+    ports:
+      - "8888:80"
+    environment:
+      - "SESSION_SECRET_KEY={{ vault_influxdb3_session_secret_key }}"
+    volumes:
+      - "{{ automation_data_path }}/influxdb3-explorer:/db:rw"
+      - "./config/influxdb3-explorer:/app-root/config:ro"
+    networks:
+      - "traefik-network"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb-explorer.rule=Host(`{{ subdomain_explorer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb-explorer.entrypoints=websecure"
+      - "traefik.http.routers.influxdb-explorer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
+
+  vaultwarden:
+    image: "vaultwarden/server:latest"
+    container_name: "vaultwarden"
+    restart: "always"
+    deploy:
+      resources:
+        limits:
+          memory: "{{ hardware_limits.vaultwarden.memory }}"
+          cpus: "{{ hardware_limits.vaultwarden.cpus }}"
+        reservations:
+          memory: "{{ hardware_limits.vaultwarden.memory_reservation }}"
+          cpus: "{{ hardware_limits.vaultwarden.cpus_reservation }}"
+    volumes:
+      - "{{ automation_data_path }}/vaultwarden:/data"
+    environment:
+      - "DOMAIN=https://{{ subdomain_vaultwarden }}.{{ domain_name }}"
+    networks:
+      - "traefik-network"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`{{ subdomain_vaultwarden }}.{{ domain_name }}`)"
+      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+
+  watchtower:
+    image: "containrrr/watchtower:latest"
+    container_name: "watchtower"
+    restart: "always"
+    deploy:
+      resources:
+        limits:
+          memory: "256M"
+          cpus: "0.5"
+        reservations:
+          memory: "128M"
+          cpus: "0.25"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ports:
+      - "127.0.0.1:8084:8080"
+    environment:
+      - "WATCHTOWER_CLEANUP=true"
+      - "WATCHTOWER_SCHEDULE=0 0 2 * * *"
+      - "WATCHTOWER_HTTP_API_METRICS=true"
+      - "WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token }}"
+      - "WATCHTOWER_HTTP_API_UPDATE=true"
+    networks:
+      - "traefik-network"
+
+# Docker Compose networks configuration
+automation_compose_networks:
+  traefik-network:
+    external: true
+
+# Docker Compose volumes configuration
+automation_compose_volumes:
+  traefik-data:
+    driver: "local"
+    driver_opts:
+      o: "bind"
+      type: "none"
+      device: "{{ automation_data_path }}/traefik"
 

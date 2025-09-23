@@ -1,0 +1,122 @@
+# Post-deployment validation for music stack
+# Verifies music services and YouTube sync are working correctly
+
+- name: Wait for music stack containers to be ready
+  ansible.builtin.pause:
+    seconds: 20
+    prompt: "Waiting for music stack containers to start..."
+  tags: [post_validation]
+
+- name: Check Docker containers are running
+  ansible.builtin.shell: |
+    cd "{{ music_stack_home }}"
+    docker compose ps --format json
+  register: music_container_status
+  become: yes
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
+- name: Parse music container status
+  ansible.builtin.set_fact:
+    music_containers: "{{ music_container_status.stdout_lines | map('from_json') | list }}"
+  tags: [post_validation]
+
+- name: Verify music containers are running
+  ansible.builtin.fail:
+    msg: "Container {{ item.Service }} is not running (State: {{ item.State }})"
+  when: item.State != "running"
+  loop: "{{ music_containers }}"
+  loop_control:
+    label: "{{ item.Service }}"
+  tags: [post_validation]
+
+- name: Test Navidrome accessibility
+  ansible.builtin.wait_for:
+    port: "{{ navidrome_port }}"
+    timeout: 60
+  tags: [post_validation]
+
+- name: Test Navidrome web interface
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}:{{ navidrome_port }}"
+    method: GET
+    timeout: 15
+  register: navidrome_web
+  tags: [post_validation]
+
+- name: Check music library directory access
+  ansible.builtin.stat:
+    path: "{{ music_library_path }}/music"
+  register: music_dir
+  tags: [post_validation]
+
+- name: Verify music library permissions
+  ansible.builtin.file:
+    path: "{{ music_library_path }}/music"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: yes
+  tags: [post_validation]
+
+- name: Test YouTube sync script if enabled
+  block:
+    - name: Check yt-dlp is installed and working
+      ansible.builtin.command: |
+        python3 -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)"
+      register: ytdlp_test
+      changed_when: false
+      become_user: "{{ ansible_user }}"
+
+    - name: Verify YouTube sync script exists
+      ansible.builtin.stat:
+        path: "{{ music_library_path }}/scripts/youtube-sync.py"
+      register: youtube_script
+
+    - name: Test YouTube sync script syntax
+      ansible.builtin.command: |
+        python3 -m py_compile "{{ music_library_path }}/scripts/youtube-sync.py"
+      when: youtube_script.stat.exists
+      changed_when: false
+      become_user: "{{ ansible_user }}"
+
+  when: youtube_sync_enabled
+  tags: [post_validation]
+
+- name: Check container health status
+  ansible.builtin.shell: |
+    cd "{{ music_stack_home }}"
+    docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
+  register: music_health_status
+  become: yes
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
+- name: Display music stack validation results
+  ansible.builtin.debug:
+    msg: |
+      ✅ Music Stack Post-Deployment Validation Results:
+
+      Container Status:
+      {{ music_health_status.stdout }}
+
+      Service Health:
+      Navidrome Web Interface: {{ 'Accessible' if navidrome_web.status == 200 else 'Failed' }}
+      Navidrome Port ({{ navidrome_port }}): Listening
+      Music Library: {{ 'Accessible' if music_dir.stat.exists else 'Missing' }}
+      Library Permissions: {{ 'Correct' if music_dir.stat.mode == '0755' else 'Check Required' }}
+
+      {% if youtube_sync_enabled %}
+      YouTube Sync:
+      yt-dlp Installation: {{ 'Working' if ytdlp_test.rc == 0 else 'Failed' }}
+      Sync Script: {{ 'Present' if youtube_script.stat.exists else 'Missing' }}
+      Script Syntax: {{ 'Valid' if youtube_script.stat.exists else 'Not tested' }}
+      {% else %}
+      YouTube Sync: Disabled
+      {% endif %}
+
+      ✅ Music stack deployment validated successfully!
+  tags: [post_validation]

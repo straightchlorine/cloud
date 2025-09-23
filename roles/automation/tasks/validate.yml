@@ -1,27 +1,51 @@
 # Automation stack deployment validation
-# Ensures all requirements are met before automation stack deployment begins
+# Uses unified validation framework to eliminate redundancy
 
-- name: Validate automation stack required variables are defined
-  ansible.builtin.fail:
-    msg: "Required variable '{{ item }}' is not defined or empty"
-  when: vars[item] is not defined or vars[item] == ""
-  loop:
-    - domain_name
-    - vault_domain_name
-    - vault_letsencrypt_email
-    - automation_data_path
-    - automation_stack_home
-    - automation_user
-    - automation_uid
-    - automation_gid
-    - vault_traefik_basic_auth
-    - vault_cloudflare_api_token
-    - services_enabled
-    - restic_enabled
-    - start_stack
-    - traefik_web_port
-    - traefik_websecure_port
-    - traefik_dashboard_port
+- name: Run automation stack comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:
+    validation_context: "automation stack"
+    validation_type: "full"
+    role_name: "automation"
+    required_variables:
+      - domain_name
+      - vault_domain_name
+      - vault_letsencrypt_email
+      - automation_data_path
+      - automation_stack_home
+      - automation_user
+      - automation_uid
+      - automation_gid
+      - vault_traefik_basic_auth
+      - vault_cloudflare_api_token
+      - services_enabled
+      - restic_enabled
+      - restic_repository
+      - restic_password
+      - backup_ssh_host
+      - backup_ssh_port
+      - backup_ssh_user
+      - start_stack
+      - traefik_web_port
+      - traefik_websecure_port
+      - traefik_dashboard_port
+    vault_placeholders:
+      - { var: "vault_cloudflare_api_token", value: "your-cloudflare-api-token-here" }
+      - { var: "vault_restic_automation_password", value: "your-32-character-secure-restic-password" }
+      - { var: "vault_influxdb3_session_secret_key", value: "example-session-secret-key" }
+    backup_directories:
+      - "{{ automation_stack_home }}"
+      - "{{ automation_data_path }}"
+    critical_backup_paths:
+      - "{{ automation_stack_home }}"
+    stack_home: "{{ automation_stack_home }}"
+    required_services:
+      - traefik
+      - influxdb3-core
+      - vaultwarden
+      - portainer
   tags: [validation]
 
 - name: Validate automation parent directories exist
@@ -132,37 +156,3 @@
   ansible.builtin.debug:
     msg: "WARNING: Domain {{ domain_name }} does not resolve. SSL certificates may fail."
   when: domain_dns_check.rc != 0
-
-- name: Run vault variable validation
-  ansible.builtin.include_tasks: vault_validation.yml
-  tags: [vault_validation]
-
-- name: Run template rendering validation
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: template_validation
-  tags: [template_validation]
-
-- name: Run backup directory validation
-  ansible.builtin.include_tasks: backup_validation.yml
-  tags: [backup_validation]
-
-- name: Run common backup directory validation
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: backup_validation
-  tags: [backup_validation]
-
-- name: Run service startup order validation
-  ansible.builtin.include_tasks: service_startup_validation.yml
-  tags: [service_startup_validation]
-
-- name: Run common service startup validation
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: service_startup_validation
-  tags: [service_startup_validation]
-
-- name: Automation stack validation completed successfully
-  ansible.builtin.debug:
-    msg: "All automation stack deployment requirements validated successfully (including vault variables, templates, backup directories, and service startup order)"

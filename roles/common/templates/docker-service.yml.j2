@@ -1,0 +1,70 @@
+# Standardized Docker Service Template
+# Eliminates duplication across automation, music-stack, and monitoring roles
+# Usage: Include with proper service configuration variables
+
+  {{ service_name }}:
+    image: {{ service_image }}
+    container_name: {{ service_name }}
+    restart: {{ service_restart | default('always') }}
+{% if service_ports is defined %}
+    ports:
+{% for port in service_ports %}
+{% if port.bind_to_localhost is defined and port.bind_to_localhost %}
+      - "127.0.0.1:{{ port.host }}:{{ port.container }}"
+{% else %}
+      - "{{ port.host }}:{{ port.container }}"
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if service_command is defined %}
+    command: {{ service_command }}
+{% endif %}
+{% if service_user is defined %}
+    user: "{{ service_user }}"
+{% endif %}
+{% if service_environment is defined %}
+    environment:
+{% for env_var in service_environment %}
+      - {{ env_var }}
+{% endfor %}
+{% endif %}
+{% if service_volumes is defined %}
+    volumes:
+{% for volume in service_volumes %}
+      - {{ volume }}
+{% endfor %}
+{% endif %}
+{% if service_networks is defined %}
+    networks:
+{% for network in service_networks %}
+      - {{ network }}
+{% endfor %}
+{% endif %}
+{% if service_labels is defined %}
+    labels:
+{% for label in service_labels %}
+      - "{{ label }}"
+{% endfor %}
+{% endif %}
+{% if service_depends_on is defined %}
+    depends_on:
+{% for dependency in service_depends_on %}
+      - {{ dependency }}
+{% endfor %}
+{% endif %}
+{% if service_healthcheck is defined %}
+    healthcheck:
+      test: {{ service_healthcheck.test }}
+      interval: {{ service_healthcheck.interval | default('30s') }}
+      timeout: {{ service_healthcheck.timeout | default('10s') }}
+      retries: {{ service_healthcheck.retries | default('3') }}
+      start_period: {{ service_healthcheck.start_period | default('40s') }}
+{% endif %}
+    deploy:
+      resources:
+        limits:
+          memory: {{ service_memory_limit }}
+          cpus: '{{ service_cpu_limit }}'
+        reservations:
+          memory: {{ service_memory_reservation }}
+          cpus: '{{ service_cpu_reservation }}'

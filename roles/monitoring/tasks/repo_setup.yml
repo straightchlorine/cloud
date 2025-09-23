@@ -1,0 +1,15 @@
+# Repository setup for monitoring packages
+# Handles non-standard package sources like Grafana
+
+- name: Add Grafana GPG key
+  ansible.builtin.apt_key:
+    url: "{{ grafana_apt_key_url }}"
+    state: present
+  become: yes
+
+- name: Add Grafana repository
+  ansible.builtin.apt_repository:
+    repo: "{{ grafana_apt_repo }}"
+    state: present
+    update_cache: yes
+  become: yes

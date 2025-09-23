@@ -1,0 +1,249 @@
+# Backup snapshot rollback system (Item #31)
+# Enterprise-grade rollback capabilities using restic snapshots
+
+- name: Create rollback system infrastructure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+  loop:
+    - "{{ enterprise_backup_base_path }}/rollback"
+    - "{{ enterprise_backup_base_path }}/rollback/staging"
+    - "{{ enterprise_backup_base_path }}/rollback/logs"
+    - "{{ enterprise_backup_base_path }}/rollback/checkpoints"
+    - "{{ enterprise_backup_base_path }}/rollback/emergency"
+
+- name: Generate service-aware rollback orchestrator
+  ansible.builtin.template:
+    src: rollback-orchestrator.sh.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-orchestrator.sh"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Create service-specific rollback procedures
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ enterprise_backup_base_path }}/scripts/{{ item }}"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+  loop:
+    - rollback-dns-service.sh
+    - rollback-automation-stack.sh
+    - rollback-music-stack.sh
+    - rollback-system-config.sh
+
+- name: Generate rollback safety checker
+  ansible.builtin.template:
+    src: rollback-safety-check.sh.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-safety-check.sh"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Create rollback configuration manager
+  ansible.builtin.template:
+    src: rollback-config.yml.j2
+    dest: "{{ enterprise_backup_base_path }}/config/rollback-config.yml"
+    owner: backup
+    group: backup
+    mode: '0640'
+  become: yes
+
+- name: Generate emergency rollback script
+  ansible.builtin.template:
+    src: emergency-rollback.sh.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/emergency-rollback.sh"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Create rollback validation framework
+  ansible.builtin.template:
+    src: validate-rollback.sh.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/validate-rollback.sh"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Generate rollback point management system
+  ansible.builtin.template:
+    src: manage-rollback-points.sh.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/manage-rollback-points.sh"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Create rollback monitoring and metrics
+  ansible.builtin.template:
+    src: rollback-metrics-exporter.py.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-metrics-exporter.py"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Generate rollback execution log analyzer
+  ansible.builtin.template:
+    src: analyze-rollback-execution.py.j2
+    dest: "{{ enterprise_backup_base_path }}/scripts/analyze-rollback-execution.py"
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: yes
+
+- name: Create rollback CLI interface
+  ansible.builtin.template:
+    src: enterprise-rollback.py.j2
+    dest: "{{ enterprise_backup_base_path }}/bin/enterprise-rollback"
+    owner: backup
+    group: backup
+    mode: '0755'
+  become: yes
+
+- name: Create rollback systemd service template
+  ansible.builtin.template:
+    src: enterprise-rollback@.service.j2
+    dest: /etc/systemd/system/enterprise-rollback@.service
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+
+- name: Generate rollback alerting rules
+  ansible.builtin.template:
+    src: rollback-alerts.yml.j2
+    dest: "{{ enterprise_backup_base_path }}/config/rollback-alerts.yml"
+    owner: backup
+    group: backup
+    mode: '0640'
+  become: yes
+
+- name: Create rollback dashboard for monitoring
+  ansible.builtin.template:
+    src: rollback-dashboard.json.j2
+    dest: "{{ enterprise_backup_base_path }}/dashboards/rollback-operations.json"
+    owner: backup
+    group: backup
+    mode: '0640'
+  become: yes
+
+- name: Create rollback point catalog
+  ansible.builtin.template:
+    src: rollback-catalog.yml.j2
+    dest: "{{ enterprise_backup_base_path }}/config/rollback-catalog.yml"
+    owner: backup
+    group: backup
+    mode: '0640'
+  become: yes
+
+- name: Set up automatic rollback point creation
+  ansible.builtin.template:
+    src: create-rollback-points.service.j2
+    dest: /etc/systemd/system/create-rollback-points.service
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+
+- name: Set up automatic rollback point timer
+  ansible.builtin.template:
+    src: create-rollback-points.timer.j2
+    dest: /etc/systemd/system/create-rollback-points.timer
+    mode: '0644'
+  become: yes
+  notify:
+    - reload systemd
+
+- name: Enable rollback point creation timer
+  ansible.builtin.systemd:
+    name: create-rollback-points.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+
+- name: Create rollback operation symlinks for easy access
+  ansible.builtin.file:
+    src: "{{ enterprise_backup_base_path }}/bin/enterprise-rollback"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  become: yes
+  loop:
+    - enterprise-rollback
+    - backup-rollback
+    - service-rollback
+
+- name: Validate rollback system functionality
+  ansible.builtin.command: >
+    {{ enterprise_backup_base_path }}/scripts/rollback-orchestrator.sh
+    --validate --dry-run
+  register: rollback_validation
+  become_user: backup
+  become: yes
+  failed_when: rollback_validation.rc != 0
+  changed_when: false
+
+- name: Create rollback documentation
+  ansible.builtin.template:
+    src: rollback-procedures.md.j2
+    dest: "{{ enterprise_backup_base_path }}/docs/rollback-procedures.md"
+    owner: backup
+    group: backup
+    mode: '0640'
+  become: yes
+
+- name: Display rollback system deployment status
+  ansible.builtin.debug:
+    msg: |
+      ✅ Enterprise Rollback System Deployed:
+
+      🔄 Rollback Capabilities:
+      - Service-Aware Rollbacks: DNS, Automation, Music, System
+      - Emergency Rollback: Full system restore capability
+      - Granular Rollbacks: Individual service/component rollback
+      - Safety Validation: Pre-rollback safety checks and validations
+
+      📊 Rollback Management:
+      - CLI Interface: /usr/local/bin/enterprise-rollback
+      - Automatic Rollback Points: Timer-based checkpoint creation
+      - Rollback Catalog: Searchable snapshot inventory
+      - Point-in-Time Recovery: Precise timestamp-based rollbacks
+
+      🚨 Monitoring and Safety:
+      - Rollback Metrics: Port 9104
+      - Grafana Dashboard: rollback-operations.json
+      - Alert Rules: rollback-alerts.yml
+      - Safety Checks: Pre-rollback validation framework
+
+      ⚡ Operations:
+      - Staging Environment: {{ enterprise_backup_base_path }}/rollback/staging/
+      - Execution Logs: {{ enterprise_backup_base_path }}/rollback/logs/
+      - Emergency Procedures: {{ enterprise_backup_base_path }}/scripts/emergency-rollback.sh
+
+      🎯 Usage Examples:
+      # List available rollback points
+      enterprise-rollback list --service dns --last 7d
+
+      # Test rollback (dry-run)
+      enterprise-rollback test --service automation --snapshot latest
+
+      # Execute rollback
+      enterprise-rollback execute --service dns --snapshot 2025-09-19_01:00:00
+
+      # Emergency system rollback
+      enterprise-rollback emergency --confirm --snapshot last-known-good
+
+      {{ '✅ Rollback system validation passed!' if rollback_validation.rc == 0 else '❌ Validation failed!' }}
+
+      📋 Documentation: {{ enterprise_backup_base_path }}/docs/rollback-procedures.md

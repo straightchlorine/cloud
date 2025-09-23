@@ -1,0 +1,107 @@
+# Music stack deployment validation
+# Uses unified validation framework to eliminate redundancy
+
+- name: Run music stack comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:
+    validation_context: "music stack"
+    validation_type: "full"
+    role_name: "music-stack"
+    required_variables:
+      - music_library_path
+      - music_stack_home
+      - ansible_uid
+      - ansible_gid
+      - ssd_device
+      - ssd_filesystem
+      - start_stack
+      - firewall_ports
+      - ytdlp_dependencies
+      - ytdlp_version
+      - beets_genres
+      - restic_enabled
+      - restic_repository
+      - restic_password
+    vault_placeholders:
+      - { var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" }
+    backup_directories:
+      - "{{ music_library_path }}"
+      - "{{ music_stack_home }}"
+    critical_backup_paths:
+      - "{{ music_library_path }}"
+      - "{{ music_stack_home }}"
+    stack_home: "{{ music_stack_home }}"
+    required_services:
+      - navidrome
+      - beets
+      - dozzle
+  tags: [validation]
+
+- name: Validate music parent directories exist
+  ansible.builtin.stat:
+    path: "{{ item | dirname }}"
+  register: parent_path_check
+  failed_when: not parent_path_check.stat.exists or not parent_path_check.stat.isdir
+  loop:
+    - "{{ music_library_path }}"
+    - "{{ music_stack_home }}"
+
+- name: Check if music directories exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: music_dir_check
+  loop:
+    - "{{ music_library_path }}"
+    - "{{ music_stack_home }}"
+
+- name: Create music directories if they don't exist
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  when: not item.stat.exists
+  loop: "{{ music_dir_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: yes
+
+- name: Check SSD device availability
+  ansible.builtin.stat:
+    path: "{{ ssd_device }}"
+  register: ssd_check
+  when: ssd_device is defined
+
+- name: Warn if SSD not available
+  ansible.builtin.debug:
+    msg: "WARNING: SSD device {{ ssd_device }} not found. Music storage will use local filesystem."
+  when: ssd_device is defined and not ssd_check.stat.exists
+
+- name: Check available disk space for music library
+  ansible.builtin.shell: df {{ music_library_path | dirname }} | tail -1 | awk '{print $4}'
+  register: music_disk_space
+  changed_when: false
+
+- name: Warn if low disk space for music
+  ansible.builtin.debug:
+    msg: "WARNING: Available space: {{ (music_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Music libraries require significant space."
+  when: (music_disk_space.stdout | int) < 10485760  # Less than 10GB
+
+- name: Verify Docker is installed and running
+  ansible.builtin.systemd:
+    name: docker
+  register: docker_status
+
+- name: Fail if Docker is not active
+  ansible.builtin.fail:
+    msg: "Docker service is not running. Install and start Docker before deploying music stack."
+  when: docker_status.status.ActiveState != "active"
+
+- name: Check Docker Compose is available
+  ansible.builtin.command: docker compose version
+  register: compose_check
+  failed_when: compose_check.rc != 0
+  changed_when: false

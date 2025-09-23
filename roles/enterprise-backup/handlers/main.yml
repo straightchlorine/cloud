@@ -1,0 +1,19 @@
+# Enterprise Backup Handlers
+# Service restart and reload handlers
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: restart backup coordinator
+  ansible.builtin.systemd:
+    name: "backup-coordinator-{{ device_role }}.service"
+    state: restarted
+  become: yes
+
+- name: restart backup timer
+  ansible.builtin.systemd:
+    name: "backup-{{ device_role }}.timer"
+    state: restarted
+  become: yes

@@ -54,17 +54,17 @@
   ansible.builtin.set_fact:
     expected_routes:
       - name: "dashboard"
-        host: "{{ subdomain_traefik | default('traefik') }}.{{ domain_name }}"
+        host: "{{ subdomain_traefik }}.{{ domain_name }}"
       - name: "dozzle"
-        host: "{{ subdomain_dozzle | default('dozzle') }}.{{ domain_name }}"
+        host: "{{ subdomain_dozzle }}.{{ domain_name }}"
       - name: "portainer"
-        host: "{{ subdomain_portainer | default('portainer') }}.{{ domain_name }}"
+        host: "{{ subdomain_portainer }}.{{ domain_name }}"
       - name: "influxdb"
-        host: "{{ subdomain_influxdb | default('influxdb') }}.{{ domain_name }}"
+        host: "{{ subdomain_influxdb }}.{{ domain_name }}"
       - name: "influxdb-explorer"
-        host: "{{ subdomain_explorer | default('influxdb-ui') }}.{{ domain_name }}"
+        host: "{{ subdomain_explorer }}.{{ domain_name }}"
       - name: "vaultwarden"
-        host: "{{ subdomain_vaultwarden | default('vault') }}.{{ domain_name }}"
+        host: "{{ subdomain_vaultwarden }}.{{ domain_name }}"
   tags: [routing_validation]
 
 - name: Check if all expected routes are present

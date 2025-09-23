@@ -1,0 +1,83 @@
+---
+# Integration test playbook for monitoring and enterprise backup
+# Tests the newly integrated roles without full deployment
+
+- name: Test inventory and variable validation
+  hosts: all
+  gather_facts: yes
+  become: no
+  tasks:
+    - name: Validate host groups
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Groups: {{ group_names }}
+          Device role: {{ device_role }}
+          Device type: {{ device_type }}
+
+    - name: Test network facts collection
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
+    - name: Display network configuration
+      ansible.builtin.debug:
+        msg: |
+          Primary IP: {{ primary_ip }}
+          Primary Interface: {{ primary_interface }}
+          Host IP/CIDR: {{ host_ip_cidr }}
+          Network CIDR: {{ primary_network_cidr }}
+
+- name: Test monitoring host configuration
+  hosts: monitoring
+  gather_facts: yes
+  become: no
+  tasks:
+    - name: Validate monitoring variables
+      ansible.builtin.debug:
+        msg: |
+          Monitoring data path: {{ monitoring_data_path }}
+          Grafana port: {{ grafana_port }}
+          Prometheus port: {{ prometheus_port }}
+          Loki port: {{ loki_port }}
+
+    - name: Test monitoring validation (dry run)
+      ansible.builtin.include_role:
+        name: monitoring
+        tasks_from: validate
+      tags: [never, test_validation]
+
+- name: Test enterprise backup configuration
+  hosts: services
+  gather_facts: yes
+  become: no
+  tasks:
+    - name: Validate backup variables
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Restic enabled: {{ restic_enabled }}
+          Backup repository: {{ restic_repository }}
+          Backup directories: {{ backup_directories }}
+
+    - name: Test enterprise backup validation (dry run)
+      ansible.builtin.include_role:
+        name: enterprise-backup
+        tasks_from: validate
+      tags: [never, test_validation]
+
+- name: Test service role targeting
+  hosts: all
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Verify service targeting works correctly
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Should deploy DNS: {{ 'dns' in group_names }}
+          Should deploy music: {{ 'music' in group_names }}
+          Should deploy automation: {{ 'automation' in group_names }}
+          Should deploy monitoring: {{ 'monitoring' in group_names }}
+          Is service host: {{ 'services' in group_names }}
+          Gets prometheus exporters: {{ 'prometheus' in group_names }}

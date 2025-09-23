@@ -1,18 +1,18 @@
 # Firewall configuration tasks
 
-- name: Install UFW
-  ansible.builtin.apt:
-    name: ufw
-    state: present
-    update_cache: true
-    cache_valid_time: "{{ package_cache_valid_time | default(3600) }}"
-  become: true
+- name: Install UFW using common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages:
+      - ufw
 
 - name: Reset UFW to defaults
   community.general.ufw:
     state: reset
   become: true
-  when: firewall_reset | default(false)
+  when: firewall_reset is defined and firewall_reset | bool
 
 - name: Reload systemd and ensure UFW is available
   ansible.builtin.systemd:
@@ -51,9 +51,9 @@
   community.general.ufw:
     rule: allow
     port: "{{ item.port | string }}"
-    comment: "{{ item.comment | default('Service port') }}"
-    proto: "{{ item.proto | default('tcp') }}"
-  loop: "{{ common_firewall_ports | default([]) }}"
+    comment: "{{ item.comment if item.comment is defined else 'Service port' }}"
+    proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
+  loop: "{{ common_firewall_ports }}"
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -64,7 +64,8 @@
     rule: allow
     port: "{{ item | string }}"
     comment: "{{ item }} service"
-  loop: "{{ firewall_ports | default([]) }}"
+  loop: "{{ firewall_ports }}"
+  when: firewall_ports is defined
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -72,13 +73,14 @@
 
 - name: Configure advanced firewall rules
   community.general.ufw:
-    rule: "{{ item.rule | default('allow') }}"
-    port: "{{ item.port | default(omit) }}"
-    proto: "{{ item.proto | default('tcp') }}"
-    src: "{{ item.src | default(omit) }}"
-    dest: "{{ item.dest | default(omit) }}"
-    comment: "{{ item.comment | default('Custom rule') }}"
-  loop: "{{ firewall_rules | default([]) }}"
+    rule: "{{ item.rule if item.rule is defined else 'allow' }}"
+    port: "{{ item.port if item.port is defined else omit }}"
+    proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
+    src: "{{ item.src if item.src is defined else omit }}"
+    dest: "{{ item.dest if item.dest is defined else omit }}"
+    comment: "{{ item.comment if item.comment is defined else 'Custom rule' }}"
+  loop: "{{ firewall_rules }}"
+  when: firewall_rules is defined
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -90,5 +92,5 @@
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  when: firewall_enabled | default(true)
+  when: firewall_enabled
 

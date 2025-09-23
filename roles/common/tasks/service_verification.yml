@@ -1,0 +1,22 @@
+# Standardized service verification for all playbooks
+# Eliminates post-task duplication across playbooks
+
+- name: Verify services are responding
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: "{{ item.method | default('GET') }}"
+    timeout: "{{ item.timeout | default(10) }}"
+    follow_redirects: "{{ item.follow_redirects | default('none') }}"
+    status_code: "{{ item.valid_codes | default([200]) }}"
+  loop: "{{ services_to_verify }}"
+  register: service_check
+  failed_when: false
+  tags: [verification]
+
+- name: Display service status
+  ansible.builtin.debug:
+    msg: "{{ item.item.name }}: {{ 'UP' if item.status in (item.item.valid_codes | default([200])) else 'DOWN' }} ({{ item.status | default('No response') }})"
+  loop: "{{ service_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags: [verification]

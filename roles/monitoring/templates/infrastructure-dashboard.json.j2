@@ -1,0 +1,238 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Infrastructure Overview",
+    "tags": ["infrastructure", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Infrastructure Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "{{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "CPU Usage by Host",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "{{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage by Host",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+            "legendFormat": "{{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "Disk Usage by Host",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "(node_filesystem_size_bytes{fstype!=\"tmpfs\"} - node_filesystem_avail_bytes{fstype!=\"tmpfs\"}) / node_filesystem_size_bytes{fstype!=\"tmpfs\"} * 100",
+            "legendFormat": "{{ "{{" }} instance {{ "}}" }} - {{ "{{" }} mountpoint {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 70},
+                {"color": "red", "value": 90}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 12}
+      },
+      {
+        "id": 5,
+        "title": "Service Status Dashboard",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job!=\"prometheus\"}",
+            "format": "table",
+            "datasource": "Prometheus"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "instance": "Host",
+                "job": "Service",
+                "Value": "Status"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18}
+      },
+      {
+        "id": 6,
+        "title": "Active Alerts",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "ALERTS{alertstate=\"firing\"}",
+            "format": "table",
+            "datasource": "Prometheus"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 18}
+      },
+      {
+        "id": 7,
+        "title": "Recent System Logs",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"syslog\"}",
+            "datasource": "Loki"
+          }
+        ],
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": true,
+          "sortOrder": "Descending"
+        },
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "DNS Service Metrics (Pi-hole)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(pihole_dns_queries_today[5m]) * 60",
+            "legendFormat": "DNS Queries/min - {{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(pihole_queries_blocked_today[5m]) * 60",
+            "legendFormat": "Blocked Queries/min - {{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 9,
+        "title": "Hardware Temperature",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "node_hwmon_temp_celsius",
+            "legendFormat": "CPU Temp - {{ "{{" }} instance {{ "}}" }}",
+            "datasource": "Prometheus"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "celsius",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 60},
+                {"color": "red", "value": 80}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 32}
+      },
+      {
+        "id": 10,
+        "title": "Error Logs by Service",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "sum by (job) (rate({job=~\".+\"} |~ \"(?i)(error|failed|critical)\" [5m]))",
+            "legendFormat": "{{ "{{" }} job {{ "}}" }} errors",
+            "datasource": "Loki"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 38}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 1,
+    "templating": {
+      "list": [
+        {
+          "name": "host",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(up, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      ]
+    }
+  }
+}

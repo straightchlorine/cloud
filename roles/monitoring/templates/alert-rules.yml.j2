@@ -1,0 +1,259 @@
+# Prometheus alerting rules for infrastructure monitoring
+# Comprehensive coverage of critical infrastructure events
+
+groups:
+  # Infrastructure Health Alerts
+  - name: infrastructure.health
+    interval: 30s
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage on {{ $labels.instance }} has been above 80% for more than 5 minutes."
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage on {{ $labels.instance }} has been above 95% for more than 2 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage on {{ $labels.instance }} has been above 85% for more than 5 minutes."
+
+      - alert: CriticalMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage on {{ $labels.instance }} has been above 95% for more than 2 minutes."
+
+      - alert: DiskSpaceWarning
+        expr: (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) * 100 < 20
+        for: 2m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space on {{ $labels.instance }} mountpoint {{ $labels.mountpoint }} is below 20%."
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk space on {{ $labels.instance }} mountpoint {{ $labels.mountpoint }} is below 10%."
+
+  # DNS Service Alerts (Pi-hole)
+  - name: dns.service
+    interval: 30s
+    rules:
+      - alert: PiHoleDown
+        expr: up{job="pihole-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: dns
+          service: pihole
+        annotations:
+          summary: "Pi-hole service is down on {{ $labels.instance }}"
+          description: "Pi-hole DNS service has been unreachable for more than 1 minute."
+
+      - alert: DNSQueriesHigh
+        expr: rate(pihole_dns_queries_today[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          service: pihole
+        annotations:
+          summary: "High DNS query rate on {{ $labels.instance }}"
+          description: "DNS query rate on {{ $labels.instance }} has been above 100 queries/minute for 5 minutes."
+
+      - alert: HighBlockedQueries
+        expr: (pihole_queries_blocked_today / pihole_dns_queries_today) * 100 > 50
+        for: 10m
+        labels:
+          severity: warning
+          category: dns
+          service: pihole
+        annotations:
+          summary: "High percentage of blocked DNS queries"
+          description: "More than 50% of DNS queries are being blocked on {{ $labels.instance }}."
+
+  # Automation Stack Alerts (Containers)
+  - name: automation.services
+    interval: 30s
+    rules:
+      - alert: TraefikDown
+        expr: up{job="traefik"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: automation
+          service: traefik
+        annotations:
+          summary: "Traefik proxy is down"
+          description: "Traefik reverse proxy has been unreachable for more than 1 minute."
+
+      - alert: ContainerDown
+        expr: absent(up{job="cadvisor"}) or up{job="cadvisor"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: automation
+          service: docker
+        annotations:
+          summary: "Container monitoring is down on {{ $labels.instance }}"
+          description: "cAdvisor container monitoring has been down for more than 2 minutes."
+
+      - alert: HighContainerCPU
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: automation
+          service: docker
+        annotations:
+          summary: "High CPU usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} has high CPU usage."
+
+      - alert: HighContainerMemory
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: automation
+          service: docker
+        annotations:
+          summary: "High memory usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} is using more than 90% of its memory limit."
+
+  # Music Stack Alerts
+  - name: music.services
+    interval: 30s
+    rules:
+      - alert: NavidromeDown
+        expr: up{job="navidrome"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: music
+          service: navidrome
+        annotations:
+          summary: "Navidrome music server is down"
+          description: "Navidrome music streaming service has been unreachable for more than 2 minutes."
+
+  # Network and Connectivity Alerts
+  - name: network.connectivity
+    interval: 60s
+    rules:
+      - alert: HighNetworkLatency
+        expr: ping_rtt_ms{type="icmp"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: "High network latency to {{ $labels.target }}"
+          description: "Network latency to {{ $labels.target }} has been above 100ms for 5 minutes."
+
+      - alert: NetworkPacketLoss
+        expr: ping_packet_loss_percent{type="icmp"} > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: network
+        annotations:
+          summary: "Network packet loss to {{ $labels.target }}"
+          description: "Packet loss to {{ $labels.target }} is above 5% for more than 2 minutes."
+
+  # Security and System Alerts
+  - name: security.events
+    interval: 60s
+    rules:
+      - alert: TooManySSHFailures
+        expr: increase(node_systemd_unit_state{name="ssh.service",state="failed"}[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Multiple SSH connection failures on {{ $labels.instance }}"
+          description: "There have been more than 5 SSH connection failures in the last 10 minutes."
+
+      - alert: SystemLoadHigh
+        expr: node_load5 / count(node_cpu_seconds_total{mode="idle"}) by (instance) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "High system load on {{ $labels.instance }}"
+          description: "System load has been above 2.0 for more than 5 minutes on {{ $labels.instance }}."
+
+  # Hardware Monitoring (Pi-specific)
+  - name: hardware.monitoring
+    interval: 60s
+    rules:
+      - alert: HighCPUTemperature
+        expr: node_hwmon_temp_celsius > 70
+        for: 5m
+        labels:
+          severity: warning
+          category: hardware
+        annotations:
+          summary: "High CPU temperature on {{ $labels.instance }}"
+          description: "CPU temperature on {{ $labels.instance }} has been above 70°C for 5 minutes."
+
+      - alert: CriticalCPUTemperature
+        expr: node_hwmon_temp_celsius > 80
+        for: 2m
+        labels:
+          severity: critical
+          category: hardware
+        annotations:
+          summary: "Critical CPU temperature on {{ $labels.instance }}"
+          description: "CPU temperature on {{ $labels.instance }} has been above 80°C for 2 minutes."
+
+      - alert: LowVoltage
+        expr: node_hwmon_voltage_volt < 4.8
+        for: 2m
+        labels:
+          severity: warning
+          category: hardware
+        annotations:
+          summary: "Low voltage detected on {{ $labels.instance }}"
+          description: "Voltage on {{ $labels.instance }} has been below 4.8V, indicating possible power supply issues."

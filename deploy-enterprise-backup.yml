@@ -1,0 +1,255 @@
+---
+# Enterprise Backup System Deployment
+# Complete deployment and initialization of enterprise backup infrastructure
+# Usage:
+#   Full deployment: ansible-playbook deploy-enterprise-backup.yml
+#   Simple deployment: ansible-playbook deploy-enterprise-backup.yml -e "simple_mode=true"
+
+- name: Deploy enterprise backup system
+  hosts: services
+  become: true
+  gather_facts: true
+
+  vars:
+    # Enterprise backup configuration (must be defined in host_vars)
+    # enterprise_backup_base_path: "/opt/enterprise-backup"
+    # backup_user: "backup"
+    # backup_group: "backup"
+    # restic_version: "0.16.4"
+
+    # Backup settings (must be defined in host_vars)
+    # backup_schedule: "02:00"  # 2 AM daily
+    # backup_randomized_delay: "300"  # 5 minutes
+    # backup_timeout: "3600"  # 1 hour
+    # max_concurrent_backups: "2"
+
+    # Retention policies (must be defined in host_vars)
+    # retention_daily: "7"
+    # retention_weekly: "4"
+    # retention_monthly: "6"
+    # retention_yearly: "1"
+
+    # Deployment mode control
+    simple_mode: false  # Set to true for simple deployment without monitoring setup
+
+  pre_tasks:
+    - name: Display enterprise backup deployment info
+      ansible.builtin.debug:
+        msg: |
+          🚀 Enterprise Backup Deployment
+          ==============================
+          Host: {{ inventory_hostname }}
+          Service: {{ device_role }}
+          Repository: {{ restic_repository }}
+          Schedule: {{ backup_schedule }}
+          ==============================
+
+  tasks:
+    - name: Include network facts collection
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
+    - name: Deploy enterprise backup role
+      ansible.builtin.include_role:
+        name: enterprise-backup
+
+  post_tasks:
+    - name: Initialize backup repository
+      ansible.builtin.shell: |
+        sudo -u {{ backup_user }} \
+        RESTIC_REPOSITORY="{{ restic_repository }}" \
+        RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password" \
+        {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+      register: repo_init_result
+      changed_when: "'Repository initialized successfully' in repo_init_result.stdout"
+      failed_when: repo_init_result.rc != 0 and 'already exists' not in repo_init_result.stderr
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Display repository initialization results
+      ansible.builtin.debug:
+        msg: |
+          📦 Repository Initialization Results
+          ===================================
+          Status: {{ repo_init_result.rc == 0 | ternary('Success', 'Failed') }}
+          {% if repo_init_result.stdout_lines %}
+          Output:
+          {% for line in repo_init_result.stdout_lines %}
+            {{ line }}
+          {% endfor %}
+          {% endif %}
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Verify backup coordinator service status
+      ansible.builtin.systemd:
+        name: "backup-coordinator-{{ device_role }}.service"
+      register: coordinator_status
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Verify backup timer status
+      ansible.builtin.systemd:
+        name: "backup-{{ device_role }}.timer"
+      register: timer_status
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Display service status summary
+      ansible.builtin.debug:
+        msg: |
+          🔧 Enterprise Backup Services Status
+          ===================================
+          Coordinator Service: {{ coordinator_status.status.ActiveState }}
+          Backup Timer: {{ timer_status.status.ActiveState }}
+          Timer Enabled: {{ timer_status.status.UnitFileState }}
+
+          Ready for operation! ✅
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Run initial backup validation
+      ansible.builtin.shell: |
+        sudo -u {{ backup_user }} \
+        {{ enterprise_backup_base_path }}/scripts/validate-backup-{{ device_role }}.sh
+      register: validation_result
+      changed_when: false
+      failed_when: false
+      when: simple_mode is not defined or not simple_mode
+
+    - name: Display validation results
+      ansible.builtin.debug:
+        msg: |
+          ✅ Backup Validation Results
+          ===========================
+          {% if validation_result.rc == 0 %}
+          Status: PASSED ✅
+          {% else %}
+          Status: ISSUES DETECTED ⚠️
+          {% endif %}
+          {% if validation_result.stdout_lines %}
+          Details:
+          {% for line in validation_result.stdout_lines %}
+            {{ line }}
+          {% endfor %}
+          {% endif %}
+      when: simple_mode is not defined or not simple_mode
+
+    # Simple mode completion message
+    - name: Display simple deployment completion
+      ansible.builtin.debug:
+        msg: |
+          ✅ Enterprise Backup Deployment Complete!
+
+          🔧 Services Configured:
+          - Repository: {{ restic_repository }}
+          - Schedule: {{ backup_schedule }}
+          - Retention: {{ retention_daily }}d/{{ retention_weekly }}w/{{ retention_monthly }}m/{{ retention_yearly }}y
+
+          🚀 Ready for Production Use!
+
+          Next Steps:
+          1. Initialize repositories: sudo -u {{ backup_user }} {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+          2. Test backup pipeline: ansible-playbook test-enterprise-backup-pipeline.yml
+          3. Monitor operations: {{ enterprise_backup_base_path }}/logs/
+      when: simple_mode is defined and simple_mode
+
+---
+# Repository Health Monitoring Setup
+- name: Configure repository health monitoring
+  hosts: monitoring
+  become: true
+  gather_facts: true
+  when: simple_mode is not defined or not simple_mode
+
+  tasks:
+    - name: Create centralized health monitoring script
+      ansible.builtin.template:
+        src: roles/enterprise-backup/templates/repository-health-monitor.sh.j2
+        dest: "{{ monitoring_stack_home }}/scripts/repository-health-monitor.sh"
+        owner: "{{ monitoring_user }}"
+        group: "{{ monitoring_user }}"
+        mode: '0750'
+
+    - name: Create centralized health monitoring service
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Enterprise Backup Repository Health Monitor
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          User={{ monitoring_user }}
+          ExecStart={{ monitoring_stack_home }}/scripts/repository-health-monitor.sh
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/backup-health-monitor.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create health monitoring timer
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Repository Health Monitoring Timer
+          Requires=backup-health-monitor.service
+
+          [Timer]
+          OnCalendar=hourly
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+        dest: /etc/systemd/system/backup-health-monitor.timer
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable and start health monitoring
+      ansible.builtin.systemd:
+        name: backup-health-monitor.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+---
+# Final deployment summary
+- name: Enterprise backup deployment summary
+  hosts: localhost
+  gather_facts: false
+  when: simple_mode is not defined or not simple_mode
+
+  tasks:
+    - name: Display deployment completion summary
+      ansible.builtin.debug:
+        msg: |
+          🎉 Enterprise Backup System Deployment Complete!
+          ===============================================
+
+          ✅ Deployed Components:
+          - Multi-repository backup system
+          - Cross-repository coordination
+          - Automated health monitoring
+          - Systemd service integration
+          - Repository initialization scripts
+
+          🔧 Services Configured:
+          {% for host in groups['services'] %}
+          - {{ hostvars[host]['inventory_hostname'] }} ({{ hostvars[host]['device_role'] }})
+          {% endfor %}
+
+          📊 Monitoring Host:
+          {% for host in groups['monitoring'] %}
+          - {{ hostvars[host]['inventory_hostname'] }} (centralized health monitoring)
+          {% endfor %}
+
+          🚀 Ready for Production Use!
+
+          Next Steps:
+          1. Verify repository accessibility: ansible-playbook test-enterprise-backup-pipeline.yml
+          2. Monitor backup operations via Grafana dashboards
+          3. Check backup logs: /opt/enterprise-backup/logs/
+          4. Test restore operations: /opt/enterprise-backup/scripts/restore-test.sh
+
+          ===============================================

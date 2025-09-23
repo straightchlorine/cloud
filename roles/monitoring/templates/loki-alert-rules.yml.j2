@@ -1,0 +1,262 @@
+# Loki log-based alerting rules for infrastructure monitoring
+# Detects critical events and error patterns in logs
+
+groups:
+  # System Log Alerts
+  - name: system.logs
+    interval: 60s
+    rules:
+      - alert: SystemErrorSpike
+        expr: |
+          sum(rate({job="syslog"} |~ "(?i)(error|failed|critical)" [5m])) by (host) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          category: system
+          source: loki
+        annotations:
+          summary: "High error rate in system logs on {{ $labels.host }}"
+          description: "System error rate has increased significantly on {{ $labels.host }}"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: AuthenticationFailures
+        expr: |
+          sum(rate({job="auth"} |~ "(?i)(failed|failure|invalid)" [5m])) by (host) > 0.05
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+          source: loki
+        annotations:
+          summary: "Authentication failures detected on {{ $labels.host }}"
+          description: "Multiple authentication failures detected in auth logs"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: KernelErrors
+        expr: |
+          sum(rate({job="kernel"} |~ "(?i)(panic|oops|error|critical)" [5m])) by (host) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: system
+          source: loki
+        annotations:
+          summary: "Kernel errors detected on {{ $labels.host }}"
+          description: "Critical kernel errors found in system logs"
+          log_message: "{{ $labels.__log__ }}"
+
+  # DNS Service Log Alerts
+  - name: dns.logs
+    interval: 60s
+    rules:
+      - alert: PiHoleServiceErrors
+        expr: |
+          sum(rate({job="pihole"} |~ "(?i)(error|failed|critical)" [5m])) by (host) > 0.02
+        for: 2m
+        labels:
+          severity: warning
+          category: dns
+          service: pihole
+          source: loki
+        annotations:
+          summary: "Pi-hole service errors on {{ $labels.host }}"
+          description: "Pi-hole is reporting errors in its logs"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: DNSQueryFlood
+        expr: |
+          sum(rate({job="dns-queries"}[1m])) by (host) > 50
+        for: 3m
+        labels:
+          severity: warning
+          category: dns
+          service: pihole
+          source: loki
+        annotations:
+          summary: "DNS query flood detected on {{ $labels.host }}"
+          description: "Unusually high DNS query rate detected"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: PiHoleFTLCrash
+        expr: |
+          sum(rate({job="pihole-ftl"} |~ "(?i)(crash|segfault|fatal)" [5m])) by (host) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: dns
+          service: pihole
+          source: loki
+        annotations:
+          summary: "Pi-hole FTL crash detected on {{ $labels.host }}"
+          description: "Pi-hole FTL daemon has crashed"
+          log_message: "{{ $labels.__log__ }}"
+
+  # Container and Application Log Alerts
+  - name: containers.logs
+    interval: 60s
+    rules:
+      - alert: ContainerCrashLoop
+        expr: |
+          sum(rate({job="docker"} |~ "(?i)(restart|exit|died)" [5m])) by (container, host) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          category: containers
+          source: loki
+        annotations:
+          summary: "Container {{ $labels.container }} crash loop on {{ $labels.host }}"
+          description: "Container is restarting frequently"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: TraefikErrors
+        expr: |
+          sum(rate({job="traefik-app"} |~ "(?i)(error|failed|5[0-9][0-9])" [5m])) by (host) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          category: automation
+          service: traefik
+          source: loki
+        annotations:
+          summary: "Traefik errors on {{ $labels.host }}"
+          description: "Traefik reverse proxy is reporting errors"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: TraefikHighLatency
+        expr: |
+          sum(rate({job="traefik-access"} |~ "request_duration_seconds=\"[0-9]+\\.[5-9][0-9]\"" [5m])) by (host) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: automation
+          service: traefik
+          source: loki
+        annotations:
+          summary: "High response times in Traefik on {{ $labels.host }}"
+          description: "Traefik is experiencing high response times"
+          log_message: "{{ $labels.__log__ }}"
+
+  # Music Stack Log Alerts
+  - name: music.logs
+    interval: 60s
+    rules:
+      - alert: NavidromeErrors
+        expr: |
+          sum(rate({job="navidrome"} |~ "(?i)(error|failed|panic)" [5m])) by (host) > 0.02
+        for: 2m
+        labels:
+          severity: warning
+          category: music
+          service: navidrome
+          source: loki
+        annotations:
+          summary: "Navidrome errors on {{ $labels.host }}"
+          description: "Navidrome music server is reporting errors"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: YouTubeDownloadFailures
+        expr: |
+          sum(rate({job="youtube-dl"} |~ "(?i)(error|failed|unable)" [10m])) by (host) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: music
+          service: youtube-sync
+          source: loki
+        annotations:
+          summary: "YouTube download failures on {{ $labels.host }}"
+          description: "YouTube download script is experiencing failures"
+          log_message: "{{ $labels.__log__ }}"
+
+  # Backup and Maintenance Log Alerts
+  - name: backup.logs
+    interval: 300s  # Check every 5 minutes
+    rules:
+      - alert: BackupFailure
+        expr: |
+          sum(rate({job="backup"} |~ "(?i)(failed|error|unable|timeout)" [30m])) by (host) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: backup
+          service: backup
+          source: loki
+        annotations:
+          summary: "Backup failure on {{ $labels.host }}"
+          description: "Backup operation has failed"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: BackupLongRunning
+        expr: |
+          sum(rate({job="backup"} |~ "(?i)(started|beginning)" [6h])) by (host)
+          unless sum(rate({job="backup"} |~ "(?i)(completed|finished|success)" [6h])) by (host)
+        for: 30m
+        labels:
+          severity: warning
+          category: backup
+          service: backup
+          source: loki
+        annotations:
+          summary: "Long-running backup on {{ $labels.host }}"
+          description: "Backup has been running for more than 6 hours"
+          log_message: "{{ $labels.__log__ }}"
+
+  # Security Log Alerts
+  - name: security.logs
+    interval: 60s
+    rules:
+      - alert: SuspiciousLoginAttempts
+        expr: |
+          sum(rate({job="auth"} |~ "(?i)(invalid user|failed password|authentication failure)" [5m])) by (host) > 0.1
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+          source: loki
+        annotations:
+          summary: "Suspicious login attempts on {{ $labels.host }}"
+          description: "Multiple failed login attempts detected"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: RootLoginAttempts
+        expr: |
+          sum(rate({job="auth"} |~ "(?i)(root.*failed|failed.*root)" [5m])) by (host) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+          source: loki
+        annotations:
+          summary: "Root login attempts detected on {{ $labels.host }}"
+          description: "Failed root login attempts detected"
+          log_message: "{{ $labels.__log__ }}"
+
+      - alert: FirewallBlocks
+        expr: |
+          sum(rate({job="syslog"} |~ "(?i)(ufw.*block|iptables.*drop)" [5m])) by (host) > 1
+        for: 10m
+        labels:
+          severity: info
+          category: security
+          source: loki
+        annotations:
+          summary: "High firewall activity on {{ $labels.host }}"
+          description: "Firewall is blocking unusual amounts of traffic"
+          log_message: "{{ $labels.__log__ }}"
+
+  # Deployment and Configuration Alerts
+  - name: deployment.logs
+    interval: 300s
+    rules:
+      - alert: AnsibleDeploymentFailure
+        expr: |
+          sum(rate({job="ansible"} |~ "(?i)(failed|error|fatal)" [30m])) by (host) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: deployment
+          source: loki
+        annotations:
+          summary: "Ansible deployment failure on {{ $labels.host }}"
+          description: "Ansible deployment has reported failures"
+          log_message: "{{ $labels.__log__ }}"

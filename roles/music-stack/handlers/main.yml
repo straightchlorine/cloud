@@ -1,39 +1,7 @@
-# Handlers for music-stack role
-
-- name: restart docker
-  ansible.builtin.systemd:
-    name: docker
-    state: restarted
-  become: true
+# Handlers for music-stack role - use common handlers with variables
 
 - name: restart music stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ music_stack_home }}"
-    state: restarted
-
-- name: reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
-
-- name: rollback music stack
-  block:
-    - name: Stop current stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ music_stack_home }}"
-        state: absent
-      ignore_errors: true
-
-    - name: Restore from backup if available
-      ansible.builtin.shell: |
-        if [ -f "{{ music_stack_home }}/docker-compose.yml.backup" ]; then
-          mv "{{ music_stack_home }}/docker-compose.yml.backup" "{{ music_stack_home }}/docker-compose.yml"
-        fi
-      ignore_errors: true
-
-    - name: Start restored stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ music_stack_home }}"
-        state: present
-      ignore_errors: true
+  ansible.builtin.set_fact:
+    stack_home: "{{ music_stack_home }}"
+  notify: restart docker compose stack
 

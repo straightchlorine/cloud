@@ -10,6 +10,7 @@
       Content-Type: "application/json"
     timeout: 15
   register: cloudflare_zones
+  no_log: true
   tags: [dns01_validation]
 
 - name: Find zone ID for domain
@@ -39,6 +40,7 @@
     timeout: 15
   register: dns_record_test
   failed_when: false
+  no_log: true
   tags: [dns01_validation]
 
 - name: Clean up test DNS record
@@ -50,6 +52,7 @@
       Content-Type: "application/json"
     timeout: 15
   when: dns_record_test.json.success | default(false)
+  no_log: true
   tags: [dns01_validation]
 
 - name: Validate DNS record creation succeeded

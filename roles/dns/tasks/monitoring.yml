@@ -1,11 +1,26 @@
 # Additional monitoring services for DNS server
 
 - name: Install Netdata for system monitoring
-  shell: |
-    bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait --disable-telemetry
-  args:
-    creates: /usr/sbin/netdata
-  become: yes
+  block:
+    - name: Download Netdata installer with GPG verification
+      ansible.builtin.get_url:
+        url: https://my-netdata.io/kickstart.sh
+        dest: /tmp/netdata-kickstart.sh
+        mode: '0755'
+      become: yes
+
+    - name: Install Netdata from verified script
+      ansible.builtin.shell: |
+        /tmp/netdata-kickstart.sh --dont-wait --disable-telemetry
+      args:
+        creates: /usr/sbin/netdata
+      become: yes
+
+    - name: Remove Netdata installer script
+      ansible.builtin.file:
+        path: /tmp/netdata-kickstart.sh
+        state: absent
+      become: yes
   when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
 
 # Pi-hole exporter setup
@@ -17,7 +32,7 @@
     home: "{{ pihole_exporter_install_dir }}"
     create_home: no
   become: yes
-  when: pihole_exporter_enabled | default(false)
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Create pihole-exporter installation directory
   ansible.builtin.file:
@@ -27,7 +42,7 @@
     group: "{{ pihole_exporter_user }}"
     mode: '0755'
   become: yes
-  when: pihole_exporter_enabled | default(false)
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Download pihole-exporter binary
   ansible.builtin.get_url:
@@ -37,19 +52,40 @@
     group: "{{ pihole_exporter_user }}"
     mode: '0755'
   become: yes
-  when: pihole_exporter_enabled | default(false)
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
   notify: restart pihole-exporter
 
 - name: Create pihole-exporter systemd service
   ansible.builtin.template:
-    src: pihole-exporter.service.j2
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
     group: root
     mode: '0644'
+  vars:
+    service_description: "Pi-hole Prometheus Exporter"
+    service_after: ["network.target"]
+    service_wants: ["network.target"]
+    service_type: "simple"
+    service_user: "{{ pihole_exporter_user }}"
+    service_group: "{{ pihole_exporter_user }}"
+    exec_start: >-
+      {{ pihole_exporter_install_dir }}/pihole_exporter
+      -pihole_hostname {{ primary_ip }}
+      -pihole_password {{ pihole_webpassword }}
+      -port {{ pihole_exporter_port }}
+    restart_policy: "on-failure"
+    restart_sec: "5"
+    syslog_identifier: "pihole-exporter"
+    kill_mode: "mixed"
+    timeout_stop_sec: "5"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["{{ pihole_exporter_install_dir }}"]
   become: yes
-  when: pihole_exporter_enabled | default(false)
-  notify: 
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  notify:
     - reload systemd
     - restart pihole-exporter
 
@@ -60,7 +96,7 @@
     state: started
     daemon_reload: yes
   become: yes
-  when: pihole_exporter_enabled | default(false)
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Configure firewall for pihole-exporter
   community.general.ufw:
@@ -68,5 +104,5 @@
     port: "{{ pihole_exporter_port }}"
     comment: "Pi-hole Prometheus exporter"
   become: yes
-  when: pihole_exporter_enabled | default(false)
+  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 

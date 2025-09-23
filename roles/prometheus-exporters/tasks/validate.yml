@@ -1,33 +1,34 @@
-# Prometheus exporters validation tasks
+# Prometheus exporters validation using unified framework
 
-- name: Validate required variables are defined
-  ansible.builtin.fail:
-    msg: "Required Prometheus exporters variable '{{ item }}' is not defined"
-  when: vars[item] is not defined
-  loop:
-    - prometheus_exporters_enabled
-    - prometheus_exporters_base_dir
-    - node_exporter_enabled
+- name: Run prometheus exporters comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:
+    validation_context: "prometheus exporters"
+    validation_type: "full"
+    role_name: "prometheus-exporters"
+    required_variables:
+      - prometheus_exporters_enabled
+      - prometheus_exporters_base_dir
+      - node_exporter_enabled
+      - prometheus_environment
+      - prometheus_role
+      - device_type
+    vault_placeholders: []  # No vault variables for exporters
+    backup_directories:
+      - "{{ prometheus_exporters_base_dir }}"
+    critical_backup_paths:
+      - "{{ prometheus_exporters_base_dir }}/bin"
+    stack_home: "{{ prometheus_exporters_base_dir }}"
+    required_services: []  # No Docker services
   tags: [validation]
 
-- name: Validate architecture is supported
+# Role-specific validation tasks that supplement unified validation
+- name: Validate exporter architecture support
   ansible.builtin.fail:
     msg: "Architecture {{ ansible_architecture }} is not supported by Prometheus exporters"
   when: ansible_architecture not in prometheus_arch_map.keys()
-  tags: [validation]
-
-- name: Validate port ranges
-  ansible.builtin.fail:
-    msg: "{{ item.name }} port {{ item.port }} is outside valid range (1024-65535)"
-  when:
-    - item.enabled
-    - item.port < 1024 or item.port > 65535
-  loop:
-    - { name: "Node Exporter", port: "{{ node_exporter_port }}", enabled: "{{ node_exporter_enabled }}" }
-    - { name: "Pi-hole Exporter", port: "{{ pihole_exporter_port }}", enabled: "{{ pihole_exporter_enabled }}" }
-    - { name: "Docker Exporter", port: "{{ docker_exporter_port }}", enabled: "{{ docker_exporter_enabled }}" }
-  loop_control:
-    label: "{{ item.name }}"
   tags: [validation]
 
 - name: Check for port conflicts

@@ -1,0 +1,146 @@
+# Service management for monitoring stack
+# Manages systemd services for Prometheus, Grafana, Loki, Uptime Kuma
+
+- name: Create Loki systemd service
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
+    dest: /etc/systemd/system/loki.service
+    mode: '0644'
+  vars:
+    service_description: "Loki log aggregation system"
+    service_wants: ["network-online.target"]
+    service_after: ["network-online.target"]
+    service_type: "simple"
+    service_user: "loki"
+    service_group: "loki"
+    exec_start: "/usr/local/bin/loki -config.file=/etc/loki/loki.yml"
+    restart_policy: "always"
+    restart_sec: "5"
+    syslog_identifier: "loki"
+    kill_mode: "mixed"
+    kill_signal: "SIGINT"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["/var/lib/loki", "/var/log/loki"]
+    protect_kernel_tunables: "yes"
+    protect_kernel_modules: "yes"
+    protect_control_groups: "yes"
+    limit_nofile: "65536"
+    memory_max: "512M"
+  become: yes
+  notify:
+    - reload systemd
+    - restart loki
+
+- name: Create Uptime Kuma systemd service
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
+    dest: /etc/systemd/system/uptime-kuma.service
+    mode: '0644'
+  vars:
+    service_description: "Uptime Kuma monitoring dashboard"
+    service_wants: ["network-online.target"]
+    service_after: ["network-online.target"]
+    service_type: "simple"
+    service_user: "uptime-kuma"
+    service_group: "uptime-kuma"
+    working_directory: "/opt/uptime-kuma"
+    exec_start: "/usr/bin/node server/server.js"
+    restart_policy: "always"
+    restart_sec: "5"
+    syslog_identifier: "uptime-kuma"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["/opt/uptime-kuma/data"]
+    memory_max: "256M"
+  become: yes
+  notify:
+    - reload systemd
+    - restart uptime-kuma
+
+- name: Start and enable all monitoring services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  loop:
+    - prometheus
+    - prometheus-alertmanager
+    - grafana-server
+    - loki
+    - uptime-kuma
+  register: service_start
+
+- name: Wait for services to start
+  ansible.builtin.wait_for:
+    port: "{{ item.port }}"
+    host: "{{ primary_ip }}"
+    delay: 5
+    timeout: 60
+  loop:
+    - { service: "prometheus", port: "{{ prometheus_port }}" }
+    - { service: "alertmanager", port: "{{ alertmanager_port }}" }
+    - { service: "grafana", port: "{{ grafana_port }}" }
+    - { service: "loki", port: "{{ loki_port }}" }
+    - { service: "uptime-kuma", port: "{{ uptime_kuma_port }}" }
+  loop_control:
+    label: "{{ item.service }}:{{ item.port }}"
+
+- name: Check service status
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+  register: service_status
+  loop:
+    - prometheus
+    - prometheus-alertmanager
+    - grafana-server
+    - loki
+    - uptime-kuma
+
+- name: Verify services are active
+  ansible.builtin.fail:
+    msg: "Service {{ item.item }} is not active: {{ item.status.ActiveState }}"
+  when: item.status.ActiveState != "active"
+  loop: "{{ service_status.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Test service endpoints
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}:{{ item.port }}{{ item.health_path | default('') }}"
+    method: GET
+    timeout: 10
+    status_code: 200
+  loop:
+    - { service: "prometheus", port: "{{ prometheus_port }}", health_path: "/-/healthy" }
+    - { service: "alertmanager", port: "{{ alertmanager_port }}", health_path: "/-/healthy" }
+    - { service: "grafana", port: "{{ grafana_port }}", health_path: "/api/health" }
+    - { service: "loki", port: "{{ loki_port }}", health_path: "/ready" }
+    - { service: "uptime-kuma", port: "{{ uptime_kuma_port }}" }
+  loop_control:
+    label: "{{ item.service }}"
+  register: endpoint_checks
+  retries: 3
+  delay: 5
+
+- name: Display service status summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Monitoring Services Status:
+
+      {% for check in endpoint_checks.results %}
+      {{ check.item.service | title }}: {{ '✅ Running' if check.status == 200 else '❌ Failed' }} ({{ check.item.port }})
+      {% endfor %}
+
+      All monitoring services are running and accessible!
+
+- name: Configure log rotation for monitoring services
+  ansible.builtin.template:
+    src: monitoring-logrotate.j2
+    dest: /etc/logrotate.d/monitoring
+    mode: '0644'
+  become: yes

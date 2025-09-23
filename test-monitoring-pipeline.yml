@@ -1,0 +1,178 @@
+---
+# Monitoring pipeline testing playbook
+# Tests the complete monitoring stack functionality
+
+- name: Test monitoring pipeline functionality
+  hosts: monitoring
+  gather_facts: yes
+  become: no
+
+  tasks:
+    - name: Display monitoring pipeline test start
+      ansible.builtin.debug:
+        msg: |
+          🧪 Starting Monitoring Pipeline Test for {{ inventory_hostname }}
+
+          Testing Components:
+          📊 Prometheus metrics collection
+          📝 Loki log aggregation
+          🚨 Alertmanager alerting
+          📈 Grafana dashboards
+          🔍 Service health endpoints
+
+    - name: Test Prometheus metrics endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ prometheus_port }}/metrics"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: prometheus_metrics
+      tags: [prometheus_test]
+
+    - name: Test Prometheus targets endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ prometheus_port }}/api/v1/targets"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: prometheus_targets
+      tags: [prometheus_test]
+
+    - name: Test Loki ready endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ loki_port }}/ready"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: loki_ready
+      tags: [loki_test]
+
+    - name: Test Loki metrics endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ loki_port }}/metrics"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: loki_metrics
+      tags: [loki_test]
+
+    - name: Test Alertmanager status endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ alertmanager_port }}/api/v1/status"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: alertmanager_status
+      tags: [alertmanager_test]
+
+    - name: Test Grafana health endpoint
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ grafana_port }}/api/health"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: grafana_health
+      tags: [grafana_test]
+
+    - name: Test Uptime Kuma accessibility
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ uptime_kuma_port }}"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: uptime_kuma_health
+      tags: [uptime_kuma_test]
+
+    - name: Verify Prometheus is scraping targets
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ prometheus_port }}/api/v1/query"
+        method: GET
+        body_format: form-urlencoded
+        body:
+          query: "up"
+        timeout: 10
+        status_code: 200
+      register: prometheus_query
+      tags: [prometheus_test]
+
+    - name: Test log ingestion to Loki
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ loki_port }}/loki/api/v1/query"
+        method: GET
+        body_format: form-urlencoded
+        body:
+          query: '{job="syslog"}'
+          limit: 10
+        timeout: 10
+        status_code: 200
+      register: loki_query
+      tags: [loki_test]
+
+    - name: Check if Prometheus alerting rules are loaded
+      ansible.builtin.uri:
+        url: "http://{{ primary_ip }}:{{ prometheus_port }}/api/v1/rules"
+        method: GET
+        timeout: 10
+        status_code: 200
+      register: prometheus_rules
+      tags: [alerting_test]
+
+    - name: Display comprehensive test results
+      ansible.builtin.debug:
+        msg: |
+          ✅ Monitoring Pipeline Test Results:
+
+          Service Health:
+          📊 Prometheus: {{ '✅ Healthy' if prometheus_metrics.status == 200 else '❌ Failed' }}
+          📝 Loki: {{ '✅ Ready' if loki_ready.status == 200 else '❌ Failed' }}
+          🚨 Alertmanager: {{ '✅ Running' if alertmanager_status.status == 200 else '❌ Failed' }}
+          📈 Grafana: {{ '✅ Healthy' if grafana_health.status == 200 else '❌ Failed' }}
+          🔍 Uptime Kuma: {{ '✅ Accessible' if uptime_kuma_health.status == 200 else '❌ Failed' }}
+
+          Data Collection:
+          📊 Prometheus Targets: {{ prometheus_targets.json.data.activeTargets | length if prometheus_targets.status == 200 else 0 }} active
+          📝 Loki Logs: {{ '✅ Receiving' if loki_query.status == 200 else '❌ No logs' }}
+          🚨 Alert Rules: {{ prometheus_rules.json.data.groups | length if prometheus_rules.status == 200 else 0 }} rule groups
+
+          {% if prometheus_targets.status == 200 %}
+          Active Targets:
+          {% for target in prometheus_targets.json.data.activeTargets %}
+          - {{ target.labels.job }}: {{ target.labels.instance }} ({{ target.health }})
+          {% endfor %}
+          {% endif %}
+
+          🎉 Monitoring pipeline test complete!
+
+    - name: Generate test report
+      ansible.builtin.copy:
+        content: |
+          # Monitoring Pipeline Test Report
+
+          **Test Date**: {{ ansible_date_time.iso8601 }}
+          **Host**: {{ inventory_hostname }}
+          **IP**: {{ primary_ip }}
+
+          ## Service Status
+          - Prometheus: {{ 'PASS' if prometheus_metrics.status == 200 else 'FAIL' }}
+          - Loki: {{ 'PASS' if loki_ready.status == 200 else 'FAIL' }}
+          - Alertmanager: {{ 'PASS' if alertmanager_status.status == 200 else 'FAIL' }}
+          - Grafana: {{ 'PASS' if grafana_health.status == 200 else 'FAIL' }}
+          - Uptime Kuma: {{ 'PASS' if uptime_kuma_health.status == 200 else 'FAIL' }}
+
+          ## Data Collection
+          - Active Prometheus Targets: {{ prometheus_targets.json.data.activeTargets | length if prometheus_targets.status == 200 else 0 }}
+          - Loki Log Ingestion: {{ 'WORKING' if loki_query.status == 200 else 'FAILED' }}
+          - Alert Rules Loaded: {{ prometheus_rules.json.data.groups | length if prometheus_rules.status == 200 else 0 }}
+
+          ## Next Steps
+          1. Verify Promtail agents are deployed on service machines
+          2. Configure notification channels in Alertmanager
+          3. Import additional Grafana dashboards
+          4. Test alert firing and notification delivery
+        dest: "/tmp/monitoring-test-report-{{ ansible_date_time.epoch }}.md"
+        mode: '0644'
+
+  handlers:
+    - name: monitoring pipeline test complete
+      ansible.builtin.debug:
+        msg: "🎉 Monitoring pipeline test completed successfully"

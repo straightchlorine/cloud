@@ -1,28 +1,66 @@
-# Hardware detection for Pi models
-# Sets hardware-appropriate resource limits based on detected Pi model
+# Hardware detection for all systems (Pi, PC, VM)
+# Sets hardware-appropriate resource limits based on detected hardware
 
-- name: Detect Raspberry Pi model
+- name: Detect hardware platform
   ansible.builtin.shell: |
+    # Check for Raspberry Pi
     if [ -f /proc/device-tree/model ]; then
       cat /proc/device-tree/model
+    # Check for virtualization
+    elif systemd-detect-virt --quiet; then
+      echo "VM-$(systemd-detect-virt)"
+    # Check DMI for physical systems
+    elif [ -f /sys/class/dmi/id/product_name ]; then
+      echo "PC-$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
     else
       echo "unknown"
     fi
-  register: pi_model_raw
+  register: hardware_detection_raw
   changed_when: false
 
-- name: Parse Pi model information
+- name: Gather system resources
+  ansible.builtin.setup:
+    gather_subset:
+      - hardware
+    filter:
+      - ansible_memtotal_mb
+      - ansible_processor_count
+      - ansible_processor_cores
+      - ansible_processor_vcpus
+
+- name: Parse hardware information
   ansible.builtin.set_fact:
-    pi_model_detected: >-
-      {%- if 'Raspberry Pi 4' in pi_model_raw.stdout -%}
+    hardware_platform: >-
+      {%- if device_type is defined -%}
+        {%- if device_type == 'rpi4b' -%}
+          rpi4
+        {%- elif device_type == 'rpi3b' -%}
+          rpi3
+        {%- elif device_type == 'rpi2b' -%}
+          rpi2
+        {%- elif device_type.endswith('_vm') or device_type.endswith('_pc') -%}
+          pc
+        {%- else -%}
+          {{ device_type }}
+        {%- endif -%}
+      {%- elif 'Raspberry Pi 4' in hardware_detection_raw.stdout -%}
         rpi4
-      {%- elif 'Raspberry Pi 3' in pi_model_raw.stdout -%}
+      {%- elif 'Raspberry Pi 3' in hardware_detection_raw.stdout -%}
         rpi3
-      {%- elif 'Raspberry Pi 2' in pi_model_raw.stdout -%}
+      {%- elif 'Raspberry Pi 2' in hardware_detection_raw.stdout -%}
         rpi2
+      {%- elif hardware_detection_raw.stdout.startswith('VM-') or hardware_detection_raw.stdout.startswith('PC-') -%}
+        pc
       {%- else -%}
         unknown
       {%- endif -%}
+
+    hardware_details:
+      raw_detection: "{{ hardware_detection_raw.stdout }}"
+      memory_mb: "{{ ansible_memtotal_mb }}"
+      cpu_cores: "{{ ansible_processor_cores }}"
+      cpu_count: "{{ ansible_processor_count }}"
+      vcpus: "{{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}"
 
 - name: Set hardware-specific resource limits for Pi 4
   ansible.builtin.set_fact:
@@ -52,7 +90,7 @@
         cpus: "1.0"
         memory_reservation: "256M"
         cpus_reservation: "0.5"
-  when: pi_model_detected == "rpi4"
+  when: hardware_platform == "rpi4"
 
 - name: Set hardware-specific resource limits for Pi 3
   ansible.builtin.set_fact:
@@ -82,7 +120,53 @@
         cpus: "0.75"
         memory_reservation: "128M"
         cpus_reservation: "0.5"
-  when: pi_model_detected == "rpi3"
+  when: hardware_platform == "rpi3"
+
+- name: Set optimized resource limits for PCs
+  ansible.builtin.set_fact:
+    hardware_limits:
+      traefik:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      influxdb3:
+        memory: "2G"
+        cpus: "4.0"
+        memory_reservation: "1G"
+        cpus_reservation: "2.0"
+      vaultwarden:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      navidrome:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      portainer:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+      grafana:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      prometheus:
+        memory: "2G"
+        cpus: "4.0"
+        memory_reservation: "1G"
+        cpus_reservation: "2.0"
+      loki:
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+  when: hardware_platform == "pc"
+
 
 - name: Set conservative resource limits for unknown hardware
   ansible.builtin.set_fact:
@@ -112,11 +196,30 @@
         cpus: "0.5"
         memory_reservation: "128M"
         cpus_reservation: "0.25"
-  when: pi_model_detected == "unknown"
+      grafana:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+      prometheus:
+        memory: "512M"
+        cpus: "1.0"
+        memory_reservation: "256M"
+        cpus_reservation: "0.5"
+      loki:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+  when: hardware_platform == "unknown"
 
 - name: Display detected hardware and resource limits
   ansible.builtin.debug:
     msg: |
-      Detected Pi Model: {{ pi_model_detected }}
+      Detected Hardware Platform: {{ hardware_platform }}
+      Hardware Details: {{ hardware_details }}
       Hardware Resource Limits: {{ hardware_limits }}
+      Total Memory: {{ ansible_memtotal_mb }}MB
+      CPU Cores: {{ ansible_processor_cores }}
+      VCPUs: {{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}
 

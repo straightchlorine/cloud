@@ -1,0 +1,15 @@
+# Unified Backup Timer Template
+# {{ ansible_managed }}
+
+[Unit]
+Description={{ timer_description }}
+Requires={{ timer_service }}
+
+[Timer]
+OnCalendar={{ timer_schedule }}
+Persistent=true
+RandomizedDelaySec={{ timer_randomized_delay }}
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

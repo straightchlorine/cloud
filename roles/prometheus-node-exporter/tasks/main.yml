@@ -20,5 +20,5 @@
     port: "{{ node_exporter_port }}"
     comment: "{{ node_exporter_ufw_comment }}"
   become: yes
-  when: node_exporter_ufw_enabled | default(true)
+  when: node_exporter_ufw_enabled
 

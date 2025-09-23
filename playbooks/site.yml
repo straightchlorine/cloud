@@ -9,7 +9,7 @@
         name: common
         tasks_from: backup_validation
       tags: [backup_validation]
-      when: run_validation | default(true)
+      when: run_validation
 
     - name: Run role-specific validation
       block:
@@ -30,7 +30,13 @@
             name: music-stack
             tasks_from: validate
           when: "'music' in group_names"
-      when: run_validation | default(true)
+
+        - name: Monitoring validation for monitoring hosts
+          ansible.builtin.include_role:
+            name: monitoring
+            tasks_from: validate
+          when: "'monitoring' in group_names"
+      when: run_validation
       tags: [role_validation]
 
 - name: Configure all hosts with common setup
@@ -39,10 +45,9 @@
   gather_facts: true
   pre_tasks:
     - name: Update package cache
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600
-      tags: [always, packages]
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: package_cache_update
 
   roles:
     - role: common
@@ -95,8 +100,8 @@
     - role: monitoring
       tags: [monitoring, grafana, prometheus, loki]
 
-- name: Configure enterprise backup across all service hosts
-  hosts: services
+- name: Configure enterprise backup across all infrastructure hosts
+  hosts: services,monitoring
   become: true
   gather_facts: true
   roles:

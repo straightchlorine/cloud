@@ -24,8 +24,19 @@
     role_specific_packages: "{{ music_stack_specific_packages }}"
   tags: [packages]
 
-- name: Include Docker setup
-  ansible.builtin.include_tasks: docker.yml
+- name: Include common Docker setup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker
+  tags: [docker]
+
+- name: Create music stack directory
+  ansible.builtin.file:
+    path: "{{ music_stack_home }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
   tags: [docker]
 
 - name: Include SSD mounting
@@ -45,6 +56,21 @@
   ansible.builtin.include_role:
     name: firewall
   tags: [firewall, security]
+
+- name: Create Docker stack systemd service
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_stack_service
+  vars:
+    stack_service_name: "music-stack"
+    stack_description: "Music Stack (Navidrome, Beets, YouTube sync)"
+    stack_home_directory: "{{ music_stack_home }}"
+    stack_user: "{{ ansible_user }}"
+    stack_environment_vars:
+      - "MUSIC_LIBRARY_PATH={{ music_library_path }}"
+      - "PUID={{ ansible_uid }}"
+      - "PGID={{ ansible_gid }}"
+  tags: [systemd, auto-start]
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml

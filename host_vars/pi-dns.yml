@@ -1,7 +1,7 @@
 # DNS server specific configuration - Pi-hole on Debian Bookworm
 dns_service: pihole
 dns_port: 53
-dns_interface: "{{ ansible_default_ipv4.address }}"
+dns_interface: "{{ primary_ip }}"
 
 # Device Configuration
 device_type: rpi3b
@@ -10,7 +10,7 @@ device_type: rpi3b
 pihole_admin_password: "{{ vault_pihole_admin_password }}"
 pihole_webpassword: "{{ vault_pihole_webpassword }}"
 pihole_dns_servers:
-  - 192.168.20.1#53
+  - "{{ hostvars['firewall']['primary_ip'] }}#53"
 pihole_interface: "{{ primary_interface }}"
 pihole_ipv4_address: "{{ host_ip_cidr }}"
 pihole_ipv6_address: ""

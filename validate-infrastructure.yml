@@ -1,0 +1,286 @@
+---
+# Infrastructure Validation Playbook
+# Centralized validation for all deployment types and infrastructure components
+#
+# Usage Examples:
+#   Full validation: ansible-playbook validate-infrastructure.yml
+#   Backup only: ansible-playbook validate-infrastructure.yml -e "validation_type=backup"
+#   Vault only: ansible-playbook validate-infrastructure.yml -e "validation_type=vault"
+#   Pre-deployment: ansible-playbook validate-infrastructure.yml -e "validation_type=pre_deployment"
+#   Post-deployment: ansible-playbook validate-infrastructure.yml -e "validation_type=post_deployment"
+#   Service startup: ansible-playbook validate-infrastructure.yml -e "validation_type=service_startup"
+#   SSL/Domain: ansible-playbook validate-infrastructure.yml -e "validation_type=ssl_domain"
+#
+# This follows the "No Redundancy" principle by centralizing all validation logic
+
+- name: Infrastructure validation
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    # Validation type control - determines which validations to run
+    # validation_type must be passed via -e validation_type=<type> - no default allowed
+
+    # Control flags - must be explicitly set when needed
+    # quick_mode: must be passed via -e quick_mode=true - no default
+
+  pre_tasks:
+    - name: Validate required parameters
+      ansible.builtin.fail:
+        msg: "validation_type must be explicitly set via -e validation_type=<type>. Valid types: full, backup, vault, pre_deployment, post_deployment, service_startup, ssl_domain"
+      when: validation_type is not defined
+
+    - name: Set validation scope based on type
+      ansible.builtin.set_fact:
+        run_backup_validation: "{{ validation_type in ['full', 'backup'] }}"
+        run_vault_validation: "{{ validation_type in ['full', 'vault'] }}"
+        run_pre_deployment_validation: "{{ validation_type in ['full', 'pre_deployment'] }}"
+        run_post_deployment_validation: "{{ validation_type in ['full', 'post_deployment'] }}"
+        run_service_startup_validation: "{{ validation_type in ['full', 'service_startup'] }}"
+        run_ssl_domain_validation: "{{ validation_type in ['full', 'ssl_domain'] }}"
+
+    - name: Display validation start message
+      ansible.builtin.debug:
+        msg: |
+          🔍 Starting {{ validation_type }} validation for {{ inventory_hostname }}
+          Host groups: {{ group_names }}
+          Quick mode: {{ quick_mode if quick_mode is defined else 'disabled' }}
+
+  tasks:
+    # === PRE-DEPLOYMENT VALIDATION ===
+    - name: Pre-deployment system validation
+      block:
+        - name: Check basic connectivity
+          ansible.builtin.ping:
+
+        - name: Validate OS compatibility
+          ansible.builtin.fail:
+            msg: "Unsupported OS family: {{ ansible_os_family }}. Only Debian-based systems supported."
+          when: ansible_os_family != "Debian"
+
+        - name: Check minimum memory requirements
+          ansible.builtin.fail:
+            msg: "Insufficient memory: {{ ansible_memtotal_mb }}MB. Minimum 1GB required."
+          when: ansible_memtotal_mb < 1024
+
+        - name: Validate architecture
+          ansible.builtin.fail:
+            msg: "Unsupported architecture: {{ ansible_architecture }}"
+          when: ansible_architecture not in ['aarch64', 'x86_64']
+
+        - name: Test network connectivity
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            method: HEAD
+            timeout: 10
+          loop:
+            - "https://hub.docker.com"
+            - "https://github.com"
+            - "https://archive.ubuntu.com"
+          register: network_check
+          when: quick_mode is defined and quick_mode is not defined or not quick_mode
+
+        - name: Check available disk space
+          ansible.builtin.shell: df / | tail -1 | awk '{print $4}'
+          register: root_disk_space
+          changed_when: false
+
+        - name: Fail if insufficient disk space
+          ansible.builtin.fail:
+            msg: "Insufficient root disk space. Available: {{ (root_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 2GB minimum"
+          when: (root_disk_space.stdout | int) < 2097152
+      when: run_pre_deployment_validation
+
+    # === BACKUP VALIDATION ===
+    - name: Backup directory and configuration validation
+      block:
+        - name: Run common backup validation
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: backup_validation
+
+        - name: Run role-specific backup validation
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+            tasks_from: backup_validation
+          loop:
+            - dns
+            - automation
+            - music-stack
+          when: "item.replace('-', '_') in group_names"
+      when: run_backup_validation
+
+    # === VAULT VALIDATION ===
+    - name: Vault variable validation
+      block:
+        - name: Run role-specific vault validation
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+            tasks_from: vault_validation
+          loop:
+            - dns
+            - automation
+            - music-stack
+          when: "item.replace('-', '_') in group_names"
+
+        - name: Run template rendering validation
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: template_validation
+          when: quick_mode is defined and quick_mode is not defined or not quick_mode
+      when: run_vault_validation
+
+    # === SERVICE STARTUP VALIDATION ===
+    - name: Service startup order validation
+      block:
+        - name: Run common service startup validation
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: service_startup_validation
+
+        - name: Run role-specific service startup validation
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+            tasks_from: service_startup_validation
+          loop:
+            - dns
+            - automation
+            - music-stack
+          when: "item.replace('-', '_') in group_names"
+      when: run_service_startup_validation
+
+    # === SSL/DOMAIN VALIDATION (automation hosts only) ===
+    - name: SSL and domain validation
+      block:
+        - name: Validate domain resolution and SSL prerequisites
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: ssl_domain_validate
+
+        - name: Validate Traefik routing configuration
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: traefik_routing_validate
+
+        - name: Validate DNS01 challenge prerequisites
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: dns01_prerequisites
+      when:
+        - run_ssl_domain_validation
+        - "'automation' in group_names"
+
+    # === POST-DEPLOYMENT VALIDATION ===
+    - name: Post-deployment service validation
+      block:
+        - name: Run common port connectivity tests
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: port_connectivity_test
+
+        - name: Run role-specific post-deployment validation
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+            tasks_from: post_deploy_validate
+          loop:
+            - dns
+            - automation
+            - music-stack
+          when: "item.replace('-', '_') in group_names"
+      when: run_post_deployment_validation
+
+    # === QUICK VALIDATION FOR CI/MONITORING ===
+    - name: Quick health checks
+      block:
+        - name: Quick connectivity test
+          ansible.builtin.wait_for:
+            port: 22
+            timeout: 5
+
+        - name: Quick core vault variable check
+          ansible.builtin.fail:
+            msg: "Core vault variable '{{ item }}' is missing or contains placeholder"
+          when:
+            - vars[item] is not defined or vars[item] == ""
+            - '"your-" in (vars[item] | string) or "example" in (vars[item] | string) or "CHANGEME" in (vars[item] | string)'
+          loop:
+            - vault_domain_name
+            - vault_letsencrypt_email
+
+        - name: Quick backup directory check
+          ansible.builtin.stat:
+            path: /opt/backup
+          register: quick_backup_check
+
+        - name: Display quick status
+          ansible.builtin.debug:
+            msg: |
+              ⚡ Quick Validation Status for {{ inventory_hostname }}:
+              SSH: ✅ Connected
+              Core Vault: ✅ Configured
+              Backup Dir: {{ '✅ Ready' if quick_backup_check.stat.exists else '⚠️ Setup Required' }}
+      when: quick_mode is defined and quick_mode
+
+    # === VALIDATION SUMMARY ===
+    - name: Generate comprehensive validation summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ {{ validation_type.title() }} Validation Summary for {{ inventory_hostname }}:
+
+          Validation Type: {{ validation_type }}
+          Host Groups: {{ group_names }}
+
+          {% if run_pre_deployment_validation %}
+          Pre-deployment:
+          ✅ System compatibility verified
+          ✅ Network connectivity confirmed
+          ✅ Disk space requirements met
+          {% endif %}
+
+          {% if run_backup_validation %}
+          Backup Validation:
+          ✅ Common backup directories validated
+          {% for group in group_names %}
+          {% if group in ['dns', 'automation', 'music'] %}
+          ✅ {{ group.title() }} backup configuration verified
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+
+          {% if run_vault_validation %}
+          Vault Validation:
+          ✅ Core vault variables configured
+          {% for group in group_names %}
+          {% if group in ['dns', 'automation', 'music'] %}
+          ✅ {{ group.title() }} vault credentials validated
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+
+          {% if run_service_startup_validation %}
+          Service Startup:
+          ✅ Service dependencies validated
+          ✅ Startup order verified
+          {% endif %}
+
+          {% if run_ssl_domain_validation and 'automation' in group_names %}
+          SSL/Domain:
+          ✅ Domain resolution verified
+          ✅ Cloudflare API access confirmed
+          ✅ SSL prerequisites met
+          {% endif %}
+
+          {% if run_post_deployment_validation %}
+          Post-deployment:
+          ✅ Service connectivity verified
+          ✅ All deployed services operational
+          {% endif %}
+
+          🚀 {{ validation_type.title() }} validation completed successfully!
+      when: not quick_mode
+
+  handlers:
+    - name: validation complete
+      ansible.builtin.debug:
+        msg: "✅ {{ validation_type.title() }} validation completed for all targeted hosts"

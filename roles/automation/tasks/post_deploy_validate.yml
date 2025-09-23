@@ -56,13 +56,13 @@
 
 - name: Test Vaultwarden accessibility (if enabled)
   ansible.builtin.uri:
-    url: "https://{{ subdomain_vaultwarden | default('vault') }}.{{ domain_name }}"
+    url: "https://{{ subdomain_vaultwarden }}.{{ domain_name }}"
     method: GET
     timeout: 10
     validate_certs: false
   register: vaultwarden_test
   failed_when: false
-  when: services_enabled.vaultwarden | default(false)
+  when: services_enabled.vaultwarden
   tags: [post_validation]
 
 - name: Test InfluxDB accessibility

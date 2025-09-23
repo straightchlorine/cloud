@@ -8,29 +8,24 @@
     - "{{ playbook_dir }}/../group_vars/vault.yml"
   vars:
     # Ensure vault variables are available to roles
-    youtube_playlists: "{{ vault_youtube_playlists | default([]) }}"
-    youtube_quality: "{{ vault_youtube_quality | default('best') }}"
-    youtube_concurrent: "{{ vault_youtube_concurrent | default(10) }}"
-    youtube_extra_args: "{{ vault_youtube_extra_args | default('') }}"
+    youtube_playlists: "{{ vault_youtube_playlists }}"
+    youtube_quality: "{{ vault_youtube_quality }}"
+    youtube_concurrent: "{{ vault_youtube_concurrent }}"
+    youtube_extra_args: "{{ vault_youtube_extra_args }}"
     # Enable YouTube sync for this playbook (overrides host_vars if needed)
     youtube_sync_enabled: true
   tags: [music-stack]
 
   pre_tasks:
     - name: Update package cache
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600
-      tags: [packages]
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: package_cache_update
 
 
   roles:
-    - role: common
-      tags: [common, base]
-    - role: firewall
-      tags: [firewall, security]
-    - role: prometheus-node-exporter
-      tags: [monitoring, prometheus]
+    - role: prometheus-exporters
+      tags: [monitoring, prometheus, exporters]
     - role: music-stack
       tags: [music, docker, stack]
 
@@ -41,8 +36,8 @@
           🎵 Music Stack Deployment Complete!
 
           Services:
-          - Navidrome: http://{{ ansible_default_ipv4.address }}:{{ navidrome_port }}
-          - Dozzle (Logs): http://{{ ansible_default_ipv4.address }}:{{ dozzle_port }}
+          - Navidrome: http://{{ primary_ip }}:{{ navidrome_port }}
+          - Dozzle (Logs): http://{{ primary_ip }}:{{ dozzle_port }}
 
           Useful commands on the Pi:
           - Manage stack: music-stack {start|stop|restart|status}
@@ -83,21 +78,14 @@
       when: manage_script_stat.stat.exists
       tags: [shortcuts]
 
-    - name: Verify services are running
-      ansible.builtin.uri:
-        url: "http://{{ ansible_default_ipv4.address }}:{{ item.port }}"
-        method: GET
-        timeout: 10
-      loop:
-        - {port: "{{ navidrome_port }}", service: "Navidrome"}
-        - {port: "{{ dozzle_port }}", service: "Dozzle"}
-      register: service_check
-      failed_when: false
-      tags: [verification]
-
-    - name: Display service status
-      ansible.builtin.debug:
-        msg: "{{ item.item.service }} on port {{ item.item.port }}: {{ 'UP' if item.status == 200 else 'DOWN' }}"
-      loop: "{{ service_check.results }}"
-      tags: [verification]
+    - name: Verify music stack services
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: service_verification
+      vars:
+        services_to_verify:
+          - name: "Navidrome"
+            url: "http://{{ primary_ip }}:{{ navidrome_port }}"
+          - name: "Dozzle"
+            url: "http://{{ primary_ip }}:{{ dozzle_port }}"
 

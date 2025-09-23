@@ -72,9 +72,31 @@
 
 - name: Create Promtail systemd service
   ansible.builtin.template:
-    src: promtail.service.j2
+    src: systemd-service.j2
     dest: /etc/systemd/system/promtail.service
     mode: '0644'
+  vars:
+    service_description: "Promtail log shipping agent"
+    service_wants: ["network-online.target"]
+    service_after: ["network-online.target"]
+    service_type: "simple"
+    service_user: "promtail"
+    service_group: "promtail"
+    exec_start: "/usr/local/bin/promtail -config.file=/etc/promtail/promtail.yml"
+    restart_policy: "always"
+    restart_sec: "5"
+    syslog_identifier: "promtail"
+    kill_mode: "mixed"
+    kill_signal: "SIGINT"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["/var/lib/promtail"]
+    protect_kernel_tunables: "yes"
+    protect_kernel_modules: "yes"
+    protect_control_groups: "yes"
+    limit_nofile: "65536"
+    memory_max: "128M"
   become: yes
   notify:
     - reload systemd

@@ -1,0 +1,61 @@
+# Repository Configuration for {{ device_role }}
+# {{ ansible_managed }}
+
+service:
+  name: "{{ device_role }}"
+  host: "{{ inventory_hostname }}"
+  type: "{{ device_type }}"
+
+repository:
+  url: "{{ restic_repository }}"
+  password_file: "{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+  cache_dir: "{{ enterprise_backup_base_path }}/cache/{{ device_role }}"
+
+backup:
+  directories:
+{% for dir in backup_directories %}
+    - "{{ dir }}"
+{% endfor %}
+
+  exclude_patterns:
+{% if backup_exclude_patterns is defined %}
+{% for pattern in backup_exclude_patterns %}
+    - "{{ pattern }}"
+{% endfor %}
+{% endif %}
+
+  retention:
+    daily: {{ retention_daily }}
+    weekly: {{ retention_weekly }}
+    monthly: {{ retention_monthly }}
+    yearly: {{ retention_yearly }}
+
+  schedule:
+    frequency: "{{ backup_frequency }}"
+    time: "{{ backup_time }}"
+    timezone: "{{ timezone }}"
+
+monitoring:
+  health_check_frequency: "{{ health_check_frequency }}"
+  metrics_enabled: {{ backup_metrics_enabled }}
+  webhook_url: "{{ backup_webhook_url if backup_webhook_url is defined else '' }}"
+
+security:
+  encryption: "AES256"
+  key_derivation: "scrypt"
+  compression: "{{ backup_compression }}"
+
+operational:
+  max_backup_time: "{{ max_backup_time }}"  # seconds
+  max_parallel_files: {{ max_parallel_files }}
+  bandwidth_limit: "{{ bandwidth_limit }}"  # KB/s, 0 = unlimited
+
+network:
+  connect_timeout: {{ connect_timeout }}  # seconds
+  retry_attempts: {{ retry_attempts }}
+  retry_delay: {{ retry_delay }}  # seconds
+
+validation:
+  pre_backup_checks: true
+  post_backup_verification: {{ post_backup_verification }}
+  restore_test_frequency: "{{ restore_test_frequency }}"

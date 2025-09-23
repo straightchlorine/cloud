@@ -1,0 +1,14 @@
+# Enterprise Backup Timer for {{ device_role }}
+# {{ ansible_managed }}
+
+[Unit]
+Description=Enterprise Backup Timer for {{ device_role }}
+Requires=backup-{{ device_role }}.service
+
+[Timer]
+OnCalendar={{ backup_schedule | default('02:00') }}
+Persistent=true
+RandomizedDelaySec={{ backup_randomized_delay | default('300') }}
+
+[Install]
+WantedBy=timers.target

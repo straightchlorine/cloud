@@ -1,0 +1,47 @@
+# Handlers for monitoring stack services
+# Restart services when configuration changes
+
+# reload systemd uses common handler
+
+- name: restart prometheus
+  ansible.builtin.systemd:
+    name: prometheus
+    state: restarted
+  become: yes
+
+- name: restart alertmanager
+  ansible.builtin.systemd:
+    name: prometheus-alertmanager
+    state: restarted
+  become: yes
+
+- name: restart grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    state: restarted
+  become: yes
+
+- name: restart loki
+  ansible.builtin.systemd:
+    name: loki
+    state: restarted
+  become: yes
+
+- name: restart uptime-kuma
+  ansible.builtin.systemd:
+    name: uptime-kuma
+    state: restarted
+  become: yes
+
+- name: restart promtail
+  ansible.builtin.systemd:
+    name: promtail
+    state: restarted
+  become: yes
+
+- name: restart monitoring stack
+  ansible.builtin.command: docker compose restart
+  args:
+    chdir: "{{ monitoring_stack_home }}"
+  become_user: "{{ monitoring_user }}"
+  become: yes

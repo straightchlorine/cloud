@@ -1,0 +1,45 @@
+# Common Docker Stack Systemd Service Creation
+# Eliminates duplication between automation and music-stack roles
+# Usage: Include this task with required variables
+
+- name: Create systemd service for Docker stack auto-start
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
+    dest: "/etc/systemd/system/{{ stack_service_name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    service_description: "{{ stack_description }}"
+    service_requires: ["docker.service"]
+    service_after: ["docker.service", "network-online.target"]
+    service_wants: ["network.target"]
+    service_type: "oneshot"
+    remain_after_exit: "true"
+    working_directory: "{{ stack_home_directory }}"
+    service_user: "{{ stack_user }}"
+    service_group: "{{ stack_user }}"
+    service_environment: "{{ stack_environment_vars }}"
+    exec_start: "/usr/bin/docker compose up -d"
+    exec_stop: "/usr/bin/docker compose down"
+    exec_reload: "/usr/bin/docker compose restart"
+    syslog_identifier: "{{ stack_service_name }}"
+    timeout_start_sec: "0"
+    kill_mode: "none"
+    # Common security hardening
+    standard_output: "journal"
+    standard_error: "journal"
+    restart_policy: "on-failure"
+    restart_sec: "5"
+    wanted_by: "multi-user.target"
+    enable_security_hardening: true
+    no_new_privileges: "true"
+  become: true
+  notify: "restart {{ stack_service_name }}"
+
+- name: Enable Docker stack service for auto-start
+  ansible.builtin.systemd:
+    name: "{{ stack_service_name }}"
+    enabled: true
+    daemon_reload: true
+  become: true

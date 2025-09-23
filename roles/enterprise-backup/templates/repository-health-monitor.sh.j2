@@ -1,0 +1,323 @@
+#!/bin/bash
+# Enterprise Backup Repository Health Monitor
+# {{ ansible_managed }}
+# Cross-repository health checks and coordination
+
+set -euo pipefail
+
+# Configuration
+BACKUP_BASE="{{ enterprise_backup_base_path }}"
+MONITOR_LOG="${BACKUP_BASE}/logs/health-monitor-$(date +%Y%m%d).log"
+METRICS_DIR="${BACKUP_BASE}/metrics"
+CONFIG_DIR="${BACKUP_BASE}/config"
+
+# Service repositories to monitor
+REPOSITORIES=(
+{% for host in groups['services'] %}
+{% if hostvars[host]['restic_enabled'] | default(false) %}
+    "{{ hostvars[host]['device_role'] }}:{{ hostvars[host]['restic_repository'] }}:{{ hostvars[host]['inventory_hostname'] }}"
+{% endif %}
+{% endfor %}
+)
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "${MONITOR_LOG}"
+}
+
+# Error handling
+error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+}
+
+# Success message
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+# Warning message
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+# Info message
+info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+    log "INFO: $1"
+}
+
+# Initialize monitoring
+initialize_monitoring() {
+    mkdir -p "${METRICS_DIR}" "${BACKUP_BASE}/logs"
+    log "Repository health monitoring started"
+}
+
+# Check individual repository health
+check_repository_health() {
+    local service="$1"
+    local repo_url="$2"
+    local host="$3"
+    local status="unknown"
+    local last_backup="0"
+    local snapshot_count="0"
+    local repo_size="0"
+    local check_result="unknown"
+
+    info "Checking repository health for ${service} (${host})"
+
+    # Set repository environment
+    export RESTIC_REPOSITORY="$repo_url"
+    export RESTIC_PASSWORD_FILE="${BACKUP_BASE}/keys/${service}-password"
+    export RESTIC_CACHE_DIR="${BACKUP_BASE}/cache/${service}"
+
+    # Check if password file exists
+    if [[ ! -f "${RESTIC_PASSWORD_FILE}" ]]; then
+        error "Password file not found for ${service}: ${RESTIC_PASSWORD_FILE}"
+        status="password_missing"
+    else
+        # Test repository accessibility
+        if timeout 30 restic snapshots --latest 1 &>/dev/null; then
+            status="accessible"
+
+            # Get repository statistics
+            snapshot_count=$(restic snapshots --json 2>/dev/null | jq length || echo "0")
+
+            # Get last backup timestamp
+            last_backup=$(restic snapshots --latest 1 --json 2>/dev/null | \
+                         jq -r '.[0].time // "1970-01-01T00:00:00Z"' | \
+                         date -d - +%s 2>/dev/null || echo "0")
+
+            # Get repository size
+            repo_size=$(restic stats --json 2>/dev/null | jq -r '.total_size // "0"' || echo "0")
+
+            # Perform integrity check (quick)
+            if timeout 60 restic check --read-data-subset=1% &>/dev/null; then
+                check_result="pass"
+                success "Repository ${service} is healthy"
+            else
+                check_result="fail"
+                warning "Repository ${service} failed integrity check"
+                status="integrity_issues"
+            fi
+
+        else
+            status="inaccessible"
+            error "Repository ${service} is not accessible"
+        fi
+    fi
+
+    # Write metrics
+    write_repository_metrics "$service" "$host" "$status" "$last_backup" "$snapshot_count" "$repo_size" "$check_result"
+}
+
+# Write Prometheus metrics
+write_repository_metrics() {
+    local service="$1"
+    local host="$2"
+    local status="$3"
+    local last_backup="$4"
+    local snapshot_count="$5"
+    local repo_size="$6"
+    local check_result="$7"
+
+    local metrics_file="${METRICS_DIR}/repository-health.prom"
+    local temp_file="${metrics_file}.tmp"
+
+    # Remove old metrics for this service
+    if [[ -f "$metrics_file" ]]; then
+        grep -v "service=\"${service}\"" "$metrics_file" > "$temp_file" || touch "$temp_file"
+    else
+        touch "$temp_file"
+    fi
+
+    # Add new metrics
+    cat >> "$temp_file" << EOF
+# HELP backup_repository_accessible Repository accessibility status
+# TYPE backup_repository_accessible gauge
+backup_repository_accessible{service="${service}",host="${host}",status="${status}"} $([[ "$status" == "accessible" ]] && echo "1" || echo "0")
+
+# HELP backup_last_backup_timestamp Timestamp of last backup
+# TYPE backup_last_backup_timestamp gauge
+backup_last_backup_timestamp{service="${service}",host="${host}"} ${last_backup}
+
+# HELP backup_repository_snapshots Total snapshots in repository
+# TYPE backup_repository_snapshots gauge
+backup_repository_snapshots{service="${service}",host="${host}"} ${snapshot_count}
+
+# HELP backup_repository_size_bytes Repository size in bytes
+# TYPE backup_repository_size_bytes gauge
+backup_repository_size_bytes{service="${service}",host="${host}"} ${repo_size}
+
+# HELP backup_repository_check_status Repository integrity check status
+# TYPE backup_repository_check_status gauge
+backup_repository_check_status{service="${service}",host="${host}",result="${check_result}"} $([[ "$check_result" == "pass" ]] && echo "1" || echo "0")
+
+EOF
+
+    mv "$temp_file" "$metrics_file"
+}
+
+# Generate health summary
+generate_health_summary() {
+    local total_repos=0
+    local healthy_repos=0
+    local failed_repos=0
+    local oldest_backup=999999999999  # Very large number
+    local summary_file="${BACKUP_BASE}/reports/health-summary-$(date +%Y%m%d-%H%M).json"
+
+    mkdir -p "$(dirname "$summary_file")"
+
+    info "Generating health summary..."
+
+    # Analyze metrics
+    if [[ -f "${METRICS_DIR}/repository-health.prom" ]]; then
+        while IFS= read -r line; do
+            if [[ "$line" =~ backup_repository_accessible.*=.*1$ ]]; then
+                ((healthy_repos++))
+            elif [[ "$line" =~ backup_repository_accessible.*=.*0$ ]]; then
+                ((failed_repos++))
+            fi
+            if [[ "$line" =~ backup_repository_accessible ]]; then
+                ((total_repos++))
+            fi
+        done < "${METRICS_DIR}/repository-health.prom"
+    fi
+
+    # Calculate backup freshness
+    local current_time=$(date +%s)
+    local max_age=86400  # 24 hours
+
+    # Generate JSON summary
+    cat > "$summary_file" << EOF
+{
+    "timestamp": "$(date -Iseconds)",
+    "infrastructure": {
+        "total_repositories": ${total_repos},
+        "healthy_repositories": ${healthy_repos},
+        "failed_repositories": ${failed_repos},
+        "health_percentage": $((total_repos > 0 ? (healthy_repos * 100) / total_repos : 0))
+    },
+    "backup_freshness": {
+        "max_age_hours": $((max_age / 3600)),
+        "check_timestamp": ${current_time}
+    },
+    "status": "$([[ $failed_repos -eq 0 ]] && echo "healthy" || echo "degraded")"
+}
+EOF
+
+    # Display summary
+    echo
+    echo "📊 Enterprise Backup Health Summary"
+    echo "=================================="
+    echo "Total repositories: ${total_repos}"
+    echo "Healthy repositories: ${healthy_repos}"
+    echo "Failed repositories: ${failed_repos}"
+    echo "Health percentage: $((total_repos > 0 ? (healthy_repos * 100) / total_repos : 0))%"
+    echo "=================================="
+
+    log "Health summary generated: $summary_file"
+}
+
+# Send alerts for failures
+send_alerts() {
+    local failed_services=()
+
+    # Check for failed repositories
+    if [[ -f "${METRICS_DIR}/repository-health.prom" ]]; then
+        while IFS= read -r line; do
+            if [[ "$line" =~ backup_repository_accessible.*service=\"([^\"]+)\".*=.*0$ ]]; then
+                failed_services+=("${BASH_REMATCH[1]}")
+            fi
+        done < "${METRICS_DIR}/repository-health.prom"
+    fi
+
+    # Send alerts if configured
+    if [[ ${#failed_services[@]} -gt 0 && -n "${BACKUP_WEBHOOK_URL:-}" ]]; then
+        local alert_message="🚨 Backup Repository Alert: Failed repositories: ${failed_services[*]}"
+
+        curl -X POST "${BACKUP_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\":\"${alert_message}\"}" \
+            &>/dev/null || warning "Failed to send alert notification"
+    fi
+}
+
+# Cross-repository coordination check
+check_coordination() {
+    info "Checking cross-repository coordination..."
+
+    local coordination_file="${BACKUP_BASE}/coordination/status.json"
+    mkdir -p "$(dirname "$coordination_file")"
+
+    # Check for backup conflicts (multiple backups running simultaneously)
+    local active_backups=0
+    for service in "${REPOSITORIES[@]}"; do
+        local service_name=$(echo "$service" | cut -d: -f1)
+        local lock_file="${BACKUP_BASE}/locks/${service_name}.lock"
+
+        if [[ -f "$lock_file" ]]; then
+            local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+            if [[ $lock_age -lt 7200 ]]; then  # 2 hours
+                ((active_backups++))
+            else
+                warning "Stale lock file detected: $lock_file (age: $lock_age seconds)"
+                rm -f "$lock_file"
+            fi
+        fi
+    done
+
+    # Generate coordination status
+    cat > "$coordination_file" << EOF
+{
+    "timestamp": "$(date -Iseconds)",
+    "active_backups": ${active_backups},
+    "total_repositories": ${#REPOSITORIES[@]},
+    "coordination_status": "$([[ $active_backups -lt 3 ]] && echo "good" || echo "congested")"
+}
+EOF
+
+    if [[ $active_backups -ge 3 ]]; then
+        warning "High backup concurrency detected: ${active_backups} active backups"
+    else
+        info "Backup coordination status: good (${active_backups} active)"
+    fi
+}
+
+# Main execution
+main() {
+    echo "🔍 Enterprise Backup Repository Health Monitor"
+    echo "=============================================="
+    echo "Monitoring {{ groups['services'] | length }} service repositories"
+    echo "=============================================="
+
+    initialize_monitoring
+
+    # Check each repository
+    for repo_info in "${REPOSITORIES[@]}"; do
+        IFS=':' read -r service repo_url host <<< "$repo_info"
+        check_repository_health "$service" "$repo_url" "$host"
+    done
+
+    # Generate summary and alerts
+    generate_health_summary
+    check_coordination
+    send_alerts
+
+    success "Repository health monitoring completed"
+    echo "Log file: ${MONITOR_LOG}"
+}
+
+# Script execution with error handling
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

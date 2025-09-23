@@ -1,0 +1,62 @@
+# Main monitoring stack deployment tasks
+# Deploys Grafana, Prometheus, Loki, Uptime Kuma via native Debian packages
+
+- name: Include pre-deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
+- name: Include common requirements
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+  tags: [network]
+
+- name: Setup monitoring package repositories
+  ansible.builtin.include_tasks: repo_setup.yml
+  tags: [packages, repositories]
+
+- name: Install monitoring packages using common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages: "{{ monitoring_packages }}"
+  tags: [packages]
+
+- name: Include directory setup
+  ansible.builtin.include_tasks: directories.yml
+  tags: [directories]
+
+- name: Include configuration generation
+  ansible.builtin.include_tasks: config.yml
+  tags: [config]
+
+- name: Include service management
+  ansible.builtin.include_tasks: services.yml
+  tags: [services]
+
+
+- name: Display monitoring stack deployment summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Monitoring Stack Deployment Complete for {{ inventory_hostname }}
+
+      Services Available:
+      🎯 Grafana: {{ primary_ip }}:{{ grafana_port }} (Unified dashboards)
+      📊 Prometheus: {{ primary_ip }}:{{ prometheus_port }} (Metrics collection)
+      📝 Loki: {{ primary_ip }}:{{ loki_port }} (Log aggregation)
+      🔍 Uptime Kuma: {{ primary_ip }}:{{ uptime_kuma_port }} (Service monitoring)
+      🚨 Alertmanager: {{ primary_ip }}:{{ alertmanager_port }} (Alert routing)
+
+      Configuration:
+      📁 Stack Home: {{ monitoring_stack_home }}
+      💾 Data Path: {{ monitoring_data_path }}
+      👤 User: {{ monitoring_user }} ({{ monitoring_uid }}:{{ monitoring_gid }})
+      🔒 SSL: {{ 'Enabled' if enable_ssl else 'Disabled' }}
+
+      Next Steps:
+      1. Configure Prometheus targets in inventory
+      2. Deploy Promtail agents on service machines
+      3. Import Grafana dashboards
+      4. Configure alerting rules
+  tags: [summary]

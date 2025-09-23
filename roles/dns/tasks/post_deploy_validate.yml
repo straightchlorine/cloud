@@ -4,13 +4,13 @@
 - name: Wait for Pi-hole service to be ready
   ansible.builtin.wait_for:
     port: 80
-    host: "{{ ansible_default_ipv4.address }}"
+    host: "{{ primary_ip }}"
     timeout: 60
   tags: [post_validation]
 
 - name: Test Pi-hole DNS resolution
   ansible.builtin.command: |
-    nslookup google.com {{ ansible_default_ipv4.address }}
+    nslookup google.com {{ primary_ip }}
   register: dns_test
   failed_when: dns_test.rc != 0
   changed_when: false
@@ -18,7 +18,7 @@
 
 - name: Verify Pi-hole web interface is accessible
   ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}/admin/"
+    url: "http://{{ primary_ip }}/admin/"
     method: GET
     timeout: 10
   register: pihole_web
@@ -26,7 +26,7 @@
 
 - name: Test Pi-hole API response
   ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}/admin/api.php?summary"
+    url: "http://{{ primary_ip }}/admin/api.php?summary"
     method: GET
     timeout: 10
   register: pihole_api
@@ -34,7 +34,7 @@
 
 - name: Verify Pi-hole is blocking ads
   ansible.builtin.command: |
-    nslookup doubleclick.net {{ ansible_default_ipv4.address }}
+    nslookup doubleclick.net {{ primary_ip }}
   register: ad_block_test
   failed_when: false
   changed_when: false

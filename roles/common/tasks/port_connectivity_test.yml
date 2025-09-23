@@ -21,7 +21,7 @@
 
 - name: Test internal connectivity between services
   ansible.builtin.command: |
-    nc -z {{ ansible_default_ipv4.address }} {{ item.port }}
+    nc -z {{ primary_ip }} {{ item.port }}
   loop: "{{ firewall_ports | default([]) }}"
   when:
     - firewall_ports is defined

@@ -1,0 +1,392 @@
+#!/bin/bash
+# Enterprise Backup Coordinator
+# {{ ansible_managed }}
+# Coordinates backup operations across multiple repositories to prevent conflicts
+
+set -euo pipefail
+
+# Configuration
+BACKUP_BASE="{{ enterprise_backup_base_path }}"
+COORDINATOR_LOG="${BACKUP_BASE}/logs/coordinator-$(date +%Y%m%d).log"
+LOCKS_DIR="${BACKUP_BASE}/locks"
+COORDINATION_DIR="${BACKUP_BASE}/coordination"
+MAX_CONCURRENT_BACKUPS="{{ max_concurrent_backups | default('2') }}"
+
+# Service priorities (lower number = higher priority)
+declare -A SERVICE_PRIORITIES=(
+    ["dns"]="1"          # Critical DNS infrastructure
+    ["automation"]="2"   # Container orchestration
+    ["monitoring"]="3"   # Monitoring data
+    ["music"]="4"        # Media content
+)
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "${COORDINATOR_LOG}"
+}
+
+# Error handling
+error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+}
+
+# Success message
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+# Warning message
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+# Info message
+info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+    log "INFO: $1"
+}
+
+# Initialize coordination system
+initialize_coordination() {
+    mkdir -p "${LOCKS_DIR}" "${COORDINATION_DIR}" "${BACKUP_BASE}/logs"
+    log "Backup coordination system initialized"
+}
+
+# Check if backup can proceed
+can_backup_proceed() {
+    local service="$1"
+    local current_backups=0
+    local blocking_services=()
+
+    # Count current active backups
+    for lock_file in "${LOCKS_DIR}"/*.lock; do
+        [[ -f "$lock_file" ]] || continue
+
+        local lock_service=$(basename "$lock_file" .lock)
+        local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+
+        # Consider locks older than 4 hours as stale
+        if [[ $lock_age -gt 14400 ]]; then
+            warning "Removing stale lock for ${lock_service} (age: $lock_age seconds)"
+            rm -f "$lock_file"
+            continue
+        fi
+
+        ((current_backups++))
+        blocking_services+=("$lock_service")
+    done
+
+    # Check if we're under the concurrent backup limit
+    if [[ $current_backups -ge $MAX_CONCURRENT_BACKUPS ]]; then
+        info "Cannot proceed: ${current_backups}/${MAX_CONCURRENT_BACKUPS} concurrent backups running"
+        info "Blocking services: ${blocking_services[*]}"
+        return 1
+    fi
+
+    # Check priority conflicts
+    local service_priority="${SERVICE_PRIORITIES[$service]:-999}"
+    for blocking_service in "${blocking_services[@]}"; do
+        local blocking_priority="${SERVICE_PRIORITIES[$blocking_service]:-999}"
+        if [[ $blocking_priority -le $service_priority ]]; then
+            info "Cannot proceed: Higher priority service ${blocking_service} is running"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+# Acquire backup lock
+acquire_lock() {
+    local service="$1"
+    local lock_file="${LOCKS_DIR}/${service}.lock"
+    local max_wait="${2:-300}"  # 5 minutes default
+    local wait_time=0
+
+    while [[ $wait_time -lt $max_wait ]]; do
+        if can_backup_proceed "$service"; then
+            # Create lock file with metadata
+            cat > "$lock_file" << EOF
+{
+    "service": "${service}",
+    "host": "{{ inventory_hostname }}",
+    "pid": $$,
+    "start_time": "$(date -Iseconds)",
+    "coordinator_version": "1.0"
+}
+EOF
+            success "Lock acquired for ${service}"
+            return 0
+        fi
+
+        info "Waiting for backup slot (${wait_time}/${max_wait} seconds)..."
+        sleep 30
+        wait_time=$((wait_time + 30))
+    done
+
+    error "Failed to acquire lock for ${service} after ${max_wait} seconds"
+    return 1
+}
+
+# Release backup lock
+release_lock() {
+    local service="$1"
+    local lock_file="${LOCKS_DIR}/${service}.lock"
+
+    if [[ -f "$lock_file" ]]; then
+        rm -f "$lock_file"
+        success "Lock released for ${service}"
+    else
+        warning "No lock file found for ${service}"
+    fi
+}
+
+# Update coordination status
+update_coordination_status() {
+    local status_file="${COORDINATION_DIR}/status.json"
+    local active_backups=()
+    local queued_requests=()
+
+    # Scan for active backups
+    for lock_file in "${LOCKS_DIR}"/*.lock; do
+        [[ -f "$lock_file" ]] || continue
+
+        local service=$(basename "$lock_file" .lock)
+        local lock_content=$(cat "$lock_file" 2>/dev/null || echo '{}')
+        active_backups+=("\"$service\"")
+    done
+
+    # Scan for queued requests
+    for queue_file in "${COORDINATION_DIR}"/queue-*.json; do
+        [[ -f "$queue_file" ]] || continue
+
+        local service=$(basename "$queue_file" | sed 's/queue-\(.*\)\.json/\1/')
+        queued_requests+=("\"$service\"")
+    done
+
+    # Generate status JSON
+    cat > "$status_file" << EOF
+{
+    "timestamp": "$(date -Iseconds)",
+    "coordinator": {
+        "max_concurrent": ${MAX_CONCURRENT_BACKUPS},
+        "active_count": ${#active_backups[@]},
+        "queued_count": ${#queued_requests[@]}
+    },
+    "active_backups": [$(IFS=,; echo "${active_backups[*]}")],
+    "queued_requests": [$(IFS=,; echo "${queued_requests[*]}")],
+    "service_priorities": {
+$(for service in "${!SERVICE_PRIORITIES[@]}"; do
+    echo "        \"$service\": ${SERVICE_PRIORITIES[$service]},"
+done | sed '$ s/,$//')
+    }
+}
+EOF
+}
+
+# Queue backup request
+queue_backup_request() {
+    local service="$1"
+    local priority="${SERVICE_PRIORITIES[$service]:-999}"
+    local queue_file="${COORDINATION_DIR}/queue-${service}.json"
+
+    cat > "$queue_file" << EOF
+{
+    "service": "${service}",
+    "host": "{{ inventory_hostname }}",
+    "priority": ${priority},
+    "requested_at": "$(date -Iseconds)",
+    "requester_pid": $$
+}
+EOF
+
+    info "Backup request queued for ${service} (priority: ${priority})"
+}
+
+# Process backup queue
+process_backup_queue() {
+    local processed_any=false
+
+    # Find highest priority queued request that can proceed
+    for queue_file in "${COORDINATION_DIR}"/queue-*.json; do
+        [[ -f "$queue_file" ]] || continue
+
+        local service=$(basename "$queue_file" | sed 's/queue-\(.*\)\.json/\1/')
+
+        if can_backup_proceed "$service"; then
+            info "Processing queued backup for ${service}"
+
+            # Acquire lock and remove from queue
+            if acquire_lock "$service" 0; then  # No wait since we already checked
+                rm -f "$queue_file"
+
+                # Execute backup
+                execute_backup "$service"
+
+                # Release lock
+                release_lock "$service"
+
+                processed_any=true
+                break
+            fi
+        fi
+    done
+
+    if [[ "$processed_any" == "false" ]]; then
+        info "No queued backups can proceed at this time"
+    fi
+}
+
+# Execute backup for service
+execute_backup() {
+    local service="$1"
+    local backup_script="${BACKUP_BASE}/scripts/backup-${service}.sh"
+
+    info "Executing backup for ${service}..."
+
+    if [[ -x "$backup_script" ]]; then
+        if "$backup_script"; then
+            success "Backup completed for ${service}"
+        else
+            error "Backup failed for ${service}"
+            return 1
+        fi
+    else
+        error "Backup script not found or not executable: ${backup_script}"
+        return 1
+    fi
+}
+
+# Cleanup stale coordination files
+cleanup_coordination() {
+    local current_time=$(date +%s)
+
+    # Clean old queue files (older than 1 hour)
+    for queue_file in "${COORDINATION_DIR}"/queue-*.json; do
+        [[ -f "$queue_file" ]] || continue
+
+        local file_age=$((current_time - $(stat -c %Y "$queue_file" 2>/dev/null || echo 0)))
+        if [[ $file_age -gt 3600 ]]; then
+            warning "Removing stale queue file: $(basename "$queue_file")"
+            rm -f "$queue_file"
+        fi
+    done
+
+    # Clean old lock files (older than 4 hours)
+    for lock_file in "${LOCKS_DIR}"/*.lock; do
+        [[ -f "$lock_file" ]] || continue
+
+        local file_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [[ $file_age -gt 14400 ]]; then
+            warning "Removing stale lock file: $(basename "$lock_file")"
+            rm -f "$lock_file"
+        fi
+    done
+}
+
+# Show coordination status
+show_status() {
+    echo "🔄 Enterprise Backup Coordinator Status"
+    echo "======================================"
+
+    local active_count=0
+    local queued_count=0
+
+    # Count active backups
+    for lock_file in "${LOCKS_DIR}"/*.lock; do
+        [[ -f "$lock_file" ]] || continue
+        ((active_count++))
+
+        local service=$(basename "$lock_file" .lock)
+        local lock_info=$(cat "$lock_file" 2>/dev/null | jq -r '.start_time // "unknown"' 2>/dev/null || echo "unknown")
+        echo "🔒 Active: ${service} (started: ${lock_info})"
+    done
+
+    # Count queued requests
+    for queue_file in "${COORDINATION_DIR}"/queue-*.json; do
+        [[ -f "$queue_file" ]] || continue
+        ((queued_count++))
+
+        local service=$(basename "$queue_file" | sed 's/queue-\(.*\)\.json/\1/')
+        local priority=$(cat "$queue_file" 2>/dev/null | jq -r '.priority // "unknown"' 2>/dev/null || echo "unknown")
+        echo "⏳ Queued: ${service} (priority: ${priority})"
+    done
+
+    echo "======================================"
+    echo "Active: ${active_count}/${MAX_CONCURRENT_BACKUPS}"
+    echo "Queued: ${queued_count}"
+    echo "======================================"
+}
+
+# Main command handler
+main() {
+    initialize_coordination
+
+    case "${1:-}" in
+        "request")
+            local service="${2:-}"
+            if [[ -z "$service" ]]; then
+                error "Service name required for request command"
+                exit 1
+            fi
+
+            if acquire_lock "$service"; then
+                execute_backup "$service"
+                release_lock "$service"
+            else
+                queue_backup_request "$service"
+            fi
+            ;;
+
+        "process-queue")
+            process_backup_queue
+            ;;
+
+        "status")
+            show_status
+            ;;
+
+        "cleanup")
+            cleanup_coordination
+            ;;
+
+        "monitor")
+            # Continuous monitoring mode
+            while true; do
+                cleanup_coordination
+                process_backup_queue
+                update_coordination_status
+                sleep 60
+            done
+            ;;
+
+        *)
+            echo "Usage: $0 {request <service>|process-queue|status|cleanup|monitor}"
+            echo ""
+            echo "Commands:"
+            echo "  request <service>  - Request backup for specific service"
+            echo "  process-queue      - Process queued backup requests"
+            echo "  status            - Show coordination status"
+            echo "  cleanup           - Clean up stale coordination files"
+            echo "  monitor           - Continuous monitoring and queue processing"
+            exit 1
+            ;;
+    esac
+
+    update_coordination_status
+}
+
+# Script execution
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

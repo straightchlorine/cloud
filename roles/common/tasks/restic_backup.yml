@@ -1,0 +1,190 @@
+# Unified Restic Backup Implementation
+# Eliminates redundancy between automation and enterprise-backup roles
+# Provides scalable backup solution with enterprise features when needed
+
+- name: Validate required backup variables
+  ansible.builtin.fail:
+    msg: "Required backup variable '{{ item }}' is not defined"
+  when: vars[item] is not defined or vars[item] == ""
+  loop:
+    - backup_service_name
+    - restic_repository
+    - restic_password
+    - backup_paths
+  no_log: true
+
+- name: Create backup user (if not already created)
+  ansible.builtin.user:
+    name: backup
+    system: true
+    shell: /bin/bash
+    home: "{{ backup_base_path }}"
+    create_home: true
+    groups: "{{ backup_additional_groups | default(['docker']) }}"
+    append: true
+  become: true
+
+- name: Install restic backup tool
+  ansible.builtin.get_url:
+    url: "https://github.com/restic/restic/releases/latest/download/restic_{{ ansible_system | lower }}_{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    dest: /usr/local/bin/restic
+    mode: '0755'
+    backup: true
+    force: false  # Don't overwrite if already exists
+  become: true
+  register: restic_download
+
+- name: Verify restic installation
+  ansible.builtin.command: restic version
+  register: restic_version_check
+  changed_when: false
+
+- name: Create backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: true
+  loop:
+    - "{{ backup_base_path }}/scripts"
+    - "{{ backup_base_path }}/logs"
+    - "{{ backup_base_path }}/cache"
+    - "{{ backup_base_path }}/keys"
+
+- name: Create service-specific restic password file
+  ansible.builtin.copy:
+    content: "{{ restic_password }}"
+    dest: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
+    owner: backup
+    group: backup
+    mode: '0600'
+  become: true
+  no_log: true
+
+- name: Generate SSH key for backup access (if needed)
+  ansible.builtin.openssh_keypair:
+    path: "{{ backup_base_path }}/keys/{{ backup_service_name }}-ssh-key"
+    type: ed25519
+    owner: backup
+    group: backup
+    mode: '0600'
+  become: true
+  when: backup_ssh_config is defined
+
+- name: Create service backup script
+  ansible.builtin.template:
+    src: backup-script.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
+    owner: backup
+    group: backup
+    mode: '0755'
+  vars:
+    backup_directories: "{{ backup_paths }}"
+    backup_password_file: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
+    backup_cache_dir: "{{ backup_base_path }}/cache"
+    backup_log_dir: "{{ backup_base_path }}/logs"
+    backup_ssh_config: "{{ backup_ssh_config | default(omit) }}"
+  become: true
+
+- name: Create repository initialization script
+  ansible.builtin.template:
+    src: restic-init.sh.j2
+    dest: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
+    owner: backup
+    group: backup
+    mode: '0755'
+  vars:
+    backup_password_file: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
+    backup_ssh_key_path: "{{ backup_base_path }}/keys/{{ backup_service_name }}-ssh-key"
+  become: true
+
+- name: Create systemd backup service
+  ansible.builtin.template:
+    src: systemd-service.j2
+    dest: "/etc/systemd/system/backup-{{ backup_service_name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    service_description: "Restic Backup Service for {{ backup_service_name }}"
+    service_after: ["network.target"]
+    service_wants: ["network.target"]
+    service_type: "oneshot"
+    service_user: "backup"
+    service_group: "backup"
+    working_directory: "{{ backup_base_path }}"
+    service_environment:
+      - "RESTIC_REPOSITORY={{ restic_repository }}"
+      - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ backup_service_name }}-password"
+      - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache"
+    exec_start: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
+    standard_output: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
+    standard_error: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
+    timeout_start_sec: "{{ backup_timeout | default('1800') }}"
+    protect_system: "strict"
+    protect_home: "read-only"
+    private_tmp: "yes"
+    read_write_paths:
+      - "{{ backup_base_path }}"
+      - "{{ backup_paths | join(',') }}"
+  become: true
+  notify: reload systemd
+
+- name: Create systemd backup timer
+  ansible.builtin.template:
+    src: backup-timer.j2
+    dest: "/etc/systemd/system/backup-{{ backup_service_name }}.timer"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    timer_description: "Backup Timer for {{ backup_service_name }}"
+    timer_service: "backup-{{ backup_service_name }}.service"
+    timer_schedule: "{{ backup_schedule | default('0 3 * * *') }}"
+    timer_randomized_delay: "{{ backup_randomized_delay | default('300') }}"
+  become: true
+  notify: reload systemd
+
+- name: Set permissions on backup paths for backup user
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "g+rx"
+    recurse: false
+  become: true
+  loop: "{{ backup_paths }}"
+
+- name: Enable and start backup timer
+  ansible.builtin.systemd:
+    name: "backup-{{ backup_service_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: backup_enabled | default(true)
+
+- name: Initialize restic repository if it doesn't exist
+  ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
+  become_user: backup
+  become: true
+  register: repository_init
+  changed_when: "'initialized' in repository_init.stdout"
+  failed_when: repository_init.rc != 0 and 'already exists' not in repository_init.stderr
+
+- name: Display backup configuration summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Unified Restic Backup Configured for {{ backup_service_name }}:
+
+      Repository: {{ restic_repository }}
+      Schedule: {{ backup_schedule | default('0 3 * * *') }}
+      Backup Paths: {{ backup_paths | join(', ') }}
+      Service: backup-{{ backup_service_name }}.service
+      Timer: backup-{{ backup_service_name }}.timer
+      Script: {{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh
+
+      Logs: {{ backup_base_path }}/logs/
+      Status: {{ 'Enabled' if backup_enabled | default(true) else 'Disabled' }}
+      Restic Version: {{ restic_version_check.stdout | default('Unknown') }}

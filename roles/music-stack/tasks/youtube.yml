@@ -1,0 +1,47 @@
+# YouTube sync configuration
+
+- name: Debug YouTube sync configuration
+  ansible.builtin.debug:
+    msg:
+      - "youtube_sync_enabled: {{ youtube_sync_enabled }}"
+      - "youtube_playlists: {{ youtube_playlists }}"
+  tags: [youtube, debug]
+
+- name: Add PATH environment variable to crontab
+  ansible.builtin.cron:
+    name: "PATH"
+    env: true
+    value: "/usr/local/bin:/usr/bin:/bin"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled
+  tags: [youtube, cron]
+
+- name: Add PLAYLIST_URL environment variable to crontab for YouTube sync
+  ansible.builtin.cron:
+    name: "PLAYLIST_URL"
+    env: true
+    value: "{{ vault_youtube_playlist_url }}"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled and vault_youtube_playlist_url is defined
+  tags: [youtube, cron]
+
+- name: Create cron job for daily YouTube playlist sync
+  ansible.builtin.cron:
+    name: "Daily YouTube playlist sync"
+    hour: "2"
+    minute: "30"
+    job: "{{ music_stack_home }}/scripts/youtube-cron.sh >> {{ music_library_path }}/logs/youtube-cron.log 2>&1"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled
+  tags: [youtube, cron]
+
+- name: Create cron job for weekly Beets rescan
+  ansible.builtin.cron:
+    name: "Weekly Beets rescan of misc folder"
+    hour: "4"
+    minute: "15"
+    weekday: "0"
+    job: "{{ music_stack_home }}/scripts/beets-rescan.sh >> {{ music_library_path }}/logs/beets-rescan.log 2>&1"
+    user: "{{ ansible_user }}"
+  when: youtube_sync_enabled
+  tags: [youtube, cron, beets]

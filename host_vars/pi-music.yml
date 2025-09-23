@@ -6,10 +6,8 @@ music_stack_enabled: true
 music_stack_home: "/home/media/compose"
 
 ssd_device: "/dev/sda1"
-ssd_filesystem: "ext4"
-ssd_mount_options: "defaults,noatime,errors=remount-ro"
+# SSD configuration inherited from group_vars/services.yml common_ssd_config
 music_library_path: "/mnt/data"
-ssd_format: false
 
 ansible_uid: 1000
 ansible_gid: 1000
@@ -59,3 +57,10 @@ backup_exclude_patterns:
   - "**/logs/*"
   - "docker/overlay2/*"
   - "**/*.cache"
+
+# Music stack configuration
+navidrome_port: 4545
+
+# Systemd and backup configuration inherited from group_vars/services.yml
+# common_systemd_config and common_backup_config
+backup_service_name: "music"

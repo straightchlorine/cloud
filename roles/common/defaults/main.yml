@@ -2,7 +2,6 @@
 
 # System Configuration
 timezone: UTC
-package_cache_valid_time: 3600
 
 # Security Configuration  
 fail2ban_enabled: true
@@ -29,4 +28,18 @@ common_packages:
   - ca-certificates
   - gnupg
   - lsb-release
+
+# Common Storage Configuration
+filesystem_utilities:
+  - e2fsprogs
+  - parted
+  - dosfstools
+
+# SSD configuration defaults
+ssd_filesystem: "ext4"
+ssd_mount_options: "defaults,noatime,errors=remount-ro"
+ssd_format: false
+
+# Stack management
+start_stack: true
 

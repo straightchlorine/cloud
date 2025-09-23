@@ -1,0 +1,118 @@
+# Prometheus configuration for centralized monitoring
+# Scrapes metrics from all service machines in the infrastructure
+
+global:
+  scrape_interval: {{ prometheus_scrape_interval }}
+  evaluation_interval: {{ prometheus_evaluation_interval }}
+  external_labels:
+    monitor: 'infrastructure-monitor'
+    cluster: 'home-lab'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:{{ alertmanager_port }}
+
+# Load alerting rules
+rule_files:
+  - "rules/*.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:{{ prometheus_port }}']
+        labels:
+          service: 'prometheus'
+          role: 'monitoring'
+
+  # Alertmanager
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['localhost:{{ alertmanager_port }}']
+        labels:
+          service: 'alertmanager'
+          role: 'monitoring'
+
+  # Node Exporter - All machines
+  - job_name: 'node-exporter'
+    static_configs:
+{% for host in groups['all'] %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:9100']
+        labels:
+          instance: '{{ host }}'
+          role: '{{ hostvars[host]['prometheus_role'] }}'
+          device_type: '{{ hostvars[host]['device_type'] }}'
+{% endfor %}
+
+  # DNS Services (Pi-hole)
+  - job_name: 'pihole-exporter'
+    static_configs:
+{% for host in groups['all'] %}
+{% if hostvars[host]['prometheus_role'] == 'dns' %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:9617']
+        labels:
+          instance: '{{ host }}'
+          service: 'pihole'
+          role: 'dns'
+{% endif %}
+{% endfor %}
+
+  # Automation Stack Services
+  - job_name: 'traefik'
+    static_configs:
+{% for host in groups['all'] %}
+{% if hostvars[host]['prometheus_role'] == 'automation' %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:8080']
+        labels:
+          instance: '{{ host }}'
+          service: 'traefik'
+          role: 'automation'
+        metrics_path: '/metrics'
+{% endif %}
+{% endfor %}
+
+  # Docker containers (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+{% for host in groups['all'] %}
+{% if hostvars[host]['prometheus_role'] in ['automation', 'music'] %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:8081']
+        labels:
+          instance: '{{ host }}'
+          service: 'cadvisor'
+          role: '{{ hostvars[host]['prometheus_role'] }}'
+{% endif %}
+{% endfor %}
+
+  # Music Stack Services
+  - job_name: 'navidrome'
+    static_configs:
+{% for host in groups['all'] %}
+{% if hostvars[host]['prometheus_role'] == 'music' %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:4533']
+        labels:
+          instance: '{{ host }}'
+          service: 'navidrome'
+          role: 'music'
+        metrics_path: '/metrics'
+{% endif %}
+{% endfor %}
+
+  # Custom application metrics
+  - job_name: 'backup-scripts'
+    static_configs:
+{% for host in groups['all'] %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:9101']
+        labels:
+          instance: '{{ host }}'
+          service: 'backup-metrics'
+          role: '{{ hostvars[host]['prometheus_role'] }}'
+{% endfor %}
+    scrape_interval: 60s
+
+# Remote write configuration (optional for long-term storage)
+# remote_write:
+#   - url: "http://your-remote-storage:9201/api/v1/write"

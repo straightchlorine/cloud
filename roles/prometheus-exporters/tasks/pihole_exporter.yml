@@ -23,11 +23,32 @@
 
 - name: Create Pi-hole Exporter systemd service
   ansible.builtin.template:
-    src: pihole-exporter.service.j2
+    src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
     group: root
     mode: '0644'
+  vars:
+    service_description: "Pi-hole Prometheus Exporter"
+    service_after: ["network.target"]
+    service_wants: ["network.target"]
+    service_type: "simple"
+    service_user: "{{ prometheus_exporters_user }}"
+    service_group: "{{ prometheus_exporters_group }}"
+    exec_start: >-
+      {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
+      -pihole_hostname {{ pihole_exporter_pihole_hostname }}
+      -pihole_password {{ pihole_exporter_pihole_password }}
+      -port {{ pihole_exporter_port }}
+    restart_policy: "on-failure"
+    restart_sec: "5"
+    syslog_identifier: "pihole-exporter"
+    kill_mode: "mixed"
+    timeout_stop_sec: "5"
+    protect_system: "strict"
+    protect_home: "yes"
+    private_tmp: "yes"
+    read_write_paths: ["{{ prometheus_exporters_base_dir }}/bin"]
   become: yes
   notify:
     - reload systemd

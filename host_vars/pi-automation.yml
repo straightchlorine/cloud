@@ -7,9 +7,7 @@ device_specs:
   architecture: "aarch64"
 
 ssd_device: "/dev/sda1"
-ssd_filesystem: "ext4"
-ssd_mount_options: "defaults,noatime,errors=remount-ro"
-ssd_format: false
+# SSD configuration inherited from group_vars/services.yml common_ssd_config
 automation_data_path: "/mnt/automation-data"
 
 # Subdomains for automation services
@@ -27,7 +25,7 @@ automation_stack_home: "/home/automation/automation-stack"
 firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 80, comment: "HTTP"}
-  - {port: 443, comment: "HTTPS",}
+  - {port: 443, comment: "HTTPS"}
 
 # Service enablement
 services_enabled:
@@ -63,3 +61,10 @@ backup_exclude_patterns:
   - "*.log.1*"
   - "**/logs/*"
   - "docker/overlay2/*"
+
+# Systemd and backup configuration inherited from group_vars/services.yml
+# common_systemd_config and common_backup_config
+backup_service_name: "automation"
+
+# Vault variables that must be defined
+vault_watchtower_api_token: "{{ vault_watchtower_api_token }}"

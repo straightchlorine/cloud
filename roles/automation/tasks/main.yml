@@ -22,12 +22,35 @@
     role_specific_packages: "{{ automation_specific_packages }}"
   tags: [packages]
 
+- name: Create automation user
+  ansible.builtin.user:
+    name: "{{ automation_user }}"
+    uid: "{{ automation_uid }}"
+    group: "{{ automation_user }}"
+    groups: docker
+    append: true
+    shell: /bin/bash
+    home: "/home/{{ automation_user }}"
+    create_home: true
+  become: true
+
 - name: Include storage setup
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
 
-- name: Include Docker setup
-  ansible.builtin.include_tasks: docker.yml
+- name: Include common Docker setup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker
+  tags: [docker]
+
+- name: Create automation stack home directory
+  ansible.builtin.file:
+    path: "{{ automation_stack_home }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
   tags: [docker]
 
 - name: Include Traefik setup
@@ -39,9 +62,30 @@
   ansible.builtin.include_tasks: stack.yml
   tags: [stack, deploy]
 
-- name: Include backup configuration
-  ansible.builtin.include_tasks: backup.yml
-  when: restic_enabled
+- name: Configure unified restic backup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: restic_backup
+  vars:
+    backup_service_name: "automation"
+    backup_paths:
+      - "{{ automation_stack_home }}"
+      - "{{ automation_data_path }}"
+    backup_schedule: "0 3 * * *"
+    backup_excludes:
+      - "*.log"
+      - "tmp/*"
+      - "cache/*"
+    pre_backup_commands:
+      - "docker compose -f {{ automation_stack_home }}/docker-compose.yml pause"
+    post_backup_commands:
+      - "docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause"
+    backup_ssh_config:
+      host: "{{ backup_ssh_host }}"
+      port: "{{ backup_ssh_port }}"
+      user: "{{ backup_ssh_user }}"
+      remote_path: "/backups"
+  when: restic_enabled | default(false)
   tags: [backup]
 
 - name: Configure firewall
@@ -49,23 +93,19 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Create systemd service for auto-start
-  ansible.builtin.template:
-    src: automation-stack.service.j2
-    dest: /etc/systemd/system/automation-stack.service
-    owner: root
-    group: root
-    mode: '0644'
-  become: true
-  notify: restart automation stack
-  tags: [systemd, auto-start]
-
-- name: Enable automation stack service for auto-start
-  ansible.builtin.systemd:
-    name: automation-stack
-    enabled: true
-    daemon_reload: true
-  become: true
+- name: Create Docker stack systemd service
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_stack_service
+  vars:
+    stack_service_name: "automation-stack"
+    stack_description: "Automation Stack (Traefik, Vaultwarden, InfluxDB)"
+    stack_home_directory: "{{ automation_stack_home }}"
+    stack_user: "{{ automation_user }}"
+    stack_environment_vars:
+      - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
+      - "PUID={{ automation_uid }}"
+      - "PGID={{ automation_gid }}"
   tags: [systemd, auto-start]
 
 - name: Run post-deployment validation

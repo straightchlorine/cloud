@@ -1,12 +1,16 @@
 # Music stack deployment
 
-- name: Create Docker Compose file
-  ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: "{{ music_stack_home }}/docker-compose.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
+- name: Create standardized Docker Compose file
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: build_docker_compose
+  vars:
+    compose_file_path: "{{ music_stack_home }}/docker-compose.yml"
+    compose_file_owner: "{{ ansible_user }}"
+    compose_file_group: "{{ ansible_user }}"
+    stack_name: "music-stack"
+    compose_services: "{{ music_stack_compose_services }}"
+    compose_networks: "{{ music_stack_compose_networks }}"
   notify: restart music stack
 
 - name: Create Beets config directory
@@ -120,11 +124,12 @@
     navidrome_jwt_secret: "{{ jwt_secret_content.content | b64decode | trim }}"
   notify: restart music stack
 
-- name: Install minimal dependencies for yt-dlp
-  ansible.builtin.apt:
-    name: "{{ ytdlp_dependencies }}"
-    state: present
-  become: true
+- name: Install yt-dlp dependencies using common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages: "{{ ytdlp_dependencies }}"
   tags: [youtube, ytdlp]
 
 - name: Detect system architecture for yt-dlp
@@ -132,9 +137,17 @@
     ytdlp_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'arm64' }}"
   tags: [youtube, ytdlp]
 
+- name: Download yt-dlp GPG public key
+  ansible.builtin.get_url:
+    url: https://github.com/yt-dlp/yt-dlp/raw/master/public.key
+    dest: /tmp/yt-dlp-public.key
+    mode: '0644'
+  become_user: "{{ ansible_user }}"
+  tags: [youtube, ytdlp, security]
+
 - name: Import yt-dlp GPG public key
   ansible.builtin.shell: |
-    curl -L https://github.com/yt-dlp/yt-dlp/raw/master/public.key | gpg --import
+    gpg --import /tmp/yt-dlp-public.key
   become_user: "{{ ansible_user }}"
   changed_when: false
   tags: [youtube, ytdlp, security]
@@ -195,6 +208,7 @@
     - SHA2-256SUMS
     - SHA2-256SUMS.sig
     - yt-dlp_binary
+    - yt-dlp-public.key
   become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp]
 
@@ -276,11 +290,12 @@
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"
     state: present
+  become_user: "{{ ansible_user }}"
   when: start_stack
 
 - name: Verify Navidrome is responding
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ navidrome_port }}/app"
+    url: "http://{{ primary_ip }}:{{ navidrome_port }}/app"
     method: GET
   register: navidrome_health
   until: navidrome_health.status == 200

@@ -59,13 +59,22 @@
       ✅ Allows code review before installation
       ✅ Verifiable source and provenance
 
+- name: Create Pi-hole configuration directory
+  ansible.builtin.file:
+    path: /etc/pihole
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
 - name: Create Pi-hole setup vars file
   ansible.builtin.template:
     src: setupVars.conf.j2
     dest: /etc/pihole/setupVars.conf
     owner: root
     group: root
-    mode: '0644'
+    mode: '0600'
   become: true
   notify: restart pihole-FTL
 
@@ -81,9 +90,9 @@
 
 - name: Set Pi-hole web admin password
   ansible.builtin.shell: |
-    pihole -a -p "{{ pihole_webpassword }}"
+    pihole -a -p "{{ vault_pihole_webpassword }}"
   become: true
-  when: pihole_webpassword is defined
+  when: vault_pihole_webpassword is defined
   no_log: true
 
 - name: Clean up Pi-hole repository after installation

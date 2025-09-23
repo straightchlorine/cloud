@@ -1,4 +1,4 @@
-# Common variables for all service hosts
+# Service-specific variables for service hosts
 
 # DNS Configuration
 dns_upstream_servers:
@@ -8,7 +8,6 @@ dns_upstream_servers:
 # System Configuration
 ansible_python_interpreter: /usr/bin/python3
 os_type: debian_bookworm
-timezone: Europe/Warsaw
 
 # Network Configuration (dynamically detected)
 local_network: "{{ primary_network_cidr }}"
@@ -18,36 +17,43 @@ common_firewall_ports:
   - port: 22
     comment: "SSH access"
 
-# Common System Packages
-common_packages:
-  - curl
-  - wget
-  - git
-  - htop
-  - vim
-  - ufw
-  - fail2ban
-  - logrotate
-  - rsync
-  - unzip
-  - software-properties-common
-  - ca-certificates
-  - gnupg
-  - lsb-release
-
 # Monitoring Configuration
 prometheus_node_exporter_enabled: true
 prometheus_node_exporter_port: 9100
 
-# Log Management
-log_rotation_days: 30
-log_compression: true
+# Common Systemd Service Configuration (eliminates duplication)
+# Used by all Docker stack services
+common_systemd_config:
+  service_type: "oneshot"
+  remain_after_exit: "true"
+  standard_output: "journal"
+  standard_error: "journal"
+  restart_policy: "on-failure"
+  restart_sec: "5"
+  wanted_by: "multi-user.target"
+  enable_security_hardening: true
+  no_new_privileges: "true"
 
-# Security Configuration
-fail2ban_enabled: true
-fail2ban_ssh_maxretry: 3
-fail2ban_ssh_bantime: 600
+# Common Enterprise Backup Configuration (eliminates duplication)
+# Used by all service hosts
+common_backup_config:
+  backup_cache_dir: "{{ backup_base_path }}/cache"
+  backup_log_dir: "{{ backup_base_path }}/logs"
+  retention_policy:
+    daily: "7"
+    weekly: "4"
+    monthly: "6"
+    yearly: "1"
+  backup_exclude_patterns:
+    - "*.tmp"
+    - "*.log.1*"
+    - "**/logs/*"
+    - "docker/overlay2/*"
 
-# Package Management
-package_cache_valid_time: 3600
+# Common SSD Configuration (eliminates duplication)
+# Used by hosts with external storage
+common_ssd_config:
+  ssd_filesystem: "ext4"
+  ssd_mount_options: "defaults,noatime,errors=remount-ro"
+  ssd_format: false
 

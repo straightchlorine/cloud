@@ -61,15 +61,18 @@ blackbox_exporter_enabled: false
 blackbox_exporter_version: "0.24.0"
 blackbox_exporter_port: 9115
 
-# Service discovery labels
+# Service discovery labels - ALL MUST be explicitly set in host_vars
+# prometheus_environment: must be set in host_vars - no default
+# prometheus_role: must be set in host_vars - no default
+# device_type: must be set in host_vars - no default
 prometheus_instance_labels:
-  environment: "{{ prometheus_environment | default('production') }}"
-  role: "{{ prometheus_role | default(group_names | first) }}"
-  device_type: "{{ device_type | default('unknown') }}"
+  environment: "{{ prometheus_environment }}"
+  role: "{{ prometheus_role }}"
+  device_type: "{{ device_type }}"
 
 # Firewall configuration
 prometheus_exporters_ufw_enabled: true
-prometheus_exporters_firewall_source: "{{ prometheus_server_ip | default('any') }}"
+# prometheus_server_ip: must be set in host_vars - no default for security
 
 # Health check configuration
 prometheus_exporters_health_check_enabled: true

@@ -12,10 +12,9 @@
 
   pre_tasks:
     - name: Update package cache
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600
-      tags: [packages]
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: package_cache_update
 
     - name: Install additional system packages
       ansible.builtin.apt:
@@ -25,12 +24,8 @@
       tags: [packages]
 
   roles:
-    - role: common
-      tags: [common, base]
-    - role: firewall
-      tags: [firewall, security]
-    - role: prometheus-node-exporter
-      tags: [monitoring, prometheus]
+    - role: prometheus-exporters
+      tags: [monitoring, prometheus, exporters]
     - role: automation
       tags: [automation, docker, services]
 
@@ -60,23 +55,16 @@
       become_user: "{{ ansible_user }}"
       tags: [verification]
 
-    - name: Verify services are responding
-      ansible.builtin.uri:
-        url: "http://{{ ansible_default_ipv4.address }}:{{ item.port }}"
-        method: GET
-        timeout: 10
-        follow_redirects: none
-        status_code: [200, 301, 302, 401, 403]
-      loop:
-        - {port: "{{ traefik_web_port }}", service: "Traefik HTTP"}
-        - {port: "{{ traefik_dashboard_port }}", service: "Traefik Dashboard"}
-      register: service_check
-      failed_when: false
-      tags: [verification]
-
-    - name: Display service status
-      ansible.builtin.debug:
-        msg: "{{ item.item.service }}: {{ 'UP' if item.status in [200, 301, 302, 401, 403] else 'DOWN' }}"
-      loop: "{{ service_check.results }}"
-      tags: [verification]
+    - name: Verify automation stack services
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: service_verification
+      vars:
+        services_to_verify:
+          - name: "Traefik HTTP"
+            url: "http://{{ primary_ip }}:{{ traefik_web_port }}"
+            valid_codes: [200, 301, 302, 401, 403]
+          - name: "Traefik Dashboard"
+            url: "http://{{ primary_ip }}:{{ traefik_dashboard_port }}"
+            valid_codes: [200, 301, 302, 401, 403]
 

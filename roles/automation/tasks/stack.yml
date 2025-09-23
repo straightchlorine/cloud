@@ -1,10 +1,15 @@
-- name: Create Docker Compose file
-  ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: "{{ automation_stack_home }}/docker-compose.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
+- name: Create standardized Docker Compose file
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: build_docker_compose
+  vars:
+    compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
+    compose_file_owner: "{{ ansible_user }}"
+    compose_file_group: "{{ ansible_user }}"
+    stack_name: "automation"
+    compose_services: "{{ automation_compose_services }}"
+    compose_networks: "{{ automation_compose_networks }}"
+    compose_volumes: "{{ automation_compose_volumes }}"
   notify: restart automation stack
 
 - name: Create InfluxDB3 data directories
@@ -33,6 +38,14 @@
     - dozzle
     - influxdb3-explorer
 
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: "{{ automation_stack_home }}/scripts"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
 - name: Create stack management script
   ansible.builtin.template:
     src: manage-automation.sh.j2
@@ -43,11 +56,16 @@
 
 - name: Create stack backup script
   ansible.builtin.template:
-    src: backup-automation.sh.j2
+    src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
     dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0755'
+  vars:
+    backup_service_name: "automation-stack"
+    backup_directories:
+      - "{{ automation_stack_home }}"
+      - "{{ automation_data_path }}"
 
 - name: Create Docker network for Traefik
   community.docker.docker_network:

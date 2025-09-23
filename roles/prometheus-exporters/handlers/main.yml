@@ -1,9 +1,5 @@
 # Handlers for prometheus-exporters role
-
-- name: reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: yes
-  become: yes
+# Note: reload systemd uses common handler
 
 - name: restart node-exporter
   ansible.builtin.systemd:
@@ -49,9 +45,4 @@
   become: yes
   when: docker_exporter_enabled
 
-- name: restart docker
-  ansible.builtin.systemd:
-    name: docker
-    state: restarted
-  become: yes
-  when: docker_exporter_enabled
+# restart docker uses common handler
