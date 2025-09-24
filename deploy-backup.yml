@@ -130,7 +130,6 @@
   hosts: monitoring
   become: true
   gather_facts: true
-  when: simple_mode is not defined or not simple_mode
 
   tasks:
     - name: Create centralized health monitoring script
@@ -140,6 +139,7 @@
         owner: "{{ monitoring_user }}"
         group: "{{ monitoring_user }}"
         mode: '0750'
+      when: simple_mode is not defined or not simple_mode
 
     - name: Create centralized health monitoring service
       ansible.builtin.copy:
@@ -161,6 +161,7 @@
         owner: root
         group: root
         mode: '0644'
+      when: simple_mode is not defined or not simple_mode
 
     - name: Create health monitoring timer
       ansible.builtin.copy:
@@ -179,6 +180,7 @@
         owner: root
         group: root
         mode: '0644'
+      when: simple_mode is not defined or not simple_mode
 
     - name: Enable and start health monitoring
       ansible.builtin.systemd:
@@ -186,11 +188,11 @@
         enabled: true
         state: started
         daemon_reload: true
+      when: simple_mode is not defined or not simple_mode
 
 - name: Enterprise backup deployment summary
   hosts: localhost
   gather_facts: false
-  when: simple_mode is not defined or not simple_mode
 
   tasks:
     - name: Display deployment completion summary
@@ -225,4 +227,5 @@
           4. Test restore operations: /opt/backup/scripts/restore-test.sh
 
           ===============================================
+      when: simple_mode is not defined or not simple_mode
 
