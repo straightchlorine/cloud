@@ -125,7 +125,6 @@
           3. Monitor operations: {{ enterprise_backup_base_path }}/logs/
       when: simple_mode is defined and simple_mode
 
----
 - name: Configure repository health monitoring
   hosts: monitoring
   become: true
@@ -187,7 +186,6 @@
         state: started
         daemon_reload: true
 
----
 - name: Enterprise backup deployment summary
   hosts: localhost
   gather_facts: false
