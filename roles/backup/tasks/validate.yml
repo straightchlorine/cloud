@@ -7,7 +7,7 @@
     tasks_from: unified_validation
   vars:
     validation_context: "enterprise backup"
-    validation_type: "full"
+    validation_type: "backup"
     role_name: "enterprise-backup"
     required_variables:
       - restic_repository
