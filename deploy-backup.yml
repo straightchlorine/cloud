@@ -1,42 +1,18 @@
----
-# Enterprise Backup System Deployment
-# Complete deployment and initialization of enterprise backup infrastructure
-# Usage:
-#   Full deployment: ansible-playbook deploy-enterprise-backup.yml
-#   Simple deployment: ansible-playbook deploy-enterprise-backup.yml -e "simple_mode=true"
+# Backup System Deployment
 
-- name: Deploy enterprise backup system
+- name: Deploy backup system
   hosts: services
   become: true
   gather_facts: true
 
   vars:
-    # Enterprise backup configuration (must be defined in host_vars)
-    # enterprise_backup_base_path: "/opt/enterprise-backup"
-    # backup_user: "backup"
-    # backup_group: "backup"
-    # restic_version: "0.16.4"
-
-    # Backup settings (must be defined in host_vars)
-    # backup_schedule: "02:00"  # 2 AM daily
-    # backup_randomized_delay: "300"  # 5 minutes
-    # backup_timeout: "3600"  # 1 hour
-    # max_concurrent_backups: "2"
-
-    # Retention policies (must be defined in host_vars)
-    # retention_daily: "7"
-    # retention_weekly: "4"
-    # retention_monthly: "6"
-    # retention_yearly: "1"
-
-    # Deployment mode control
-    simple_mode: false  # Set to true for simple deployment without monitoring setup
+    simple_mode: false
 
   pre_tasks:
-    - name: Display enterprise backup deployment info
+    - name: Display backup deployment info
       ansible.builtin.debug:
         msg: |
-          🚀 Enterprise Backup Deployment
+          🚀 Backup Deployment
           ==============================
           Host: {{ inventory_hostname }}
           Service: {{ device_role }}
@@ -50,9 +26,9 @@
         name: common
         tasks_from: network_facts
 
-    - name: Deploy enterprise backup role
+    - name: Deploy backup role
       ansible.builtin.include_role:
-        name: enterprise-backup
+        name: backup
 
   post_tasks:
     - name: Initialize backup repository
@@ -95,7 +71,7 @@
     - name: Display service status summary
       ansible.builtin.debug:
         msg: |
-          🔧 Enterprise Backup Services Status
+          🔧 Backup Services Status
           ===================================
           Coordinator Service: {{ coordinator_status.status.ActiveState }}
           Backup Timer: {{ timer_status.status.ActiveState }}
@@ -131,11 +107,10 @@
           {% endif %}
       when: simple_mode is not defined or not simple_mode
 
-    # Simple mode completion message
     - name: Display simple deployment completion
       ansible.builtin.debug:
         msg: |
-          ✅ Enterprise Backup Deployment Complete!
+          ✅ Backup Deployment Complete!
 
           🔧 Services Configured:
           - Repository: {{ restic_repository }}
@@ -146,12 +121,11 @@
 
           Next Steps:
           1. Initialize repositories: sudo -u {{ backup_user }} {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
-          2. Test backup pipeline: ansible-playbook test-enterprise-backup-pipeline.yml
+          2. Test backup pipeline: ansible-playbook test-backup-pipeline.yml
           3. Monitor operations: {{ enterprise_backup_base_path }}/logs/
       when: simple_mode is defined and simple_mode
 
 ---
-# Repository Health Monitoring Setup
 - name: Configure repository health monitoring
   hosts: monitoring
   become: true
@@ -161,7 +135,7 @@
   tasks:
     - name: Create centralized health monitoring script
       ansible.builtin.template:
-        src: roles/enterprise-backup/templates/repository-health-monitor.sh.j2
+        src: roles/backup/templates/repository-health-monitor.sh.j2
         dest: "{{ monitoring_stack_home }}/scripts/repository-health-monitor.sh"
         owner: "{{ monitoring_user }}"
         group: "{{ monitoring_user }}"
@@ -171,7 +145,7 @@
       ansible.builtin.copy:
         content: |
           [Unit]
-          Description=Enterprise Backup Repository Health Monitor
+          Description=Backup Repository Health Monitor
           After=network.target
 
           [Service]
@@ -214,7 +188,6 @@
         daemon_reload: true
 
 ---
-# Final deployment summary
 - name: Enterprise backup deployment summary
   hosts: localhost
   gather_facts: false
@@ -224,7 +197,7 @@
     - name: Display deployment completion summary
       ansible.builtin.debug:
         msg: |
-          🎉 Enterprise Backup System Deployment Complete!
+          🎉 Backup System Deployment Complete!
           ===============================================
 
           ✅ Deployed Components:
@@ -247,9 +220,10 @@
           🚀 Ready for Production Use!
 
           Next Steps:
-          1. Verify repository accessibility: ansible-playbook test-enterprise-backup-pipeline.yml
+          1. Verify repository accessibility: ansible-playbook test-backup-pipeline.yml
           2. Monitor backup operations via Grafana dashboards
-          3. Check backup logs: /opt/enterprise-backup/logs/
-          4. Test restore operations: /opt/enterprise-backup/scripts/restore-test.sh
+          3. Check backup logs: /opt/backup/logs/
+          4. Test restore operations: /opt/backup/scripts/restore-test.sh
 
           ===============================================
+

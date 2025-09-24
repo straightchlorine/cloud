@@ -25,7 +25,7 @@ Multi-repository backup strategy with automated restore testing and performance 
 
 ### Enterprise Backup Only
 ```bash
-ansible-playbook -i inventory/production/hosts.yml deploy-enterprise-backup.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml deploy-backup.yml --ask-vault-pass
 ```
 
 ### Pipeline Testing

@@ -42,8 +42,8 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/music-stack.yml --a
 # Automation stack only
 ansible-playbook -i inventory/production/hosts.yml playbooks/automation-stack.yml --ask-vault-pass
 
-# Enterprise backup only
-ansible-playbook -i inventory/production/hosts.yml deploy-enterprise-backup.yml --ask-vault-pass
+# Backup only
+ansible-playbook -i inventory/production/hosts.yml deploy-backup.yml --ask-vault-pass
 ```
 
 ## Validation
