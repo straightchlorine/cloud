@@ -1,4 +1,3 @@
----
 # Backup System Deployment
 
 - name: Deploy backup system
@@ -17,7 +16,7 @@
           ==============================
           Host: {{ inventory_hostname }}
           Service: {{ device_role }}
-          Repository: {{ restic_repository }}
+          Repository: {{ restic_repository}}
           Schedule: {{ backup_schedule }}
           ==============================
 
