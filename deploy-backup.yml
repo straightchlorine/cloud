@@ -2,7 +2,7 @@
 # Backup System Deployment
 
 - name: Deploy backup system
-  hosts: services
+  hosts: backup-primary
   become: true
   gather_facts: true
 
