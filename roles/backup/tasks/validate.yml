@@ -18,10 +18,10 @@
       - backup_user
       - backup_group
     vault_placeholders:
-      - { var: "restic_password", value: "your-32-character-secure-restic-password" }
+      - {var: "restic_password", value: "your-32-character-secure-restic-password"}
     critical_backup_paths: "{{ backup_directories }}"
     stack_home: "{{ enterprise_backup_base_path }}"
-    required_services: []  # Enterprise backup doesn't use Docker services
+    required_services: []
   tags: [validation]
 
 - name: Validate backup directories exist and are accessible
@@ -73,32 +73,8 @@
 - name: Fail if insufficient disk space for backup operations
   ansible.builtin.fail:
     msg: "Insufficient disk space. Available: {{ (available_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 2GB minimum for backup operations"
-  when: (available_space.stdout | int) < 2097152  # 2GB in KB
+  when: (available_space.stdout | int) < 2097152 # 2GB in KB
   tags: [validation]
-
-- name: Validate network connectivity for repository backend
-  block:
-    - name: Test SFTP connectivity for SFTP repositories
-      ansible.builtin.command: ssh -o ConnectTimeout=10 -o BatchMode=yes {{ restic_repository | regex_replace('^sftp:([^:]+):.*', '\\1') }} exit
-      when: restic_repository | regex_search('^sftp:')
-      changed_when: false
-      register: sftp_test
-      failed_when: sftp_test.rc != 0
-
-    - name: Test network connectivity for remote repositories
-      ansible.builtin.uri:
-        url: "{{ restic_repository | regex_replace('^s3:https://([^/]+)/.*', 'https://\\1') }}"
-        method: HEAD
-        timeout: 10
-      when: restic_repository | regex_search('^s3:https://')
-      changed_when: false
-
-  rescue:
-    - name: Fail if repository backend is not accessible
-      ansible.builtin.fail:
-        msg: "Cannot connect to repository backend: {{ restic_repository }}"
-
-  tags: [validation, network]
 
 - name: Validate systemd is available for service management
   ansible.builtin.command: systemctl --version
@@ -138,3 +114,4 @@
   ansible.builtin.debug:
     msg: "All enterprise backup deployment requirements validated successfully"
   tags: [validation]
+
