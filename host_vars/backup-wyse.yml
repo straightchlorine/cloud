@@ -150,34 +150,41 @@ disaster_recovery:
 
 # Service-specific backup configuration
 service_backup_configs:
+  backup:
+    repository: "system"
+    schedule: "0 5 * * *"
+    pre_backup_scripts: []
+    post_backup_scripts: []
+    directories: ["/home", "/etc", "/opt", "/var/lib"]
+    excludes: ["*.tmp", "*.log.1*", "**/logs/*", "**/cache/*", "**/.cache/*", "**/tmp/*"]
   dns:
     repository: "critical"
     schedule: "0 1 * * *"
     pre_backup_scripts: ["pihole-flush", "dns-consistency-check"]
     post_backup_scripts: ["backup-verification"]
-    include_paths: ["/etc/pihole", "/etc/dnsmasq.d", "/var/log/pihole.log"]
-    exclude_patterns: ["*.tmp", "cache/*"]
+    directories: ["/etc/pihole", "/etc/dnsmasq.d", "/var/log/pihole.log"]
+    excludes: ["*.tmp", "cache/*"]
   automation:
     repository: "critical"
     schedule: "0 2 * * *"
     pre_backup_scripts: ["container-pause", "database-backup"]
     post_backup_scripts: ["container-resume", "backup-verification"]
-    include_paths: ["/opt/automation", "/etc/traefik"]
-    exclude_patterns: ["*/logs/*", "*/tmp/*", "*.log"]
+    directories: ["/opt/automation", "/etc/traefik"]
+    excludes: ["*/logs/*", "*/tmp/*", "*.log"]
   music:
     repository: "services"
     schedule: "0 3 * * *"
     pre_backup_scripts: ["media-sync", "library-consistency"]
     post_backup_scripts: ["backup-verification"]
-    include_paths: ["/opt/music", "/var/lib/music"]
-    exclude_patterns: ["*/cache/*", "*.tmp", "*/thumbnails/*"]
+    directories: ["/opt/music", "/var/lib/music"]
+    excludes: ["*/cache/*", "*.tmp", "*/thumbnails/*"]
   system:
     repository: "system"
     schedule: "0 4 * * *"
     pre_backup_scripts: ["system-snapshot"]
     post_backup_scripts: ["backup-verification"]
-    include_paths: ["/etc", "/home", "/var/lib", "/opt"]
-    exclude_patterns: ["/tmp/*", "*/cache/*", "*.log", "/proc/*", "/sys/*"]
+    directories: ["/etc", "/home", "/var/lib", "/opt"]
+    excludes: ["/tmp/*", "*/cache/*", "*.log", "/proc/*", "/sys/*"]
 
 # Remote repository configuration
 remote_repositories:
