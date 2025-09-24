@@ -1,0 +1,55 @@
+# Backup Machine Host Configuration
+device_role: backup
+device_type: debian
+
+# Enterprise backup configuration
+restic_enabled: true
+restic_repository: "{{ vault_backup_repository_base }}/backup-wyse"
+restic_password: "{{ vault_restic_backup_password }}"
+enterprise_backup_base_path: "/opt/enterprise-backup"
+backup_user: "backup"
+backup_group: "backup"
+
+# Backup directories
+backup_directories:
+  - "/home"
+  - "/etc"
+  - "/opt"
+  - "/var/lib"
+
+backup_exclude_patterns:
+  - "*.tmp"
+  - "*.log.1*"
+  - "**/logs/*"
+  - "**/cache/*"
+  - "**/.cache/*"
+  - "**/tmp/*"
+
+# Backup schedule
+backup_schedule: "0 5 * * *"
+backup_randomized_delay: "300"
+backup_timeout: "7200"
+
+# Retention policy
+retention_daily: "7"
+retention_weekly: "4"
+retention_monthly: "6"
+retention_yearly: "1"
+
+# Node exporter configuration
+node_exporter_enabled: true
+node_exporter_port: 9100
+node_exporter_ufw_enabled: true
+
+# Firewall ports
+firewall_backup_ports:
+  - port: 9100
+    comment: "Prometheus Node Exporter"
+
+# Required vault variables
+required_backup_vars:
+  - vault_backup_repository_base
+  - vault_restic_backup_password
+  - vault_domain_name
+  - vault_letsencrypt_email
+
