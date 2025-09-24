@@ -19,7 +19,6 @@
       - backup_group
     vault_placeholders:
       - { var: "restic_password", value: "your-32-character-secure-restic-password" }
-    backup_directories: "{{ backup_directories }}"
     critical_backup_paths: "{{ backup_directories }}"
     stack_home: "{{ enterprise_backup_base_path }}"
     required_services: []  # Enterprise backup doesn't use Docker services
