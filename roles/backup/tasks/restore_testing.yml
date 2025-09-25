@@ -14,13 +14,13 @@
     - "{{ restore_testing.test_environment }}/staging"
     - "{{ restore_testing.test_environment }}/results"
     - "{{ restore_testing.test_environment }}/logs"
-    - "{{ enterprise_backup_base_path }}/restore-tests"
-    - "{{ enterprise_backup_base_path }}/restore-reports"
+    - "{{ backup_base_path }}/restore-tests"
+    - "{{ backup_base_path }}/restore-reports"
 
 - name: Generate automated restore testing script
   ansible.builtin.template:
     src: automated-restore-test.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/automated-restore-test.sh"
+    dest: "{{ backup_base_path }}/scripts/automated-restore-test.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -29,7 +29,7 @@
 - name: Generate restore testing configuration
   ansible.builtin.template:
     src: restore-test-config.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/restore-test-config.yml"
+    dest: "{{ backup_base_path }}/config/restore-test-config.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -38,7 +38,7 @@
 - name: Create restore test validation scripts
   ansible.builtin.template:
     src: "{{ item }}.j2"
-    dest: "{{ enterprise_backup_base_path }}/scripts/{{ item }}"
+    dest: "{{ backup_base_path }}/scripts/{{ item }}"
     owner: backup
     group: backup
     mode: '0750'
@@ -52,7 +52,7 @@
 - name: Generate restore performance benchmarking script
   ansible.builtin.template:
     src: restore-benchmark.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/restore-benchmark.sh"
+    dest: "{{ backup_base_path }}/scripts/restore-benchmark.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -80,7 +80,7 @@
 - name: Create restore test results analyzer
   ansible.builtin.template:
     src: analyze-restore-results.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/analyze-restore-results.py"
+    dest: "{{ backup_base_path }}/scripts/analyze-restore-results.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -89,7 +89,7 @@
 - name: Generate restore testing Prometheus exporter
   ansible.builtin.template:
     src: restore-test-exporter.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/restore-test-exporter.py"
+    dest: "{{ backup_base_path }}/scripts/restore-test-exporter.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -98,7 +98,7 @@
 - name: Create restore test alerting rules
   ansible.builtin.template:
     src: restore-test-alerts.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/restore-test-alerts.yml"
+    dest: "{{ backup_base_path }}/config/restore-test-alerts.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -116,7 +116,7 @@
 - name: Create restore test summary dashboard
   ansible.builtin.template:
     src: restore-test-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/restore-test-summary.json"
+    dest: "{{ backup_base_path }}/dashboards/restore-test-summary.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -124,7 +124,7 @@
 
 - name: Validate restore testing framework
   ansible.builtin.command: >
-    {{ enterprise_backup_base_path }}/scripts/automated-restore-test.sh
+    {{ backup_base_path }}/scripts/automated-restore-test.sh
     --dry-run --validate-only
   register: restore_test_validation
   become_user: backup
@@ -154,11 +154,11 @@
       🚨 Monitoring Integration:
       - Prometheus Metrics: Port 9103
       - Grafana Dashboard: restore-test-summary.json
-      - Alert Rules: {{ enterprise_backup_base_path }}/config/restore-test-alerts.yml
+      - Alert Rules: {{ backup_base_path }}/config/restore-test-alerts.yml
 
       ⚡ Automation:
       - Systemd Timer: {{ 'Active' if restore_testing.enabled else 'Disabled' }}
-      - Test Results: {{ enterprise_backup_base_path }}/restore-reports/
+      - Test Results: {{ backup_base_path }}/restore-reports/
       - Cleanup: {{ 'Enabled' if restore_testing.cleanup_after_test else 'Manual' }}
 
       {{ '✅ Framework validation passed!' if restore_test_validation.rc == 0 else '❌ Validation failed!' }}

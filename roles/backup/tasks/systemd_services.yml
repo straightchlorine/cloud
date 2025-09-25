@@ -15,16 +15,16 @@
     service_type: "oneshot"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    working_directory: "{{ enterprise_backup_base_path }}"
+    working_directory: "{{ backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{ enterprise_backup_base_path }}/cache/{{ device_role }}"
-    exec_start: "{{ enterprise_backup_base_path }}/scripts/backup-{{ device_role }}.sh"
+      - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
+      - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
+    exec_start: "{{ backup_base_path }}/scripts/backup-{{ device_role }}.sh"
     protect_system: "strict"
     protect_home: "true"
     private_tmp: "true"
-    read_write_paths: ["{{ enterprise_backup_base_path }}"]
+    read_write_paths: ["{{ backup_base_path }}"]
   become: yes
   notify: reload systemd
 
@@ -52,12 +52,12 @@
     service_type: "simple"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    working_directory: "{{ enterprise_backup_base_path }}"
+    working_directory: "{{ backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{ enterprise_backup_base_path }}/cache/{{ device_role }}"
-    exec_start: "{{ enterprise_backup_base_path }}/scripts/backup-coordinator.sh monitor"
+      - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
+      - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
+    exec_start: "{{ backup_base_path }}/scripts/backup-coordinator.sh monitor"
     restart_policy: "on-failure"
     restart_sec: "30"
     start_limit_burst: "3"

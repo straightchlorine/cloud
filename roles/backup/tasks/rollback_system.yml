@@ -10,16 +10,16 @@
     mode: '0750'
   become: yes
   loop:
-    - "{{ enterprise_backup_base_path }}/rollback"
-    - "{{ enterprise_backup_base_path }}/rollback/staging"
-    - "{{ enterprise_backup_base_path }}/rollback/logs"
-    - "{{ enterprise_backup_base_path }}/rollback/checkpoints"
-    - "{{ enterprise_backup_base_path }}/rollback/emergency"
+    - "{{ backup_base_path }}/rollback"
+    - "{{ backup_base_path }}/rollback/staging"
+    - "{{ backup_base_path }}/rollback/logs"
+    - "{{ backup_base_path }}/rollback/checkpoints"
+    - "{{ backup_base_path }}/rollback/emergency"
 
 - name: Generate service-aware rollback orchestrator
   ansible.builtin.template:
     src: rollback-orchestrator.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-orchestrator.sh"
+    dest: "{{ backup_base_path }}/scripts/rollback-orchestrator.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -28,7 +28,7 @@
 - name: Create service-specific rollback procedures
   ansible.builtin.template:
     src: "{{ item }}.j2"
-    dest: "{{ enterprise_backup_base_path }}/scripts/{{ item }}"
+    dest: "{{ backup_base_path }}/scripts/{{ item }}"
     owner: backup
     group: backup
     mode: '0750'
@@ -42,7 +42,7 @@
 - name: Generate rollback safety checker
   ansible.builtin.template:
     src: rollback-safety-check.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-safety-check.sh"
+    dest: "{{ backup_base_path }}/scripts/rollback-safety-check.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -51,7 +51,7 @@
 - name: Create rollback configuration manager
   ansible.builtin.template:
     src: rollback-config.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/rollback-config.yml"
+    dest: "{{ backup_base_path }}/config/rollback-config.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -60,7 +60,7 @@
 - name: Generate emergency rollback script
   ansible.builtin.template:
     src: emergency-rollback.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/emergency-rollback.sh"
+    dest: "{{ backup_base_path }}/scripts/emergency-rollback.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -69,7 +69,7 @@
 - name: Create rollback validation framework
   ansible.builtin.template:
     src: validate-rollback.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/validate-rollback.sh"
+    dest: "{{ backup_base_path }}/scripts/validate-rollback.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -78,7 +78,7 @@
 - name: Generate rollback point management system
   ansible.builtin.template:
     src: manage-rollback-points.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/manage-rollback-points.sh"
+    dest: "{{ backup_base_path }}/scripts/manage-rollback-points.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -87,7 +87,7 @@
 - name: Create rollback monitoring and metrics
   ansible.builtin.template:
     src: rollback-metrics-exporter.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/rollback-metrics-exporter.py"
+    dest: "{{ backup_base_path }}/scripts/rollback-metrics-exporter.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -96,7 +96,7 @@
 - name: Generate rollback execution log analyzer
   ansible.builtin.template:
     src: analyze-rollback-execution.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/analyze-rollback-execution.py"
+    dest: "{{ backup_base_path }}/scripts/analyze-rollback-execution.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -105,7 +105,7 @@
 - name: Create rollback CLI interface
   ansible.builtin.template:
     src: enterprise-rollback.py.j2
-    dest: "{{ enterprise_backup_base_path }}/bin/enterprise-rollback"
+    dest: "{{ backup_base_path }}/bin/enterprise-rollback"
     owner: backup
     group: backup
     mode: '0755'
@@ -123,7 +123,7 @@
 - name: Generate rollback alerting rules
   ansible.builtin.template:
     src: rollback-alerts.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/rollback-alerts.yml"
+    dest: "{{ backup_base_path }}/config/rollback-alerts.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -132,7 +132,7 @@
 - name: Create rollback dashboard for monitoring
   ansible.builtin.template:
     src: rollback-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/rollback-operations.json"
+    dest: "{{ backup_base_path }}/dashboards/rollback-operations.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -141,7 +141,7 @@
 - name: Create rollback point catalog
   ansible.builtin.template:
     src: rollback-catalog.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/rollback-catalog.yml"
+    dest: "{{ backup_base_path }}/config/rollback-catalog.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -175,7 +175,7 @@
 
 - name: Create rollback operation symlinks for easy access
   ansible.builtin.file:
-    src: "{{ enterprise_backup_base_path }}/bin/enterprise-rollback"
+    src: "{{ backup_base_path }}/bin/enterprise-rollback"
     dest: "/usr/local/bin/{{ item }}"
     state: link
   become: yes
@@ -186,7 +186,7 @@
 
 - name: Validate rollback system functionality
   ansible.builtin.command: >
-    {{ enterprise_backup_base_path }}/scripts/rollback-orchestrator.sh
+    {{ backup_base_path }}/scripts/rollback-orchestrator.sh
     --validate --dry-run
   register: rollback_validation
   become_user: backup
@@ -197,7 +197,7 @@
 - name: Create rollback documentation
   ansible.builtin.template:
     src: rollback-procedures.md.j2
-    dest: "{{ enterprise_backup_base_path }}/docs/rollback-procedures.md"
+    dest: "{{ backup_base_path }}/docs/rollback-procedures.md"
     owner: backup
     group: backup
     mode: '0640'
@@ -227,9 +227,9 @@
       - Safety Checks: Pre-rollback validation framework
 
       ⚡ Operations:
-      - Staging Environment: {{ enterprise_backup_base_path }}/rollback/staging/
-      - Execution Logs: {{ enterprise_backup_base_path }}/rollback/logs/
-      - Emergency Procedures: {{ enterprise_backup_base_path }}/scripts/emergency-rollback.sh
+      - Staging Environment: {{ backup_base_path }}/rollback/staging/
+      - Execution Logs: {{ backup_base_path }}/rollback/logs/
+      - Emergency Procedures: {{ backup_base_path }}/scripts/emergency-rollback.sh
 
       🎯 Usage Examples:
       # List available rollback points
@@ -246,4 +246,4 @@
 
       {{ '✅ Rollback system validation passed!' if rollback_validation.rc == 0 else '❌ Validation failed!' }}
 
-      📋 Documentation: {{ enterprise_backup_base_path }}/docs/rollback-procedures.md
+      📋 Documentation: {{ backup_base_path }}/docs/rollback-procedures.md

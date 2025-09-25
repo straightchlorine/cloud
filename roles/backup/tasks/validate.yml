@@ -14,13 +14,13 @@
       - restic_password
       - backup_directories
       - device_role
-      - enterprise_backup_base_path
+      - backup_base_path
       - backup_user
       - backup_group
     vault_placeholders:
       - {var: "restic_password", value: "your-32-character-secure-restic-password"}
     critical_backup_paths: "{{ backup_directories }}"
-    stack_home: "{{ enterprise_backup_base_path }}"
+    stack_home: "{{ backup_base_path }}"
     required_services: []
   tags: [validation]
 
@@ -42,13 +42,13 @@
 
 - name: Validate enterprise backup base path parent directory exists
   ansible.builtin.stat:
-    path: "{{ enterprise_backup_base_path | dirname }}"
+    path: "{{ backup_base_path | dirname }}"
   register: backup_base_parent
   tags: [validation]
 
 - name: Fail if enterprise backup base path parent does not exist
   ansible.builtin.fail:
-    msg: "Enterprise backup base path parent directory does not exist: {{ enterprise_backup_base_path | dirname }}"
+    msg: "Enterprise backup base path parent directory does not exist: {{ backup_base_path | dirname }}"
   when: not backup_base_parent.stat.exists or not backup_base_parent.stat.isdir
   tags: [validation]
 
@@ -65,7 +65,7 @@
   tags: [validation]
 
 - name: Check available disk space for backup operations
-  ansible.builtin.shell: df {{ enterprise_backup_base_path | dirname }} | tail -1 | awk '{print $4}'
+  ansible.builtin.shell: df {{ backup_base_path | dirname }} | tail -1 | awk '{print $4}'
   register: available_space
   changed_when: false
   tags: [validation]

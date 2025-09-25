@@ -5,7 +5,7 @@
   ansible.builtin.user:
     name: "{{ backup_user }}"
     group: "{{ backup_group }}"
-    home: "{{ enterprise_backup_base_path }}"
+    home: "{{ backup_base_path }}"
     shell: /bin/bash
     system: true
     create_home: true
@@ -20,16 +20,16 @@
     mode: '0750'
   become: yes
   loop:
-    - "{{ enterprise_backup_base_path }}/scripts"
-    - "{{ enterprise_backup_base_path }}/repositories"
-    - "{{ enterprise_backup_base_path }}/cache"
-    - "{{ enterprise_backup_base_path }}/keys"
-    - "{{ enterprise_backup_base_path }}/config"
-    - "{{ enterprise_backup_base_path }}/logs"
-    - "{{ enterprise_backup_base_path }}/metrics"
-    - "{{ enterprise_backup_base_path }}/locks"
-    - "{{ enterprise_backup_base_path }}/coordination"
-    - "{{ enterprise_backup_base_path }}/reports"
+    - "{{ backup_base_path }}/scripts"
+    - "{{ backup_base_path }}/repositories"
+    - "{{ backup_base_path }}/cache"
+    - "{{ backup_base_path }}/keys"
+    - "{{ backup_base_path }}/config"
+    - "{{ backup_base_path }}/logs"
+    - "{{ backup_base_path }}/metrics"
+    - "{{ backup_base_path }}/locks"
+    - "{{ backup_base_path }}/coordination"
+    - "{{ backup_base_path }}/reports"
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
@@ -51,7 +51,7 @@
 - name: Create restic password file
   ansible.builtin.copy:
     content: "{{ restic_password }}"
-    dest: "{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+    dest: "{{ backup_base_path }}/keys/{{ device_role }}-password"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -61,7 +61,7 @@
 - name: Generate repository initialization script
   ansible.builtin.template:
     src: init-repositories.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/init-repositories.sh"
+    dest: "{{ backup_base_path }}/scripts/init-repositories.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -70,7 +70,7 @@
 - name: Generate service backup script
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-{{ device_role }}.sh"
+    dest: "{{ backup_base_path }}/scripts/backup-{{ device_role }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -82,7 +82,7 @@
     post_backup_commands: "{{ service_backup_configs[device_role].post_backup_scripts }}"
     backup_password_file: "{{ backup_base_path }}/keys/{{ device_role }}-password"
     backup_cache_dir: "{{ backup_base_path }}/cache"
-    backup_log_dir: "{{ enterprise_backup_base_path }}/logs"
+    backup_log_dir: "{{ backup_base_path }}/logs"
     retention_policy:
       daily: "{{ retention_daily }}"
       weekly: "{{ retention_weekly }}"
@@ -93,7 +93,7 @@
 - name: Generate backup coordinator script
   ansible.builtin.template:
     src: backup-coordinator.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-coordinator.sh"
+    dest: "{{ backup_base_path }}/scripts/backup-coordinator.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -102,7 +102,7 @@
 - name: Generate repository health monitor script
   ansible.builtin.template:
     src: repository-health-monitor.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-health-monitor.sh"
+    dest: "{{ backup_base_path }}/scripts/repository-health-monitor.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -111,7 +111,7 @@
 - name: Create repository-specific configuration files
   ansible.builtin.template:
     src: repository-config.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/{{ device_role }}-repository.yml"
+    dest: "{{ backup_base_path }}/config/{{ device_role }}-repository.yml"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0640'
@@ -121,7 +121,7 @@
 - name: Generate repository management script
   ansible.builtin.template:
     src: manage-repositories.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/manage-repositories.sh"
+    dest: "{{ backup_base_path }}/scripts/manage-repositories.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -130,7 +130,7 @@
 - name: Create repository health monitoring script
   ansible.builtin.template:
     src: repository-health-check.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-health-check.sh"
+    dest: "{{ backup_base_path }}/scripts/repository-health-check.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -139,7 +139,7 @@
 - name: Generate repository performance analyzer
   ansible.builtin.template:
     src: repository-performance.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-performance.py"
+    dest: "{{ backup_base_path }}/scripts/repository-performance.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -148,7 +148,7 @@
 - name: Create repository encryption key management
   ansible.builtin.template:
     src: manage-encryption-keys.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/manage-encryption-keys.sh"
+    dest: "{{ backup_base_path }}/scripts/manage-encryption-keys.sh"
     owner: backup
     group: backup
     mode: '0700'
@@ -157,7 +157,7 @@
 - name: Generate repository consistency checker
   ansible.builtin.template:
     src: repository-consistency.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-consistency.sh"
+    dest: "{{ backup_base_path }}/scripts/repository-consistency.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -166,7 +166,7 @@
 - name: Create repository backup orchestrator
   ansible.builtin.template:
     src: repository-orchestrator.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-orchestrator.sh"
+    dest: "{{ backup_base_path }}/scripts/repository-orchestrator.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -175,7 +175,7 @@
 - name: Generate repository migration tools
   ansible.builtin.template:
     src: repository-migration.sh.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/repository-migration.sh"
+    dest: "{{ backup_base_path }}/scripts/repository-migration.sh"
     owner: backup
     group: backup
     mode: '0750'
@@ -184,7 +184,7 @@
 - name: Create repository deduplication analyzer
   ansible.builtin.template:
     src: analyze-deduplication.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/analyze-deduplication.py"
+    dest: "{{ backup_base_path }}/scripts/analyze-deduplication.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -228,7 +228,7 @@
 
 - name: Initialize repositories if they don't exist
   ansible.builtin.command: >
-    {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+    {{ backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.key }}
     --check-only
   register: repository_status
@@ -240,7 +240,7 @@
 
 - name: Create missing repositories
   ansible.builtin.command: >
-    {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+    {{ backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.item.key }}
     --initialize
   become_user: backup
@@ -269,7 +269,7 @@
 
 - name: Verify repository health
   ansible.builtin.command: >
-    {{ enterprise_backup_base_path }}/scripts/repository-health-check.sh
+    {{ backup_base_path }}/scripts/repository-health-check.sh
     --repository {{ item.key }}
     --quick-check
   register: repository_health
@@ -282,7 +282,7 @@
 - name: Create repository monitoring dashboard
   ansible.builtin.template:
     src: repository-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/repository-management.json"
+    dest: "{{ backup_base_path }}/dashboards/repository-management.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -306,10 +306,10 @@
       {% endfor %}
 
       🔧 Repository Management:
-      - Initialization: {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
-      - Management CLI: {{ enterprise_backup_base_path }}/scripts/manage-repositories.sh
-      - Health Monitoring: {{ enterprise_backup_base_path }}/scripts/repository-health-check.sh
-      - Performance Analysis: {{ enterprise_backup_base_path }}/scripts/repository-performance.py
+      - Initialization: {{ backup_base_path }}/scripts/init-repositories.sh
+      - Management CLI: {{ backup_base_path }}/scripts/manage-repositories.sh
+      - Health Monitoring: {{ backup_base_path }}/scripts/repository-health-check.sh
+      - Performance Analysis: {{ backup_base_path }}/scripts/repository-performance.py
 
       ⚡ Automation:
       {% for repo in backup_repositories.keys() %}
@@ -318,7 +318,7 @@
       - Maintenance Timer: repository-maintenance.timer (Active)
 
       🔐 Security Features:
-      - Encryption Key Management: {{ enterprise_backup_base_path }}/scripts/manage-encryption-keys.sh
+      - Encryption Key Management: {{ backup_base_path }}/scripts/manage-encryption-keys.sh
       - Repository Consistency Checks: Automated via timers
       - Access Control: Backup user isolation with proper permissions
 

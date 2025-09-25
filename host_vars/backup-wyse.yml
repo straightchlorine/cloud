@@ -7,7 +7,7 @@ restic_enabled: true
 restic_version: "0.18.1"
 restic_repository: "{{ vault_backup_repository_base }}/backup-wyse"
 restic_password: "{{ vault_restic_backup_password }}"
-enterprise_backup_base_path: "/opt/enterprise-backup"
+backup_base_path: "/opt/enterprise-backup"
 backup_user: "backup"
 backup_group: "backup"
 

@@ -10,15 +10,15 @@
     mode: '0750'
   become: yes
   loop:
-    - "{{ enterprise_backup_base_path }}/monitoring"
-    - "{{ enterprise_backup_base_path }}/metrics"
-    - "{{ enterprise_backup_base_path }}/dashboards"
-    - "{{ enterprise_backup_base_path }}/alerts"
+    - "{{ backup_base_path }}/monitoring"
+    - "{{ backup_base_path }}/metrics"
+    - "{{ backup_base_path }}/dashboards"
+    - "{{ backup_base_path }}/alerts"
 
 - name: Generate backup metrics exporter
   ansible.builtin.template:
     src: backup-metrics-exporter.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-metrics-exporter.py"
+    dest: "{{ backup_base_path }}/scripts/backup-metrics-exporter.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -27,7 +27,7 @@
 - name: Create backup performance analyzer
   ansible.builtin.template:
     src: backup-performance-analyzer.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-performance-analyzer.py"
+    dest: "{{ backup_base_path }}/scripts/backup-performance-analyzer.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -36,7 +36,7 @@
 - name: Generate backup storage efficiency tracker
   ansible.builtin.template:
     src: storage-efficiency-tracker.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/storage-efficiency-tracker.py"
+    dest: "{{ backup_base_path }}/scripts/storage-efficiency-tracker.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -45,7 +45,7 @@
 - name: Create backup operation logger
   ansible.builtin.template:
     src: backup-operation-logger.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-operation-logger.py"
+    dest: "{{ backup_base_path }}/scripts/backup-operation-logger.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -54,7 +54,7 @@
 - name: Generate backup SLA monitor
   ansible.builtin.template:
     src: backup-sla-monitor.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-sla-monitor.py"
+    dest: "{{ backup_base_path }}/scripts/backup-sla-monitor.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -73,7 +73,7 @@
 - name: Create comprehensive backup dashboard
   ansible.builtin.template:
     src: enterprise-backup-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/enterprise-backup-overview.json"
+    dest: "{{ backup_base_path }}/dashboards/enterprise-backup-overview.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -82,7 +82,7 @@
 - name: Create backup performance dashboard
   ansible.builtin.template:
     src: backup-performance-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/backup-performance-analytics.json"
+    dest: "{{ backup_base_path }}/dashboards/backup-performance-analytics.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -91,7 +91,7 @@
 - name: Create backup storage analytics dashboard
   ansible.builtin.template:
     src: backup-storage-dashboard.json.j2
-    dest: "{{ enterprise_backup_base_path }}/dashboards/backup-storage-analytics.json"
+    dest: "{{ backup_base_path }}/dashboards/backup-storage-analytics.json"
     owner: backup
     group: backup
     mode: '0640'
@@ -100,7 +100,7 @@
 - name: Generate backup alerting rules for Prometheus
   ansible.builtin.template:
     src: backup-alert-rules.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/alerts/backup-alert-rules.yml"
+    dest: "{{ backup_base_path }}/alerts/backup-alert-rules.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -109,7 +109,7 @@
 - name: Create backup capacity planning analyzer
   ansible.builtin.template:
     src: backup-capacity-planner.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-capacity-planner.py"
+    dest: "{{ backup_base_path }}/scripts/backup-capacity-planner.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -118,7 +118,7 @@
 - name: Generate backup trend analyzer
   ansible.builtin.template:
     src: backup-trend-analyzer.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-trend-analyzer.py"
+    dest: "{{ backup_base_path }}/scripts/backup-trend-analyzer.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -127,7 +127,7 @@
 - name: Create backup cost analyzer
   ansible.builtin.template:
     src: backup-cost-analyzer.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-cost-analyzer.py"
+    dest: "{{ backup_base_path }}/scripts/backup-cost-analyzer.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -136,7 +136,7 @@
 - name: Generate backup health checker
   ansible.builtin.template:
     src: backup-health-checker.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-health-checker.py"
+    dest: "{{ backup_base_path }}/scripts/backup-health-checker.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -145,7 +145,7 @@
 - name: Create backup notification processor
   ansible.builtin.template:
     src: backup-notification-processor.py.j2
-    dest: "{{ enterprise_backup_base_path }}/scripts/backup-notification-processor.py"
+    dest: "{{ backup_base_path }}/scripts/backup-notification-processor.py"
     owner: backup
     group: backup
     mode: '0750'
@@ -154,7 +154,7 @@
 - name: Create backup monitoring configuration
   ansible.builtin.template:
     src: backup-monitoring-config.yml.j2
-    dest: "{{ enterprise_backup_base_path }}/config/backup-monitoring-config.yml"
+    dest: "{{ backup_base_path }}/config/backup-monitoring-config.yml"
     owner: backup
     group: backup
     mode: '0640'
@@ -183,7 +183,7 @@
 - name: Create backup monitoring documentation
   ansible.builtin.template:
     src: backup-monitoring-guide.md.j2
-    dest: "{{ enterprise_backup_base_path }}/docs/backup-monitoring-guide.md"
+    dest: "{{ backup_base_path }}/docs/backup-monitoring-guide.md"
     owner: backup
     group: backup
     mode: '0640'
@@ -215,10 +215,10 @@
       - SLA Compliance Tracking
 
       ⚡ Automated Analysis:
-      - Capacity Planning: {{ enterprise_backup_base_path }}/scripts/backup-capacity-planner.py
-      - Trend Analysis: {{ enterprise_backup_base_path }}/scripts/backup-trend-analyzer.py
-      - Cost Analysis: {{ enterprise_backup_base_path }}/scripts/backup-cost-analyzer.py
-      - Health Monitoring: {{ enterprise_backup_base_path }}/scripts/backup-health-checker.py
+      - Capacity Planning: {{ backup_base_path }}/scripts/backup-capacity-planner.py
+      - Trend Analysis: {{ backup_base_path }}/scripts/backup-trend-analyzer.py
+      - Cost Analysis: {{ backup_base_path }}/scripts/backup-cost-analyzer.py
+      - Health Monitoring: {{ backup_base_path }}/scripts/backup-health-checker.py
 
       🔔 Alerting Integration:
       - Prometheus Alert Rules: backup-alert-rules.yml
@@ -234,6 +234,6 @@
 
       {{ '✅ Metrics endpoint accessible!' if backup_metrics_check.status == 200 else '❌ Metrics endpoint not accessible!' }}
 
-      📖 Documentation: {{ enterprise_backup_base_path }}/docs/backup-monitoring-guide.md
+      📖 Documentation: {{ backup_base_path }}/docs/backup-monitoring-guide.md
 
       Enterprise backup monitoring integrated with existing Prometheus/Grafana stack!
