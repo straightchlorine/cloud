@@ -154,7 +154,7 @@ test_repository() {
 
     # Cleanup test data
     info "Cleaning up test data..."
-    restic forget --tag "init-test" --prune
+    restic forget --tag "init-test" --keep-last 0 --prune || true
     rm -rf "${TEST_DIR}" "${RESTORE_DIR}"
 
     success "Repository operations test completed"
