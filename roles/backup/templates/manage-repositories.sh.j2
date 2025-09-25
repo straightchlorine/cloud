@@ -1,0 +1,200 @@
+#!/bin/bash
+# Repository Management CLI
+# {{ ansible_managed }}
+# Provides management interface for backup repositories
+
+set -euo pipefail
+
+# Configuration
+BACKUP_BASE="{{ backup_base_path }}"
+CONFIG_DIR="${BACKUP_BASE}/config"
+LOGS_DIR="${BACKUP_BASE}/logs"
+RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "${LOGS_DIR}/manage-repositories-$(date +%Y%m%d).log"
+}
+
+error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+}
+
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+    log "INFO: $1"
+}
+
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+# Check if restic is available
+check_restic() {
+    if ! command -v restic >/dev/null 2>&1; then
+        error "restic is not installed or not in PATH"
+        exit 1
+    fi
+}
+
+# Initialize repository
+init_repository() {
+    info "Initializing repository: ${RESTIC_REPOSITORY}"
+
+    if restic snapshots >/dev/null 2>&1; then
+        warning "Repository already initialized"
+        return 0
+    fi
+
+    if restic init; then
+        success "Repository initialized successfully"
+    else
+        error "Failed to initialize repository"
+        return 1
+    fi
+}
+
+# List snapshots
+list_snapshots() {
+    info "Listing snapshots in repository: ${RESTIC_REPOSITORY}"
+    restic snapshots --compact
+}
+
+# Show repository statistics
+show_stats() {
+    info "Repository statistics for: ${RESTIC_REPOSITORY}"
+    echo
+
+    echo "📊 Repository Info:"
+    restic stats --mode restore-size
+    echo
+
+    echo "📈 Storage Usage:"
+    restic stats --mode raw-data
+    echo
+
+    echo "🔄 Deduplication Stats:"
+    restic stats --mode blobs-per-file
+}
+
+# Check repository integrity
+check_repository() {
+    info "Checking repository integrity: ${RESTIC_REPOSITORY}"
+
+    if restic check; then
+        success "Repository integrity check passed"
+    else
+        error "Repository integrity check failed"
+        return 1
+    fi
+}
+
+# Cleanup old snapshots
+cleanup_snapshots() {
+    local keep_daily="${1:-7}"
+    local keep_weekly="${2:-4}"
+    local keep_monthly="${3:-6}"
+    local keep_yearly="${4:-1}"
+
+    info "Cleaning up old snapshots (${keep_daily}d/${keep_weekly}w/${keep_monthly}m/${keep_yearly}y)"
+
+    restic forget \
+        --keep-daily "$keep_daily" \
+        --keep-weekly "$keep_weekly" \
+        --keep-monthly "$keep_monthly" \
+        --keep-yearly "$keep_yearly" \
+        --prune
+
+    success "Cleanup completed"
+}
+
+# Unlock repository
+unlock_repository() {
+    info "Unlocking repository: ${RESTIC_REPOSITORY}"
+
+    if restic unlock; then
+        success "Repository unlocked"
+    else
+        error "Failed to unlock repository"
+        return 1
+    fi
+}
+
+# Show help
+show_help() {
+    cat << EOF
+Repository Management CLI
+
+Usage: $0 <command> [options]
+
+Commands:
+  init                    Initialize repository
+  list                    List all snapshots
+  stats                   Show repository statistics
+  check                   Check repository integrity
+  cleanup [d] [w] [m] [y] Clean up old snapshots (defaults: 7d/4w/6m/1y)
+  unlock                  Unlock repository
+  help                    Show this help
+
+Environment:
+  Repository: ${RESTIC_REPOSITORY}
+  Config Dir: ${CONFIG_DIR}
+  Logs Dir:   ${LOGS_DIR}
+
+Examples:
+  $0 init                    # Initialize repository
+  $0 list                    # List snapshots
+  $0 cleanup 14 8 12 2       # Keep 14 daily, 8 weekly, 12 monthly, 2 yearly
+  $0 check                   # Verify repository integrity
+
+EOF
+}
+
+# Main function
+main() {
+    check_restic
+
+    case "${1:-help}" in
+        "init")
+            init_repository
+            ;;
+        "list")
+            list_snapshots
+            ;;
+        "stats")
+            show_stats
+            ;;
+        "check")
+            check_repository
+            ;;
+        "cleanup")
+            cleanup_snapshots "${2:-7}" "${3:-4}" "${4:-6}" "${5:-1}"
+            ;;
+        "unlock")
+            unlock_repository
+            ;;
+        "help"|*)
+            show_help
+            ;;
+    esac
+}
+
+# Script execution
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

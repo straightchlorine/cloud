@@ -1,0 +1,17 @@
+[Unit]
+Description=Repository Backup Service for %i
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ backup_user }}
+Group={{ backup_group }}
+WorkingDirectory={{ backup_base_path }}
+ExecStart={{ backup_base_path }}/scripts/backup-%i.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

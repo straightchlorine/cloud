@@ -1,0 +1,82 @@
+#!/bin/bash
+# Repository Consistency Checker
+# {{ ansible_managed }}
+# Checks backup repository consistency and performs repairs
+
+set -euo pipefail
+
+# Configuration
+RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+}
+
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+check_consistency() {
+    log "Checking repository consistency..."
+
+    if restic check; then
+        success "Repository consistency check passed"
+        return 0
+    else
+        error "Repository consistency check failed"
+        return 1
+    fi
+}
+
+show_help() {
+    cat << EOF
+Repository Consistency Checker
+
+Usage: $0 [options]
+
+Options:
+  --check    Perform consistency check (default)
+  --help     Show this help
+
+Environment:
+  Repository: ${RESTIC_REPOSITORY}
+
+EOF
+}
+
+main() {
+    case "${1:---check}" in
+        "--check")
+            check_consistency
+            ;;
+        "--help")
+            show_help
+            ;;
+        *)
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -122,8 +122,8 @@
   ansible.builtin.template:
     src: manage-repositories.sh.j2
     dest: "{{ backup_base_path }}/scripts/manage-repositories.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -131,8 +131,8 @@
   ansible.builtin.template:
     src: repository-health-check.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-health-check.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -140,8 +140,8 @@
   ansible.builtin.template:
     src: repository-performance.py.j2
     dest: "{{ backup_base_path }}/scripts/repository-performance.py"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -149,8 +149,8 @@
   ansible.builtin.template:
     src: manage-encryption-keys.sh.j2
     dest: "{{ backup_base_path }}/scripts/manage-encryption-keys.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0700'
   become: yes
 
@@ -158,8 +158,8 @@
   ansible.builtin.template:
     src: repository-consistency.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-consistency.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -167,8 +167,8 @@
   ansible.builtin.template:
     src: repository-orchestrator.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-orchestrator.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -176,8 +176,8 @@
   ansible.builtin.template:
     src: repository-migration.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-migration.sh"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -185,8 +185,8 @@
   ansible.builtin.template:
     src: analyze-deduplication.py.j2
     dest: "{{ backup_base_path }}/scripts/analyze-deduplication.py"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: yes
 
@@ -283,8 +283,8 @@
   ansible.builtin.template:
     src: repository-dashboard.json.j2
     dest: "{{ backup_base_path }}/dashboards/repository-management.json"
-    owner: backup
-    group: backup
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
     mode: '0640'
   become: yes
 

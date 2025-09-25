@@ -1,0 +1,11 @@
+[Unit]
+Description=Repository Maintenance Timer
+Requires=repository-maintenance.service
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

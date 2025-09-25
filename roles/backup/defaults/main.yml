@@ -221,3 +221,7 @@ retry_attempts: "3"
 retry_delay: "60"
 post_backup_verification: "true"
 restore_test_frequency: "weekly"
+
+# Systemd service management
+backup_timer_enabled: true
+backup_coordinator_enabled: true

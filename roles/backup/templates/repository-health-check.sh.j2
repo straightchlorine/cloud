@@ -1,0 +1,137 @@
+#!/bin/bash
+# Repository Health Check Script
+# {{ ansible_managed }}
+# Performs health checks on backup repositories
+
+set -euo pipefail
+
+# Configuration
+BACKUP_BASE="{{ backup_base_path }}"
+RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    log "ERROR: $1"
+}
+
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+    log "SUCCESS: $1"
+}
+
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+    log "WARNING: $1"
+}
+
+# Check repository connectivity
+check_connectivity() {
+    log "Checking repository connectivity..."
+
+    if restic snapshots --quiet >/dev/null 2>&1; then
+        success "Repository is accessible"
+        return 0
+    else
+        error "Cannot connect to repository"
+        return 1
+    fi
+}
+
+# Check repository integrity
+check_integrity() {
+    log "Performing repository integrity check..."
+
+    if restic check --quiet; then
+        success "Repository integrity check passed"
+        return 0
+    else
+        error "Repository integrity check failed"
+        return 1
+    fi
+}
+
+# Quick health check
+quick_check() {
+    local exit_code=0
+
+    log "Performing quick health check..."
+
+    check_connectivity || exit_code=1
+
+    # Basic repository stats
+    if restic stats --quiet >/dev/null 2>&1; then
+        success "Repository statistics accessible"
+    else
+        warning "Cannot retrieve repository statistics"
+        exit_code=1
+    fi
+
+    return $exit_code
+}
+
+# Full health check
+full_check() {
+    local exit_code=0
+
+    log "Performing full health check..."
+
+    check_connectivity || exit_code=1
+    check_integrity || exit_code=1
+
+    return $exit_code
+}
+
+# Show help
+show_help() {
+    cat << EOF
+Repository Health Check Script
+
+Usage: $0 [options]
+
+Options:
+  --quick-check    Perform quick connectivity check
+  --full-check     Perform full integrity check (default)
+  --help           Show this help
+
+Environment:
+  Repository: ${RESTIC_REPOSITORY}
+  Password File: ${RESTIC_PASSWORD_FILE}
+
+EOF
+}
+
+# Main function
+main() {
+    case "${1:---full-check}" in
+        "--quick-check")
+            quick_check
+            ;;
+        "--full-check")
+            full_check
+            ;;
+        "--help")
+            show_help
+            ;;
+        *)
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Script execution
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

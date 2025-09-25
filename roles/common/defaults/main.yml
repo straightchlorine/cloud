@@ -43,3 +43,13 @@ ssd_format: false
 # Stack management
 start_stack: true
 
+# Systemd service defaults
+remain_after_exit: "false"
+standard_output: "journal"
+standard_error: "journal"
+restart_policy: "no"
+restart_sec: "5"
+wanted_by: "multi-user.target"
+enable_security_hardening: true
+no_new_privileges: "true"
+
