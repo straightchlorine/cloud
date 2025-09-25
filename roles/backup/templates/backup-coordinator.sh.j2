@@ -180,8 +180,8 @@ update_coordination_status() {
     "timestamp": "$(date -Iseconds)",
     "coordinator": {
         "max_concurrent": ${MAX_CONCURRENT_BACKUPS},
-        "active_count": ${#active_backups[@]},
-        "queued_count": ${#queued_requests[@]}
+        "active_count": ${{ '{#' }}active_backups[@]},
+        "queued_count": ${{ '{#' }}queued_requests[@]}
     },
     "active_backups": [$(IFS=,; echo "${active_backups[*]}")],
     "queued_requests": [$(IFS=,; echo "${queued_requests[*]}")],

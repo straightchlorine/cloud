@@ -242,7 +242,7 @@ send_alerts() {
     fi
 
     # Send alerts if configured
-    if [[ ${#failed_services[@]} -gt 0 && -n "${BACKUP_WEBHOOK_URL:-}" ]]; then
+    if [[ ${{ '{#' }}failed_services[@]} -gt 0 && -n "${BACKUP_WEBHOOK_URL:-}" ]]; then
         local alert_message="🚨 Backup Repository Alert: Failed repositories: ${failed_services[*]}"
 
         curl -X POST "${BACKUP_WEBHOOK_URL}" \
@@ -281,7 +281,7 @@ check_coordination() {
 {
     "timestamp": "$(date -Iseconds)",
     "active_backups": ${active_backups},
-    "total_repositories": ${#REPOSITORIES[@]},
+    "total_repositories": ${{ '{#' }}REPOSITORIES[@]},
     "coordination_status": "$([[ $active_backups -lt 3 ]] && echo "good" || echo "congested")"
 }
 EOF
