@@ -30,6 +30,7 @@
     - "{{ backup_base_path }}/locks"
     - "{{ backup_base_path }}/coordination"
     - "{{ backup_base_path }}/reports"
+    - "{{ backup_base_path }}/dashboards"
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
