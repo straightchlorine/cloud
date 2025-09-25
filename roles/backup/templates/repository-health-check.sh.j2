@@ -101,28 +101,67 @@ Repository Health Check Script
 Usage: $0 [options]
 
 Options:
-  --quick-check    Perform quick connectivity check
-  --full-check     Perform full integrity check (default)
-  --help           Show this help
+  --repository <type>  Repository type (critical, services, system)
+  --quick-check        Perform quick connectivity check
+  --full-check         Perform full integrity check (default)
+  --help               Show this help
 
 Environment:
   Repository: ${RESTIC_REPOSITORY}
   Password File: ${RESTIC_PASSWORD_FILE}
+
+Examples:
+  $0 --repository critical --quick-check
+  $0 --repository services --full-check
+  $0 --help
 
 EOF
 }
 
 # Main function
 main() {
-    case "${1:---full-check}" in
-        "--quick-check")
+    local action="full"
+    local repo_type=""
+
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --repository)
+                repo_type="$2"
+                shift 2
+                ;;
+            --quick-check)
+                action="quick"
+                shift
+                ;;
+            --full-check)
+                action="full"
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "Unknown argument: $1" >&2
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+
+    # Set repository URL based on type
+    if [[ -n "$repo_type" ]]; then
+        export RESTIC_REPOSITORY="{{ restic_repository }}-${repo_type}"
+    fi
+
+    # Execute the appropriate health check
+    case "$action" in
+        "quick")
             quick_check
             ;;
-        "--full-check")
+        "full")
             full_check
-            ;;
-        "--help")
-            show_help
             ;;
         *)
             show_help
