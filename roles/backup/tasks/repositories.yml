@@ -83,6 +83,11 @@
     backup_password_file: "{{ backup_base_path }}/keys/{{ device_role }}-password"
     backup_cache_dir: "{{ backup_base_path }}/cache"
     backup_log_dir: "{{ enterprise_backup_base_path }}/logs"
+    retention_policy:
+      daily: "{{ retention_daily }}"
+      weekly: "{{ retention_weekly }}"
+      monthly: "{{ retention_monthly }}"
+      yearly: "{{ retention_yearly }}"
   become: yes
 
 - name: Generate backup coordinator script
