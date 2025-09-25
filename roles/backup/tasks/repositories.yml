@@ -231,6 +231,9 @@
     {{ backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.key }}
     --check-only
+  environment:
+    RESTIC_REPOSITORY: "{{ restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ backup_base_path }}/keys/{{ device_role }}-password"
   register: repository_status
   become_user: backup
   become: yes
@@ -243,6 +246,9 @@
     {{ backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.item.key }}
     --initialize
+  environment:
+    RESTIC_REPOSITORY: "{{ restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ backup_base_path }}/keys/{{ device_role }}-password"
   become_user: backup
   become: yes
   when: item.rc != 0
@@ -272,6 +278,9 @@
     {{ backup_base_path }}/scripts/repository-health-check.sh
     --repository {{ item.key }}
     --quick-check
+  environment:
+    RESTIC_REPOSITORY: "{{ restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ backup_base_path }}/keys/{{ device_role }}-password"
   register: repository_health
   become_user: backup
   become: yes

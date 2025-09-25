@@ -70,9 +70,9 @@ validate_environment() {
         error_exit "restic is not installed or not in PATH"
     fi
 
-    # Check repository password is set
-    if [[ -z "${RESTIC_PASSWORD:-}" ]]; then
-        error_exit "RESTIC_PASSWORD environment variable is not set"
+    # Check repository password file exists
+    if [[ ! -f "${RESTIC_PASSWORD_FILE:-}" ]]; then
+        error_exit "RESTIC_PASSWORD_FILE not found: ${RESTIC_PASSWORD_FILE:-'not set'}"
     fi
 
     # Check repository URL is set
@@ -310,20 +310,66 @@ main() {
     echo "Log file: ${LOG_FILE}"
 }
 
-# Handle script arguments
-case "${1:-}" in
-    --check-only)
+# Parse command line arguments
+REPO_TYPE=""
+ACTION="full"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --repository)
+            REPO_TYPE="$2"
+            shift 2
+            ;;
+        --check-only)
+            ACTION="check"
+            shift
+            ;;
+        --initialize)
+            ACTION="init"
+            shift
+            ;;
+        --test-only)
+            ACTION="test"
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Set repository URL based on type
+if [[ -n "$REPO_TYPE" ]]; then
+    export RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-{{ restic_repository }}}-${REPO_TYPE}"
+fi
+
+# Execute based on action
+case "$ACTION" in
+    check)
         check_user
         setup_logging
         validate_environment
+        if restic snapshots >/dev/null 2>&1; then
+            exit 0  # Repository exists
+        else
+            exit 1  # Repository needs initialization
+        fi
         ;;
-    --test-only)
+    init)
+        check_user
+        setup_logging
+        validate_environment
+        initialize_repository
+        test_repository
+        ;;
+    test)
         check_user
         setup_logging
         validate_environment
         test_repository
         ;;
-    *)
+    full)
         main
         ;;
 esac
