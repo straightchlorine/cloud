@@ -13,6 +13,7 @@
     service_after: ["network.target"]
     service_wants: ["network.target"]
     service_type: "oneshot"
+    remain_after_exit: "true"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
     working_directory: "{{ backup_base_path }}"
@@ -21,6 +22,13 @@
       - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
       - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
     exec_start: "{{ backup_base_path }}/scripts/backup-{{ device_role }}.sh"
+    standard_output: "journal"
+    standard_error: "journal"
+    restart_policy: "no"
+    restart_sec: "5"
+    wanted_by: "multi-user.target"
+    enable_security_hardening: true
+    no_new_privileges: "true"
     protect_system: "strict"
     protect_home: "true"
     private_tmp: "true"
@@ -50,6 +58,7 @@
     service_after: ["network.target"]
     service_wants: ["network.target"]
     service_type: "simple"
+    remain_after_exit: "false"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
     working_directory: "{{ backup_base_path }}"
@@ -58,8 +67,13 @@
       - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
       - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
     exec_start: "{{ backup_base_path }}/scripts/backup-coordinator.sh monitor"
+    standard_output: "journal"
+    standard_error: "journal"
     restart_policy: "on-failure"
     restart_sec: "30"
+    wanted_by: "multi-user.target"
+    enable_security_hardening: true
+    no_new_privileges: "true"
     start_limit_burst: "3"
     start_limit_interval_sec: "600"
     syslog_identifier: "backup-coordinator-{{ device_role }}"
