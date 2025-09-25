@@ -87,7 +87,7 @@ test_connectivity() {
 {% endif %}
 
 run_pre_backup_commands() {
-    if [[ ${#PRE_BACKUP_COMMANDS[@]} -gt 0 ]]; then
+    if [[ ${{ '{#' }}PRE_BACKUP_COMMANDS[@]} -gt 0 ]]; then
         log "Running pre-backup commands..."
         for cmd in "${PRE_BACKUP_COMMANDS[@]}"; do
             log "Executing: $cmd"
@@ -101,7 +101,7 @@ run_pre_backup_commands() {
 }
 
 run_post_backup_commands() {
-    if [[ ${#POST_BACKUP_COMMANDS[@]} -gt 0 ]]; then
+    if [[ ${{ '{#' }}POST_BACKUP_COMMANDS[@]} -gt 0 ]]; then
         log "Running post-backup commands..."
         for cmd in "${POST_BACKUP_COMMANDS[@]}"; do
             log "Executing: $cmd"

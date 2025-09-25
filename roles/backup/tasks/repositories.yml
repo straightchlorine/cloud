@@ -77,9 +77,9 @@
   vars:
     backup_service_name: "{{ device_role }}"
     backup_directories: "{{ service_backup_configs[device_role].directories }}"
-    backup_excludes: "{{ service_backup_configs[device_role].excludes if service_backup_configs[device_role].excludes is defined else [] }}"
-    pre_backup_commands: "{{ service_backup_configs[device_role].pre_backup_scripts if service_backup_configs[device_role].pre_backup_scripts is defined else [] }}"
-    post_backup_commands: "{{ service_backup_configs[device_role].post_backup_scripts if service_backup_configs[device_role].post_backup_scripts is defined else [] }}"
+    backup_excludes: "{{ service_backup_configs[device_role].excludes }}"
+    pre_backup_commands: "{{ service_backup_configs[device_role].pre_backup_scripts }}"
+    post_backup_commands: "{{ service_backup_configs[device_role].post_backup_scripts }}"
     backup_password_file: "{{ backup_base_path }}/keys/{{ device_role }}-password"
     backup_cache_dir: "{{ backup_base_path }}/cache"
     backup_log_dir: "{{ enterprise_backup_base_path }}/logs"
