@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{ enterprise_backup_base_path }}"
+BACKUP_BASE="{{ backup_base_path }}"
 COORDINATOR_LOG="${BACKUP_BASE}/logs/coordinator-$(date +%Y%m%d).log"
 LOCKS_DIR="${BACKUP_BASE}/locks"
 COORDINATION_DIR="${BACKUP_BASE}/coordination"

@@ -35,8 +35,8 @@
       ansible.builtin.shell: |
         sudo -u {{ backup_user }} \
         RESTIC_REPOSITORY="{{ restic_repository }}" \
-        RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password" \
-        {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+        RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password" \
+        {{ backup_base_path }}/scripts/init-repositories.sh
       register: repo_init_result
       changed_when: "'Repository initialized successfully' in repo_init_result.stdout"
       failed_when: repo_init_result.rc != 0 and 'already exists' not in repo_init_result.stderr
@@ -83,7 +83,7 @@
     - name: Run initial backup validation
       ansible.builtin.shell: |
         sudo -u {{ backup_user }} \
-        {{ enterprise_backup_base_path }}/scripts/validate-backup-{{ device_role }}.sh
+        {{ backup_base_path }}/scripts/validate-backup-{{ device_role }}.sh
       register: validation_result
       changed_when: false
       failed_when: false
@@ -120,9 +120,9 @@
           🚀 Ready for Production Use!
 
           Next Steps:
-          1. Initialize repositories: sudo -u {{ backup_user }} {{ enterprise_backup_base_path }}/scripts/init-repositories.sh
+          1. Initialize repositories: sudo -u {{ backup_user }} {{ backup_base_path }}/scripts/init-repositories.sh
           2. Test backup pipeline: ansible-playbook test-backup-pipeline.yml
-          3. Monitor operations: {{ enterprise_backup_base_path }}/logs/
+          3. Monitor operations: {{ backup_base_path }}/logs/
       when: simple_mode is defined and simple_mode
 
 - name: Configure repository health monitoring

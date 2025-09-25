@@ -8,8 +8,8 @@ service:
 
 repository:
   url: "{{ restic_repository }}"
-  password_file: "{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
-  cache_dir: "{{ enterprise_backup_base_path }}/cache/{{ device_role }}"
+  password_file: "{{ backup_base_path }}/keys/{{ device_role }}-password"
+  cache_dir: "{{ backup_base_path }}/cache/{{ device_role }}"
 
 backup:
   directories:

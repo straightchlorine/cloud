@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_BASE="{{ enterprise_backup_base_path }}"
+BACKUP_BASE="{{ backup_base_path }}"
 BACKUP_USER="{{ backup_user | default('backup') }}"
 LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
@@ -172,7 +172,7 @@ create_health_check() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
 
 # Check repository integrity
 echo "Checking repository integrity..."
@@ -212,7 +212,7 @@ create_backup_validation() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ enterprise_backup_base_path }}/keys/{{ device_role }}-password"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
 
 # Validate backup directories exist and are accessible
 {% for dir in backup_directories %}
