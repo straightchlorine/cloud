@@ -218,6 +218,9 @@ advanced_features:
   automated_cleanup: true
   capacity_planning: true
 
+# Monitoring configuration
+backup_monitoring_enabled: false
+
 # Required vault variables
 required_backup_vars:
   - vault_backup_repository_base

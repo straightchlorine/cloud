@@ -22,6 +22,7 @@
 - name: Include backup monitoring setup
   ansible.builtin.include_tasks: monitoring.yml
   tags: [monitoring, enterprise_backup]
+  when: backup_monitoring_enabled
 
 
 - name: Display enterprise backup deployment summary
