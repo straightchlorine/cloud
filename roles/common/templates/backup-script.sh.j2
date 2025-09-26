@@ -6,13 +6,11 @@
 
 set -euo pipefail
 
-# Configuration
+# Configuration - Set explicitly since systemd+sudo environment inheritance is unreliable
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ backup_cache_dir }}"
-{% if backup_ssh_config is defined %}
-export RESTIC_SFTP_COMMAND="ssh -i {{ backup_ssh_config.key_path }} -p {{ backup_ssh_config.port }} -o StrictHostKeyChecking=no {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} -s sftp"
-{% endif %}
+export RESTIC_SFTP_COMMAND="ssh -F /opt/enterprise-backup/.ssh/config hetzner-storage -s sftp"
 
 # Service-specific configuration
 SERVICE_NAME="{{ backup_service_name }}"

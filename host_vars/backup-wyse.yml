@@ -31,6 +31,10 @@ backup_schedule: "*-*-* 05:00:00"
 backup_randomized_delay: "300s"
 backup_timeout: "7200"
 
+# Required backup variables (no defaults)
+backup_enabled: true
+backup_additional_groups: ["sudo"]
+
 # Retention policy
 retention_daily: "7"
 retention_weekly: "4"
