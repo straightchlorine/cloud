@@ -119,6 +119,7 @@
       - "RESTIC_REPOSITORY={{ restic_repository }}"
       - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ backup_service_name }}-password"
       - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache"
+      - "RESTIC_SFTP_COMMAND=ssh -F /opt/enterprise-backup/.ssh/config hetzner-storage -s sftp"
     exec_start: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
     standard_output: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
     standard_error: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
