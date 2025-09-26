@@ -112,8 +112,8 @@
     service_after: ["network.target"]
     service_wants: ["network.target"]
     service_type: "oneshot"
-    service_user: "root"
-    service_group: "root"
+    service_user: "backup"
+    service_group: "backup"
     working_directory: "{{ backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
@@ -123,6 +123,8 @@
     standard_output: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
     standard_error: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
     timeout_start_sec: "{{ backup_timeout | default('1800') }}"
+    enable_security_hardening: true
+    no_new_privileges: false
     protect_system: "strict"
     protect_home: "read-only"
     private_tmp: "yes"

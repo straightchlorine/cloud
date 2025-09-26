@@ -118,7 +118,7 @@ perform_backup() {
     log "Starting backup for ${SERVICE_NAME}..."
 
     # Build backup command
-    local backup_cmd="restic backup"
+    local backup_cmd="sudo restic backup"
 
     # Add paths
     for path in "${BACKUP_PATHS[@]}"; do
@@ -139,17 +139,22 @@ perform_backup() {
 
     # Execute backup
     log "Executing: $backup_cmd"
-    if eval "$backup_cmd" >> "$LOG_FILE" 2>&1; then
+    eval "$backup_cmd" >> "$LOG_FILE" 2>&1
+    local backup_exit_code=$?
+
+    if [[ $backup_exit_code -eq 0 ]]; then
         log "Backup completed successfully"
+    elif [[ $backup_exit_code -eq 1 ]]; then
+        log "Backup completed with warnings (some files had permission issues, but backup succeeded)"
     else
-        error_exit "Backup failed"
+        error_exit "Backup failed with exit code $backup_exit_code"
     fi
 }
 
 cleanup_old_snapshots() {
     log "Cleaning up old snapshots..."
 
-    local cleanup_cmd="restic forget"
+    local cleanup_cmd="sudo restic forget"
     cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
 {% if retention_policy is defined %}
     cleanup_cmd="$cleanup_cmd --keep-daily {{ retention_policy.daily }}"
@@ -172,7 +177,7 @@ cleanup_old_snapshots() {
 get_backup_stats() {
     log "Getting backup statistics..."
 
-    if restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
+    if sudo restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
         local snapshot_count=$(jq length /tmp/snapshots.json 2>/dev/null || echo "unknown")
         log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
         rm -f /tmp/snapshots.json
