@@ -133,7 +133,9 @@
       - "{{ backup_base_path }}"
       - "{{ backup_paths | join(',') }}"
   become: true
-  notify: reload systemd
+  notify:
+    - reload systemd
+    - restart backup service
 
 - name: Create systemd backup timer
   ansible.builtin.template:
@@ -148,7 +150,9 @@
     timer_schedule: "{{ backup_schedule | default('0 3 * * *') }}"
     timer_randomized_delay: "{{ backup_randomized_delay | default('300') }}"
   become: true
-  notify: reload systemd
+  notify:
+    - reload systemd
+    - restart backup timer
 
 - name: Set permissions on backup paths for backup user
   ansible.builtin.file:
@@ -159,6 +163,9 @@
   become: true
   loop: "{{ backup_paths }}"
 
+- name: Force handler execution
+  ansible.builtin.meta: flush_handlers
+
 - name: Enable and start backup timer
   ansible.builtin.systemd:
     name: "backup-{{ backup_service_name }}.timer"
@@ -167,6 +174,17 @@
     daemon_reload: true
   become: true
   when: backup_enabled | default(true)
+
+- name: Verify backup service configuration
+  ansible.builtin.systemd:
+    name: "backup-{{ backup_service_name }}.service"
+    daemon_reload: true
+  become: true
+  register: backup_service_status
+
+- name: Display backup service status
+  ansible.builtin.debug:
+    msg: "Backup service status: {{ backup_service_status.status.ActiveState | default('unknown') }}"
 
 - name: Initialize restic repository if it doesn't exist
   ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"

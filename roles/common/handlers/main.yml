@@ -31,6 +31,23 @@
     state: restarted
   become: true
 
+# Backup service restart handler
+- name: restart backup service
+  ansible.builtin.systemd:
+    name: "backup-{{ backup_service_name }}.service"
+    state: restarted
+    daemon_reload: true
+  become: true
+
+# Backup timer restart handler
+- name: restart backup timer
+  ansible.builtin.systemd:
+    name: "backup-{{ backup_service_name }}.timer"
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  become: true
+
 # Common Docker Compose stack restart handler - parameterized for different stacks
 - name: restart docker compose stack
   community.docker.docker_compose_v2:
