@@ -112,8 +112,8 @@
     service_after: ["network.target"]
     service_wants: ["network.target"]
     service_type: "oneshot"
-    service_user: "backup"
-    service_group: "backup"
+    service_user: "root"
+    service_group: "root"
     working_directory: "{{ backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"

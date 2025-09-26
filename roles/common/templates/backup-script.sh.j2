@@ -118,7 +118,7 @@ perform_backup() {
     log "Starting backup for ${SERVICE_NAME}..."
 
     # Build backup command
-    local backup_cmd="sudo restic backup"
+    local backup_cmd="restic backup"
 
     # Add paths
     for path in "${BACKUP_PATHS[@]}"; do
@@ -149,7 +149,7 @@ perform_backup() {
 cleanup_old_snapshots() {
     log "Cleaning up old snapshots..."
 
-    local cleanup_cmd="sudo restic forget"
+    local cleanup_cmd="restic forget"
     cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
 {% if retention_policy is defined %}
     cleanup_cmd="$cleanup_cmd --keep-daily {{ retention_policy.daily }}"
@@ -172,7 +172,7 @@ cleanup_old_snapshots() {
 get_backup_stats() {
     log "Getting backup statistics..."
 
-    if sudo restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
+    if restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
         local snapshot_count=$(jq length /tmp/snapshots.json 2>/dev/null || echo "unknown")
         log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
         rm -f /tmp/snapshots.json
