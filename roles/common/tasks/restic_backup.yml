@@ -138,9 +138,7 @@
     protect_system: "strict"
     protect_home: "read-only"
     private_tmp: "yes"
-    read_write_paths:
-      - "{{ backup_base_path }}"
-      - "{{ backup_paths | join(',') }}"
+    read_write_paths: "{{ [backup_base_path] + backup_paths }}"
   become: true
   notify:
     - reload systemd

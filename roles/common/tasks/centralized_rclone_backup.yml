@@ -1,0 +1,216 @@
+# Centralized Rclone Backup Implementation
+# Allows backup-wyse to backup multiple remote hosts via rclone SFTP
+# Each remote host is defined in centralized_backup_targets list
+
+- name: Validate centralized backup configuration
+  ansible.builtin.fail:
+    msg: "centralized_backup_targets must be defined as a list"
+  when: centralized_backup_targets is not defined or centralized_backup_targets | length == 0
+
+- name: Validate each backup target configuration
+  ansible.builtin.fail:
+    msg: "Required backup target variable '{{ item.1 }}' is not defined for {{ item.0.service_name }}"
+  when: item.0[item.1] is not defined or item.0[item.1] == ""
+  loop: "{{ centralized_backup_targets | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
+  no_log: true
+
+- name: Install rclone
+  ansible.builtin.shell: |
+    if ! command -v rclone &> /dev/null; then
+      curl https://rclone.org/install.sh | bash
+    else
+      echo "rclone already installed"
+    fi
+  register: rclone_install
+  changed_when: "'rclone already installed' not in rclone_install.stdout"
+  become: true
+
+- name: Verify rclone installation
+  ansible.builtin.command: rclone version
+  register: rclone_version_check
+  changed_when: false
+
+- name: Create rclone configuration directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: true
+  loop:
+    - "{{ backup_base_path }}/.config"
+    - "{{ backup_base_path }}/.config/rclone"
+    - "{{ backup_base_path }}/staging"
+
+- name: Generate SSH keys for each backup target
+  ansible.builtin.openssh_keypair:
+    path: "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
+    type: ed25519
+    owner: backup
+    group: backup
+    mode: '0600'
+    comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
+  become: true
+  loop: "{{ centralized_backup_targets }}"
+  register: ssh_keys_generated
+
+- name: Create rclone configuration file
+  ansible.builtin.template:
+    src: rclone.conf.j2
+    dest: "{{ backup_base_path }}/.config/rclone/rclone.conf"
+    owner: backup
+    group: backup
+    mode: '0600'
+  become: true
+
+- name: Create centralized backup script for each target
+  ansible.builtin.template:
+    src: centralized-backup-script.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
+    owner: backup
+    group: backup
+    mode: '0755'
+  vars:
+    backup_target: "{{ item }}"
+    backup_service_name: "{{ item.service_name }}"
+    backup_paths: "{{ item.backup_paths }}"
+    restic_repository: "{{ item.restic_repository }}"
+    backup_password_file: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    backup_cache_dir: "{{ backup_base_path }}/cache/{{ item.service_name }}"
+    backup_log_dir: "{{ backup_base_path }}/logs"
+    rclone_remote: "{{ item.service_name }}"
+    rclone_config: "{{ backup_base_path }}/.config/rclone/rclone.conf"
+  become: true
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Create restic password files for each target
+  ansible.builtin.copy:
+    content: "{{ item.restic_password }}"
+    dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    owner: backup
+    group: backup
+    mode: '0600'
+  become: true
+  no_log: true
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Create systemd service for each backup target
+  ansible.builtin.template:
+    src: systemd-service.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  vars:
+    service_description: "Centralized Rclone Backup Service for {{ item.service_name }}"
+    service_after: ["network.target"]
+    service_wants: ["network.target"]
+    service_type: "oneshot"
+    service_user: "backup"
+    service_group: "backup"
+    working_directory: "{{ backup_base_path }}"
+    exec_start: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
+    standard_output: "append:{{ backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
+    standard_error: "append:{{ backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
+    timeout_start_sec: "{{ item.backup_timeout }}"
+    enable_security_hardening: true
+    no_new_privileges: false
+    protect_system: "strict"
+    protect_home: "read-only"
+    private_tmp: "yes"
+    read_write_paths: "{{ [backup_base_path, '/tmp'] }}"
+    restart_policy: "no"
+    restart_sec: "5"
+    wanted_by: "multi-user.target"
+  become: true
+  notify:
+    - reload systemd
+    - restart backup service
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Create systemd timer for each backup target
+  ansible.builtin.template:
+    src: backup-timer.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    timer_description: "Centralized Backup Timer for {{ item.service_name }}"
+    timer_service: "backup-{{ item.service_name }}.service"
+    timer_schedule: "{{ item.backup_schedule }}"
+    timer_randomized_delay: "{{ item.backup_randomized_delay }}"
+  become: true
+  notify:
+    - reload systemd
+    - restart backup timer
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Force handler execution
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start backup timers
+  ansible.builtin.systemd:
+    name: "backup-{{ item.service_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: item.backup_enabled
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Initialize restic repositories
+  ansible.builtin.shell: |
+    export RESTIC_REPOSITORY="{{ item.restic_repository }}"
+    export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ item.service_name }}"
+
+    if ! restic snapshots &>/dev/null; then
+      restic init
+      echo "Repository initialized for {{ item.service_name }}"
+    else
+      echo "Repository already exists for {{ item.service_name }}"
+    fi
+  become_user: backup
+  become: true
+  register: repository_init
+  changed_when: "'Repository initialized' in repository_init.stdout"
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Display SSH public keys for deployment
+  ansible.builtin.debug:
+    msg: |
+      ✅ SSH Key for {{ item.service_name }}:
+
+      Public key to deploy to root@{{ item.target_host }}:
+      {{ lookup('file', backup_base_path + '/keys/' + item.service_name + '-ssh-key.pub') }}
+
+      Deploy command:
+      ssh-copy-id -i {{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key.pub root@{{ item.target_host }}
+  loop: "{{ centralized_backup_targets }}"
+
+- name: Display centralized backup configuration summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Centralized Rclone Backup Configured:
+
+      {% for target in centralized_backup_targets %}
+      {{ target.service_name }}:
+        Target: {{ target.target_host }}
+        Repository: {{ target.restic_repository }}
+        Schedule: {{ target.backup_schedule }}
+        Paths: {{ target.backup_paths | join(', ') }}
+        Service: backup-{{ target.service_name }}.service
+        Timer: backup-{{ target.service_name }}.timer
+        Status: {{ 'Enabled' if target.backup_enabled else 'Disabled' }}
+
+      {% endfor %}
+      Rclone Version: {{ rclone_version_check.stdout }}
+      Backup Base: {{ backup_base_path }}
+
+      Next Steps:
+      1. Deploy SSH keys to target hosts (see above)
+      2. Test connectivity: rclone ls {{ centralized_backup_targets[0].service_name }}:/
+      3. Run manual backup: systemctl start backup-{{ centralized_backup_targets[0].service_name }}.service

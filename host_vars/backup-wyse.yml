@@ -225,10 +225,96 @@ advanced_features:
 # Monitoring configuration
 backup_monitoring_enabled: false
 
+# Centralized backup configuration for multiple hosts
+centralized_backup_targets:
+  - service_name: "pi-automation"
+    target_host: "192.168.101.20"
+    backup_enabled: true
+    backup_schedule: "*-*-* 02:00:00"
+    backup_randomized_delay: "300s"
+    backup_timeout: "3600"
+    restic_repository: "{{ vault_backup_repository_base }}/pi-automation"
+    restic_password: "{{ vault_restic_pi_automation_password }}"
+    backup_paths:
+      - "/home"
+      - "/etc"
+      - "/opt/automation"
+      - "/var/lib/docker"
+    exclude_patterns:
+      - "*.tmp"
+      - "*.log.1*"
+      - "**/logs/*"
+      - "**/cache/*"
+      - "**/.cache/*"
+      - "**/tmp/*"
+      - "**/node_modules/*"
+    retention_policy:
+      daily: "7"
+      weekly: "4"
+      monthly: "6"
+      yearly: "1"
+
+  - service_name: "pi-music"
+    target_host: "192.168.101.30"
+    backup_enabled: true
+    backup_schedule: "*-*-* 03:00:00"
+    backup_randomized_delay: "300s"
+    backup_timeout: "7200"
+    restic_repository: "{{ vault_backup_repository_base }}/pi-music"
+    restic_password: "{{ vault_restic_pi_music_password }}"
+    backup_paths:
+      - "/home"
+      - "/etc"
+      - "/opt/music"
+      - "/var/lib/music"
+      - "/mnt/music-storage"
+    exclude_patterns:
+      - "*.tmp"
+      - "*.log.1*"
+      - "**/logs/*"
+      - "**/cache/*"
+      - "**/.cache/*"
+      - "**/tmp/*"
+      - "**/thumbnails/*"
+    retention_policy:
+      daily: "14"
+      weekly: "8"
+      monthly: "12"
+      yearly: "2"
+
+  - service_name: "pi-dns"
+    target_host: "192.168.101.40"
+    backup_enabled: true
+    backup_schedule: "*-*-* 01:00:00"
+    backup_randomized_delay: "300s"
+    backup_timeout: "1800"
+    restic_repository: "{{ vault_backup_repository_base }}/pi-dns"
+    restic_password: "{{ vault_restic_pi_dns_password }}"
+    backup_paths:
+      - "/home"
+      - "/etc"
+      - "/etc/pihole"
+      - "/etc/dnsmasq.d"
+      - "/var/log/pihole.log"
+    exclude_patterns:
+      - "*.tmp"
+      - "*.log.1*"
+      - "**/logs/*"
+      - "**/cache/*"
+      - "**/.cache/*"
+      - "**/tmp/*"
+    retention_policy:
+      daily: "30"
+      weekly: "12"
+      monthly: "24"
+      yearly: "3"
+
 # Required vault variables
 required_backup_vars:
   - vault_backup_repository_base
-  - vault_restic_backup_password
+  - vault_restic_pi_automation_password
+  - vault_restic_pi_music_password
+  - vault_restic_pi_dns_password
   - vault_domain_name
   - vault_letsencrypt_email
 

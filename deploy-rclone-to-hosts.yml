@@ -1,0 +1,23 @@
+---
+# Deploy rclone to specific hosts
+# Use this playbook to install rclone on individual target hosts
+
+- name: Install rclone on target hosts
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install rclone
+      include_tasks: roles/common/tasks/install_rclone.yml
+
+  post_tasks:
+    - name: Display installation summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ Rclone installed on {{ inventory_hostname }}
+
+          You can now use rclone for:
+          - Manual file transfers
+          - Additional backup scripts
+          - Cloud storage synchronization
