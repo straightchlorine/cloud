@@ -5,7 +5,7 @@
 [{{ target.service_name }}]
 type = sftp
 host = {{ target.target_host }}
-user = root
+user = {{ target.ssh_user }}
 key_file = {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key
 use_insecure_cipher = false
 disable_hashcheck = false

@@ -1,4 +1,3 @@
----
 # Enterprise backup pipeline testing playbook
 # Comprehensive validation of backup excellence implementation
 
@@ -26,11 +25,11 @@
         path: "{{ item }}"
       register: backup_infrastructure
       loop:
-        - "{{ enterprise_backup_base_path }}"
-        - "{{ enterprise_backup_base_path }}/scripts"
-        - "{{ enterprise_backup_base_path }}/config"
-        - "{{ enterprise_backup_base_path }}/repositories"
-        - "{{ enterprise_backup_base_path }}/rollback"
+        - "{{ backup_base_path }}"
+        - "{{ backup_base_path }}/scripts"
+        - "{{ backup_base_path }}/config"
+        - "{{ backup_base_path }}/repositories"
+        - "{{ backup_base_path }}/rollback"
 
     - name: Verify backup infrastructure exists
       ansible.builtin.fail:
@@ -42,7 +41,7 @@
 
     - name: Test repository initialization scripts
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/init-repositories.sh --help
+        {{ backup_base_path }}/scripts/init-repositories.sh --help
       register: repo_init_test
       become_user: backup
       become: yes
@@ -51,8 +50,7 @@
 
     - name: Test repository health check functionality
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/repository-health-check.sh
-        --repository critical --quick-check --dry-run
+        {{ backup_base_path }}/scripts/repository-health-check.sh --repository critical --quick-check --dry-run
       register: repo_health_test
       become_user: backup
       become: yes
@@ -61,8 +59,7 @@
 
     - name: Test automated restore testing framework
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/automated-restore-test.sh
-        --validate-only --dry-run
+        {{ backup_base_path }}/scripts/automated-restore-test.sh --validate-only --dry-run
       register: restore_test_validation
       become_user: backup
       become: yes
@@ -71,8 +68,7 @@
 
     - name: Test rollback system functionality
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/rollback-orchestrator.sh
-        --validate --dry-run
+        {{ backup_base_path }}/scripts/rollback-orchestrator.sh --validate --dry-run
       register: rollback_test
       become_user: backup
       become: yes
@@ -98,7 +94,7 @@
 
     - name: Test repository management scripts
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/manage-repositories.sh --help
+        {{ backup_base_path }}/scripts/manage-repositories.sh --help
       register: repo_management_test
       become_user: backup
       become: yes
@@ -107,7 +103,7 @@
 
     - name: Test backup performance analyzer
       ansible.builtin.command: >
-        python3 {{ enterprise_backup_base_path }}/scripts/backup-performance-analyzer.py --help
+        python3 {{ backup_base_path }}/scripts/backup-performance-analyzer.py --help
       register: performance_analyzer_test
       become_user: backup
       become: yes
@@ -116,7 +112,7 @@
 
     - name: Test security features - encryption key management
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/manage-encryption-keys.sh --help
+        {{ backup_base_path }}/scripts/manage-encryption-keys.sh --help
       register: key_management_test
       become_user: backup
       become: yes
@@ -135,7 +131,7 @@
 
     - name: Test backup orchestration scripts
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/repository-orchestrator.sh --help
+        {{ backup_base_path }}/scripts/repository-orchestrator.sh --help
       register: orchestrator_test
       become_user: backup
       become: yes
@@ -147,23 +143,23 @@
         path: "{{ item }}"
       register: compliance_features
       loop:
-        - "{{ enterprise_backup_base_path }}/config/rollback-catalog.yml"
-        - "{{ enterprise_backup_base_path }}/alerts/backup-alert-rules.yml"
-        - "{{ enterprise_backup_base_path }}/docs/rollback-procedures.md"
+        - "{{ backup_base_path }}/config/rollback-catalog.yml"
+        - "{{ backup_base_path }}/alerts/backup-alert-rules.yml"
+        - "{{ backup_base_path }}/docs/rollback-procedures.md"
 
     - name: Verify dashboard files exist
       ansible.builtin.stat:
         path: "{{ item }}"
       register: dashboard_files
       loop:
-        - "{{ enterprise_backup_base_path }}/dashboards/enterprise-backup-overview.json"
-        - "{{ enterprise_backup_base_path }}/dashboards/backup-performance-analytics.json"
-        - "{{ enterprise_backup_base_path }}/dashboards/rollback-operations.json"
-        - "{{ enterprise_backup_base_path }}/dashboards/repository-management.json"
+        - "{{ backup_base_path }}/dashboards/enterprise-backup-overview.json"
+        - "{{ backup_base_path }}/dashboards/backup-performance-analytics.json"
+        - "{{ backup_base_path }}/dashboards/rollback-operations.json"
+        - "{{ backup_base_path }}/dashboards/repository-management.json"
 
     - name: Test backup validation framework
       ansible.builtin.command: >
-        {{ enterprise_backup_base_path }}/scripts/validate-rollback.sh --help
+        {{ backup_base_path }}/scripts/validate-rollback.sh --help
       register: validation_test
       become_user: backup
       become: yes
@@ -269,3 +265,4 @@
     - name: enterprise backup pipeline test complete
       ansible.builtin.debug:
         msg: "🏆 Enterprise backup pipeline test completed successfully"
+
