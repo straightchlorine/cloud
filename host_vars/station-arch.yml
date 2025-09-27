@@ -1,0 +1,228 @@
+# Station-Arch Workstation Configuration
+# Backup Node Configuration
+device_role: workstation
+device_type: arch_linux
+
+# Enterprise backup node configuration
+backup_role: "node"
+backup_base_path: "/opt/enterprise-backup"
+backup_user: "backup"
+backup_group: "backup"
+backup_node_agent_enabled: false
+
+# Network optimization for node
+backup_network_optimization: true
+backup_bandwidth_limit: 50
+
+# Repository configuration (enhanced with network optimization)
+restic_enabled: true
+restic_version: "0.18.1"
+restic_repository: "{{ vault_backup_repository_base }}/station-arch"
+restic_password: "{{ vault_restic_station_arch_password }}"
+
+# Enhanced backup paths with intelligent categorization
+backup_directories:
+  critical:
+    - "/etc"
+    - "/home"
+    - "/data/vault/code"
+    - "/data/vault/books"
+  bulk:
+    - "/data/ssd/code"
+    - "/data/vault/media/img"
+    - "/data/vault/media/misc"
+    - "/data/vault/organise"
+  system:
+    - "/var/lib"
+
+# Advanced exclude patterns with performance optimization
+backup_exclude_patterns:
+  cache:
+    - "**/.cache/**"
+    - "**/cache/**"
+    - "**/tmp/**"
+    - "/var/tmp/**"
+    - "/var/cache/**"
+
+  logs:
+    - "*.log.1*"
+    - "*.tmp"
+    - "**/logs/**"
+
+  development:
+    - "/data/vault/code/.vault/leaks/"
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/target/**"
+    - "**/build/**"
+    - "**/__pycache__/**"
+
+  large_files:
+    - "/home/*/.local/share/Steam/steamapps/**"
+    - "/home/*/.local/share/anaconda/**"
+    - "/home/*/.local/share/matlab/**"
+    - "/home/*/building/**"
+    - "*.iso"
+    - "*.img"
+    - "*.vmdk"
+
+# Enhanced scheduling with load balancing
+backup_schedule: "*-*-* 10:00:00"
+backup_randomized_delay: "1800s"  # Extended for better load distribution
+backup_timeout: "7200"
+backup_priority: "normal"
+
+# Network optimization settings
+network_optimization:
+  enabled: true
+  compression_level: "adaptive"
+  bandwidth_limit_mbps: 50
+  concurrent_transfers: 3
+  delta_sync: true
+  resume_support: true
+  connection_pooling: true
+
+# Enhanced retention policy with compliance
+retention_policy:
+  critical:
+    daily: "30"
+    weekly: "12"
+    monthly: "24"
+    yearly: "5"
+  bulk:
+    daily: "7"
+    weekly: "4"
+    monthly: "6"
+    yearly: "2"
+  system:
+    daily: "14"
+    weekly: "8"
+    monthly: "12"
+    yearly: "3"
+
+# Security enhancements
+backup_security:
+  encryption_algorithm: "AES256"
+  key_derivation: "scrypt"
+  verification_enabled: true
+  integrity_checks: true
+  secure_deletion: true
+  audit_logging: true
+
+# Performance monitoring
+backup_monitoring:
+  enabled: true
+  metrics_collection: true
+  performance_tracking: true
+  bandwidth_monitoring: true
+  error_tracking: true
+  success_notifications: false
+  failure_notifications: true
+
+# Enhanced restore capabilities
+restore_capabilities:
+  centralized_restore: true
+  push_back_enabled: true
+  granular_restore: true
+  point_in_time_recovery: true
+  cross_platform_restore: true
+
+restore_methods:
+  primary: "centralized_coordinator"
+  fallback: "direct_pull"
+  emergency: "manual_intervention"
+
+# Push-back configuration for restored data
+pushback_config:
+  enabled: true
+  methods: ["rsync", "scp", "rclone"]
+  verification: true
+  atomic_operations: true
+  rollback_on_failure: true
+  post_restore_validation: true
+
+# Backup coordination with backup-wyse
+coordination:
+  backup_coordinator: "backup-wyse"
+  coordinator_ip: "192.168.101.10"
+  heartbeat_interval: "300s"
+  status_reporting: true
+  dependency_management: true
+
+# Advanced features
+advanced_features:
+  deduplication_analysis: true
+  storage_optimization: true
+  automated_testing: true
+  disaster_recovery: true
+  compliance_reporting: true
+
+# Pre and post backup hooks
+backup_hooks:
+  pre_backup:
+    - name: "system_snapshot"
+      command: "btrfs subvolume snapshot / /snapshots/pre-backup-$(date +%s)"
+      enabled: false
+    - name: "database_dump"
+      command: "pg_dumpall > /tmp/db-backup.sql"
+      enabled: false
+    - name: "service_quiesce"
+      command: "systemctl stop --user applications.target"
+      enabled: false
+
+  post_backup:
+    - name: "service_resume"
+      command: "systemctl start --user applications.target"
+      enabled: false
+    - name: "cleanup_temp"
+      command: "rm -f /tmp/db-backup.sql"
+      enabled: false
+    - name: "notification"
+      command: "notify-send 'Backup Complete' 'Station-arch backup finished successfully'"
+      enabled: true
+
+# Node exporter configuration
+node_exporter_enabled: true
+node_exporter_port: 9100
+node_exporter_ufw_enabled: false
+
+# Firewall configuration for backup operations
+firewall_backup_ports:
+  - port: 9100
+    comment: "Prometheus Node Exporter"
+  - port: 22
+    comment: "SSH for backup operations"
+
+# Required vault variables
+required_backup_vars:
+  - vault_backup_repository_base
+  - vault_restic_station_arch_password
+  - vault_domain_name
+  - vault_letsencrypt_email
+
+# Compliance and audit settings
+compliance:
+  retention_enforcement: true
+  immutable_backups: false
+  legal_hold_support: true
+  audit_logging: true
+  data_classification: "sensitive"
+  gdpr_compliance: true
+  retention_audit_trail: true
+
+# Disaster recovery configuration
+disaster_recovery:
+  replication_enabled: true
+  cross_site_backup: true
+  recovery_time_objective: "4h"
+  recovery_point_objective: "1h"
+  automated_failover: false
+  manual_validation_required: true
+
+# Development environment specific settings
+development_settings:
+  code_backup_priority: "high"
+  project_isolation: true
+  version_control_integration: true
+  build_artifact_exclusion: true
+  dependency_cache_exclusion: true

@@ -1,0 +1,50 @@
+# Backup System - Validation Tasks
+
+- name: Validate enterprise backup role configuration
+  ansible.builtin.fail:
+    msg: "backup_role must be defined as 'coordinator' or 'node'"
+  when: >
+    backup_role is not defined or
+    backup_role not in ['coordinator', 'node']
+
+- name: Validate coordinator configuration
+  ansible.builtin.fail:
+    msg: "backup_targets must be defined for coordinator role"
+  when: >
+    backup_role == "coordinator" and
+    (backup_targets is not defined or backup_targets | length == 0)
+
+- name: Validate backup base path
+  ansible.builtin.fail:
+    msg: "backup_base_path must be defined"
+  when: backup_base_path is not defined
+
+- name: Validate required vault variables for coordinator
+  ansible.builtin.fail:
+    msg: "Required vault variable '{{ item }}' is not defined"
+  when: >
+    backup_role == "coordinator" and
+    vars[item] is not defined
+  loop: "{{ backup_required_vault_vars | default([]) }}"
+  no_log: true
+
+- name: Validate target configurations for coordinator
+  ansible.builtin.fail:
+    msg: "Required target variable '{{ item.1 }}' is not defined for {{ item.0.service_name }}"
+  when: >
+    backup_role == "coordinator" and
+    item.0[item.1] is not defined
+  loop: "{{ (backup_targets | default([])) | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
+  no_log: true
+
+- name: Display validation results
+  ansible.builtin.debug:
+    msg: |
+      ✅ Backup Validation Passed:
+      - Role: {{ backup_role }}
+      - Base Path: {{ backup_base_path }}
+      {% if backup_role == "coordinator" %}
+      - Targets: {{ backup_targets | length }} configured
+      {% endif %}
+      - Network Optimization: {{ backup_network_optimization | default(false) }}
+      - Monitoring: {{ backup_monitoring | default(true) }}

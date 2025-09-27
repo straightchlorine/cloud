@@ -1,0 +1,132 @@
+---
+# Backup System - Coordinator Only Deployment
+# Deploys only the backup coordinator (backup-wyse)
+
+- name: Deploy Backup Coordinator
+  hosts: backup-primary
+  become: true
+  gather_facts: true
+
+  vars:
+    backup_role: "coordinator"
+    backup_base_path: "/opt/enterprise-backup"
+    backup_user: "backup"
+    backup_group: "backup"
+    backup_restic_version: "0.18.1"
+    backup_network_optimization: true
+    backup_monitoring: true
+    backup_network_tuning: true
+
+  pre_tasks:
+    - name: Validate coordinator deployment configuration
+      ansible.builtin.fail:
+        msg: "backup_targets must be defined for coordinator deployment"
+      when: backup_targets is not defined or backup_targets | length == 0
+
+    - name: Display coordinator deployment summary
+      ansible.builtin.debug:
+        msg: |
+          🚀 Deploying Backup Coordinator
+
+          Host: {{ inventory_hostname }}
+          Targets: {{ backup_targets | length }} configured
+          Base Path: {{ backup_base_path }}
+
+          Target Services:
+          {% for target in backup_targets %}
+          - {{ target.service_name }}: {{ target.target_host }}
+            Repository: {{ target.restic_repository }}
+            Schedule: {{ target.backup_schedule | default('*-*-* 02:00:00') }}
+            Method: {{ target.backup_method | default('hybrid_enhanced') }}
+          {% endfor %}
+
+  tasks:
+    - name: Deploy enterprise backup coordinator
+      ansible.builtin.include_role:
+        name: backup-system
+
+  post_tasks:
+    - name: Create coordinator verification script
+      ansible.builtin.copy:
+        content: |
+          #!/bin/bash
+          # Backup Coordinator Verification Script
+
+          BACKUP_BASE="{{ backup_base_path }}"
+          echo "🔍 Verifying Backup Coordinator..."
+
+          # Check coordinator services
+          echo "Checking coordinator services..."
+          {% for target in backup_targets %}
+          if systemctl is-enabled backup-{{ target.service_name }}.timer >/dev/null 2>&1; then
+              echo "✅ backup-{{ target.service_name }}.timer: Enabled"
+          else
+              echo "❌ backup-{{ target.service_name }}.timer: Not enabled"
+          fi
+          {% endfor %}
+
+          # Check SSH connectivity
+          echo "Testing SSH connectivity..."
+          {% for target in backup_targets %}
+          if ssh -i "$BACKUP_BASE/keys/{{ target.service_name }}-ssh-key" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
+              echo "✅ {{ target.service_name }}: SSH connectivity OK"
+          else
+              echo "❌ {{ target.service_name }}: SSH connectivity FAILED"
+              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}"
+          fi
+          {% endfor %}
+
+          # Check repositories
+          echo "Checking repository access..."
+          {% for target in backup_targets %}
+          export RESTIC_REPOSITORY="{{ target.restic_repository }}"
+          export RESTIC_PASSWORD_FILE="$BACKUP_BASE/keys/{{ target.service_name }}-password"
+          if restic snapshots >/dev/null 2>&1; then
+              echo "✅ {{ target.service_name }}: Repository accessible"
+          else
+              echo "⚠️  {{ target.service_name }}: Repository needs initialization"
+          fi
+          {% endfor %}
+
+          echo ""
+          echo "🎯 Quick Test Commands:"
+          {% for target in backup_targets %}
+          echo "{{ target.service_name }}: systemctl start backup-{{ target.service_name }}.service"
+          {% endfor %}
+        dest: "{{ backup_base_path }}/scripts/backup-verify-coordinator.sh"
+        owner: "{{ backup_user }}"
+        group: "{{ backup_group }}"
+        mode: '0755'
+
+    - name: Display coordinator deployment completion
+      ansible.builtin.debug:
+        msg: |
+          ✅ Backup Coordinator Deployment Complete!
+
+          📊 Coordinator Configuration:
+          - Host: {{ inventory_hostname }}
+          - Base Path: {{ backup_base_path }}
+          - Targets: {{ backup_targets | length }} services configured
+          - Network Optimization: {{ backup_network_optimization }}
+          - Health Monitoring: {{ backup_monitoring }}
+
+          🔧 Deployed Services:
+          {% for target in backup_targets %}
+          - backup-{{ target.service_name }}.service
+          - backup-{{ target.service_name }}.timer
+          {% endfor %}
+          - backup-health-monitor.service
+          - backup-metrics.service
+
+          📋 SSH Key Deployment Required:
+          {% for target in backup_targets %}
+          {{ target.service_name }}:
+            ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
+          {% endfor %}
+
+          🚀 Next Steps:
+          1. Deploy SSH keys (see commands above)
+          2. Verify setup: {{ backup_base_path }}/scripts/backup-verify-coordinator.sh
+          3. Test operations: {{ backup_base_path }}/scripts/backup-manager.sh --status
+
+          Coordinator ready for enterprise backup operations!

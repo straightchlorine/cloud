@@ -84,6 +84,23 @@
   become: true
   loop: "{{ centralized_backup_targets }}"
 
+- name: Create centralized restore script for each target
+  ansible.builtin.template:
+    src: centralized-restore-script.sh.j2
+    dest: "{{ backup_base_path }}/scripts/restore-{{ item.service_name }}.sh"
+    owner: backup
+    group: backup
+    mode: '0755'
+  vars:
+    backup_target: "{{ item }}"
+    backup_service_name: "{{ item.service_name }}"
+    restic_repository: "{{ item.restic_repository }}"
+    backup_password_file: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    backup_cache_dir: "{{ backup_base_path }}/cache/{{ item.service_name }}"
+    backup_log_dir: "{{ backup_base_path }}/logs"
+  become: true
+  loop: "{{ centralized_backup_targets }}"
+
 - name: Create restic password files for each target
   ansible.builtin.copy:
     content: "{{ item.restic_password }}"
@@ -191,26 +208,39 @@
       ssh-copy-id -i {{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key.pub root@{{ item.target_host }}
   loop: "{{ centralized_backup_targets }}"
 
-- name: Display centralized backup configuration summary
+- name: Display enhanced centralized backup configuration summary
   ansible.builtin.debug:
     msg: |
-      ✅ Centralized Rclone Backup Configured:
+      ✅ Enhanced Centralized Backup System Configured:
 
       {% for target in centralized_backup_targets %}
       {{ target.service_name }}:
         Target: {{ target.target_host }}
         Repository: {{ target.restic_repository }}
         Schedule: {{ target.backup_schedule }}
+        Method: {{ target.backup_method | default('standard') }}
+        Network Optimization: {{ 'Enabled' if target.network_optimization else 'Disabled' }}
+        Restore Push-back: {{ 'Enabled' if target.restore_pushback_enabled else 'Disabled' }}
         Paths: {{ target.backup_paths | join(', ') }}
-        Service: backup-{{ target.service_name }}.service
-        Timer: backup-{{ target.service_name }}.timer
+        Backup Service: backup-{{ target.service_name }}.service
+        Backup Timer: backup-{{ target.service_name }}.timer
+        Backup Script: {{ backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
+        Restore Script: {{ backup_base_path }}/scripts/restore-{{ target.service_name }}.sh
         Status: {{ 'Enabled' if target.backup_enabled else 'Disabled' }}
 
       {% endfor %}
       Rclone Version: {{ rclone_version_check.stdout }}
       Backup Base: {{ backup_base_path }}
 
+      Enhanced Features:
+      ✅ Network optimization with bandwidth limiting
+      ✅ Adaptive compression and concurrent transfers
+      ✅ Centralized restore with secure push-back
+      ✅ Performance metrics and monitoring
+      ✅ Enhanced error handling and retry logic
+
       Next Steps:
       1. Deploy SSH keys to target hosts (see above)
       2. Test connectivity: rclone ls {{ centralized_backup_targets[0].service_name }}:/
       3. Run manual backup: systemctl start backup-{{ centralized_backup_targets[0].service_name }}.service
+      4. Test restore: {{ backup_base_path }}/scripts/restore-{{ centralized_backup_targets[0].service_name }}.sh --latest --dry-run

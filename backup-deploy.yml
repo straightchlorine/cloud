@@ -1,0 +1,5 @@
+---
+# Backup System - Master Deployment Playbook
+# Unified deployment for the complete backup solution
+
+- import_playbook: playbooks/backup/deploy-full-system.yml

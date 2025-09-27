@@ -1,0 +1,321 @@
+# Backup System - Coordinator Deployment
+# Deploys centralized backup coordinator (backup-wyse)
+
+- name: Create backup coordinator user
+  ansible.builtin.user:
+    name: "{{ backup_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ backup_base_path }}"
+    create_home: true
+    groups: ["sudo"]
+    append: true
+
+- name: Create coordinator directory structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
+  loop:
+    - "{{ backup_base_path }}/scripts"
+    - "{{ backup_base_path }}/logs"
+    - "{{ backup_base_path }}/keys"
+    - "{{ backup_base_path }}/cache"
+    - "{{ backup_base_path }}/staging"
+    - "{{ backup_base_path }}/.config"
+    - "{{ backup_base_path }}/restore-staging"
+    - "{{ backup_base_path }}/metrics"
+    - "{{ backup_base_path }}/coordination"
+
+- name: Install enterprise backup prerequisites
+  ansible.builtin.package:
+    name:
+      - curl
+      - jq
+      - rsync
+      - openssh-client
+      - bc
+    state: present
+
+- name: Install rclone for coordinator
+  ansible.builtin.shell: |
+    if ! command -v rclone &> /dev/null; then
+      curl https://rclone.org/install.sh | bash
+    else
+      echo "rclone already installed"
+    fi
+  register: rclone_install
+  changed_when: "'rclone already installed' not in rclone_install.stdout"
+
+- name: Install restic backup tool
+  ansible.builtin.get_url:
+    url: "https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{ backup_restic_version }}_linux_amd64.bz2"
+    dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
+    mode: '0644'
+
+- name: Extract and install restic
+  ansible.builtin.shell: |
+    cd /tmp
+    bunzip2 -f restic_{{ backup_restic_version }}_linux_amd64.bz2
+    mv restic_{{ backup_restic_version }}_linux_amd64 /usr/local/bin/restic
+    chmod +x /usr/local/bin/restic
+  args:
+    creates: /usr/local/bin/restic
+
+- name: Create rclone configuration directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
+  loop:
+    - "{{ backup_base_path }}/.config"
+    - "{{ backup_base_path }}/.config/rclone"
+
+- name: Generate SSH keys for each target
+  ansible.builtin.openssh_keypair:
+    path: "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
+    type: ed25519
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+    comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
+  loop: "{{ backup_targets }}"
+  register: ssh_keys_generated
+
+- name: Deploy SSH public keys to target hosts
+  ansible.posix.authorized_key:
+    user: "{{ item.ssh_user | default(backup_user) }}"
+    state: present
+    key: "{{ lookup('file', backup_base_path + '/keys/' + item.service_name + '-ssh-key.pub') }}"
+    comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
+    exclusive: false
+  delegate_to: "{{ item.target_host }}"
+  loop: "{{ backup_targets }}"
+  when: ssh_keys_generated is changed or backup_force_key_deployment | default(false)
+
+- name: Verify SSH connectivity to targets
+  ansible.builtin.shell: |
+    ssh -i "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key" \
+        -o ConnectTimeout=10 \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        "{{ item.ssh_user | default(backup_user) }}@{{ item.target_host }}" \
+        "echo 'SSH connectivity verified'"
+  become_user: "{{ backup_user }}"
+  loop: "{{ backup_targets }}"
+  register: ssh_connectivity_test
+  failed_when: ssh_connectivity_test.rc != 0
+  retries: 2
+  delay: 5
+
+- name: Create rclone configuration file
+  ansible.builtin.template:
+    src: rclone-config.conf.j2
+    dest: "{{ backup_base_path }}/.config/rclone/rclone.conf"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+
+- name: Create coordinator backup scripts for each target
+  ansible.builtin.template:
+    src: coordinator-backup.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0755'
+  vars:
+    backup_target: "{{ item }}"
+  loop: "{{ backup_targets }}"
+
+- name: Create coordinator restore scripts for each target
+  ansible.builtin.template:
+    src: coordinator-restore.sh.j2
+    dest: "{{ backup_base_path }}/scripts/enterprise-restore-{{ item.service_name }}.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0755'
+  vars:
+    backup_target: "{{ item }}"
+  loop: "{{ backup_targets }}"
+
+- name: Generate secure restic passwords for targets without existing passwords
+  ansible.builtin.set_fact:
+    generated_restic_passwords: "{{ generated_restic_passwords | default({}) | combine({item.service_name: lookup('password', '/dev/null chars=ascii_letters,digits,!@#$%^&*() length=32')}) }}"
+  when: item.restic_password is not defined
+  loop: "{{ backup_targets }}"
+  no_log: true
+
+- name: Create ansible-vault encrypted password files for each target
+  ansible.builtin.copy:
+    content: "{{ item.restic_password | default(generated_restic_passwords[item.service_name]) }}"
+    dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+  no_log: true
+  loop: "{{ backup_targets }}"
+
+- name: Encrypt restic password files with ansible-vault
+  ansible.builtin.shell: |
+    if [ ! -f "{{ backup_base_path }}/keys/{{ item.service_name }}-password" ]; then
+      # Create vault password if it doesn't exist
+      if [ ! -f "{{ backup_base_path }}/keys/.vault-password" ]; then
+        openssl rand -base64 32 > "{{ backup_base_path }}/keys/.vault-password"
+        chmod 600 "{{ backup_base_path }}/keys/.vault-password"
+        chown {{ backup_user }}:{{ backup_group }} "{{ backup_base_path }}/keys/.vault-password"
+      fi
+
+      # Decrypt vault file to create plaintext password file for restic
+      export ANSIBLE_VAULT_PASSWORD_FILE="{{ backup_base_path }}/keys/.vault-password"
+      ansible-vault decrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
+        --output "{{ backup_base_path }}/keys/{{ item.service_name }}-password" 2>/dev/null || \
+      ansible-vault encrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
+        --vault-password-file="{{ backup_base_path }}/keys/.vault-password" && \
+      ansible-vault decrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
+        --output "{{ backup_base_path }}/keys/{{ item.service_name }}-password" \
+        --vault-password-file="{{ backup_base_path }}/keys/.vault-password"
+
+      chmod 600 "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+      chown {{ backup_user }}:{{ backup_group }} "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    fi
+  become_user: root
+  loop: "{{ backup_targets }}"
+  no_log: true
+
+- name: Secure vault password file permissions
+  ansible.builtin.file:
+    path: "{{ backup_base_path }}/keys/.vault-password"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0400'
+
+- name: Create systemd services for each target
+  ansible.builtin.template:
+    src: enterprise-backup.service.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    backup_target: "{{ item }}"
+  loop: "{{ backup_targets }}"
+  notify:
+    - reload systemd
+
+- name: Create systemd timers for each target
+  ansible.builtin.template:
+    src: enterprise-backup.timer.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    backup_target: "{{ item }}"
+  loop: "{{ backup_targets }}"
+  notify:
+    - reload systemd
+
+- name: Force handler execution
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start backup timers
+  ansible.builtin.systemd:
+    name: "backup-{{ item.service_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: item.backup_enabled | default(true)
+  loop: "{{ backup_targets }}"
+
+- name: Initialize restic repositories
+  ansible.builtin.shell: |
+    export RESTIC_REPOSITORY="{{ item.restic_repository }}"
+    export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ item.service_name }}"
+
+    if ! restic snapshots &>/dev/null; then
+      restic init
+      echo "Repository initialized for {{ item.service_name }}"
+    else
+      echo "Repository already exists for {{ item.service_name }}"
+    fi
+  become_user: "{{ backup_user }}"
+  register: repository_init
+  changed_when: "'Repository initialized' in repository_init.stdout"
+  loop: "{{ backup_targets }}"
+
+- name: Create coordinator management script
+  ansible.builtin.template:
+    src: coordinator-manager.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-manager.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0755'
+
+- name: Create key rotation script
+  ansible.builtin.template:
+    src: key-rotation.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-key-rotation.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0755'
+
+- name: Create key rotation service
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Backup Key Rotation Service
+      After=network.target
+
+      [Service]
+      Type=oneshot
+      User={{ backup_user }}
+      ExecStart={{ backup_base_path }}/scripts/backup-key-rotation.sh
+      StandardOutput=journal
+      StandardError=journal
+      PrivateTmp=true
+      ProtectSystem=strict
+      ReadWritePaths={{ backup_base_path }}
+      NoNewPrivileges=true
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/backup-key-rotation.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+
+- name: Create key rotation timer
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Backup Key Rotation Timer
+      Requires=backup-key-rotation.service
+
+      [Timer]
+      OnCalendar={{ backup_key_rotation_schedule | default('monthly') }}
+      RandomizedDelaySec=3600
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+    dest: /etc/systemd/system/backup-key-rotation.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+
+- name: Enable key rotation timer
+  ansible.builtin.systemd:
+    name: backup-key-rotation.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: backup_enable_key_rotation | default(true)

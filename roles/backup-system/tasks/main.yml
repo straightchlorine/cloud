@@ -1,0 +1,52 @@
+# Backup System - Main Task Entry Point
+# Unified backup solution with coordinator and node agents
+
+- name: Include validation tasks
+  ansible.builtin.include_tasks: validation.yml
+  tags: [validation, backup]
+
+- name: Include network facts collection
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+  tags: [network, backup]
+
+- name: Deploy backup coordinator
+  ansible.builtin.include_tasks: coordinator.yml
+  when: backup_role == "coordinator"
+  tags: [coordinator, backup]
+
+- name: Deploy node agent
+  ansible.builtin.include_tasks: node-agent.yml
+  when: backup_role == "node"
+  tags: [node, backup]
+
+- name: Configure network optimization
+  ansible.builtin.include_tasks: network-optimization.yml
+  when: backup_network_optimization | default(false)
+  tags: [network, backup]
+
+- name: Setup monitoring and health checks
+  ansible.builtin.include_tasks: monitoring.yml
+  when: backup_monitoring | default(true)
+  tags: [monitoring, backup]
+
+- name: Display deployment summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Backup System Deployed Successfully!
+
+      Role: {{ backup_role }}
+      Node: {{ inventory_hostname }}
+      Repository Strategy: {{ backup_strategy | default('hybrid') }}
+      Network Optimization: {{ backup_network_optimization | default(false) }}
+      Monitoring: {{ backup_monitoring | default(true) }}
+
+      {% if backup_role == "coordinator" %}
+      Coordinator Services:
+      {% for target in backup_targets | default([]) %}
+      - {{ target.service_name }}: {{ target.target_host }}
+      {% endfor %}
+      {% endif %}
+
+      backup system ready for production use!

@@ -1,0 +1,40 @@
+# Backup System - Handlers
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart sshd
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+
+- name: restart enterprise backup coordinator
+  ansible.builtin.systemd:
+    name: "backup-{{ item.service_name }}.service"
+    state: restarted
+    daemon_reload: true
+  loop: "{{ backup_targets | default([]) }}"
+
+- name: restart enterprise backup timers
+  ansible.builtin.systemd:
+    name: "backup-{{ item.service_name }}.timer"
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  loop: "{{ backup_targets | default([]) }}"
+
+- name: restart enterprise backup monitoring
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop:
+    - backup-health-monitor.service
+    - backup-metrics.service
+
+- name: restart enterprise backup node agent
+  ansible.builtin.systemd:
+    name: backup-node-agent.service
+    state: restarted
+    daemon_reload: true
