@@ -10,29 +10,37 @@
   # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
-    - name: Test YAML file syntax
-      ansible.builtin.shell: python3 -c "import yaml; yaml.safe_load(open('../../host_vars/backup-wyse.yml'))"
-      register: yaml_test
-      delegate_to: localhost
-      ignore_errors: true
-
-    - name: Display YAML test result
-      ansible.builtin.debug:
-        msg: "YAML syntax test: {{ 'PASSED' if yaml_test.rc == 0 else 'FAILED - ' + yaml_test.stderr }}"
-
     - name: Load host_vars manually for testing
       ansible.builtin.include_vars: "../../host_vars/backup-wyse.yml"
-      register: manual_vars
+      ignore_errors: true
+      register: manual_load_result
 
-    - name: Display manually loaded variables
+    - name: Display manual load result
       ansible.builtin.debug:
         msg: |
-          Manual load test:
+          Manual load result: {{ 'SUCCESS' if manual_load_result is succeeded else 'FAILED' }}
+          {% if manual_load_result is failed %}
+          Error: {{ manual_load_result.msg | default('Unknown error') }}
+          {% endif %}
+
+    - name: Display manually loaded variables (if successful)
+      ansible.builtin.debug:
+        msg: |
+          After manual load:
           - backup_role: {{ backup_role | default('STILL UNDEFINED') }}
           - backup_targets defined: {{ backup_targets is defined }}
           {% if backup_targets is defined %}
           - backup_targets count: {{ backup_targets | length }}
           {% endif %}
+      when: manual_load_result is succeeded
+
+    - name: Test simple variable access
+      ansible.builtin.debug:
+        msg: |
+          Direct inventory variables:
+          - device_role: {{ device_role | default('UNDEFINED') }}
+          - ansible_host: {{ ansible_host | default('UNDEFINED') }}
+          - Current working directory: {{ ansible_env.PWD | default('UNDEFINED') }}
 
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
