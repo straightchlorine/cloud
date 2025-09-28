@@ -7,12 +7,74 @@
   become: true
   gather_facts: true
 
+  vars:
+    backup_role: "coordinator"
+    backup_base_path: "/opt/enterprise-backup"
+    backup_user: "backup"
+    backup_group: "backup"
+    backup_restic_version: "0.18.1"
+    backup_network_optimization: true
+    backup_monitoring: true
+    backup_network_tuning: true
+    backup_targets:
+      - service_name: "station-arch"
+        target_host: "192.168.100.10"
+        ssh_user: "backup"
+        backup_enabled: true
+        backup_schedule: "*-*-* 10:00:00"
+        backup_randomized_delay: "1800s"
+        backup_timeout: "7200"
+        backup_method: "hybrid_enhanced"
+        network_optimization: true
+        restic_repository: "{{ vault_backup_repository_base }}/station-arch"
+        restic_password: "{{ vault_restic_station_arch_password }}"
+        backup_paths:
+          - "/etc"
+          - "/home"
+          - "/var/lib"
+          - "/data/ssd/code"
+          - "/data/vault/books"
+          - "/data/vault/code"
+          - "/data/vault/media/img"
+          - "/data/vault/media/misc"
+          - "/data/vault/organise"
+        exclude_patterns:
+          - "**/.cache/**"
+          - "**/cache/**"
+          - "**/tmp/**"
+          - "/var/tmp/**"
+          - "/var/cache/**"
+          - "*.log.1*"
+          - "*.tmp"
+          - "**/logs/**"
+          - "/data/vault/code/.vault/leaks/"
+          - "/home/*/.local/share/Steam/steamapps/**"
+          - "/home/*/.local/share/anaconda/**"
+          - "/home/*/.local/share/matlab/**"
+          - "/home/*/building/**"
+          - "**/node_modules/**"
+          - "**/.git/**"
+          - "**/target/**"
+          - "**/build/**"
+          - "**/__pycache__/**"
+          - "*.iso"
+          - "*.img"
+          - "*.vmdk"
+        retention_policy:
+          daily: "30"
+          weekly: "12"
+          monthly: "24"
+          yearly: "3"
+        compression_level: "adaptive"
+        bandwidth_limit_mbps: 50
+        concurrent_transfers: 3
+        restore_pushback_enabled: true
+
   pre_tasks:
-    # Temporarily disabled validation due to variable scoping issue
-    # - name: Validate coordinator deployment configuration
-    #   ansible.builtin.fail:
-    #     msg: "backup_targets must be defined for coordinator deployment"
-    #   when: backup_targets is not defined or backup_targets | length == 0
+    - name: Validate coordinator deployment configuration
+      ansible.builtin.fail:
+        msg: "backup_targets must be defined for coordinator deployment"
+      when: backup_targets is not defined or backup_targets | length == 0
 
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
