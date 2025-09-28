@@ -10,17 +10,19 @@
   # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
-    - name: Debug available variables
+    - name: Debug all variables
       ansible.builtin.debug:
-        msg: |
-          🔍 Debugging Variable Loading:
-          - inventory_hostname: {{ inventory_hostname }}
-          - backup_role: {{ backup_role | default('UNDEFINED') }}
-          - backup_base_path: {{ backup_base_path | default('UNDEFINED') }}
-          - backup_targets defined: {{ backup_targets is defined }}
-          {% if backup_targets is defined %}
-          - backup_targets count: {{ backup_targets | length }}
-          {% endif %}
+        var: hostvars[inventory_hostname]
+
+    - name: Check if host_vars file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../host_vars/backup-wyse.yml"
+      register: hostvar_file
+      delegate_to: localhost
+
+    - name: Display hostvar file status
+      ansible.builtin.debug:
+        msg: "Host vars file exists: {{ hostvar_file.stat.exists }}"
 
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
