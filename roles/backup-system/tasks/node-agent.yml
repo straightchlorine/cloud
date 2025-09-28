@@ -98,7 +98,7 @@
     owner: root
     group: root
     mode: '0644'
-  when: backup_node_agent_enabled | default(false)
+  when: backup_node_agent_enabled
 
 - name: Create node health monitoring timer
   ansible.builtin.copy:
@@ -148,14 +148,14 @@
   loop:
     - backup-node-agent.service
     - backup-node-health.timer
-  when: backup_node_agent_enabled | default(false)
+  when: backup_node_agent_enabled
 
 - name: Display node agent deployment status
   ansible.builtin.debug:
     msg: |
       ✅ Backup Node Agent Deployed:
       - Node: {{ inventory_hostname }}
-      - Agent Service: {{ 'Enabled' if backup_node_agent_enabled | default(false) else 'Disabled' }}
+      - Agent Service: {{ 'Enabled' if backup_node_agent_enabled else 'Disabled' }}
       - SSH Configuration: Optimized for backup operations
       - Health Monitoring: Active
 

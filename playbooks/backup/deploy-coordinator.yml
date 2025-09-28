@@ -7,68 +7,7 @@
   become: true
   gather_facts: true
 
-  vars:
-    backup_role: "coordinator"
-    backup_base_path: "/opt/enterprise-backup"
-    backup_user: "backup"
-    backup_group: "backup"
-    backup_restic_version: "0.18.1"
-    backup_network_optimization: true
-    backup_monitoring: true
-    backup_network_tuning: true
-    backup_targets:
-      - service_name: "station-arch"
-        target_host: "192.168.100.10"
-        ssh_user: "backup"
-        backup_enabled: true
-        backup_schedule: "*-*-* 10:00:00"
-        backup_randomized_delay: "1800s"
-        backup_timeout: "7200"
-        backup_method: "hybrid_enhanced"
-        network_optimization: true
-        restic_repository: "{{ vault_backup_repository_base }}/station-arch"
-        restic_password: "{{ vault_restic_station_arch_password }}"
-        backup_paths:
-          - "/etc"
-          - "/home"
-          - "/var/lib"
-          - "/data/ssd/code"
-          - "/data/vault/books"
-          - "/data/vault/code"
-          - "/data/vault/media/img"
-          - "/data/vault/media/misc"
-          - "/data/vault/organise"
-        exclude_patterns:
-          - "**/.cache/**"
-          - "**/cache/**"
-          - "**/tmp/**"
-          - "/var/tmp/**"
-          - "/var/cache/**"
-          - "*.log.1*"
-          - "*.tmp"
-          - "**/logs/**"
-          - "/data/vault/code/.vault/leaks/"
-          - "/home/*/.local/share/Steam/steamapps/**"
-          - "/home/*/.local/share/anaconda/**"
-          - "/home/*/.local/share/matlab/**"
-          - "/home/*/building/**"
-          - "**/node_modules/**"
-          - "**/.git/**"
-          - "**/target/**"
-          - "**/build/**"
-          - "**/__pycache__/**"
-          - "*.iso"
-          - "*.img"
-          - "*.vmdk"
-        retention_policy:
-          daily: "30"
-          weekly: "12"
-          monthly: "24"
-          yearly: "3"
-        compression_level: "adaptive"
-        bandwidth_limit_mbps: 50
-        concurrent_transfers: 3
-        restore_pushback_enabled: true
+  # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
     - name: Validate coordinator deployment configuration
@@ -89,8 +28,8 @@
           {% for target in backup_targets %}
           - {{ target.service_name }}: {{ target.target_host }}
             Repository: {{ target.restic_repository }}
-            Schedule: {{ target.backup_schedule | default('*-*-* 02:00:00') }}
-            Method: {{ target.backup_method | default('hybrid_enhanced') }}
+            Schedule: {{ target.backup_schedule }}
+            Method: {{ target.backup_method }}
           {% endfor %}
 
   tasks:
@@ -121,11 +60,11 @@
           # Check SSH connectivity
           echo "Testing SSH connectivity..."
           {% for target in backup_targets %}
-          if ssh -i "$BACKUP_BASE/keys/{{ target.service_name }}-ssh-key" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
+          if ssh -i "$BACKUP_BASE/keys/{{ target.service_name }}-ssh-key" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
               echo "✅ {{ target.service_name }}: SSH connectivity OK"
           else
               echo "❌ {{ target.service_name }}: SSH connectivity FAILED"
-              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}"
+              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user }}@{{ target.target_host }}"
           fi
           {% endfor %}
 
@@ -174,7 +113,7 @@
           📋 SSH Key Deployment Required:
           {% for target in backup_targets %}
           {{ target.service_name }}:
-            ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
+            ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user }}@{{ target.target_host }}
           {% endfor %}
 
           🚀 Next Steps:

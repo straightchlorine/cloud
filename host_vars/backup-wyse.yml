@@ -16,6 +16,8 @@ backup_bandwidth_limit: 100
 backup_qos_enabled: true
 
 # Monitoring and health checks
+backup_monitoring: true
+backup_node_agent_enabled: false
 backup_grafana_integration: false
 backup_health_check_schedule: "*-*-* 06:00:00"
 backup_metrics_schedule: "*-*-* *:15:00"

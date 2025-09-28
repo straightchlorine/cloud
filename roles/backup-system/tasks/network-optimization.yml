@@ -13,7 +13,7 @@
     - { name: 'net.ipv4.tcp_wmem', value: '4096 65536 134217728' }
     - { name: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
     - { name: 'net.core.default_qdisc', value: 'fq' }
-  when: backup_network_tuning | default(false)
+  when: backup_network_tuning
 
 - name: Create network optimization script
   ansible.builtin.template:
@@ -30,7 +30,7 @@
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
-  when: backup_bandwidth_limit | default(0) > 0
+  when: backup_bandwidth_limit > 0
 
 - name: Create QoS configuration for backup traffic
   ansible.builtin.template:
@@ -39,7 +39,7 @@
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
-  when: backup_qos_enabled | default(false)
+  when: backup_qos_enabled
 
 - name: Configure connection pooling settings
   ansible.builtin.copy:
@@ -71,8 +71,8 @@
   ansible.builtin.debug:
     msg: |
       ✅ Network Optimization Configured:
-      - TCP Buffer Optimization: {{ backup_network_tuning | default(false) }}
-      - Bandwidth Limiting: {{ backup_bandwidth_limit | default('unlimited') }} Mbps
-      - QoS Configuration: {{ backup_qos_enabled | default(false) }}
+      - TCP Buffer Optimization: {{ backup_network_tuning }}
+      - Bandwidth Limiting: {{ backup_bandwidth_limit }} Mbps
+      - QoS Configuration: {{ backup_qos_enabled }}
       - SSH Connection Pooling: Enabled
       - Compression: Enabled (Level 6)

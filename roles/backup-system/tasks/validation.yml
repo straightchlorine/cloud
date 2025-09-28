@@ -25,7 +25,7 @@
   when: >
     backup_role == "coordinator" and
     vars[item] is not defined
-  loop: "{{ backup_required_vault_vars | default([]) }}"
+  loop: "{{ backup_required_vault_vars }}"
   no_log: true
 
 - name: Validate target configurations for coordinator
@@ -34,7 +34,7 @@
   when: >
     backup_role == "coordinator" and
     item.0[item.1] is not defined
-  loop: "{{ (backup_targets | default([])) | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
+  loop: "{{ backup_targets | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
   no_log: true
 
 - name: Display validation results
@@ -46,5 +46,5 @@
       {% if backup_role == "coordinator" %}
       - Targets: {{ backup_targets | length }} configured
       {% endif %}
-      - Network Optimization: {{ backup_network_optimization | default(false) }}
-      - Monitoring: {{ backup_monitoring | default(true) }}
+      - Network Optimization: {{ backup_network_optimization }}
+      - Monitoring: {{ backup_monitoring }}
