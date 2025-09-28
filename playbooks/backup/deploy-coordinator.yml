@@ -10,6 +10,18 @@
   # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
+    - name: Debug available variables
+      ansible.builtin.debug:
+        msg: |
+          🔍 Debugging Variable Loading:
+          - inventory_hostname: {{ inventory_hostname }}
+          - backup_role: {{ backup_role | default('UNDEFINED') }}
+          - backup_base_path: {{ backup_base_path | default('UNDEFINED') }}
+          - backup_targets defined: {{ backup_targets is defined }}
+          {% if backup_targets is defined %}
+          - backup_targets count: {{ backup_targets | length }}
+          {% endif %}
+
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
         msg: |
@@ -26,6 +38,7 @@
             Schedule: {{ target.backup_schedule }}
             Method: {{ target.backup_method }}
           {% endfor %}
+      when: backup_targets is defined
 
   tasks:
     - name: Deploy enterprise backup coordinator
