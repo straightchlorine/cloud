@@ -7,16 +7,6 @@
   become: true
   gather_facts: true
 
-  vars:
-    backup_role: "coordinator"
-    backup_base_path: "/opt/enterprise-backup"
-    backup_user: "backup"
-    backup_group: "backup"
-    backup_restic_version: "0.18.1"
-    backup_network_optimization: true
-    backup_monitoring: true
-    backup_network_tuning: true
-
   pre_tasks:
     - name: Debug backup_targets in playbook context
       ansible.builtin.debug:
