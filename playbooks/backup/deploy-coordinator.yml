@@ -10,19 +10,29 @@
   # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
-    - name: Debug all variables
-      ansible.builtin.debug:
-        var: hostvars[inventory_hostname]
-
-    - name: Check if host_vars file exists
-      ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../host_vars/backup-wyse.yml"
-      register: hostvar_file
+    - name: Test YAML file syntax
+      ansible.builtin.shell: python3 -c "import yaml; yaml.safe_load(open('../../host_vars/backup-wyse.yml'))"
+      register: yaml_test
       delegate_to: localhost
+      ignore_errors: true
 
-    - name: Display hostvar file status
+    - name: Display YAML test result
       ansible.builtin.debug:
-        msg: "Host vars file exists: {{ hostvar_file.stat.exists }}"
+        msg: "YAML syntax test: {{ 'PASSED' if yaml_test.rc == 0 else 'FAILED - ' + yaml_test.stderr }}"
+
+    - name: Load host_vars manually for testing
+      ansible.builtin.include_vars: "../../host_vars/backup-wyse.yml"
+      register: manual_vars
+
+    - name: Display manually loaded variables
+      ansible.builtin.debug:
+        msg: |
+          Manual load test:
+          - backup_role: {{ backup_role | default('STILL UNDEFINED') }}
+          - backup_targets defined: {{ backup_targets is defined }}
+          {% if backup_targets is defined %}
+          - backup_targets count: {{ backup_targets | length }}
+          {% endif %}
 
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
