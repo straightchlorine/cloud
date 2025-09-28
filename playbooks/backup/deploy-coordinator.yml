@@ -8,14 +8,6 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Debug backup_targets in playbook context
-      ansible.builtin.debug:
-        var: backup_targets
-
-    - name: Debug backup_targets defined status
-      ansible.builtin.debug:
-        msg: "backup_targets is defined: {{ backup_targets is defined }}"
-
     - name: Validate coordinator deployment configuration
       ansible.builtin.fail:
         msg: "backup_targets must be defined for coordinator deployment"
