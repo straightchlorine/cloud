@@ -10,11 +10,6 @@
   # Configuration comes from host_vars - no hardcoded overrides
 
   pre_tasks:
-    - name: Validate coordinator deployment configuration
-      ansible.builtin.fail:
-        msg: "backup_targets must be defined for coordinator deployment"
-      when: backup_targets is not defined or backup_targets | length == 0
-
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
         msg: |
