@@ -8,6 +8,11 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Force load backup_targets variable
+      set_fact:
+        backup_targets: "{{ backup_targets }}"
+      when: backup_targets is defined
+
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
         msg: |
