@@ -44,15 +44,15 @@
       - bc
     state: present
 
+- name: Check if rclone is installed
+  ansible.builtin.command: which rclone
+  register: rclone_check
+  changed_when: false
+  failed_when: false
+
 - name: Install rclone for coordinator
-  ansible.builtin.shell: |
-    if ! command -v rclone &> /dev/null; then
-      curl https://rclone.org/install.sh | bash
-    else
-      echo "rclone already installed"
-    fi
-  register: rclone_install
-  changed_when: "'rclone already installed' not in rclone_install.stdout"
+  ansible.builtin.shell: curl https://rclone.org/install.sh | bash
+  when: rclone_check.rc != 0
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
