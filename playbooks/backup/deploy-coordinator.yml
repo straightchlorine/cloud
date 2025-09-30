@@ -3,7 +3,7 @@
 # Deploys only the backup coordinator (backup-wyse)
 
 - name: Deploy Backup Coordinator
-  hosts: backup-primary
+  hosts: backup_primary
   become: true
   gather_facts: true
 
