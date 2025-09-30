@@ -45,7 +45,7 @@
     backup_role == "coordinator" and
     item.0[item.1] is not defined
   loop: "{{ backup_targets | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
-  no_log: true
+  no_log: false
 
 - name: Display validation results
   ansible.builtin.debug:
