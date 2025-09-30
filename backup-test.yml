@@ -1,5 +1,0 @@
----
-# Backup System - Testing and Validation
-# Comprehensive testing of the backup system
-
-- import_playbook: playbooks/backup/test-system.yml

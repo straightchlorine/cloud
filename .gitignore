@@ -1,0 +1,16 @@
+# Ansible vault files with secrets
+group_vars/vault.yml
+host_vars/vault_*.yml
+
+# Ansible logs
+*.log
+ansible.log
+
+# Temporary files
+*.tmp
+*.retry
+.vault_pass
+
+# OS files
+.DS_Store
+Thumbs.db

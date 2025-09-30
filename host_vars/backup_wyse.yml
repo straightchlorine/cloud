@@ -292,6 +292,7 @@ backup_targets:
 
 
 # Enterprise backup required vault variables
+# These must be defined in group_vars/vault.yml on the deployment machine
 backup_required_vault_vars:
   - vault_backup_repository_base
   - vault_restic_station_arch_password

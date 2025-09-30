@@ -7,14 +7,6 @@
   become: true
   gather_facts: true
 
-  # Explicitly load variables from hostvars due to Ansible scoping issue
-  vars:
-    backup_targets: "{{ hostvars[inventory_hostname].backup_targets }}"
-    vault_backup_repository_base: "{{ hostvars[inventory_hostname].vault_backup_repository_base }}"
-    vault_restic_station_arch_password: "{{ hostvars[inventory_hostname].vault_restic_station_arch_password }}"
-    vault_domain_name: "{{ hostvars[inventory_hostname].vault_domain_name }}"
-    vault_letsencrypt_email: "{{ hostvars[inventory_hostname].vault_letsencrypt_email }}"
-
   pre_tasks:
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
