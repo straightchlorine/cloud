@@ -7,6 +7,16 @@
     backup_role is not defined or
     backup_role not in ['coordinator', 'node']
 
+- name: Debug backup_targets availability
+  ansible.builtin.debug:
+    msg: |
+      Checking backup_targets:
+      - backup_role: {{ backup_role }}
+      - backup_targets is defined: {{ backup_targets is defined }}
+      - backup_targets type: {{ backup_targets | type_debug }}
+      - backup_targets length: {{ backup_targets | length if backup_targets is defined else 'N/A' }}
+  when: backup_role == "coordinator"
+
 - name: Validate coordinator configuration
   ansible.builtin.fail:
     msg: "backup_targets must be defined for coordinator role"
