@@ -111,6 +111,7 @@
 - name: Verify SSH connectivity to targets
   ansible.builtin.shell: |
     ssh -i "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}" \
+        -F /dev/null \
         -o ConnectTimeout=10 \
         -o BatchMode=yes \
         -o StrictHostKeyChecking=accept-new \
