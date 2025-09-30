@@ -1,15 +1,18 @@
 # Backup System - Coordinator Deployment
 # Deploys centralized backup coordinator (backup-wyse)
 
-- name: Create backup coordinator user
+- name: Ensure backup coordinator user exists
   ansible.builtin.user:
     name: "{{ backup_user }}"
-    system: true
     shell: /bin/bash
     home: "{{ backup_base_path }}"
     create_home: true
     groups: ["sudo"]
     append: true
+  register: backup_user_result
+  failed_when:
+    - backup_user_result.failed
+    - "'currently used by process' not in backup_user_result.msg"
 
 - name: Create coordinator directory structure
   ansible.builtin.file:
