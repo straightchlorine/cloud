@@ -82,11 +82,11 @@
           # Check SSH connectivity
           echo "Testing SSH connectivity..."
           {% for target in backup_targets %}
-          if ssh -i "$BACKUP_BASE/keys/{{ target.service_name }}-ssh-key" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
+          if ssh -i "$BACKUP_BASE/.ssh/nodes/{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
               echo "✅ {{ target.service_name }}: SSH connectivity OK"
           else
               echo "❌ {{ target.service_name }}: SSH connectivity FAILED"
-              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user }}@{{ target.target_host }}"
+              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}"
           fi
           {% endfor %}
 
@@ -135,7 +135,7 @@
           📋 SSH Key Deployment Required:
           {% for target in backup_targets %}
           {{ target.service_name }}:
-            ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user }}@{{ target.target_host }}
+            ssh-copy-id -i {{ backup_base_path }}/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}
           {% endfor %}
 
           🚀 Next Steps:

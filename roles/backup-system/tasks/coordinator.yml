@@ -25,6 +25,8 @@
     - "{{ backup_base_path }}/scripts"
     - "{{ backup_base_path }}/logs"
     - "{{ backup_base_path }}/keys"
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/nodes"
     - "{{ backup_base_path }}/cache"
     - "{{ backup_base_path }}/staging"
     - "{{ backup_base_path }}/.config"
@@ -80,7 +82,7 @@
 
 - name: Generate SSH keys for each target
   ansible.builtin.openssh_keypair:
-    path: "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
+    path: "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}"
     type: ed25519
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
@@ -89,20 +91,26 @@
   loop: "{{ backup_targets }}"
   register: ssh_keys_generated
 
+- name: Read SSH public keys from coordinator
+  ansible.builtin.slurp:
+    src: "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}.pub"
+  loop: "{{ backup_targets }}"
+  register: ssh_public_keys
+
 - name: Deploy SSH public keys to target hosts
   ansible.posix.authorized_key:
-    user: "{{ item.ssh_user | default(backup_user) }}"
+    user: "{{ item.item.ssh_user | default(backup_user) }}"
     state: present
-    key: "{{ lookup('file', backup_base_path + '/keys/' + item.service_name + '-ssh-key.pub') }}"
-    comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
+    key: "{{ item.content | b64decode }}"
+    comment: "backup-{{ item.item.service_name }}@{{ ansible_hostname }}"
     exclusive: false
-  delegate_to: "{{ item.target_host }}"
-  loop: "{{ backup_targets }}"
+  delegate_to: "{{ item.item.target_host }}"
+  loop: "{{ ssh_public_keys.results }}"
   when: ssh_keys_generated is changed or backup_force_key_deployment | default(false)
 
 - name: Verify SSH connectivity to targets
   ansible.builtin.shell: |
-    ssh -i "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key" \
+    ssh -i "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}" \
         -o ConnectTimeout=10 \
         -o BatchMode=yes \
         -o StrictHostKeyChecking=accept-new \
