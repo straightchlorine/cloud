@@ -7,7 +7,9 @@
   become: true
   gather_facts: true
 
-  # Configuration comes from host_vars - no hardcoded overrides
+  # Explicitly load variables from hostvars due to Ansible scoping issue
+  vars:
+    backup_targets: "{{ hostvars[inventory_hostname].backup_targets }}"
 
   pre_tasks:
     - name: Debug variable access in playbook context
