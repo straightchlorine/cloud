@@ -106,7 +106,7 @@ test_connectivity() {
     log "Testing enterprise backup connectivity to $TARGET_HOST..."
 
     # Test SSH connectivity
-    if ssh -i "$SSH_KEY" -o ConnectTimeout=10 -o BatchMode=yes "$SSH_USER@$TARGET_HOST" "echo 'SSH connectivity verified'" >/dev/null 2>&1; then
+    if ssh -i "$SSH_KEY" -F /dev/null -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$SSH_USER@$TARGET_HOST" "echo 'SSH connectivity verified'" >/dev/null 2>&1; then
         log "SSH connectivity test passed"
     else
         error_exit "Cannot establish SSH connection to $SSH_USER@$TARGET_HOST"
