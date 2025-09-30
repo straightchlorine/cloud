@@ -12,6 +12,10 @@
       set_fact:
         backup_targets: "{{ hostvars[inventory_hostname]['backup_targets'] }}"
 
+    - name: Verify backup_targets was loaded
+      debug:
+        msg: "backup_targets loaded: {{ backup_targets is defined }} ({{ backup_targets | length }} items)"
+
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
         msg: |
