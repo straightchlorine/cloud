@@ -36,7 +36,7 @@
     backup_role == "coordinator" and
     vars[item] is not defined
   loop: "{{ backup_required_vault_vars }}"
-  no_log: true
+  no_log: false
 
 - name: Validate target configurations for coordinator
   ansible.builtin.fail:
