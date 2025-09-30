@@ -184,7 +184,7 @@
 
 - name: Create systemd services for each target
   ansible.builtin.template:
-    src: enterprise-backup.service.j2
+    src: backup.service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
     group: root
@@ -197,7 +197,7 @@
 
 - name: Create systemd timers for each target
   ansible.builtin.template:
-    src: enterprise-backup.timer.j2
+    src: backup.timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
     group: root

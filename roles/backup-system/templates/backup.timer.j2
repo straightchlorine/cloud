@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup Timer for {{ backup_target.service_name }}
+Requires=backup-{{ backup_target.service_name }}.service
+
+[Timer]
+OnCalendar={{ backup_target.backup_schedule }}
+RandomizedDelaySec={{ backup_target.backup_randomized_delay | default('300s') }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

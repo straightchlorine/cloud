@@ -1,0 +1,16 @@
+[Unit]
+Description=Backup Service for {{ backup_target.service_name }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ backup_user }}
+Group={{ backup_group }}
+ExecStart={{ backup_base_path }}/scripts/backup-{{ backup_target.service_name }}.sh
+TimeoutStartSec={{ backup_target.backup_timeout | default('7200') }}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
