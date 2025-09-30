@@ -8,6 +8,9 @@
   gather_facts: true
 
   # Configuration comes from host_vars - no hardcoded overrides
+  vars:
+    backup_role: "{{ hostvars[inventory_hostname].backup_role }}"
+    backup_targets: "{{ hostvars[inventory_hostname].backup_targets }}"
 
   pre_tasks:
     - name: Debug variable access in playbook context
