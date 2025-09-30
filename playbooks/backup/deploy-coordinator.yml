@@ -8,6 +8,15 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Debug vault variables
+      debug:
+        msg: |
+          Vault variables check:
+          - vault_backup_repository_base: {{ vault_backup_repository_base | default('UNDEFINED') }}
+          - vault_restic_station_arch_password: {{ vault_restic_station_arch_password | default('UNDEFINED') }}
+          - vault_domain_name: {{ vault_domain_name | default('UNDEFINED') }}
+          - vault_letsencrypt_email: {{ vault_letsencrypt_email | default('UNDEFINED') }}
+
     - name: Force load backup_targets variable from hostvars
       set_fact:
         backup_targets: "{{ hostvars[inventory_hostname]['backup_targets'] }}"
