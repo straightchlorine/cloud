@@ -8,10 +8,9 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Force load backup_targets variable
+    - name: Force load backup_targets variable from hostvars
       set_fact:
-        backup_targets: "{{ backup_targets }}"
-      when: backup_targets is defined
+        backup_targets: "{{ hostvars[inventory_hostname]['backup_targets'] }}"
 
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
