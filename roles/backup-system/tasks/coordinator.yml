@@ -104,7 +104,7 @@
     key: "{{ item.content | b64decode }}"
     comment: "backup-{{ item.item.service_name }}@{{ ansible_hostname }}"
     exclusive: false
-  delegate_to: "{{ item.item.target_host }}"
+  delegate_to: "{{ item.item.service_name }}"
   loop: "{{ ssh_public_keys.results }}"
   when: ssh_keys_generated is changed or backup_force_key_deployment | default(false)
 
