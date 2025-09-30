@@ -159,39 +159,16 @@
   no_log: true
   loop: "{{ backup_targets }}"
 
-- name: Encrypt restic password files with ansible-vault
-  ansible.builtin.shell: |
-    if [ ! -f "{{ backup_base_path }}/keys/{{ item.service_name }}-password" ]; then
-      # Create vault password if it doesn't exist
-      if [ ! -f "{{ backup_base_path }}/keys/.vault-password" ]; then
-        openssl rand -base64 32 > "{{ backup_base_path }}/keys/.vault-password"
-        chmod 600 "{{ backup_base_path }}/keys/.vault-password"
-        chown {{ backup_user }}:{{ backup_group }} "{{ backup_base_path }}/keys/.vault-password"
-      fi
-
-      # Decrypt vault file to create plaintext password file for restic
-      export ANSIBLE_VAULT_PASSWORD_FILE="{{ backup_base_path }}/keys/.vault-password"
-      ansible-vault decrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
-        --output "{{ backup_base_path }}/keys/{{ item.service_name }}-password" 2>/dev/null || \
-      ansible-vault encrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
-        --vault-password-file="{{ backup_base_path }}/keys/.vault-password" && \
-      ansible-vault decrypt "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault" \
-        --output "{{ backup_base_path }}/keys/{{ item.service_name }}-password" \
-        --vault-password-file="{{ backup_base_path }}/keys/.vault-password"
-
-      chmod 600 "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
-      chown {{ backup_user }}:{{ backup_group }} "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
-    fi
-  become_user: root
+- name: Create plaintext password files for restic
+  ansible.builtin.copy:
+    content: "{{ item.restic_password }}"
+    dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
   loop: "{{ backup_targets }}"
   no_log: true
 
-- name: Secure vault password file permissions
-  ansible.builtin.file:
-    path: "{{ backup_base_path }}/keys/.vault-password"
-    owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
-    mode: '0400'
 
 - name: Create systemd services for each target
   ansible.builtin.template:
