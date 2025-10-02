@@ -10,6 +10,7 @@ port = {{ target.ssh_port | default(22) }}
 key_file = {{ backup_base_path }}/.ssh/nodes/{{ target.service_name }}
 use_insecure_cipher = false
 disable_hashcheck = false
+server_command = sudo /usr/bin/sftp-server
 {% if target.ssh_config_extra is defined %}
 {{ target.ssh_config_extra }}
 {% endif %}

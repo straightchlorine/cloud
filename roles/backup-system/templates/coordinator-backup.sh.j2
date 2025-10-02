@@ -120,6 +120,38 @@ test_connectivity() {
     fi
 }
 
+validate_disk_space() {
+    log "Validating available disk space for backup operation..."
+
+    # Get estimated remote size for all backup paths
+    local estimated_size=0
+    for path in "${BACKUP_PATHS[@]}"; do
+        local path_size=$(rclone --config "$RCLONE_CONFIG" size "$SERVICE_NAME:$path" --json 2>/dev/null | jq -r '.bytes // 0' || echo "0")
+        estimated_size=$((estimated_size + path_size))
+    done
+
+    if [[ $estimated_size -eq 0 ]]; then
+        log "WARNING: Could not estimate remote size, skipping space validation"
+        return 0
+    fi
+
+    # Get available space in staging directory
+    local staging_parent=$(dirname "$STAGING_DIR")
+    local available_bytes=$(df --output=avail "$staging_parent" | tail -1)
+    available_bytes=$((available_bytes * 1024))  # Convert KB to bytes
+
+    # Add 20% safety margin
+    local required_bytes=$((estimated_size + (estimated_size / 5)))
+
+    log "Disk space check: Required $(numfmt --to=iec $required_bytes), Available $(numfmt --to=iec $available_bytes)"
+
+    if [[ $available_bytes -lt $required_bytes ]]; then
+        error_exit "Insufficient disk space: Required $(numfmt --to=iec $required_bytes), Available $(numfmt --to=iec $available_bytes)"
+    fi
+
+    log "Disk space validation passed"
+}
+
 sync_remote_files() {
     log "Starting enhanced enterprise file synchronization from $SERVICE_NAME..."
 
@@ -361,6 +393,7 @@ main() {
 
     check_prerequisites
     test_connectivity
+    validate_disk_space
     sync_remote_files
     perform_backup
     verify_backup_integrity
