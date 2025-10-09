@@ -166,11 +166,11 @@ sync_remote_files() {
             rclone_args+=(--bwlimit "${BANDWIDTH_LIMIT}M")
         fi
         rclone_args+=(--transfers "$CONCURRENT_TRANSFERS")
-        rclone_args+=(--checkers 8)
+        rclone_args+=(--checkers 4)
         rclone_args+=(--retries 3)
         rclone_args+=(--low-level-retries 10)
-        rclone_args+=(--use-mmap)
-        rclone_args+=(--fast-list)
+        rclone_args+=(--buffer-size 16M)
+        rclone_args+=(--use-server-modtime)
     fi
 
     local total_size=0

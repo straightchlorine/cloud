@@ -246,6 +246,10 @@ backup_targets:
     backup_timeout: "7200"
     backup_method: "hybrid_enhanced"
     network_optimization: true
+    memory_max: "2G"
+    memory_high: "1.5G"
+    tasks_max: "512"
+    cpu_quota: "80%"
     restic_repository: "{{ vault_backup_repository_base }}/station-arch"
     restic_password: "{{ vault_restic_station_arch_password }}"
     backup_paths:
@@ -287,7 +291,7 @@ backup_targets:
       yearly: "3"
     compression_level: "adaptive"
     bandwidth_limit_mbps: 50
-    concurrent_transfers: 3
+    concurrent_transfers: 2
     restore_pushback_enabled: true
 
 

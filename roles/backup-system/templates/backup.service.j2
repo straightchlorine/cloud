@@ -12,5 +12,18 @@ TimeoutStartSec={{ backup_target.backup_timeout | default('7200') }}
 StandardOutput=journal
 StandardError=journal
 
+# Memory and resource limits
+MemoryMax={{ backup_target.memory_max | default('2G') }}
+MemoryHigh={{ backup_target.memory_high | default('1.5G') }}
+TasksMax={{ backup_target.tasks_max | default('512') }}
+CPUQuota={{ backup_target.cpu_quota | default('80%') }}
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths={{ backup_base_path }}
+
 [Install]
 WantedBy=multi-user.target
