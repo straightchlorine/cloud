@@ -1,76 +1,78 @@
 # Station-Arch Workstation Configuration
-# Backup Node Configuration
+# Direct backup configuration (self-managed)
 device_role: workstation
 device_type: arch_linux
 
-# Enterprise backup node configuration
-backup_role: "node"
+# Direct backup configuration - handles its own backups
+backup_role: "standalone"
 backup_base_path: "/opt/enterprise-backup"
 backup_user: "backup"
 backup_group: "backup"
-backup_node_agent_enabled: false
+backup_enabled: true
+backup_additional_groups: ["sudo"]
 
-# Network optimization for node
+# Service configuration for restic backup
+backup_service_name: "station-arch"
+
+# Network optimization
 backup_network_optimization: true
 backup_bandwidth_limit: 50
 
-# Repository configuration (enhanced with network optimization)
+# Repository configuration (same backend as before)
 restic_enabled: true
 restic_version: "0.18.1"
 restic_repository: "{{ vault_backup_repository_base }}/station-arch"
 restic_password: "{{ vault_restic_station_arch_password }}"
 
-# Enhanced backup paths with intelligent categorization
-backup_directories:
-  critical:
-    - "/etc"
-    - "/home"
-    - "/data/vault/code"
-    - "/data/vault/books"
-  bulk:
-    - "/data/ssd/code"
-    - "/data/vault/media/img"
-    - "/data/vault/media/misc"
-    - "/data/vault/organise"
-  system:
-    - "/var/lib"
+# Backup paths (used by restic_backup.yml)
+backup_paths:
+  - "/etc"
+  - "/home"
+  - "/var/lib"
+  - "/data/ssd/code"
+  - "/data/vault/books"
+  - "/data/vault/code"
+  - "/data/vault/media/img"
+  - "/data/vault/media/misc"
+  - "/data/vault/organise"
 
-# Advanced exclude patterns with performance optimization
-backup_exclude_patterns:
-  cache:
-    - "**/.cache/**"
-    - "**/cache/**"
-    - "**/tmp/**"
-    - "/var/tmp/**"
-    - "/var/cache/**"
+# Exclude patterns (used by restic_backup.yml)
+backup_excludes:
+  - "**/.cache/**"
+  - "**/cache/**"
+  - "**/tmp/**"
+  - "/var/tmp/**"
+  - "/var/cache/**"
+  - "*.log.1*"
+  - "*.tmp"
+  - "**/logs/**"
+  - "/data/vault/code/.vault/leaks/"
+  - "/home/*/.local/share/Steam/steamapps/**"
+  - "/home/*/.local/share/anaconda/**"
+  - "/home/*/.local/share/matlab/**"
+  - "/home/*/building/**"
+  - "**/node_modules/**"
+  - "**/.git/**"
+  - "**/target/**"
+  - "**/build/**"
+  - "**/__pycache__/**"
+  - "*.iso"
+  - "*.img"
+  - "*.vmdk"
 
-  logs:
-    - "*.log.1*"
-    - "*.tmp"
-    - "**/logs/**"
-
-  development:
-    - "/data/vault/code/.vault/leaks/"
-    - "**/node_modules/**"
-    - "**/.git/**"
-    - "**/target/**"
-    - "**/build/**"
-    - "**/__pycache__/**"
-
-  large_files:
-    - "/home/*/.local/share/Steam/steamapps/**"
-    - "/home/*/.local/share/anaconda/**"
-    - "/home/*/.local/share/matlab/**"
-    - "/home/*/building/**"
-    - "*.iso"
-    - "*.img"
-    - "*.vmdk"
-
-# Enhanced scheduling with load balancing
+# Scheduling
 backup_schedule: "*-*-* 10:00:00"
-backup_randomized_delay: "1800s"  # Extended for better load distribution
-backup_timeout: "7200"
+backup_randomized_delay: "1800s"
+backup_timeout: "14400"  # 4 hours for large dataset
 backup_priority: "normal"
+
+# Memory optimization for large datasets
+restic_memory_limit: "1200M"
+restic_pack_size: 32  # MB - smaller packs reduce memory usage
+restic_read_concurrency: 2  # Limit concurrent file reads
+restic_compression: "auto"  # Balance between speed and memory
+backup_nice_level: 19
+backup_io_class: "idle"
 
 # Network optimization settings
 network_optimization:
@@ -82,30 +84,19 @@ network_optimization:
   resume_support: true
   connection_pooling: true
 
-# Enhanced retention policy with compliance
+# Retention policy (flattened for restic_backup.yml)
 retention_policy:
-  critical:
-    daily: "30"
-    weekly: "12"
-    monthly: "24"
-    yearly: "5"
-  bulk:
-    daily: "7"
-    weekly: "4"
-    monthly: "6"
-    yearly: "2"
-  system:
-    daily: "14"
-    weekly: "8"
-    monthly: "12"
-    yearly: "3"
+  daily: "30"
+  weekly: "12"
+  monthly: "24"
+  yearly: "3"
 
 # Security enhancements
 backup_security:
   encryption_algorithm: "AES256"
   key_derivation: "scrypt"
-  verification_enabled: true
-  integrity_checks: true
+  verification_enabled: false
+  integrity_checks: false
   secure_deletion: true
   audit_logging: true
 
@@ -136,18 +127,16 @@ restore_methods:
 pushback_config:
   enabled: true
   methods: ["rsync", "scp", "rclone"]
-  verification: true
+  verification: false
   atomic_operations: true
   rollback_on_failure: true
-  post_restore_validation: true
+  post_restore_validation: false
 
-# Backup coordination with backup-wyse
+# Direct backup - no coordinator needed
 coordination:
-  backup_coordinator: "backup-wyse"
-  coordinator_ip: "192.168.101.10"
-  heartbeat_interval: "300s"
-  status_reporting: true
-  dependency_management: true
+  backup_coordinator: "none"
+  status_reporting: false
+  dependency_management: false
 
 # Advanced features
 advanced_features:

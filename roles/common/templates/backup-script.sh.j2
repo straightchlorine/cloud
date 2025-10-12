@@ -128,6 +128,17 @@ perform_backup() {
     backup_cmd="$backup_cmd --tag $(hostname)"
     backup_cmd="$backup_cmd --tag $(date +%Y-%m-%d)"
 
+    # Memory optimization flags
+{% if restic_pack_size is defined %}
+    backup_cmd="$backup_cmd --pack-size {{ restic_pack_size }}"
+{% endif %}
+{% if restic_read_concurrency is defined %}
+    backup_cmd="$backup_cmd --read-concurrency {{ restic_read_concurrency }}"
+{% endif %}
+{% if restic_compression is defined %}
+    backup_cmd="$backup_cmd --compression {{ restic_compression }}"
+{% endif %}
+
     # Add excludes
 {% if backup_excludes is defined %}
 {% for exclude in backup_excludes %}

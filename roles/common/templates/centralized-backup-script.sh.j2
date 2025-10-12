@@ -120,12 +120,17 @@ sync_remote_files() {
     # Build base rclone arguments
     local rclone_args=(--config "$RCLONE_CONFIG")
 
+    # Memory optimization flags for low-memory systems
+    rclone_args+=(--buffer-size 16M)
+    rclone_args+=(--max-backlog 200000)
+    rclone_args+=(--checkers 2)
+    rclone_args+=(--transfers 1)
+
     if [[ "$NETWORK_OPTIMIZATION" == "true" ]]; then
         if [[ "$BANDWIDTH_LIMIT" != "0" ]]; then
             rclone_args+=(--bwlimit "${BANDWIDTH_LIMIT}M")
         fi
-        rclone_args+=(--transfers "$CONCURRENT_TRANSFERS")
-        rclone_args+=(--checkers 8)
+        # Override for low-memory: reduce concurrency
         rclone_args+=(--retries 3)
         rclone_args+=(--low-level-retries 10)
     fi

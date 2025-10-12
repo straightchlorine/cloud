@@ -152,6 +152,9 @@ RestrictNamespaces={{ restrict_namespaces }}
 {% endif %}
 
 # Memory and resource limits
+{% if memory_limit is defined %}
+MemoryMax={{ memory_limit }}
+{% endif %}
 {% if memory_max is defined %}
 MemoryMax={{ memory_max }}
 {% endif %}
@@ -166,6 +169,17 @@ TasksMax={{ tasks_max }}
 {% endif %}
 {% if limit_nofile is defined %}
 LimitNOFILE={{ limit_nofile }}
+{% endif %}
+
+# Process priority
+{% if nice_level is defined %}
+Nice={{ nice_level }}
+{% endif %}
+{% if io_scheduling_class is defined %}
+IOSchedulingClass={{ io_scheduling_class }}
+{% endif %}
+{% if io_scheduling_priority is defined %}
+IOSchedulingPriority={{ io_scheduling_priority }}
 {% endif %}
 
 # Start limit configuration
