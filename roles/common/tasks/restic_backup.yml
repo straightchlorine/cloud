@@ -104,7 +104,6 @@
     backup_password_file: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
     backup_cache_dir: "{{ backup_base_path }}/cache"
     backup_log_dir: "{{ backup_base_path }}/logs"
-    backup_ssh_config: "{{ backup_ssh_config }}"
   become: true
 
 - name: Create repository initialization script
