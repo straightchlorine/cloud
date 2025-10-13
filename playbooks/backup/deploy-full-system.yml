@@ -52,6 +52,16 @@
   become: true
   gather_facts: true
 
+  pre_tasks:
+    - name: DEBUG - Check if variables exist at play level
+      ansible.builtin.debug:
+        msg: |
+          Variable check at PLAY level (before role):
+          - backup_role from inventory: {{ hostvars[inventory_hostname].backup_role | default('NOT FOUND') }}
+          - backup_base_path from inventory: {{ hostvars[inventory_hostname].backup_base_path | default('NOT FOUND') }}
+          - backup_role direct: {{ backup_role | default('NOT FOUND') }}
+          - backup_base_path direct: {{ backup_base_path | default('NOT FOUND') }}
+
   roles:
     - backup-system
 
