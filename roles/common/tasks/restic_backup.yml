@@ -231,18 +231,11 @@
     msg: "Service file checksum: {{ current_service_file.stat.checksum }}"
 
 - name: Verify critical service configuration
-  ansible.builtin.lineinfile:
-    path: "/etc/systemd/system/backup-{{ backup_service_name }}.service"
-    line: "NoNewPrivileges=false"
-    state: present
+  ansible.builtin.shell: grep -i "NoNewPrivileges=false" "/etc/systemd/system/backup-{{ backup_service_name }}.service"
   become: true
-  check_mode: true
   register: service_config_check
-
-- name: Fail if service configuration is incorrect
-  ansible.builtin.fail:
-    msg: "Service configuration verification failed - NoNewPrivileges should be false"
-  when: service_config_check.changed
+  changed_when: false
+  failed_when: service_config_check.rc != 0
 
 - name: Initialize restic repository if it doesn't exist
   ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
