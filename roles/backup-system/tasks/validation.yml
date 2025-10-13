@@ -1,8 +1,17 @@
 # Backup System - Validation Tasks
 
+- name: Debug backup_role value
+  ansible.builtin.debug:
+    msg: |
+      backup_role debug:
+      - Value: '{{ backup_role }}'
+      - Type: {{ backup_role | type_debug }}
+      - Is defined: {{ backup_role is defined }}
+      - In list check: {{ backup_role in ['coordinator', 'standalone'] }}
+
 - name: Validate backup role configuration
   ansible.builtin.fail:
-    msg: "backup_role must be defined as 'coordinator' or 'standalone'"
+    msg: "backup_role must be defined as 'coordinator' or 'standalone'. Current value: '{{ backup_role | default('undefined') }}'"
   when: >
     backup_role is not defined or
     backup_role not in ['coordinator', 'standalone']
