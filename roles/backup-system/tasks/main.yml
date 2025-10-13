@@ -1,33 +1,33 @@
 # Backup System - Main Task Entry Point
 # Unified backup solution with coordinator and node agents
 
-- name: Include validation tasks
-  ansible.builtin.include_tasks: validation.yml
+- name: Import validation tasks
+  ansible.builtin.import_tasks: validation.yml
   tags: [validation, backup]
 
-- name: Include network facts collection
-  ansible.builtin.include_role:
+- name: Import network facts collection
+  ansible.builtin.import_role:
     name: common
     tasks_from: network_facts
   tags: [network, backup]
 
 - name: Deploy backup coordinator
-  ansible.builtin.include_tasks: coordinator.yml
+  ansible.builtin.import_tasks: coordinator.yml
   when: backup_role == "coordinator"
   tags: [coordinator, backup]
 
 - name: Deploy standalone backup
-  ansible.builtin.include_tasks: standalone.yml
+  ansible.builtin.import_tasks: standalone.yml
   when: backup_role == "standalone"
   tags: [standalone, backup]
 
 - name: Configure network optimization
-  ansible.builtin.include_tasks: network-optimization.yml
+  ansible.builtin.import_tasks: network-optimization.yml
   when: backup_network_optimization | default(false)
   tags: [network, backup]
 
 - name: Setup monitoring and health checks
-  ansible.builtin.include_tasks: monitoring.yml
+  ansible.builtin.import_tasks: monitoring.yml
   when: backup_monitoring | default(true)
   tags: [monitoring, backup]
 
