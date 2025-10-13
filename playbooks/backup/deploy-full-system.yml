@@ -53,14 +53,6 @@
   gather_facts: true
 
   tasks:
-    - name: Debug backup_role BEFORE role inclusion
-      ansible.builtin.debug:
-        msg: |
-          PRE-ROLE DEBUG:
-          - backup_role: '{{ backup_role }}'
-          - hostvars backup_role: '{{ hostvars[inventory_hostname]['backup_role'] }}'
-          - Type: {{ backup_role | type_debug }}
-
     - name: Deploy standalone backup system
       ansible.builtin.include_role:
         name: backup-system
