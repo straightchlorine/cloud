@@ -2,6 +2,9 @@
 # Standalone backup - handles its own backups independently
 device_role: workstation
 device_type: arch_linux
+
+# Backup configuration
+backup_role: "standalone"
 backup_base_path: "/opt/enterprise-backup"
 backup_user: "backup"
 backup_group: "backup"
