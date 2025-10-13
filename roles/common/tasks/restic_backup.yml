@@ -20,9 +20,11 @@
     shell: /bin/bash
     home: "{{ backup_base_path }}"
     create_home: true
-    groups: "{{ backup_additional_groups }}"
+    groups: "{{ backup_additional_groups | default([]) }}"
     append: true
   become: true
+  when: backup_additional_groups is defined and backup_additional_groups | length > 0
+  ignore_errors: true
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
