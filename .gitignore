@@ -14,3 +14,11 @@ ansible.log
 # OS files
 .DS_Store
 Thumbs.db
+
+.ansible/
+.ash_history
+.gitconfig
+.gnupg/
+.profile
+.shrc
+.ssh/
