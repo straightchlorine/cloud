@@ -56,6 +56,8 @@
     - name: Deploy standalone backup system
       ansible.builtin.include_role:
         name: backup-system
+      vars:
+        backup_role: "{{ hostvars[inventory_hostname]['backup_role'] }}"
 
 - name: Backup System Deployment Summary
   hosts: localhost
