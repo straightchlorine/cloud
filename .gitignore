@@ -1,6 +1,6 @@
 # Ansible vault files with secrets
-group_vars/vault.yml
-host_vars/vault_*.yml
+inventory/production/group_vars/vault.yml
+inventory/production/host_vars/vault_*.yml
 
 # Ansible logs
 *.log
