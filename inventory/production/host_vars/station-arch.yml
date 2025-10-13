@@ -5,7 +5,7 @@ device_type: arch_linux
 
 # Backup configuration
 backup_role: "standalone"
-backup_base_path: "/opt/enterprise-backup"
+backup_base_path: "/home/backup/.backup"
 backup_user: "backup"
 backup_group: "backup"
 backup_enabled: true
