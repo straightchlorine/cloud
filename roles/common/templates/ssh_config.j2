@@ -1,0 +1,12 @@
+# SSH Config for Backup User
+# {{ ansible_managed }}
+
+Host hetzner-storage
+    HostName {{ vault_backup_storage_host }}
+    User {{ vault_backup_storage_user }}
+    Port {{ vault_backup_storage_port }}
+    IdentityFile {{ backup_base_path }}/.ssh/id_ed25519
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    Compression yes

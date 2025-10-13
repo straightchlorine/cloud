@@ -10,6 +10,7 @@ backup_user: "backup"
 backup_group: "backup"
 backup_enabled: true
 backup_additional_groups: []  # User already exists with proper sudo access
+backup_skip_init: true  # Skip auto-initialization, will be done manually with existing SSH config
 
 # Service configuration for restic backup
 backup_service_name: "station-arch"
