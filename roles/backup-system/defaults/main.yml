@@ -1,7 +1,8 @@
 # Backup System - Default Variables
+# NOTE: backup_role should be explicitly set in host_vars, not relied upon from defaults
 
 # Core configuration
-backup_role: "coordinator"  # coordinator or node
+# backup_role: Must be explicitly set to "coordinator" or "standalone" in host_vars
 backup_base_path: "/opt/enterprise-backup"
 backup_user: "backup"
 backup_group: "backup"
