@@ -26,15 +26,32 @@
   when: backup_additional_groups is defined and backup_additional_groups | length > 0
   ignore_errors: true
 
-- name: Install restic backup tool
-  ansible.builtin.get_url:
-    url: "https://github.com/restic/restic/releases/latest/download/restic_{{ ansible_system | lower }}_{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
-    dest: /usr/local/bin/restic
-    mode: '0755'
-    backup: true
-    force: false  # Don't overwrite if already exists
+- name: Check if restic is already installed
+  ansible.builtin.command: which restic
+  register: restic_check
+  changed_when: false
+  failed_when: false
+
+- name: Install restic on Arch Linux
+  community.general.pacman:
+    name: restic
+    state: present
+    update_cache: true
   become: true
-  register: restic_download
+  when:
+    - ansible_os_family == "Archlinux"
+    - restic_check.rc != 0
+
+- name: Install restic on Debian/Ubuntu
+  ansible.builtin.apt:
+    name: restic
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  when:
+    - ansible_os_family == "Debian"
+    - restic_check.rc != 0
 
 - name: Verify restic installation
   ansible.builtin.command: restic version
