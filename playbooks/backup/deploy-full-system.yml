@@ -52,10 +52,8 @@
   become: true
   gather_facts: true
 
-  tasks:
-    - name: Deploy standalone backup system
-      ansible.builtin.import_role:
-        name: backup-system
+  roles:
+    - backup-system
 
 - name: Backup System Deployment Summary
   hosts: localhost
