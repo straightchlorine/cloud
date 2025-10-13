@@ -5,7 +5,8 @@
   ansible.builtin.getent:
     database: passwd
     key: "{{ backup_user }}"
-  failed_when: backup_user not in ansible_facts.getent_passwd
+  register: backup_user_check
+  failed_when: backup_user not in backup_user_check.ansible_facts.getent_passwd
 
 - name: Install restic
   ansible.builtin.include_role:
