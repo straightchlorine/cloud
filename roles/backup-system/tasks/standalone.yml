@@ -1,0 +1,24 @@
+# Backup System - Standalone Deployment
+# Simple restic installation and backup service setup for self-managed nodes
+
+- name: Validate backup user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ backup_user }}"
+  failed_when: backup_user not in ansible_facts.getent_passwd
+
+- name: Install restic
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: restic_backup
+
+- name: Display standalone deployment status
+  ansible.builtin.debug:
+    msg: |
+      ✅ Standalone Backup Deployed:
+      - Node: {{ inventory_hostname }}
+      - Backup User: {{ backup_user }}
+      - Restic Repository: {{ restic_repository }}
+      - Schedule: {{ backup_schedule }}
+
+      Standalone node handles its own backups independently.

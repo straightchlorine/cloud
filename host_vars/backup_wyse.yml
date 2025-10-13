@@ -235,15 +235,7 @@ advanced_features:
 # Monitoring configuration
 backup_monitoring_enabled: false
 
-# Centralized backup configuration for multiple hosts
-# Note: station-arch now handles its own backups directly
-backup_targets: []
-
-
-# Enterprise backup required vault variables
-# These must be defined in group_vars/vault.yml on the deployment machine
-backup_required_vault_vars:
-  - vault_backup_repository_base
-  - vault_restic_station_arch_password
-  - vault_domain_name
-  - vault_letsencrypt_email
+# Coordinator backup configuration
+# This host pulls backups from coordinated hosts (Raspberry Pis, small devices)
+# Large machines use standalone mode and handle their own backups
+backup_targets: []  # TODO: Add coordinated hosts (pi-dns, pi-music, pi-automation)

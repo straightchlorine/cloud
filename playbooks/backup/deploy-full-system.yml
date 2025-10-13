@@ -47,23 +47,15 @@
 
           {% endfor %}
 
-- name: Deploy Backup Node Agents (Optional)
-  hosts: workstations
+- name: Deploy Standalone Backup Systems
+  hosts: backup_standalone
   become: true
   gather_facts: true
 
-  vars:
-    backup_role: "node"
-    backup_base_path: "/opt/enterprise-backup"
-    backup_user: "backup"
-    backup_group: "backup"
-    backup_node_agent_enabled: false
-
   tasks:
-    - name: Deploy enterprise backup node agent
+    - name: Deploy standalone backup system
       ansible.builtin.include_role:
         name: backup-system
-      when: inventory_hostname in groups['workstations']
 
 - name: Backup System Deployment Summary
   hosts: localhost
@@ -76,9 +68,9 @@
           ✅ Backup System Deployment Complete!
 
           🏗️ Architecture Deployed:
-          - Coordinator: {{ groups['backup-primary'] | join(', ') }}
-          - Node Agents: {{ groups['workstations'] | join(', ') }}
-          - Backup Strategy: Hybrid Enterprise Architecture
+          - Coordinator: {{ groups['backup_primary'] | join(', ') }}
+          - Standalone Systems: {{ groups['backup_standalone'] | join(', ') }}
+          - Backup Strategy: Coordinator + Standalone Architecture
 
           🔧 Services Configured:
           {% for host in groups['backup-primary'] %}
@@ -108,5 +100,9 @@
           - Status: /opt/enterprise-backup/scripts/backup-manager.sh --status
           - Health Check: /opt/enterprise-backup/scripts/backup-health-monitor.sh
           - Metrics: cat /opt/enterprise-backup/metrics/backup-*.json
+
+          📋 Architecture:
+          - Coordinator (backup-wyse): Pulls backups from coordinated hosts (Raspberry Pis)
+          - Standalone Systems: Large machines handle their own backups independently
 
           🎉 Backup System Ready for Production!

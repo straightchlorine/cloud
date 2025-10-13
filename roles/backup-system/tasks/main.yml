@@ -16,10 +16,10 @@
   when: backup_role == "coordinator"
   tags: [coordinator, backup]
 
-- name: Deploy node agent
-  ansible.builtin.include_tasks: node-agent.yml
-  when: backup_role == "node"
-  tags: [node, backup]
+- name: Deploy standalone backup
+  ansible.builtin.include_tasks: standalone.yml
+  when: backup_role == "standalone"
+  tags: [standalone, backup]
 
 - name: Configure network optimization
   ansible.builtin.include_tasks: network-optimization.yml

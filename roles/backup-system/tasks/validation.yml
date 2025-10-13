@@ -1,11 +1,11 @@
 # Backup System - Validation Tasks
 
-- name: Validate enterprise backup role configuration
+- name: Validate backup role configuration
   ansible.builtin.fail:
-    msg: "backup_role must be defined as 'coordinator' or 'node'"
+    msg: "backup_role must be defined as 'coordinator' or 'standalone'"
   when: >
     backup_role is not defined or
-    backup_role not in ['coordinator', 'node']
+    backup_role not in ['coordinator', 'standalone']
 
 - name: Debug backup_targets availability
   ansible.builtin.debug:
@@ -29,22 +29,33 @@
     msg: "backup_base_path must be defined"
   when: backup_base_path is not defined
 
-- name: Validate required vault variables for coordinator
+- name: Validate required vault variables
   ansible.builtin.fail:
     msg: "Required vault variable '{{ item }}' is not defined"
-  when: >
-    backup_role == "coordinator" and
-    vars[item] is not defined
-  loop: "{{ backup_required_vault_vars | default([]) }}"
+  when: vars[item] is not defined
+  loop:
+    - vault_backup_repository_base
   no_log: false
 
-- name: Validate target configurations for coordinator
+- name: Validate coordinator target configurations
   ansible.builtin.fail:
     msg: "Required target variable '{{ item.1 }}' is not defined for {{ item.0.service_name }}"
   when: >
     backup_role == "coordinator" and
     item.0[item.1] is not defined
   loop: "{{ backup_targets | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
+  no_log: false
+
+- name: Validate standalone configuration
+  ansible.builtin.fail:
+    msg: "Required standalone variable '{{ item }}' is not defined"
+  when: >
+    backup_role == "standalone" and
+    vars[item] is not defined
+  loop:
+    - restic_repository
+    - restic_password
+    - backup_paths
   no_log: false
 
 - name: Display validation results
