@@ -52,12 +52,9 @@
   become: true
   gather_facts: true
 
-  vars:
-    backup_role: "standalone"
-
   tasks:
     - name: Deploy standalone backup system
-      ansible.builtin.include_role:
+      ansible.builtin.import_role:
         name: backup-system
 
 - name: Backup System Deployment Summary
