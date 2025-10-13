@@ -10,7 +10,7 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ backup_cache_dir }}"
-export RESTIC_SFTP_COMMAND="ssh -F /opt/enterprise-backup/.ssh/config hetzner-storage -s sftp"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Service-specific configuration
 SERVICE_NAME="{{ backup_service_name }}"
