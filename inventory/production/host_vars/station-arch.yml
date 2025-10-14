@@ -17,7 +17,9 @@ backup_service_name: "station-arch"
 
 # Network optimization
 backup_network_optimization: true
+backup_network_tuning: true
 backup_bandwidth_limit: 50
+backup_qos_enabled: false
 
 # Repository configuration (same backend as before)
 restic_enabled: true
