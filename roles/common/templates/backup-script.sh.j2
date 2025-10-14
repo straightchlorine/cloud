@@ -115,8 +115,9 @@ run_post_backup_commands() {
 perform_backup() {
     log "Starting backup for ${SERVICE_NAME}..."
 
-    # Build backup command
-    local backup_cmd="sudo -E restic backup"
+    # Build backup command with sudo to read protected files
+    # Environment variables are preserved via systemd service configuration
+    local backup_cmd="sudo --preserve-env=RESTIC_REPOSITORY,RESTIC_PASSWORD_FILE,RESTIC_CACHE_DIR,RESTIC_SFTP_COMMAND restic backup"
 
     # Add paths
     for path in "${BACKUP_PATHS[@]}"; do
@@ -163,7 +164,7 @@ perform_backup() {
 cleanup_old_snapshots() {
     log "Cleaning up old snapshots..."
 
-    local cleanup_cmd="sudo -E restic forget"
+    local cleanup_cmd="sudo --preserve-env=RESTIC_REPOSITORY,RESTIC_PASSWORD_FILE,RESTIC_CACHE_DIR,RESTIC_SFTP_COMMAND restic forget"
     cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
 {% if retention_policy is defined %}
     cleanup_cmd="$cleanup_cmd --keep-daily {{ retention_policy.daily }}"
@@ -186,7 +187,7 @@ cleanup_old_snapshots() {
 get_backup_stats() {
     log "Getting backup statistics..."
 
-    if sudo -E restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
+    if sudo --preserve-env=RESTIC_REPOSITORY,RESTIC_PASSWORD_FILE,RESTIC_CACHE_DIR,RESTIC_SFTP_COMMAND restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots.json 2>>"$LOG_FILE"; then
         local snapshot_count=$(jq length /tmp/snapshots.json 2>/dev/null || echo "unknown")
         log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
         rm -f /tmp/snapshots.json

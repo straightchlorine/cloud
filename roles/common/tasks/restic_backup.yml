@@ -26,6 +26,16 @@
   when: backup_additional_groups is defined and backup_additional_groups | length > 0
   ignore_errors: true
 
+- name: Configure sudoers for backup user
+  ansible.builtin.template:
+    src: backup-sudoers.j2
+    dest: /etc/sudoers.d/backup-user
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  become: true
+
 - name: Check if restic is already installed
   ansible.builtin.command: which restic
   register: restic_check
