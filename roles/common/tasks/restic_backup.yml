@@ -186,7 +186,7 @@
       - "RESTIC_REPOSITORY={{ restic_repository }}"
       - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ backup_service_name }}-password"
       - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache"
-      - "RESTIC_SFTP_COMMAND=ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+      - "RESTIC_SFTP_COMMAND=ssh -i {{ backup_base_path }}/.ssh/hetzner -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }} -s sftp"
     exec_start: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
     standard_output: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
     standard_error: "append:{{ backup_base_path }}/logs/systemd-backup-{{ backup_service_name }}.log"
