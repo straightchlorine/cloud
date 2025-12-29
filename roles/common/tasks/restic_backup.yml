@@ -116,7 +116,7 @@
       Please place your SSH private key at: {{ backup_base_path }}/.ssh/hetzner
       Then set correct permissions: chmod 600 {{ backup_base_path }}/.ssh/hetzner
       And ownership: chown backup:backup {{ backup_base_path }}/.ssh/hetzner
-  when: not hetzner_key_stat.exists
+  when: not hetzner_key_stat.stat.exists
   become: true
 
 - name: Fix SSH key permissions if needed
@@ -126,7 +126,7 @@
     group: backup
     mode: '0600'
   become: true
-  when: hetzner_key_stat.exists
+  when: hetzner_key_stat.stat.exists
 
 - name: Create SSH socket directory
   ansible.builtin.file:
