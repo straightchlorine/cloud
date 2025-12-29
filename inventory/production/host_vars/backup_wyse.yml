@@ -116,3 +116,6 @@ firewall_backup_ports:
 
 # Monitoring and health checks
 backup_monitoring: true
+
+# Backup service name (used for logging and identification)
+backup_service_name: "backup-coordinator"

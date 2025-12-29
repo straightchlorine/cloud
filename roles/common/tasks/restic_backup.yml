@@ -4,14 +4,14 @@
 
 - name: Validate required backup variables
   ansible.builtin.fail:
-    msg: "Required backup variable '{{ item }}' is not defined"
+    msg: "Required backup variable '{{ item }}' is not defined or empty"
   when: vars[item] is not defined or vars[item] == ""
   loop:
     - backup_service_name
     - restic_repository
     - restic_password
     - backup_paths
-  no_log: true
+  no_log: false
 
 - name: Create backup user (if not already created)
   ansible.builtin.user:
