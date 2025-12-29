@@ -28,7 +28,7 @@ fi
 # Extract repository path and create remote directory
 REPO_PATH="${RESTIC_REPOSITORY#sftp:hetzner-storage:}"
 echo "$(date): Creating repository directory on remote storage: $REPO_PATH" | tee -a "$LOG_FILE"
-if ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage "mkdir -p '$REPO_PATH'" >> "$LOG_FILE" 2>&1; then
+if ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage mkdir -p '$REPO_PATH' >> "$LOG_FILE" 2>&1; then
     echo "$(date): Remote directory created successfully" | tee -a "$LOG_FILE"
 else
     echo "$(date): WARNING: Could not create remote directory (may already exist)" | tee -a "$LOG_FILE"
