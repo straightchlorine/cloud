@@ -35,7 +35,7 @@ backup_targets:
       - "*.tmp"
       - "cache/*"
       - "*.log.1*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-dns"
+    restic_repository: "sftp:hetzner-storage{{ vault_backup_repository_base }}/pi-dns"
     restic_password: "{{ vault_restic_pi_dns_password }}"
     retention_policy:
       daily: 14
@@ -62,7 +62,7 @@ backup_targets:
       - "*/logs/*"
       - "*.log"
       - "*/tmp/*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-automation"
+    restic_repository: "sftp:hetzner-storage{{ vault_backup_repository_base }}/pi-automation"
     restic_password: "{{ vault_restic_pi_automation_password }}"
     retention_policy:
       daily: 14
@@ -90,7 +90,7 @@ backup_targets:
       - "*.tmp"
       - "*/thumbnails/*"
       - "*/logs/*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-music"
+    restic_repository: "sftp:hetzner-storage{{ vault_backup_repository_base }}/pi-music"
     restic_password: "{{ vault_restic_pi_music_password }}"
     retention_policy:
       daily: 7

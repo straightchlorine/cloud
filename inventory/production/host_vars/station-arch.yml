@@ -18,7 +18,7 @@ backup_base_path: /opt/backup
 
 # Restic configuration
 restic_version: "0.18.1"
-restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/station-arch"
+restic_repository: "sftp:hetzner-storage{{ vault_backup_repository_base }}/station-arch"
 restic_password: "{{ vault_restic_station_arch_password }}"
 
 # Backup paths
