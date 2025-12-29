@@ -11,6 +11,11 @@ BACKUP_BASE="{{ backup_base_path }}"
 BACKUP_USER="{{ backup_user | default('backup') }}"
 LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
+# Restic environment configuration
+export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_SFTP_COMMAND="ssh -F ${BACKUP_BASE}/.ssh/config hetzner-storage -s sftp"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -83,10 +88,9 @@ validate_environment() {
     # Check connectivity to repository backend
     info "Testing connectivity to repository backend..."
     if [[ "${RESTIC_REPOSITORY}" =~ ^sftp: ]]; then
-        # Test SFTP connectivity
-        SFTP_HOST=$(echo "${RESTIC_REPOSITORY}" | sed 's|sftp:\([^:]*\):.*|\1|')
-        if ! ssh -o ConnectTimeout=10 -o BatchMode=yes "${SFTP_HOST}" exit &>/dev/null; then
-            error_exit "Cannot connect to SFTP host: ${SFTP_HOST}"
+        # Test SFTP connectivity using SSH config
+        if ! ssh -F "${BACKUP_BASE}/.ssh/config" -o ConnectTimeout=10 -o BatchMode=yes hetzner-storage exit &>/dev/null; then
+            error_exit "Cannot connect to Hetzner Storage via SSH config"
         fi
     fi
 
@@ -172,7 +176,8 @@ create_health_check() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
+export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Check repository integrity
 echo "Checking repository integrity..."
@@ -212,7 +217,8 @@ create_backup_validation() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ device_role }}-password"
+export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Validate backup directories exist and are accessible
 {% for dir in backup_directories %}
