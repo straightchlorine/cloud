@@ -80,3 +80,6 @@ backup_timeout: 14400              # 4 hours timeout for large dataset
 
 # Monitoring and health checks
 backup_monitoring: false
+
+# Backup service name (used for logging and identification)
+backup_service_name: "station-arch"
