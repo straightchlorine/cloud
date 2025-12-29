@@ -64,7 +64,7 @@ prometheus_role: "dns"
 
 # Enterprise backup configuration
 restic_enabled: true
-restic_repository: "{{ vault_backup_repository_base }}/dns"
+restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
 restic_password: "{{ vault_restic_dns_password }}"
 backup_directories:
   - "/etc/pihole"

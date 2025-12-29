@@ -49,7 +49,7 @@ docker_exporter_enabled: true
 prometheus_role: "automation"
 
 # Enterprise backup configuration
-restic_repository: "{{ vault_backup_repository_base }}/automation"
+restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
 restic_password: "{{ vault_restic_automation_password }}"
 backup_directories:
   - "{{ automation_stack_home }}"

@@ -2,28 +2,41 @@
 # Standalone Backup Mode Tasks
 # For powerful machines that handle their own backups directly to Hetzner
 
-- name: Create SSH key for Hetzner Storage Box
-  ansible.builtin.openssh_keypair:
-    path: "{{ backup_base_path }}/.ssh/hetzner"
-    type: ed25519
+- name: Create SSH directories for backup user
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
-    mode: '0600'
+    mode: '0700'
   become: true
-  register: hetzner_ssh_key
+  loop:
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/sockets"
 
-- name: Display SSH public key for manual setup
+- name: Check if Hetzner SSH key exists
+  ansible.builtin.stat:
+    path: "{{ backup_base_path }}/.ssh/hetzner"
+  become: true
+  register: hetzner_ssh_key_stat
+
+- name: Display manual SSH key setup instructions
   ansible.builtin.debug:
     msg: |
-      [ssh public key for hetzner storage box]
-      add this key to your hetzner storage box authorized_keys:
+      [ssh key for hetzner storage box]
+      The SSH private key does not exist at: {{ backup_base_path }}/.ssh/hetzner
 
-      {{ hetzner_ssh_key.public_key }}
+      To set up the single shared key:
+      1. Place your existing private key at: {{ backup_base_path }}/.ssh/hetzner
+      2. Set permissions: chmod 600 {{ backup_base_path }}/.ssh/hetzner
+      3. Set ownership: chown {{ backup_user }}:{{ backup_group }} {{ backup_base_path }}/.ssh/hetzner
 
-      instructions:
-      1. ssh to your storage box: ssh {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }}
-      2. add the key: echo "{{ hetzner_ssh_key.public_key }}" >> .ssh/authorized_keys
-  when: hetzner_ssh_key.changed
+      If you don't have a key yet, generate it on your storage box:
+      - ssh {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }}
+      - ssh-keygen -t ed25519 -f ~/.ssh/backup-hosts-key -N ""
+      - cat ~/.ssh/backup-hosts-key (copy the private key)
+      - Add to authorized_keys: cat ~/.ssh/backup-hosts-key.pub >> ~/.ssh/authorized_keys
+  when: not hetzner_ssh_key_stat.exists
 
 - name: Create SSH config for Hetzner connection
   ansible.builtin.template:
@@ -77,6 +90,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ restic_repository }}"
     RESTIC_PASSWORD: "{{ restic_password }}"
+    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   register: restic_init
@@ -88,6 +102,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ restic_repository }}"
     RESTIC_PASSWORD: "{{ restic_password }}"
+    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   register: restic_snapshots

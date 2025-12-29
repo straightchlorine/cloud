@@ -10,6 +10,7 @@ Host *
     ServerAliveCountMax 3
     TCPKeepAlive yes
     StrictHostKeyChecking accept-new
+    ConnectTimeout 30
 
 # Hetzner Storage Box Configuration
 Host hetzner-storage
@@ -17,3 +18,5 @@ Host hetzner-storage
     User {{ vault_backup_storage_user }}
     Port {{ vault_backup_storage_port }}
     IdentityFile {{ backup_base_path }}/.ssh/hetzner
+    BatchMode yes
+    PasswordAuthentication no
