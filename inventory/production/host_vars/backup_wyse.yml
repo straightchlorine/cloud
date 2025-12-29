@@ -113,3 +113,6 @@ node_exporter_ufw_enabled: true
 firewall_backup_ports:
   - port: 9100
     comment: "Prometheus Node Exporter"
+
+# Monitoring and health checks
+backup_monitoring: true

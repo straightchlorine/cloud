@@ -77,3 +77,6 @@ backup_timeout: 14400              # 4 hours timeout for large dataset
 
 # Optional: Memory limit (not needed on 32GB machine but can be set for safety)
 # restic_memory_limit: "4G"
+
+# Monitoring and health checks
+backup_monitoring: false
