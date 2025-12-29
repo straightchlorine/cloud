@@ -101,17 +101,43 @@
     mode: '0700'
   become: true
 
-- name: Generate SSH key for backup access
-  ansible.builtin.openssh_keypair:
-    path: "{{ backup_base_path }}/.ssh/id_ed25519"
-    type: ed25519
+- name: Verify SSH key exists at configured location
+  ansible.builtin.stat:
+    path: "{{ backup_base_path }}/.ssh/hetzner"
+  register: hetzner_key_stat
+  become: true
+
+- name: Fail if SSH key is missing
+  ansible.builtin.fail:
+    msg: |
+      SSH key not found at {{ backup_base_path }}/.ssh/hetzner
+
+      This role requires a pre-configured SSH private key for Hetzner Storage Box access.
+      Please place your SSH private key at: {{ backup_base_path }}/.ssh/hetzner
+      Then set correct permissions: chmod 600 {{ backup_base_path }}/.ssh/hetzner
+      And ownership: chown backup:backup {{ backup_base_path }}/.ssh/hetzner
+  when: not hetzner_key_stat.exists
+  become: true
+
+- name: Fix SSH key permissions if needed
+  ansible.builtin.file:
+    path: "{{ backup_base_path }}/.ssh/hetzner"
     owner: backup
     group: backup
     mode: '0600'
   become: true
-  register: backup_ssh_key
+  when: hetzner_key_stat.exists
 
-- name: Create SSH config for backup user
+- name: Create SSH socket directory
+  ansible.builtin.file:
+    path: "{{ backup_base_path }}/.ssh/sockets"
+    state: directory
+    owner: backup
+    group: backup
+    mode: '0700'
+  become: true
+
+- name: Create SSH config for backup connectivity
   ansible.builtin.template:
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
@@ -119,18 +145,6 @@
     group: backup
     mode: '0600'
   become: true
-
-- name: Display SSH public key for manual upload
-  ansible.builtin.debug:
-    msg: |
-      [WARN]  SSH Key Setup Required for {{ inventory_hostname }}:
-
-      Add this public key to your Hetzner Storage Box authorized_keys:
-      {{ backup_ssh_key.public_key }}
-
-      Login to Hetzner Storage Box and run:
-      echo "{{ backup_ssh_key.public_key }}" >> ~/.ssh/authorized_keys
-  when: backup_ssh_key.changed
 
 - name: Create service backup script
   ansible.builtin.template:
