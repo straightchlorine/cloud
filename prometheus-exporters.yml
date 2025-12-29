@@ -11,14 +11,14 @@
     - name: Display Prometheus exporters deployment start
       ansible.builtin.debug:
         msg: |
-          📊 Starting Prometheus exporters deployment for {{ inventory_hostname }}
+          [STATS] Starting Prometheus exporters deployment for {{ inventory_hostname }}
 
           Deployment scope:
-          ✅ Node Exporter for system metrics
-          ✅ Pi-specific hardware metrics (temperature, voltage, frequency)
-          ✅ Service-specific exporters (Pi-hole, Docker)
-          ✅ Firewall configuration and health checks
-          ✅ Automated service management and log rotation
+          [OK] Node Exporter for system metrics
+          [OK] Pi-specific hardware metrics (temperature, voltage, frequency)
+          [OK] Service-specific exporters (Pi-hole, Docker)
+          [OK] Firewall configuration and health checks
+          [OK] Automated service management and log rotation
 
           Target services based on host role:
           {% if 'dns' in group_names %}
@@ -39,7 +39,7 @@
     - name: Display deployment summary
       ansible.builtin.debug:
         msg: |
-          ✅ Prometheus Exporters Deployment Complete for {{ inventory_hostname }}:
+          [OK] Prometheus Exporters Deployment Complete for {{ inventory_hostname }}:
 
           Deployed Exporters:
           {% if node_exporter_enabled %}
@@ -56,7 +56,7 @@
           {% endif %}
 
           Service Status:
-          📊 All exporters configured and running
+          [STATS] All exporters configured and running
           🔥 Firewall rules applied
           🏥 Health checks enabled
           📋 Log rotation configured
@@ -64,7 +64,7 @@
   handlers:
     - name: prometheus exporters deployment complete
       ansible.builtin.debug:
-        msg: "📊 All Prometheus exporters deployed successfully"
+        msg: "[STATS] All Prometheus exporters deployed successfully"
 
 # Validation and health check play
 - name: Validate Prometheus exporters health

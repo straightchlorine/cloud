@@ -216,71 +216,71 @@
         - name: Display quick status
           ansible.builtin.debug:
             msg: |
-              ⚡ Quick Validation Status for {{ inventory_hostname }}:
-              SSH: ✅ Connected
-              Core Vault: ✅ Configured
-              Backup Dir: {{ '✅ Ready' if quick_backup_check.stat.exists else '⚠️ Setup Required' }}
+              [POWER] Quick Validation Status for {{ inventory_hostname }}:
+              SSH: [OK] Connected
+              Core Vault: [OK] Configured
+              Backup Dir: {{ '[OK] Ready' if quick_backup_check.stat.exists else '[WARN] Setup Required' }}
       when: quick_mode is defined and quick_mode
 
     # === VALIDATION SUMMARY ===
     - name: Generate comprehensive validation summary
       ansible.builtin.debug:
         msg: |
-          ✅ {{ validation_type.title() }} Validation Summary for {{ inventory_hostname }}:
+          [OK] {{ validation_type.title() }} Validation Summary for {{ inventory_hostname }}:
 
           Validation Type: {{ validation_type }}
           Host Groups: {{ group_names }}
 
           {% if run_pre_deployment_validation %}
           Pre-deployment:
-          ✅ System compatibility verified
-          ✅ Network connectivity confirmed
-          ✅ Disk space requirements met
+          [OK] System compatibility verified
+          [OK] Network connectivity confirmed
+          [OK] Disk space requirements met
           {% endif %}
 
           {% if run_backup_validation %}
           Backup Validation:
-          ✅ Common backup directories validated
+          [OK] Common backup directories validated
           {% for group in group_names %}
           {% if group in ['dns', 'automation', 'music'] %}
-          ✅ {{ group.title() }} backup configuration verified
+          [OK] {{ group.title() }} backup configuration verified
           {% endif %}
           {% endfor %}
           {% endif %}
 
           {% if run_vault_validation %}
           Vault Validation:
-          ✅ Core vault variables configured
+          [OK] Core vault variables configured
           {% for group in group_names %}
           {% if group in ['dns', 'automation', 'music'] %}
-          ✅ {{ group.title() }} vault credentials validated
+          [OK] {{ group.title() }} vault credentials validated
           {% endif %}
           {% endfor %}
           {% endif %}
 
           {% if run_service_startup_validation %}
           Service Startup:
-          ✅ Service dependencies validated
-          ✅ Startup order verified
+          [OK] Service dependencies validated
+          [OK] Startup order verified
           {% endif %}
 
           {% if run_ssl_domain_validation and 'automation' in group_names %}
           SSL/Domain:
-          ✅ Domain resolution verified
-          ✅ Cloudflare API access confirmed
-          ✅ SSL prerequisites met
+          [OK] Domain resolution verified
+          [OK] Cloudflare API access confirmed
+          [OK] SSL prerequisites met
           {% endif %}
 
           {% if run_post_deployment_validation %}
           Post-deployment:
-          ✅ Service connectivity verified
-          ✅ All deployed services operational
+          [OK] Service connectivity verified
+          [OK] All deployed services operational
           {% endif %}
 
-          🚀 {{ validation_type.title() }} validation completed successfully!
+          [DEPLOY] {{ validation_type.title() }} validation completed successfully!
       when: not quick_mode
 
   handlers:
     - name: validation complete
       ansible.builtin.debug:
-        msg: "✅ {{ validation_type.title() }} validation completed for all targeted hosts"
+        msg: "[OK] {{ validation_type.title() }} validation completed for all targeted hosts"

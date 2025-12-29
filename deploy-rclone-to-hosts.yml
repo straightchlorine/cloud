@@ -15,7 +15,7 @@
     - name: Display installation summary
       ansible.builtin.debug:
         msg: |
-          ✅ Rclone installed on {{ inventory_hostname }}
+          [OK] Rclone installed on {{ inventory_hostname }}
 
           You can now use rclone for:
           - Manual file transfers

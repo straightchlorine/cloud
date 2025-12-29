@@ -22,8 +22,8 @@
           🔗 SSH Connectivity
           📁 Repository Access
           🔄 Backup Operations
-          📊 Monitoring Systems
-          🔐 Security Configuration
+          [STATS] Monitoring Systems
+          [SECURE] Security Configuration
 
     - name: Test coordinator infrastructure
       ansible.builtin.stat:
@@ -134,44 +134,44 @@
     - name: Display comprehensive test results
       ansible.builtin.debug:
         msg: |
-          ✅ Backup System Test Results
+          [OK] Backup System Test Results
 
           🏗️ Infrastructure Components:
           {% for item in infrastructure_test.results %}
-          - {{ item.item | basename }}: {{ '✅ OK' if item.stat.exists else '❌ MISSING' }}
+          - {{ item.item | basename }}: {{ '[OK] OK' if item.stat.exists else '[FAIL] MISSING' }}
           {% endfor %}
 
-          🔧 Script Validation:
+          [TOOL] Script Validation:
           {% for item in script_syntax_test.results | default([]) %}
-          - Backup Script ({{ item.item.service_name }}): {{ '✅ OK' if item.rc == 0 else '❌ SYNTAX ERROR' }}
+          - Backup Script ({{ item.item.service_name }}): {{ '[OK] OK' if item.rc == 0 else '[FAIL] SYNTAX ERROR' }}
           {% endfor %}
           {% for item in restore_syntax_test.results | default([]) %}
-          - Restore Script ({{ item.item.service_name }}): {{ '✅ OK' if item.rc == 0 else '❌ SYNTAX ERROR' }}
+          - Restore Script ({{ item.item.service_name }}): {{ '[OK] OK' if item.rc == 0 else '[FAIL] SYNTAX ERROR' }}
           {% endfor %}
 
           🔗 SSH Connectivity:
           {% for item in ssh_connectivity_test.results | default([]) %}
-          - {{ item.item.service_name }}: {{ '✅ CONNECTED' if item.rc == 0 else '❌ FAILED' }}
+          - {{ item.item.service_name }}: {{ '[OK] CONNECTED' if item.rc == 0 else '[FAIL] FAILED' }}
           {% endfor %}
 
           📁 Repository Access:
           {% for item in repository_test.results | default([]) %}
-          - {{ item.item.service_name }}: {{ '✅ ACCESSIBLE (' + item.stdout.strip() + ' snapshots)' if item.rc == 0 else '❌ INACCESSIBLE' }}
+          - {{ item.item.service_name }}: {{ '[OK] ACCESSIBLE (' + item.stdout.strip() + ' snapshots)' if item.rc == 0 else '[FAIL] INACCESSIBLE' }}
           {% endfor %}
 
           ⚙️ System Services:
           {% for item in systemd_test.results | default([]) %}
-          - {{ item.item }}: {{ '✅ LOADED' if item.status.LoadState == 'loaded' else '❌ NOT FOUND' }}
+          - {{ item.item }}: {{ '[OK] LOADED' if item.status.LoadState == 'loaded' else '[FAIL] NOT FOUND' }}
           {% endfor %}
 
-          📊 Monitoring System:
-          - Health Monitor: {{ '✅ FUNCTIONAL' if monitoring_test.rc == 0 else '❌ FAILED' }}
+          [STATS] Monitoring System:
+          - Health Monitor: {{ '[OK] FUNCTIONAL' if monitoring_test.rc == 0 else '[FAIL] FAILED' }}
 
           🧪 Backup Operations:
           {% if backup_dry_run_test.rc is defined %}
-          - Dry Run Test: {{ '✅ PASSED' if backup_dry_run_test.rc == 0 else '⚠️ ISSUES DETECTED' }}
+          - Dry Run Test: {{ '[OK] PASSED' if backup_dry_run_test.rc == 0 else '[WARN] ISSUES DETECTED' }}
           {% else %}
-          - Dry Run Test: ⚠️ SKIPPED (No targets configured)
+          - Dry Run Test: [WARN] SKIPPED (No targets configured)
           {% endif %}
 
           📋 Test Summary:
@@ -186,7 +186,7 @@
           {% if (passed_tests / total_tests) >= 0.9 %}
           🎉 ENTERPRISE BACKUP SYSTEM: READY FOR PRODUCTION!
           {% elif (passed_tests / total_tests) >= 0.7 %}
-          ⚠️ ENTERPRISE BACKUP SYSTEM: NEEDS ATTENTION
+          [WARN] ENTERPRISE BACKUP SYSTEM: NEEDS ATTENTION
           {% else %}
           🚨 ENTERPRISE BACKUP SYSTEM: REQUIRES FIXES
           {% endif %}
