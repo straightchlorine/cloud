@@ -8,7 +8,6 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache"
-# SSH configuration using config file
 export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 LOG_FILE="{{ backup_base_path }}/logs/init-{{ backup_service_name }}-$(date +%Y%m%d_%H%M%S).log"
@@ -18,7 +17,7 @@ echo "Repository: $RESTIC_REPOSITORY" | tee -a "$LOG_FILE"
 
 # Test SSH connection first
 echo "$(date): Testing SSH connection..." | tee -a "$LOG_FILE"
-if ssh -F {{ backup_base_path }}/.ssh/config -o ConnectTimeout=10 hetzner-storage "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
+if ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage exit "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
     echo "$(date): SSH connection test passed" | tee -a "$LOG_FILE"
 else
     echo "$(date): ERROR: SSH connection failed. Check SSH key configuration." | tee -a "$LOG_FILE"
