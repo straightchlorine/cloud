@@ -8,35 +8,23 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache"
-
-{% if backup_ssh_config is defined %}
-# SSH configuration
-export RESTIC_SFTP_COMMAND="ssh -i {{ backup_ssh_key_path }} -p {{ backup_ssh_config.port }} -o StrictHostKeyChecking=no {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} -s sftp"
-{% endif %}
+# SSH configuration using config file
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 LOG_FILE="{{ backup_base_path }}/logs/init-{{ backup_service_name }}-$(date +%Y%m%d_%H%M%S).log"
 
 echo "$(date): Initializing restic repository for {{ backup_service_name }}..." | tee -a "$LOG_FILE"
 echo "Repository: $RESTIC_REPOSITORY" | tee -a "$LOG_FILE"
 
-{% if backup_ssh_config is defined %}
 # Test SSH connection first
 echo "$(date): Testing SSH connection..." | tee -a "$LOG_FILE"
-if ssh -i {{ backup_ssh_key_path }} -p {{ backup_ssh_config.port }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
+if ssh -F {{ backup_base_path }}/.ssh/config -o ConnectTimeout=10 hetzner-storage "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
     echo "$(date): SSH connection test passed" | tee -a "$LOG_FILE"
 else
     echo "$(date): ERROR: SSH connection failed. Check SSH key configuration." | tee -a "$LOG_FILE"
-    echo "$(date): MANUAL STEP REQUIRED: Upload this public key:" | tee -a "$LOG_FILE"
-    echo "" | tee -a "$LOG_FILE"
-    cat {{ backup_ssh_key_path }}.pub | tee -a "$LOG_FILE"
-    echo "" | tee -a "$LOG_FILE"
+    echo "$(date): Ensure your SSH public key is in Hetzner Storage Box authorized_keys" | tee -a "$LOG_FILE"
     exit 1
 fi
-
-# Create directory structure on remote
-echo "$(date): Creating directory structure..." | tee -a "$LOG_FILE"
-ssh -i {{ backup_ssh_key_path }} -p {{ backup_ssh_config.port }} {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} "mkdir -p {{ backup_ssh_config.remote_path | default('/backups') }}/{{ backup_service_name }}" >> "$LOG_FILE" 2>&1
-{% endif %}
 
 # Initialize repository
 echo "$(date): Initializing restic repository..." | tee -a "$LOG_FILE"
