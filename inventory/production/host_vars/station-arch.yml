@@ -1,45 +1,39 @@
+---
 # Station-Arch Workstation Configuration
 # Standalone backup - handles its own backups independently
 device_role: workstation
 device_type: arch_linux
 
-# Backup configuration
-backup_role: "standalone"
-backup_base_path: "/home/backup/.backup"
-backup_user: "backup"
-backup_group: "backup"
-backup_enabled: true
-backup_additional_groups: []  # User already exists with proper sudo access
-backup_skip_init: true  # Skip auto-initialization, will be done manually with existing SSH config
+# ============================================
+# BACKUP CONFIGURATION (Standalone Mode)
+# ============================================
 
-# Service configuration for restic backup
-backup_service_name: "station-arch"
+# Mode: standalone (direct backup to Hetzner)
+backup_role: standalone
 
-# Network optimization
-backup_network_optimization: true
-backup_network_tuning: true
-backup_bandwidth_limit: 50
-backup_qos_enabled: false
+# User and paths
+backup_user: backup
+backup_group: backup
+backup_base_path: /opt/backup
 
-# Repository configuration (same backend as before)
-restic_enabled: true
+# Restic configuration
 restic_version: "0.18.1"
-restic_repository: "{{ vault_backup_repository_base }}/station-arch"
+restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/station-arch"
 restic_password: "{{ vault_restic_station_arch_password }}"
 
-# Backup paths (used by restic_backup.yml)
+# Backup paths
 backup_paths:
-  - "/etc"
-  - "/home"
-  - "/var/lib"
-  - "/data/ssd/code"
-  - "/data/vault/books"
-  - "/data/vault/code"
-  - "/data/vault/media/img"
-  - "/data/vault/media/misc"
-  - "/data/vault/organise"
+  - /etc
+  - /home
+  - /var/lib
+  - /data/ssd/code
+  - /data/vault/books
+  - /data/vault/code
+  - /data/vault/media/img
+  - /data/vault/media/misc
+  - /data/vault/organise
 
-# Exclude patterns (used by restic_backup.yml)
+# Exclude patterns
 backup_excludes:
   - "**/.cache/**"
   - "**/cache/**"
@@ -63,158 +57,23 @@ backup_excludes:
   - "*.img"
   - "*.vmdk"
 
-# Scheduling
-backup_schedule: "*-*-* 10:00:00"
-backup_randomized_delay: "1800s"
-backup_timeout: "14400"  # 4 hours for large dataset
-backup_priority: "normal"
-
-# Memory optimization for large datasets
-restic_memory_limit: "1200M"
-restic_pack_size: 32  # MB - smaller packs reduce memory usage
-restic_read_concurrency: 2  # Limit concurrent file reads
-restic_compression: "auto"  # Balance between speed and memory
-backup_nice_level: 19
-backup_io_class: "idle"
-
-# Network optimization settings
-network_optimization:
-  enabled: true
-  compression_level: "adaptive"
-  bandwidth_limit_mbps: 50
-  concurrent_transfers: 3
-  delta_sync: true
-  resume_support: true
-  connection_pooling: true
-
-# Retention policy (flattened for restic_backup.yml)
+# Retention policy
 retention_policy:
-  daily: "30"
-  weekly: "12"
-  monthly: "24"
-  yearly: "3"
+  daily: 30
+  weekly: 12
+  monthly: 24
+  yearly: 3
 
-# Security enhancements
-backup_security:
-  encryption_algorithm: "AES256"
-  key_derivation: "scrypt"
-  verification_enabled: false
-  integrity_checks: false
-  secure_deletion: true
-  audit_logging: true
+# Restic optimization (optimized for speed on powerful machine)
+restic_optimization:
+  read_concurrency: 8     # High for Ryzen 7 16-thread CPU
+  compression: auto
+  pack_size: 64           # Larger packs OK with 32GB RAM
 
-# Performance monitoring
-backup_monitoring:
-  enabled: true
-  metrics_collection: true
-  performance_tracking: true
-  bandwidth_monitoring: true
-  error_tracking: true
-  success_notifications: false
-  failure_notifications: true
+# Scheduling
+backup_schedule: "*-*-* 10:00:00"  # Daily at 10 AM
+backup_randomized_delay: "1800s"   # Random delay up to 30 min
+backup_timeout: 14400              # 4 hours timeout for large dataset
 
-# Enhanced restore capabilities
-restore_capabilities:
-  centralized_restore: true
-  push_back_enabled: true
-  granular_restore: true
-  point_in_time_recovery: true
-  cross_platform_restore: true
-
-restore_methods:
-  primary: "centralized_coordinator"
-  fallback: "direct_pull"
-  emergency: "manual_intervention"
-
-# Push-back configuration for restored data
-pushback_config:
-  enabled: true
-  methods: ["rsync", "scp", "rclone"]
-  verification: false
-  atomic_operations: true
-  rollback_on_failure: true
-  post_restore_validation: false
-
-# Direct backup - no coordinator needed
-coordination:
-  backup_coordinator: "none"
-  status_reporting: false
-  dependency_management: false
-
-# Advanced features
-advanced_features:
-  deduplication_analysis: true
-  storage_optimization: true
-  automated_testing: true
-  disaster_recovery: true
-  compliance_reporting: true
-
-# Pre and post backup hooks
-backup_hooks:
-  pre_backup:
-    - name: "system_snapshot"
-      command: "btrfs subvolume snapshot / /snapshots/pre-backup-$(date +%s)"
-      enabled: false
-    - name: "database_dump"
-      command: "pg_dumpall > /tmp/db-backup.sql"
-      enabled: false
-    - name: "service_quiesce"
-      command: "systemctl stop --user applications.target"
-      enabled: false
-
-  post_backup:
-    - name: "service_resume"
-      command: "systemctl start --user applications.target"
-      enabled: false
-    - name: "cleanup_temp"
-      command: "rm -f /tmp/db-backup.sql"
-      enabled: false
-    - name: "notification"
-      command: "notify-send 'Backup Complete' 'Station-arch backup finished successfully'"
-      enabled: true
-
-# Node exporter configuration
-node_exporter_enabled: true
-node_exporter_port: 9100
-node_exporter_ufw_enabled: false
-
-# Firewall configuration for backup operations
-firewall_backup_ports:
-  - port: 9100
-    comment: "Prometheus Node Exporter"
-  - port: 22
-    comment: "SSH for backup operations"
-
-# Required vault variables
-required_backup_vars:
-  - vault_backup_repository_base
-  - vault_restic_station_arch_password
-  - vault_domain_name
-  - vault_letsencrypt_email
-
-# Compliance and audit settings
-compliance:
-  retention_enforcement: true
-  immutable_backups: false
-  legal_hold_support: true
-  audit_logging: true
-  data_classification: "sensitive"
-  gdpr_compliance: true
-  retention_audit_trail: true
-
-# Disaster recovery configuration
-disaster_recovery:
-  replication_enabled: true
-  cross_site_backup: true
-  recovery_time_objective: "4h"
-  recovery_point_objective: "1h"
-  automated_failover: false
-  manual_validation_required: true
-
-# Development environment specific settings
-development_settings:
-  code_backup_priority: "high"
-  project_isolation: true
-  version_control_integration: true
-  build_artifact_exclusion: true
-  dependency_cache_exclusion: true
+# Optional: Memory limit (not needed on 32GB machine but can be set for safety)
+# restic_memory_limit: "4G"

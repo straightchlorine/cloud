@@ -40,13 +40,13 @@ error() {
 
 # Success message
 success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}[OK] $1${NC}"
     log "SUCCESS: $1"
 }
 
 # Warning message
 warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}[WARN]  $1${NC}"
     log "WARNING: $1"
 }
 

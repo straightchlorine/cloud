@@ -111,7 +111,7 @@
 - name: Display validation completion
   ansible.builtin.debug:
     msg: |
-      ✅ {{ validation_context | title }} validation completed successfully
+      [OK] {{ validation_context | title }} validation completed successfully
       Role: {{ role_name }}
       Type: {{ validation_type }}
       {% if required_variables is defined %}

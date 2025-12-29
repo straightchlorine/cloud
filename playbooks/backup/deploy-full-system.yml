@@ -13,20 +13,18 @@
     backup_user: "backup"
     backup_group: "backup"
     backup_restic_version: "0.18.1"
-    backup_network_optimization: true
     backup_monitoring: true
 
   pre_tasks:
     - name: Display enterprise backup deployment start
       ansible.builtin.debug:
         msg: |
-          🚀 Backup System Deployment Starting
+          [deploy] backup system deployment starting
 
-          Coordinator: {{ inventory_hostname }}
-          Targets: {{ backup_targets | length }} configured
-          Base Path: {{ backup_base_path }}
-          Network Optimization: {{ backup_network_optimization }}
-          Monitoring: {{ backup_monitoring }}
+          coordinator: {{ inventory_hostname }}
+          targets: {{ backup_targets | length }} configured
+          base path: {{ backup_base_path }}
+          monitoring: {{ backup_monitoring }}
 
   tasks:
     - name: Deploy enterprise backup coordinator
@@ -73,14 +71,14 @@
     - name: Display comprehensive deployment summary
       ansible.builtin.debug:
         msg: |
-          ✅ Backup System Deployment Complete!
+          [OK] Backup System Deployment Complete!
 
           🏗️ Architecture Deployed:
           - Coordinator: {{ groups['backup_primary'] | join(', ') }}
           - Standalone Systems: {{ groups['backup_standalone'] | join(', ') }}
           - Backup Strategy: Coordinator + Standalone Architecture
 
-          🔧 Services Configured:
+          [TOOL] Services Configured:
           {% for host in groups['backup-primary'] %}
           {% set targets = hostvars[host]['backup_targets'] | default([]) %}
           {% for target in targets %}
@@ -91,14 +89,14 @@
           {% endfor %}
           {% endfor %}
 
-          📊 Features Enabled:
-          ✅ Network Optimization with Bandwidth Control
-          ✅ Centralized Restore with Secure Push-back
-          ✅ Real-time Performance Metrics
-          ✅ Automated Health Monitoring
-          ✅ Enterprise Security and Compliance
+          [STATS] Features Enabled:
+          [OK] Network Optimization with Bandwidth Control
+          [OK] Centralized Restore with Secure Push-back
+          [OK] Real-time Performance Metrics
+          [OK] Automated Health Monitoring
+          [OK] Enterprise Security and Compliance
 
-          🚀 Next Steps:
+          [DEPLOY] Next Steps:
           1. Deploy SSH keys (see instructions above)
           2. Verify connectivity: /opt/enterprise-backup/scripts/backup-manager.sh --verify
           3. Test backup operations: systemctl start backup-[service].service

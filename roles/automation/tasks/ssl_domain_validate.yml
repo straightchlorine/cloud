@@ -135,39 +135,39 @@
 - name: Check Let's Encrypt staging vs production
   ansible.builtin.debug:
     msg: |
-      ⚠️  Let's Encrypt Configuration:
+      [WARN]  Let's Encrypt Configuration:
       Staging Mode: {{ letsencrypt_staging | default(false) }}
       {% if letsencrypt_staging | default(false) %}
       🔸 Using staging environment - certificates will NOT be trusted by browsers
       {% else %}
-      ✅ Using production environment - certificates will be trusted
+      [OK] Using production environment - certificates will be trusted
       {% endif %}
   tags: [ssl_validation]
 
 - name: Display SSL/Domain validation results
   ansible.builtin.debug:
     msg: |
-      ✅ SSL/Domain Validation Results for DNS01 Setup:
+      [OK] SSL/Domain Validation Results for DNS01 Setup:
 
       Domain Resolution:
-      Primary Domain ({{ domain_name }}): ✅ Resolves from all resolvers
+      Primary Domain ({{ domain_name }}): [OK] Resolves from all resolvers
       {% for subdomain in ['traefik', 'influxdb', 'vault', 'portainer', 'dozzle'] %}
-      {{ subdomain }}.{{ domain_name }}: {{ '✅ Resolves' if subdomain_resolution.results[loop.index0].rc == 0 else '❌ Failed' }}
+      {{ subdomain }}.{{ domain_name }}: {{ '[OK] Resolves' if subdomain_resolution.results[loop.index0].rc == 0 else '[FAIL] Failed' }}
       {% endfor %}
 
       DNS01 Prerequisites:
-      Cloudflare API: {{ '✅ Connected' if cloudflare_api_test.json.success else '❌ Failed' }}
+      Cloudflare API: {{ '[OK] Connected' if cloudflare_api_test.json.success else '[FAIL] Failed' }}
       Cloudflare User: {{ cloudflare_api_test.json.result.email | default('Unknown') }}
-      DNS Resolvers: {{ '✅ Working' if traefik_resolver_test.results | selectattr('rc', 'equalto', 0) | list | length == 2 else '❌ Issues detected' }}
+      DNS Resolvers: {{ '[OK] Working' if traefik_resolver_test.results | selectattr('rc', 'equalto', 0) | list | length == 2 else '[FAIL] Issues detected' }}
 
       Certificate Management:
-      acme.json: {{ '✅ Exists' if acme_file.stat.exists else '❌ Missing' }}
-      File Permissions: {{ '✅ Secure (0600)' if acme_file.stat.mode == '0600' else '⚠️  Check permissions' }}
+      acme.json: {{ '[OK] Exists' if acme_file.stat.exists else '[FAIL] Missing' }}
+      File Permissions: {{ '[OK] Secure (0600)' if acme_file.stat.mode == '0600' else '[WARN]  Check permissions' }}
       Existing Certificates: {{ existing_certificates.stdout if existing_certificates.stdout != 'empty-file' else 'None yet' }}
 
       Traefik Configuration:
-      Static Config: {{ '✅ Present' if traefik_configs.results[0].stat.exists else '❌ Missing' }}
-      Dynamic Config: {{ '✅ Present' if traefik_configs.results[1].stat.exists else '❌ Missing' }}
+      Static Config: {{ '[OK] Present' if traefik_configs.results[0].stat.exists else '[FAIL] Missing' }}
+      Dynamic Config: {{ '[OK] Present' if traefik_configs.results[1].stat.exists else '[FAIL] Missing' }}
       Let's Encrypt Email: {{ vault_letsencrypt_email }}
       Staging Mode: {{ letsencrypt_staging | default(false) }}
 

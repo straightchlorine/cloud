@@ -159,10 +159,10 @@
 - name: Backup directory validation completed
   ansible.builtin.debug:
     msg: |
-      ✅ Common backup directories validated:
+      [OK] Common backup directories validated:
       - Backup user home: /opt/backup ({{ 'exists' if backup_home_check.stat.exists else 'will be created' }})
       - System Docker config: {{ system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list | join(', ') or 'none found' }}
       - Available space: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB
-      - Writability test: ✅ PASSED - Backup directories are writable
-      - Log directory: ✅ VERIFIED - Backup logging will work correctly
+      - Writability test: [OK] PASSED - Backup directories are writable
+      - Log directory: [OK] VERIFIED - Backup logging will work correctly
   tags: [backup_validation]

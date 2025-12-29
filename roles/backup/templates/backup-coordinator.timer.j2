@@ -1,0 +1,12 @@
+[Unit]
+Description=Timer for Coordinator Backup - {{ target.service_name }}
+Requires=backup-{{ target.service_name }}.service
+
+[Timer]
+# Stagger timers based on priority (1 hour apart)
+OnCalendar=*-*-* {{ '%02d' | format(target.priority) }}:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

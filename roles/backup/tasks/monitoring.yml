@@ -192,9 +192,9 @@
 - name: Display backup monitoring deployment status
   ansible.builtin.debug:
     msg: |
-      ✅ Enterprise Backup Monitoring Deployed:
+      [OK] Enterprise Backup Monitoring Deployed:
 
-      📊 Metrics and Analytics:
+      [STATS] Metrics and Analytics:
       - Backup Metrics Endpoint: http://{{ primary_ip }}:{{ backup_monitoring.metrics_port }}/metrics
       - Performance Analytics: {{ 'Enabled' if backup_monitoring.detailed_timing else 'Disabled' }}
       - Storage Efficiency Tracking: {{ 'Enabled' if backup_monitoring.storage_efficiency else 'Disabled' }}
@@ -214,7 +214,7 @@
       - Restore Testing Results
       - SLA Compliance Tracking
 
-      ⚡ Automated Analysis:
+      [POWER] Automated Analysis:
       - Capacity Planning: {{ backup_base_path }}/scripts/backup-capacity-planner.py
       - Trend Analysis: {{ backup_base_path }}/scripts/backup-trend-analyzer.py
       - Cost Analysis: {{ backup_base_path }}/scripts/backup-cost-analyzer.py
@@ -232,7 +232,7 @@
       - Infrastructure Health (disk usage, network performance)
       - Compliance Metrics (retention policy adherence, audit trails)
 
-      {{ '✅ Metrics endpoint accessible!' if backup_metrics_check.status == 200 else '❌ Metrics endpoint not accessible!' }}
+      {{ '[OK] Metrics endpoint accessible!' if backup_metrics_check.status == 200 else '[FAIL] Metrics endpoint not accessible!' }}
 
       📖 Documentation: {{ backup_base_path }}/docs/backup-monitoring-guide.md
 

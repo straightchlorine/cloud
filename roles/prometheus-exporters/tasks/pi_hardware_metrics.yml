@@ -75,7 +75,7 @@
 - name: Pi hardware metrics setup completed
   ansible.builtin.debug:
     msg: |
-      ✅ Pi Hardware Metrics Setup Complete:
+      [OK] Pi Hardware Metrics Setup Complete:
       - Metrics script: {{ pi_hardware_metrics_script }}
       - Collection interval: {{ pi_hardware_metrics_interval }} seconds
       - Textfile output: {{ node_exporter_textfile_dir }}/pi_hardware.prom

@@ -1,58 +1,43 @@
-# Main enterprise backup deployment tasks
-# Implements modern backup standards with automated restore testing and operational excellence
+---
+# Unified Backup Role - Main Entry Point
+# Supports two modes: standalone and coordinator
+# No defaults - all configuration must be explicit
 
-- name: Include enterprise backup validation
+- name: Include backup validation (fail-fast)
   ansible.builtin.include_tasks: validate.yml
-  tags: [validation, enterprise_backup]
+  tags: [validation, backup]
 
-- name: Include network facts collection
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: network_facts
-  tags: [network, enterprise_backup]
+- name: Include common backup setup
+  ansible.builtin.include_tasks: common.yml
+  tags: [common, backup]
 
-- name: Include multi-repository setup
-  ansible.builtin.include_tasks: repositories.yml
-  tags: [repositories, enterprise_backup]
+- name: Include standalone backup setup
+  ansible.builtin.include_tasks: standalone.yml
+  when: backup_role == 'standalone'
+  tags: [standalone, backup]
 
-- name: Include systemd services setup
-  ansible.builtin.include_tasks: systemd_services.yml
-  tags: [systemd, enterprise_backup]
+- name: Include coordinator backup setup
+  ansible.builtin.include_tasks: coordinator.yml
+  when: backup_role == 'coordinator'
+  tags: [coordinator, backup]
 
-- name: Include backup monitoring setup
-  ansible.builtin.include_tasks: monitoring.yml
-  tags: [monitoring, enterprise_backup]
-  when: backup_monitoring_enabled
-
-
-- name: Display enterprise backup deployment summary
+- name: Display backup deployment summary
   ansible.builtin.debug:
     msg: |
-      ✅ Enterprise Backup Deployment Complete for {{ inventory_hostname }}
-
-      🏢 Enterprise Features Deployed:
-      📊 Multi-Repository Strategy: {{ backup_repositories.keys() | length }} repositories
-      🔄 Automated Restore Testing: {{ 'Enabled' if restore_testing.enabled else 'Disabled' }}
-      📈 Performance Monitoring: {{ 'Enabled' if backup_monitoring.prometheus_metrics else 'Disabled' }}
-      🔐 Security Hardening: Encryption, key rotation, audit trails
-      ⚡ Orchestration: Dependency management, parallel operations
-      🎯 Compliance: Retention enforcement, audit logging
-
-      📁 Repository Configuration:
-      {% for repo, config in backup_repositories.items() %}
-      - {{ repo | title }}: {{ config.description }}
-        Retention: {{ config.retention_policy }}
-        Priority: {{ config.priority }}
-        Check Frequency: {{ config.check_frequency }}
+      [backup deployment complete]
+      host: {{ inventory_hostname }}
+      mode: {{ backup_role }}
+      user: {{ backup_user }}
+      base path: {{ backup_base_path }}
+      {% if backup_role == 'standalone' %}
+      repository: {{ restic_repository }}
+      backup paths: {{ backup_paths | length }}
+      schedule: {{ backup_schedule }}
+      {% endif %}
+      {% if backup_role == 'coordinator' %}
+      targets: {{ coordinator_targets | length }}
+      {% for target in coordinator_targets | sort(attribute='priority') %}
+      - {{ target.service_name }} (priority {{ target.priority }})
       {% endfor %}
-
-      🚀 Service Backup Schedules:
-      {% for service, config in service_backup_configs.items() %}
-      - {{ service | title }}: {{ config.schedule }} → {{ config.repository }} repository
-      {% endfor %}
-
-      📊 Enterprise Metrics: http://{{ primary_ip }}:{{ backup_monitoring.metrics_port }}/metrics
-      🔍 Restore Testing: {{ 'Weekly validation enabled' if restore_testing.enabled else 'Manual only' }}
-
-      Enterprise backup infrastructure ready for production!
-  tags: [summary, enterprise_backup]
+      {% endif %}
+  tags: [summary, backup]

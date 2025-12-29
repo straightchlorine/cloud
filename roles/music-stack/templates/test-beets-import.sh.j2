@@ -104,7 +104,7 @@ if ! docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" config >/dev/null 
     exit 1
 fi
 
-log "✅ Pre-flight checks completed successfully" "INFO"
+log "[OK] Pre-flight checks completed successfully" "INFO"
 
 if [[ "$TEST_MODE" == "setup-only" ]]; then
     log "Setup-only mode completed" "INFO"
@@ -139,9 +139,9 @@ fi
 log "Testing beets container startup..." "INFO"
 if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
     beet --config /config/config.yaml version 2>&1 | tee -a "$LOG_FILE"; then
-    log "✅ Beets container startup successful" "INFO"
+    log "[OK] Beets container startup successful" "INFO"
 else
-    log "❌ Beets container startup failed" "ERROR"
+    log "[FAIL] Beets container startup failed" "ERROR"
     exit 1
 fi
 
@@ -167,10 +167,10 @@ if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
     beet --config /config/config.yaml import -q /downloads 2>&1 | tee -a "$LOG_FILE"; then
     IMPORT_END_TIME=$(date +%s)
     IMPORT_DURATION=$((IMPORT_END_TIME - IMPORT_START_TIME))
-    log "✅ Beets import completed successfully in ${IMPORT_DURATION}s" "INFO"
+    log "[OK] Beets import completed successfully in ${IMPORT_DURATION}s" "INFO"
 else
     BEETS_EXIT_CODE=$?
-    log "❌ Beets import failed with exit code $BEETS_EXIT_CODE" "ERROR"
+    log "[FAIL] Beets import failed with exit code $BEETS_EXIT_CODE" "ERROR"
 fi
 
 # Simple archiving test
@@ -178,7 +178,7 @@ if [[ $BEETS_EXIT_CODE -eq 0 && "$TEST_MODE" == "full" ]]; then
     log "Testing basic archiving..." "INFO"
     ARCHIVE_DIR="$MUSIC_STACK_HOME/archive/test-$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$ARCHIVE_DIR"
-    log "✅ Archive directory ready" "INFO"
+    log "[OK] Archive directory ready" "INFO"
 fi
 
 # Test library verification
@@ -190,9 +190,9 @@ log "Library now contains $LIBRARY_COUNT audio files" "INFO"
 log "Testing beets database queries..." "INFO"
 if docker compose -f "$MUSIC_STACK_HOME/docker-compose.yml" run --rm -T beets \
     beet --config /config/config.yaml stats 2>&1 | tee -a "$LOG_FILE"; then
-    log "✅ Beets database queries working" "INFO"
+    log "[OK] Beets database queries working" "INFO"
 else
-    log "❌ Beets database queries failed" "ERROR"
+    log "[FAIL] Beets database queries failed" "ERROR"
     BEETS_EXIT_CODE=1
 fi
 
@@ -206,8 +206,8 @@ log "Files processed: $EXISTING_AUDIO_COUNT" "INFO"
 log "Files in library: $LIBRARY_COUNT" "INFO"
 
 if [[ $BEETS_EXIT_CODE -eq 0 ]]; then
-    log "✅ Beets import test: SUCCESS" "INFO"
+    log "[OK] Beets import test: SUCCESS" "INFO"
 else
-    log "❌ Beets import test: FAILED" "ERROR"
+    log "[FAIL] Beets import test: FAILED" "ERROR"
 fi
 exit $BEETS_EXIT_CODE

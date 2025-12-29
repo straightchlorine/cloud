@@ -1,0 +1,13 @@
+[Unit]
+Description=Timer for Standalone Backup - {{ inventory_hostname }}
+Requires=backup-{{ inventory_hostname }}.service
+
+[Timer]
+OnCalendar={{ backup_schedule }}
+{% if backup_randomized_delay is defined %}
+RandomizedDelaySec={{ backup_randomized_delay }}
+{% endif %}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

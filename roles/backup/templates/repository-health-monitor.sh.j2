@@ -40,13 +40,13 @@ error() {
 
 # Success message
 success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}[OK] $1${NC}"
     log "SUCCESS: $1"
 }
 
 # Warning message
 warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}[WARN]  $1${NC}"
     log "WARNING: $1"
 }
 
@@ -217,7 +217,7 @@ EOF
 
     # Display summary
     echo
-    echo "📊 Enterprise Backup Health Summary"
+    echo "[STATS] Enterprise Backup Health Summary"
     echo "=================================="
     echo "Total repositories: ${total_repos}"
     echo "Healthy repositories: ${healthy_repos}"

@@ -40,39 +40,39 @@ This document outlines the development principles and guidelines for maintaining
 
 ### Variable Management
 ```yaml
-# ❌ Wrong - uses defaults
+# [FAIL] Wrong - uses defaults
 pihole_interface: "{{ primary_interface | default('eth0') }}"
 
-# ✅ Correct - explicit, will fail if undefined
+# [OK] Correct - explicit, will fail if undefined
 pihole_interface: "{{ primary_interface }}"
 ```
 
 ### Role Structure
 ```yaml
-# ❌ Wrong - duplicated across roles
+# [FAIL] Wrong - duplicated across roles
 - name: Install packages
   apt: name={{ packages }} state=present
 
-# ✅ Correct - use common role
+# [OK] Correct - use common role
 - name: Include common package management
   include_role: name=common tasks_from=packages
 ```
 
 ### Network Configuration
 ```yaml
-# ❌ Wrong - hardcoded IP
+# [FAIL] Wrong - hardcoded IP
 pihole_ipv4_address: 192.168.20.10/24
 
-# ✅ Correct - dynamic detection
+# [OK] Correct - dynamic detection
 pihole_ipv4_address: "{{ host_ip_cidr }}"
 ```
 
 ### Security Configuration
 ```yaml
-# ❌ Wrong - exposed interface
+# [FAIL] Wrong - exposed interface
 traefik_dashboard_port: 8080
 
-# ✅ Correct - localhost only
+# [OK] Correct - localhost only
 ports: "127.0.0.1:{{ traefik_dashboard_port }}:8080"
 ```
 
@@ -143,11 +143,11 @@ roles/common/
 
 ### Configuration Comments
 ```yaml
-# ✅ Good - explains the why
+# [OK] Good - explains the why
 # Docker user namespace mapping for container isolation
 userns-remap: default
 
-# ❌ Bad - explains the what (obvious)
+# [FAIL] Bad - explains the what (obvious)
 # Set the domain name
 domain_name: "{{ vault_domain_name }}"
 ```

@@ -1,0 +1,127 @@
+---
+# Common Backup Setup Tasks
+# Shared functionality for both standalone and coordinator modes
+
+- name: Create backup group
+  ansible.builtin.group:
+    name: "{{ backup_group }}"
+    state: present
+  become: true
+
+- name: Create backup user
+  ansible.builtin.user:
+    name: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    home: "{{ backup_base_path }}"
+    shell: /bin/bash
+    createhome: true
+    system: true
+  become: true
+
+- name: Create backup directory structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
+  loop:
+    - "{{ backup_base_path }}"
+    - "{{ backup_base_path }}/scripts"
+    - "{{ backup_base_path }}/logs"
+    - "{{ backup_base_path }}/cache"
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/sockets"
+  become: true
+
+- name: Create coordinator-specific directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
+  loop:
+    - "{{ backup_base_path }}/mounts"
+  become: true
+  when: backup_role == 'coordinator'
+
+- name: Set SSH directory permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0700'
+  loop:
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/sockets"
+  become: true
+
+- name: Install required packages (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name:
+      - curl
+      - jq
+      - fuse
+      - sshfs
+    state: present
+    update_cache: true
+  become: true
+  when: ansible_os_family == 'Debian'
+
+- name: Install required packages (Arch Linux)
+  community.general.pacman:
+    name:
+      - curl
+      - jq
+      - fuse3
+      - sshfs
+    state: present
+  become: true
+  when: ansible_os_family == 'Archlinux'
+
+- name: Check if restic is already installed
+  ansible.builtin.command: restic version
+  register: restic_check
+  failed_when: false
+  changed_when: false
+
+- name: Install restic
+  when: restic_check.rc != 0 or (restic_check.stdout is defined and restic_version not in restic_check.stdout)
+  block:
+    - name: Download restic binary
+      ansible.builtin.get_url:
+        url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_amd64.bz2"
+        dest: "/tmp/restic_{{ restic_version }}_linux_amd64.bz2"
+        mode: '0644'
+      become: true
+
+    - name: Extract restic binary
+      ansible.builtin.command: "bunzip2 -f /tmp/restic_{{ restic_version }}_linux_amd64.bz2"
+      become: true
+      changed_when: true
+
+    - name: Install restic to /usr/local/bin
+      ansible.builtin.copy:
+        src: "/tmp/restic_{{ restic_version }}_linux_amd64"
+        dest: /usr/local/bin/restic
+        mode: '0755'
+        remote_src: true
+      become: true
+
+    - name: Clean up downloaded restic file
+      ansible.builtin.file:
+        path: "/tmp/restic_{{ restic_version }}_linux_amd64"
+        state: absent
+      become: true
+
+- name: Verify restic installation
+  ansible.builtin.command: restic version
+  register: restic_verify
+  changed_when: false
+  failed_when: restic_verify.rc != 0
+
+- name: Display restic version
+  ansible.builtin.debug:
+    msg: "Restic installed: {{ restic_verify.stdout }}"

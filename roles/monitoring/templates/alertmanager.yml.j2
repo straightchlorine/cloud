@@ -190,7 +190,7 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '📝 Log-based Alert'
+        title: '[NOTE] Log-based Alert'
         text: |
           {{ range .Alerts }}
           **Log Alert:** {{ .Annotations.summary }}

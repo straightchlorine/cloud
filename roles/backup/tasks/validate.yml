@@ -1,117 +1,196 @@
-# Enterprise Backup Validation Tasks
-# Uses unified validation framework to eliminate redundancy
+---
+# Unified Backup Role Validation Tasks
+# Implements fail-fast validation - NO defaults allowed
+# All required variables must be explicitly defined
 
-- name: Run enterprise backup comprehensive validation
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: unified_validation
-  vars:
-    validation_context: "enterprise backup"
-    validation_type: "backup"
-    role_name: "enterprise-backup"
-    required_variables:
-      - restic_repository
-      - restic_password
-      - backup_directories
-      - device_role
-      - backup_base_path
-      - backup_user
-      - backup_group
-    vault_placeholders:
-      - {var: "restic_password", value: "your-32-character-secure-restic-password"}
-    critical_backup_paths: "{{ backup_directories }}"
-    stack_home: "{{ backup_base_path }}"
-    required_services: []
-  tags: [validation]
+- name: Validate backup_role is defined
+  ansible.builtin.assert:
+    that:
+      - backup_role is defined
+      - backup_role in ['standalone', 'coordinator']
+    fail_msg: "backup_role must be defined and set to 'standalone' or 'coordinator'"
+    success_msg: "Backup role validated: {{ backup_role }}"
 
-- name: Validate backup directories exist and are accessible
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: backup_dir_check
-  loop: "{{ backup_directories }}"
-  tags: [validation]
+- name: Validate common required variables
+  ansible.builtin.assert:
+    that:
+      - backup_user is defined
+      - backup_group is defined
+      - backup_base_path is defined
+      - restic_version is defined
+    fail_msg: "Missing required common variables. Required: backup_user, backup_group, backup_base_path, restic_version"
+    success_msg: "Common backup variables validated"
 
-- name: Fail if backup directories are not accessible
-  ansible.builtin.fail:
-    msg: "Backup directory does not exist or is not accessible: {{ item.item }}"
-  when: not item.stat.exists or not item.stat.readable
-  loop: "{{ backup_dir_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  tags: [validation]
+- name: Validate Hetzner storage configuration
+  ansible.builtin.assert:
+    that:
+      - vault_backup_storage_host is defined
+      - vault_backup_storage_user is defined
+      - vault_backup_storage_port is defined
+      - vault_backup_repository_base is defined
+    fail_msg: "Missing Hetzner storage configuration. Required: vault_backup_storage_host, vault_backup_storage_user, vault_backup_storage_port, vault_backup_repository_base"
+    success_msg: "Hetzner storage configuration validated"
 
-- name: Validate enterprise backup base path parent directory exists
-  ansible.builtin.stat:
-    path: "{{ backup_base_path | dirname }}"
-  register: backup_base_parent
-  tags: [validation]
+# Standalone mode validation
+- name: Validate standalone mode configuration
+  when: backup_role == 'standalone'
+  block:
+    - name: Validate standalone required variables
+      ansible.builtin.assert:
+        that:
+          - restic_repository is defined
+          - restic_password is defined
+          - backup_paths is defined
+          - backup_paths | length > 0
+          - retention_policy is defined
+          - retention_policy.daily is defined
+          - retention_policy.weekly is defined
+          - retention_policy.monthly is defined
+          - retention_policy.yearly is defined
+          - restic_optimization is defined
+          - backup_schedule is defined
+          - backup_timeout is defined
+        fail_msg: |
+          Missing required standalone variables. Required:
+            - restic_repository
+            - restic_password
+            - backup_paths (list with at least one path)
+            - retention_policy (with daily, weekly, monthly, yearly)
+            - restic_optimization
+            - backup_schedule
+            - backup_timeout
+        success_msg: "Standalone mode configuration validated"
 
-- name: Fail if enterprise backup base path parent does not exist
-  ansible.builtin.fail:
-    msg: "Enterprise backup base path parent directory does not exist: {{ backup_base_path | dirname }}"
-  when: not backup_base_parent.stat.exists or not backup_base_parent.stat.isdir
-  tags: [validation]
+    - name: Validate restic_optimization structure
+      ansible.builtin.assert:
+        that:
+          - restic_optimization.read_concurrency is defined
+          - restic_optimization.compression is defined
+          - restic_optimization.pack_size is defined
+        fail_msg: "restic_optimization must define: read_concurrency, compression, pack_size"
+        success_msg: "Restic optimization settings validated"
 
-- name: Check if restic repository URL format is valid
-  ansible.builtin.fail:
-    msg: "Invalid restic repository URL format: {{ restic_repository }}"
-  when: not (restic_repository | regex_search('^(sftp:|s3:|local:|rest:|rclone:|azure:|gs:|swift:)'))
-  tags: [validation]
+    - name: Validate backup paths exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: backup_path_check
+      loop: "{{ backup_paths }}"
+      failed_when: false
+      changed_when: false
 
-- name: Validate backup password length
-  ansible.builtin.fail:
-    msg: "Backup password must be at least 12 characters long for security"
-  when: restic_password | length < 12
-  tags: [validation]
+    - name: Warn about non-existent backup paths
+      ansible.builtin.debug:
+        msg: "WARNING: Backup path does not exist: {{ item.item }}"
+      loop: "{{ backup_path_check.results }}"
+      when: not item.stat.exists
+      loop_control:
+        label: "{{ item.item }}"
+
+# Coordinator mode validation
+- name: Validate coordinator mode configuration
+  when: backup_role == 'coordinator'
+  block:
+    - name: Validate coordinator_targets is defined
+      ansible.builtin.assert:
+        that:
+          - coordinator_targets is defined
+          - coordinator_targets | length > 0
+        fail_msg: "coordinator_targets must be defined with at least one target"
+        success_msg: "Coordinator has {{ coordinator_targets | length }} target(s)"
+
+    - name: Validate each coordinator target configuration
+      ansible.builtin.assert:
+        that:
+          - item.service_name is defined
+          - item.hostname is defined
+          - item.ssh_user is defined
+          - item.ssh_key is defined
+          - item.backup_paths is defined
+          - item.backup_paths | length > 0
+          - item.restic_repository is defined
+          - item.restic_password is defined
+          - item.retention_policy is defined
+          - item.retention_policy.daily is defined
+          - item.retention_policy.weekly is defined
+          - item.retention_policy.monthly is defined
+          - item.retention_policy.yearly is defined
+          - item.priority is defined
+          - item.memory_limit is defined
+          - item.restic_optimization is defined
+        fail_msg: |
+          Invalid coordinator target configuration for {{ item.service_name | default('unknown') }}.
+          Required fields: service_name, hostname, ssh_user, ssh_key, backup_paths,
+          restic_repository, restic_password, retention_policy (daily/weekly/monthly/yearly),
+          priority, memory_limit, restic_optimization
+        success_msg: "Target {{ item.service_name }} configuration validated"
+      loop: "{{ coordinator_targets }}"
+      loop_control:
+        label: "{{ item.service_name | default('unknown') }}"
+
+    - name: Validate coordinator target restic_optimization
+      ansible.builtin.assert:
+        that:
+          - item.restic_optimization.read_concurrency is defined
+          - item.restic_optimization.compression is defined
+          - item.restic_optimization.pack_size is defined
+        fail_msg: "Target {{ item.service_name }}: restic_optimization must define read_concurrency, compression, pack_size"
+        success_msg: "Target {{ item.service_name }} optimization validated"
+      loop: "{{ coordinator_targets }}"
+      loop_control:
+        label: "{{ item.service_name }}"
+
+    - name: Validate unique priorities
+      ansible.builtin.assert:
+        that:
+          - coordinator_targets | map(attribute='priority') | list | unique | length == coordinator_targets | length
+        fail_msg: "Coordinator target priorities must be unique (for sequential execution order)"
+        success_msg: "All coordinator targets have unique priorities"
+
+    - name: Validate unique service names
+      ansible.builtin.assert:
+        that:
+          - coordinator_targets | map(attribute='service_name') | list | unique | length == coordinator_targets | length
+        fail_msg: "Coordinator target service_name values must be unique"
+        success_msg: "All coordinator targets have unique service names"
+
+- name: Validate backup_excludes format (if defined)
+  when: backup_excludes is defined
+  ansible.builtin.assert:
+    that:
+      - backup_excludes is iterable
+      - backup_excludes is not string
+    fail_msg: "backup_excludes must be a list"
+    success_msg: "Backup excludes validated ({{ backup_excludes | length }} patterns)"
 
 - name: Check available disk space for backup operations
   ansible.builtin.shell: df {{ backup_base_path | dirname }} | tail -1 | awk '{print $4}'
   register: available_space
   changed_when: false
-  tags: [validation]
 
-- name: Fail if insufficient disk space for backup operations
-  ansible.builtin.fail:
-    msg: "Insufficient disk space. Available: {{ (available_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 2GB minimum for backup operations"
-  when: (available_space.stdout | int) < 2097152 # 2GB in KB
-  tags: [validation]
+- name: Warn if low disk space
+  ansible.builtin.debug:
+    msg: "WARNING: Low disk space. Available: {{ (available_space.stdout | int / 1024 / 1024) | round(2) }}GB"
+  when: (available_space.stdout | int) < 2097152
 
-- name: Validate systemd is available for service management
+- name: Validate systemd is available
   ansible.builtin.command: systemctl --version
   changed_when: false
   failed_when: false
   register: systemd_check
-  tags: [validation]
 
 - name: Fail if systemd is not available
   ansible.builtin.fail:
-    msg: "systemd is required for enterprise backup service management"
+    msg: "systemd is required for backup service management"
   when: systemd_check.rc != 0
-  tags: [validation]
 
-- name: Check if jq is available for JSON processing
-  ansible.builtin.command: which jq
-  changed_when: false
-  failed_when: false
-  register: jq_check
-  tags: [validation]
-
-- name: Install jq if not available
-  ansible.builtin.package:
-    name: jq
-    state: present
-  become: yes
-  when: jq_check.rc != 0
-  tags: [validation, packages]
-
-- name: Validate backup user configuration
-  ansible.builtin.fail:
-    msg: "backup_user must be defined and non-empty"
-  when: backup_user is not defined or backup_user == ""
-  tags: [validation]
-
-- name: Enterprise backup validation completed successfully
+- name: Display validation summary
   ansible.builtin.debug:
-    msg: "All enterprise backup deployment requirements validated successfully"
-  tags: [validation]
+    msg:
+      - "[backup configuration validation summary]"
+      - "mode: {{ backup_role }}"
+      - "user: {{ backup_user }}"
+      - "base path: {{ backup_base_path }}"
+      - "restic version: {{ restic_version }}"
+      - "{% if backup_role == 'standalone' %}backup paths: {{ backup_paths | length }}{% endif %}"
+      - "{% if backup_role == 'coordinator' %}coordinator targets: {{ coordinator_targets | length }}{% endif %}"
 

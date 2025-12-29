@@ -53,11 +53,11 @@
       Last modified: {{ pihole_installer.stat.mtime }}
 
       Security enhancements implemented:
-      ✅ Using official GitHub repository (not direct script download)
-      ✅ Pinned to specific version tag for reproducibility
-      ✅ Commit hash verification for integrity
-      ✅ Allows code review before installation
-      ✅ Verifiable source and provenance
+      [OK] Using official GitHub repository (not direct script download)
+      [OK] Pinned to specific version tag for reproducibility
+      [OK] Commit hash verification for integrity
+      [OK] Allows code review before installation
+      [OK] Verifiable source and provenance
 
 - name: Create Pi-hole configuration directory
   ansible.builtin.file:

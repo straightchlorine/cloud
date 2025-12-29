@@ -83,7 +83,7 @@
 - name: Docker metrics setup status
   ansible.builtin.debug:
     msg: |
-      ✅ Docker Metrics Setup:
+      [OK] Docker Metrics Setup:
       - Docker daemon metrics: {{ 'Enabled' if docker_exporter_enabled else 'Disabled' }}
       - Metrics endpoint: {{ 'Accessible' if docker_metrics_test.status == 200 else 'Not accessible' }}
       - Collection script: {{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh

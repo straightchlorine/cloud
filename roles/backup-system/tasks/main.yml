@@ -21,11 +21,6 @@
   when: backup_role == "standalone"
   tags: [standalone, backup]
 
-- name: Configure network optimization
-  ansible.builtin.import_tasks: network-optimization.yml
-  when: backup_network_optimization | default(false)
-  tags: [network, backup]
-
 - name: Setup monitoring and health checks
   ansible.builtin.import_tasks: monitoring.yml
   when: backup_monitoring | default(true)
@@ -34,13 +29,12 @@
 - name: Display deployment summary
   ansible.builtin.debug:
     msg: |
-      ✅ Backup System Deployed Successfully!
+      [OK] Backup System Deployed Successfully!
 
-      Role: {{ backup_role }}
-      Node: {{ inventory_hostname }}
-      Repository Strategy: {{ backup_strategy | default('hybrid') }}
-      Network Optimization: {{ backup_network_optimization | default(false) }}
-      Monitoring: {{ backup_monitoring | default(true) }}
+      role: {{ backup_role }}
+      node: {{ inventory_hostname }}
+      repository strategy: {{ backup_strategy | default('hybrid') }}
+      monitoring: {{ backup_monitoring | default(true) }}
 
       {% if backup_role == "coordinator" %}
       Coordinator Services:

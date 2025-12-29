@@ -36,7 +36,7 @@
 - name: Display core vault validation success
   ansible.builtin.debug:
     msg: |
-      ✅ Core Vault Variables Validated:
+      [OK] Core Vault Variables Validated:
       Domain: {{ vault_domain_name }}
       Email: {{ vault_letsencrypt_email }}
   tags: [vault_validation]

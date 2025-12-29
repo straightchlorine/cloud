@@ -1,47 +1,8 @@
-# Backup System - Network Optimization
+# Backup System - SSH Connection Optimization
+# Keep it simple: connection pooling, keep-alive, and host key checking
+# Restic handles compression, no need for SSH-level compression
 
-- name: Configure network optimization parameters
-  ansible.builtin.sysctl:
-    name: "{{ item.name }}"
-    value: "{{ item.value }}"
-    state: present
-    reload: true
-  loop:
-    - { name: 'net.core.rmem_max', value: '134217728' }
-    - { name: 'net.core.wmem_max', value: '134217728' }
-    - { name: 'net.ipv4.tcp_rmem', value: '4096 16384 134217728' }
-    - { name: 'net.ipv4.tcp_wmem', value: '4096 65536 134217728' }
-    - { name: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
-    - { name: 'net.core.default_qdisc', value: 'fq' }
-  when: backup_network_tuning
-
-- name: Create network optimization script
-  ansible.builtin.template:
-    src: network-optimizer.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-network-optimizer.sh"
-    owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
-    mode: '0755'
-
-- name: Configure bandwidth limiting service
-  ansible.builtin.template:
-    src: bandwidth-limiter.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-bandwidth-limiter.sh"
-    owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
-    mode: '0755'
-  when: backup_bandwidth_limit > 0
-
-- name: Create QoS configuration for backup traffic
-  ansible.builtin.template:
-    src: qos-config.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-qos.sh"
-    owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
-    mode: '0755'
-  when: backup_qos_enabled
-
-- name: Configure connection pooling settings
+- name: Configure SSH connection pooling
   ansible.builtin.copy:
     content: |
       # Backup SSH Connection Optimization
@@ -52,7 +13,7 @@
           ServerAliveInterval 60
           ServerAliveCountMax 3
           TCPKeepAlive yes
-          Compression yes
+          StrictHostKeyChecking accept-new
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
@@ -66,12 +27,11 @@
     group: "{{ backup_group }}"
     mode: '0700'
 
-- name: Display network optimization status
+- name: Display SSH optimization status
   ansible.builtin.debug:
     msg: |
-      ✅ Network Optimization Configured:
-      - TCP Buffer Optimization: {{ backup_network_tuning }}
-      - Bandwidth Limiting: {{ backup_bandwidth_limit }} Mbps
-      - QoS Configuration: {{ backup_qos_enabled }}
-      - SSH Connection Pooling: Enabled
-      - Compression: Enabled (Level 6)
+      [ssh connection optimization configured]
+      connection pooling: enabled
+      keep-alive interval: 60 seconds
+      connection timeout: 10 minutes
+

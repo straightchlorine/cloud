@@ -1,0 +1,322 @@
+#!/bin/bash
+# Coordinator Backup Script - {{ target.service_name }}
+# Managed by Ansible - Do not edit manually
+# Mode: Coordinator (pulling from {{ target.hostname }} via SFTP)
+
+set -euo pipefail
+
+# Configuration
+export RESTIC_REPOSITORY="{{ target.restic_repository }}"
+export RESTIC_PASSWORD="{{ target.restic_password }}"
+export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ target.service_name }}"
+
+# Target configuration
+SERVICE_NAME="{{ target.service_name }}"
+TARGET_HOSTNAME="{{ target.hostname }}"
+TARGET_USER="{{ target.ssh_user }}"
+SSH_KEY="{{ target.ssh_key }}"
+LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+
+# Backup paths on remote system
+BACKUP_PATHS=(
+{% for path in target.backup_paths %}
+    "{{ path }}"
+{% endfor %}
+)
+
+# Exclude patterns
+BACKUP_EXCLUDES=(
+{% if target.backup_excludes is defined %}
+{% for exclude in target.backup_excludes %}
+    "{{ exclude }}"
+{% endfor %}
+{% endif %}
+)
+
+# Restic optimization settings (memory-conscious for coordinator)
+PACK_SIZE="{{ target.restic_optimization.pack_size }}"
+READ_CONCURRENCY="{{ target.restic_optimization.read_concurrency }}"
+COMPRESSION="{{ target.restic_optimization.compression }}"
+
+# Retention policy
+RETENTION_DAILY="{{ target.retention_policy.daily }}"
+RETENTION_WEEKLY="{{ target.retention_policy.weekly }}"
+RETENTION_MONTHLY="{{ target.retention_policy.monthly }}"
+RETENTION_YEARLY="{{ target.retention_policy.yearly }}"
+
+# SSH options for remote connection
+SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 -o ConnectTimeout=30"
+
+# SSHFS mount point for this backup
+MOUNT_POINT="{{ backup_base_path }}/mounts/${SERVICE_NAME}"
+
+# Functions
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [${SERVICE_NAME}] $*" | tee -a "$LOG_FILE"
+}
+
+error_exit() {
+    log "ERROR: $1"
+    exit "${2:-1}"
+}
+
+check_prerequisites() {
+    log "Checking backup prerequisites for ${SERVICE_NAME}..."
+
+    # Check restic is available
+    if ! command -v restic >/dev/null 2>&1; then
+        error_exit "restic is not installed or not in PATH"
+    fi
+
+    # Verify restic version
+    local restic_ver=$(restic version | head -1 | awk '{print $2}')
+    log "Using restic version: $restic_ver"
+
+    # Check SSH key exists
+    if [[ ! -f "$SSH_KEY" ]]; then
+        error_exit "SSH key not found: $SSH_KEY"
+    fi
+
+    # Check password is set
+    if [[ -z "$RESTIC_PASSWORD" ]]; then
+        error_exit "RESTIC_PASSWORD is not set"
+    fi
+
+    # Check cache directory exists
+    if [[ ! -d "$RESTIC_CACHE_DIR" ]]; then
+        log "Creating cache directory: $RESTIC_CACHE_DIR"
+        mkdir -p "$RESTIC_CACHE_DIR"
+    fi
+
+    # Check/create mount point
+    if [[ ! -d "$MOUNT_POINT" ]]; then
+        log "Creating mount point: $MOUNT_POINT"
+        mkdir -p "$MOUNT_POINT"
+    fi
+
+    # Check sshfs is installed
+    if ! command -v sshfs >/dev/null 2>&1; then
+        error_exit "sshfs is not installed or not in PATH (required for remote backups)"
+    fi
+
+    log "Prerequisites check completed"
+}
+
+test_remote_connectivity() {
+    log "Testing SSH connectivity to ${TARGET_HOSTNAME}..."
+
+    if ssh -i "${SSH_KEY}" -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "${TARGET_USER}@${TARGET_HOSTNAME}" "echo 'SSH connection successful'" >/dev/null 2>&1; then
+        log "SSH connectivity test passed"
+    else
+        error_exit "Cannot connect to ${TARGET_HOSTNAME} via SSH"
+    fi
+
+    # Test remote paths exist
+    log "Verifying remote backup paths..."
+    local missing_paths=0
+    for path in "${BACKUP_PATHS[@]}"; do
+        if ! ssh -i "${SSH_KEY}" "${TARGET_USER}@${TARGET_HOSTNAME}" "test -e '${path}'" 2>/dev/null; then
+            log "WARNING: Remote path does not exist: $path"
+            missing_paths=$((missing_paths + 1))
+        fi
+    done
+
+    if [[ $missing_paths -gt 0 ]]; then
+        log "WARNING: $missing_paths remote path(s) do not exist"
+    else
+        log "All remote paths verified"
+    fi
+}
+
+test_repository_connectivity() {
+    log "Testing repository connectivity for ${SERVICE_NAME}..."
+
+    if restic snapshots --latest 1 >/dev/null 2>&1; then
+        log "Repository connectivity test passed"
+        return 0
+    else
+        log "WARNING: Could not connect to repository (may not be initialized)"
+        return 1
+    fi
+}
+
+mount_remote_filesystem() {
+    log "Mounting remote filesystem from ${TARGET_HOSTNAME}..."
+
+    # Check if already mounted
+    if mountpoint -q "$MOUNT_POINT"; then
+        log "Mount point already mounted, unmounting first..."
+        fusermount -u "$MOUNT_POINT" || umount "$MOUNT_POINT"
+    fi
+
+    # Mount remote root filesystem via SSHFS
+    # This gives us access to all backup paths
+    if sshfs \
+        "${TARGET_USER}@${TARGET_HOSTNAME}:/" \
+        "$MOUNT_POINT" \
+        -o IdentityFile="${SSH_KEY}" \
+        -o StrictHostKeyChecking=accept-new \
+        -o Compression=yes \
+        -o ServerAliveInterval=60 \
+        -o reconnect \
+        -o allow_other \
+        -o default_permissions; then
+        log "Remote filesystem mounted successfully at ${MOUNT_POINT}"
+    else
+        error_exit "Failed to mount remote filesystem"
+    fi
+
+    # Verify backup paths are accessible through mount
+    local missing_paths=0
+    for path in "${BACKUP_PATHS[@]}"; do
+        local mounted_path="${MOUNT_POINT}${path}"
+        if [[ ! -e "$mounted_path" ]]; then
+            log "WARNING: Mounted path does not exist: $mounted_path"
+            missing_paths=$((missing_paths + 1))
+        fi
+    done
+
+    if [[ $missing_paths -gt 0 ]]; then
+        log "WARNING: $missing_paths path(s) not accessible through mount"
+    else
+        log "All backup paths verified through mount"
+    fi
+}
+
+unmount_remote_filesystem() {
+    log "Unmounting remote filesystem..."
+
+    if mountpoint -q "$MOUNT_POINT"; then
+        if fusermount -u "$MOUNT_POINT" 2>/dev/null || umount "$MOUNT_POINT" 2>/dev/null; then
+            log "Remote filesystem unmounted successfully"
+        else
+            log "WARNING: Failed to unmount filesystem cleanly"
+        fi
+    else
+        log "Filesystem not mounted, skipping unmount"
+    fi
+}
+
+perform_backup() {
+    log "Starting backup for ${SERVICE_NAME} from mounted filesystem..."
+
+    # Build backup command - backup from SSHFS mount to Hetzner
+    local backup_cmd="restic backup"
+
+    # Add paths from mount point
+    for path in "${BACKUP_PATHS[@]}"; do
+        backup_cmd="$backup_cmd \"${MOUNT_POINT}${path}\""
+    done
+
+    # Add tags
+    backup_cmd="$backup_cmd --tag ${SERVICE_NAME}"
+    backup_cmd="$backup_cmd --tag ${TARGET_HOSTNAME}"
+    backup_cmd="$backup_cmd --tag coordinator"
+    backup_cmd="$backup_cmd --tag $(date +%Y-%m-%d)"
+
+    # Add optimization flags (conservative for low-memory coordinator)
+    backup_cmd="$backup_cmd --pack-size ${PACK_SIZE}"
+    backup_cmd="$backup_cmd --read-concurrency ${READ_CONCURRENCY}"
+    backup_cmd="$backup_cmd --compression ${COMPRESSION}"
+
+    # Add excludes
+    for exclude in "${BACKUP_EXCLUDES[@]}"; do
+        backup_cmd="$backup_cmd --exclude '${exclude}'"
+    done
+
+    # Add verbosity
+    backup_cmd="$backup_cmd --verbose"
+
+    # Execute backup
+    log "Executing: $backup_cmd"
+    eval "$backup_cmd" >> "$LOG_FILE" 2>&1
+    local backup_exit_code=$?
+
+    if [[ $backup_exit_code -eq 0 ]]; then
+        log "Backup completed successfully"
+        return 0
+    elif [[ $backup_exit_code -eq 3 ]]; then
+        log "Backup completed with warnings (some files could not be read, but backup succeeded)"
+        return 0
+    else
+        error_exit "Backup failed with exit code $backup_exit_code" "$backup_exit_code"
+    fi
+}
+
+cleanup_old_snapshots() {
+    log "Cleaning up old snapshots for ${SERVICE_NAME}..."
+
+    local cleanup_cmd="restic forget"
+    cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
+    cleanup_cmd="$cleanup_cmd --keep-daily ${RETENTION_DAILY}"
+    cleanup_cmd="$cleanup_cmd --keep-weekly ${RETENTION_WEEKLY}"
+    cleanup_cmd="$cleanup_cmd --keep-monthly ${RETENTION_MONTHLY}"
+    cleanup_cmd="$cleanup_cmd --keep-yearly ${RETENTION_YEARLY}"
+    cleanup_cmd="$cleanup_cmd --prune"
+    cleanup_cmd="$cleanup_cmd --verbose"
+
+    log "Executing: $cleanup_cmd"
+    if eval "$cleanup_cmd" >> "$LOG_FILE" 2>&1; then
+        log "Cleanup completed successfully"
+        return 0
+    else
+        log "WARNING: Cleanup failed but backup was successful"
+        return 1
+    fi
+}
+
+get_backup_stats() {
+    log "Getting backup statistics for ${SERVICE_NAME}..."
+
+    if restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+        local snapshot_count=$(jq length /tmp/snapshots-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
+
+        # Get latest snapshot info
+        local latest_snapshot=$(jq -r '.[0] | "\(.time) - \(.short_id)"' /tmp/snapshots-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        log "Latest snapshot: $latest_snapshot"
+
+        rm -f /tmp/snapshots-${SERVICE_NAME}.json
+    else
+        log "Could not retrieve backup statistics"
+    fi
+
+    # Get repository stats
+    if restic stats --mode raw-data --json > /tmp/stats-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+        local total_size=$(jq -r '.total_size' /tmp/stats-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        local total_size_mb=$((total_size / 1024 / 1024))
+        log "Repository total size: ${total_size_mb}MB"
+
+        rm -f /tmp/stats-${SERVICE_NAME}.json
+    else
+        log "Could not retrieve repository statistics"
+    fi
+}
+
+# Main execution
+main() {
+    log "=== Starting coordinator backup for ${SERVICE_NAME} from ${TARGET_HOSTNAME} ==="
+
+    check_prerequisites
+    test_remote_connectivity
+    test_repository_connectivity
+    mount_remote_filesystem
+    perform_backup
+    unmount_remote_filesystem
+    cleanup_old_snapshots
+    get_backup_stats
+
+    log "=== Backup completed for ${SERVICE_NAME} ==="
+}
+
+# Cleanup handler for interrupted execution
+cleanup_on_exit() {
+    log "Cleaning up on exit..."
+    unmount_remote_filesystem
+}
+
+# Error handling - ensure unmount on exit
+trap 'cleanup_on_exit; error_exit "Script interrupted"' INT TERM EXIT
+
+# Execute main function
+main "$@"

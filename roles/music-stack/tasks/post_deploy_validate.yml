@@ -98,7 +98,7 @@
 - name: Display music stack validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Music Stack Post-Deployment Validation Results:
+      [OK] Music Stack Post-Deployment Validation Results:
 
       Container Status:
       {{ music_health_status.stdout }}
@@ -118,5 +118,5 @@
       YouTube Sync: Disabled
       {% endif %}
 
-      ✅ Music stack deployment validated successfully!
+      [OK] Music stack deployment validated successfully!
   tags: [post_validation]

@@ -205,7 +205,7 @@
 - name: Display SSH public keys for deployment
   ansible.builtin.debug:
     msg: |
-      ✅ SSH Key for {{ item.service_name }}:
+      [OK] SSH Key for {{ item.service_name }}:
 
       Public key to deploy to root@{{ item.target_host }}:
       {{ lookup('file', backup_base_path + '/keys/' + item.service_name + '-ssh-key.pub') }}
@@ -217,7 +217,7 @@
 - name: Display enhanced centralized backup configuration summary
   ansible.builtin.debug:
     msg: |
-      ✅ Enhanced Centralized Backup System Configured:
+      [OK] Enhanced Centralized Backup System Configured:
 
       {% for target in centralized_backup_targets %}
       {{ target.service_name }}:
@@ -239,11 +239,11 @@
       Backup Base: {{ backup_base_path }}
 
       Enhanced Features:
-      ✅ Network optimization with bandwidth limiting
-      ✅ Adaptive compression and concurrent transfers
-      ✅ Centralized restore with secure push-back
-      ✅ Performance metrics and monitoring
-      ✅ Enhanced error handling and retry logic
+      [OK] Network optimization with bandwidth limiting
+      [OK] Adaptive compression and concurrent transfers
+      [OK] Centralized restore with secure push-back
+      [OK] Performance metrics and monitoring
+      [OK] Enhanced error handling and retry logic
 
       Next Steps:
       1. Deploy SSH keys to target hosts (see above)

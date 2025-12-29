@@ -1,55 +1,108 @@
+---
 # Backup Coordinator Configuration
+# Dell Wyse - handles backups for Raspberry Pis and small devices
 device_role: backup
 device_type: debian
 
-# Enterprise backup system configuration
-backup_role: "coordinator"
-backup_base_path: "/opt/enterprise-backup"
-backup_user: "backup"
-backup_group: "backup"
-backup_restic_version: "0.18.1"
+# ============================================
+# BACKUP CONFIGURATION (Coordinator Mode)
+# ============================================
 
-# Network optimization and performance
-backup_network_optimization: true
-backup_network_tuning: true
-backup_bandwidth_limit: 100
-backup_qos_enabled: true
+# Mode: coordinator (pulls backups from remote hosts via SSHFS)
+backup_role: coordinator
 
-# Monitoring and health checks
-backup_node_agent_enabled: false
-backup_grafana_integration: false
-backup_health_check_schedule: "*-*-* 06:00:00"
-backup_metrics_schedule: "*-*-* *:15:00"
+# User and paths
+backup_user: backup
+backup_group: backup
+backup_base_path: /opt/backup
 
-# Backup directories
-backup_directories:
-  - "/home"
-  - "/etc"
-  - "/opt"
-  - "/var/lib"
+# Restic configuration
+restic_version: "0.18.1"
 
-backup_exclude_patterns:
-  - "*.tmp"
-  - "*.log.1*"
-  - "**/logs/*"
-  - "**/cache/*"
-  - "**/.cache/*"
-  - "**/tmp/*"
+# Backup targets (Raspberry Pis) - pulled by coordinator
+backup_targets:
+  - service_name: pi-dns
+    hostname: pi-dns.local
+    ssh_user: root
+    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-dns"
+    backup_paths:
+      - /etc/pihole
+      - /etc/chrony
+      - /var/log/pihole
+      - /opt/pihole
+      - /etc/dnsmasq.d
+    backup_excludes:
+      - "*.tmp"
+      - "cache/*"
+      - "*.log.1*"
+    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-dns"
+    restic_password: "{{ vault_restic_pi_dns_password }}"
+    retention_policy:
+      daily: 14
+      weekly: 8
+      monthly: 12
+      yearly: 3
+    priority: 1
+    memory_limit: 800M
+    restic_optimization:
+      pack_size: 16
+      read_concurrency: 2
+      compression: auto
 
-# Backup schedule (systemd timer format)
-backup_schedule: "*-*-* 05:00:00"
-backup_randomized_delay: "300s"
-backup_timeout: "7200"
+  - service_name: pi-automation
+    hostname: pi-automation.local
+    ssh_user: root
+    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-automation"
+    backup_paths:
+      - /opt/automation
+      - /etc/traefik
+      - /var/lib/docker/volumes
+      - /etc/docker
+    backup_excludes:
+      - "*/logs/*"
+      - "*.log"
+      - "*/tmp/*"
+    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-automation"
+    restic_password: "{{ vault_restic_pi_automation_password }}"
+    retention_policy:
+      daily: 14
+      weekly: 8
+      monthly: 12
+      yearly: 3
+    priority: 2
+    memory_limit: 800M
+    restic_optimization:
+      pack_size: 16
+      read_concurrency: 2
+      compression: auto
 
-# Required backup variables (no defaults)
-backup_enabled: true
-backup_additional_groups: ["sudo"]
-
-# Retention policy
-retention_daily: "7"
-retention_weekly: "4"
-retention_monthly: "6"
-retention_yearly: "1"
+  - service_name: pi-music
+    hostname: pi-music.local
+    ssh_user: root
+    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-music"
+    backup_paths:
+      - /opt/music
+      - /var/lib/music
+      - /var/lib/docker/volumes
+      - /etc/docker
+    backup_excludes:
+      - "*/cache/*"
+      - "*.tmp"
+      - "*/thumbnails/*"
+      - "*/logs/*"
+    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-music"
+    restic_password: "{{ vault_restic_pi_music_password }}"
+    retention_policy:
+      daily: 7
+      weekly: 4
+      monthly: 6
+      yearly: 1
+    priority: 3
+    memory_limit: 800M
+    restic_optimization:
+      pack_size: 16
+      read_concurrency: 2
+      compression: auto
 
 # Node exporter configuration
 node_exporter_enabled: true
@@ -60,182 +113,3 @@ node_exporter_ufw_enabled: true
 firewall_backup_ports:
   - port: 9100
     comment: "Prometheus Node Exporter"
-
-# Enterprise backup strategy
-backup_strategy: "multi-repository"
-backup_tier: "production"
-
-# Repository configuration
-backup_repositories:
-  critical:
-    description: "Critical system and database backups"
-    retention_policy: "14 daily, 8 weekly, 12 monthly, 3 yearly"
-    priority: 1
-    max_parallel_operations: 2
-    compression: "max"
-    check_frequency: "daily"
-  services:
-    description: "Application and service data backups"
-    retention_policy: "7 daily, 4 weekly, 6 monthly, 1 yearly"
-    priority: 2
-    max_parallel_operations: 3
-    compression: "auto"
-    check_frequency: "weekly"
-  system:
-    description: "System configuration and logs"
-    retention_policy: "3 daily, 2 weekly, 3 monthly"
-    priority: 3
-    max_parallel_operations: 4
-    compression: "fast"
-    check_frequency: "weekly"
-
-# Backup orchestration
-backup_orchestration:
-  enabled: true
-  coordination_method: "systemd"
-  dependency_management: true
-  parallel_limit: 6
-  timeout_minutes: 240
-  retry_attempts: 3
-  retry_delay_minutes: 15
-
-# Enterprise restore testing
-restore_testing:
-  enabled: true
-  frequency: "weekly"
-  test_percentage: 10
-  test_environment: "/tmp/restore-test"
-  cleanup_after_test: true
-  alert_on_failure: true
-  performance_benchmarking: true
-
-# Performance optimization
-performance_optimization:
-  cache_enabled: true
-  cache_size_mb: 2048
-  compression_level: "auto"
-  concurrent_uploads: 4
-  concurrent_downloads: 4
-  bandwidth_limit_mbps: 0
-  cpu_priority: "normal"
-
-# Monitoring and metrics
-backup_monitoring:
-  prometheus_metrics: true
-  metrics_port: 9102
-  detailed_timing: true
-  storage_efficiency: true
-  deduplication_stats: true
-  error_tracking: true
-
-# Security configuration
-backup_security:
-  encryption_algorithm: "AES256"
-  key_derivation: "scrypt"
-  key_rotation_enabled: true
-  key_rotation_frequency: "quarterly"
-  access_logging: true
-  audit_trail: true
-
-# Notification and alerting
-backup_notifications:
-  success_notifications: false
-  failure_notifications: true
-  warning_notifications: true
-  summary_reports: true
-  report_frequency: "weekly"
-
-# Compliance
-compliance:
-  retention_enforcement: true
-  immutable_backups: false
-  legal_hold_support: true
-  audit_logging: true
-  data_classification: true
-
-# Disaster recovery
-disaster_recovery:
-  cross_site_replication: true
-  hot_standby_repos: 1
-  recovery_time_objective_minutes: 30
-  recovery_point_objective_minutes: 15
-  automated_failover: false
-  manual_validation_required: true
-
-# Service-specific backup configuration
-service_backup_configs:
-  backup:
-    repository: "system"
-    schedule: "0 5 * * *"
-    pre_backup_scripts: []
-    post_backup_scripts: []
-    directories: ["/home", "/etc", "/opt", "/var/lib"]
-    excludes: ["*.tmp", "*.log.1*", "**/logs/*", "**/cache/*", "**/.cache/*", "**/tmp/*"]
-  dns:
-    repository: "critical"
-    schedule: "0 1 * * *"
-    pre_backup_scripts: ["pihole-flush", "dns-consistency-check"]
-    post_backup_scripts: ["backup-verification"]
-    directories: ["/etc/pihole", "/etc/dnsmasq.d", "/var/log/pihole.log"]
-    excludes: ["*.tmp", "cache/*"]
-  automation:
-    repository: "critical"
-    schedule: "0 2 * * *"
-    pre_backup_scripts: ["container-pause", "database-backup"]
-    post_backup_scripts: ["container-resume", "backup-verification"]
-    directories: ["/opt/automation", "/etc/traefik"]
-    excludes: ["*/logs/*", "*/tmp/*", "*.log"]
-  music:
-    repository: "services"
-    schedule: "0 3 * * *"
-    pre_backup_scripts: ["media-sync", "library-consistency"]
-    post_backup_scripts: ["backup-verification"]
-    directories: ["/opt/music", "/var/lib/music"]
-    excludes: ["*/cache/*", "*.tmp", "*/thumbnails/*"]
-  system:
-    repository: "system"
-    schedule: "0 4 * * *"
-    pre_backup_scripts: ["system-snapshot"]
-    post_backup_scripts: ["backup-verification"]
-    directories: ["/etc", "/home", "/var/lib", "/opt"]
-    excludes: ["/tmp/*", "*/cache/*", "*.log", "/proc/*", "/sys/*"]
-
-# Remote repository configuration
-remote_repositories:
-  primary:
-    type: "sftp"
-    connection_string: "{{ vault_backup_repository_base }}"
-    bandwidth_limit: "10MB"
-    connection_timeout: 30
-    retry_attempts: 5
-  secondary:
-    type: "sftp"
-    connection_string: "{{ vault_backup_repository_base }}/secondary"
-    bandwidth_limit: "5MB"
-    connection_timeout: 30
-    retry_attempts: 3
-    replication_delay_hours: 6
-
-# Backup validation and integrity
-backup_validation:
-  checksum_verification: true
-  repository_consistency_check: true
-  random_restore_testing: true
-  data_integrity_verification: true
-  performance_regression_testing: true
-
-# Advanced features
-advanced_features:
-  backup_deduplication_analysis: true
-  storage_cost_analysis: true
-  backup_lifecycle_management: true
-  automated_cleanup: true
-  capacity_planning: true
-
-# Monitoring configuration
-backup_monitoring_enabled: false
-
-# Coordinator backup configuration
-# This host pulls backups from coordinated hosts (Raspberry Pis, small devices)
-# Large machines use standalone mode and handle their own backups
-backup_targets: []  # TODO: Add coordinated hosts (pi-dns, pi-music, pi-automation)

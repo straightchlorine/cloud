@@ -137,15 +137,15 @@
 - name: Display Promtail deployment status
   ansible.builtin.debug:
     msg: |
-      ✅ Promtail Agent Deployment Complete for {{ inventory_hostname }}
+      [OK] Promtail Agent Deployment Complete for {{ inventory_hostname }}
 
       Configuration:
       📁 Config: /etc/promtail/promtail.yml
-      📊 Metrics: http://127.0.0.1:9080/metrics
-      📝 Logs: /var/log/promtail.log
-      🎯 Target: {{ loki_server }}:{{ loki_port }}
+      [STATS] Metrics: http://127.0.0.1:9080/metrics
+      [NOTE] Logs: /var/log/promtail.log
+      [TARGET] Target: {{ loki_server }}:{{ loki_port }}
 
-      Status: {{ '✅ Running' if promtail_metrics.status == 200 else '❌ Failed' }}
+      Status: {{ '[OK] Running' if promtail_metrics.status == 200 else '[FAIL] Failed' }}
 
       Next: Logs are now being shipped to Loki for centralized aggregation!
 

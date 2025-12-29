@@ -16,7 +16,7 @@
 - name: Display standalone deployment status
   ansible.builtin.debug:
     msg: |
-      ✅ Standalone Backup Deployed:
+      [OK] Standalone Backup Deployed:
       - Node: {{ inventory_hostname }}
       - Backup User: {{ backup_user }}
       - Restic Repository: {{ restic_repository }}

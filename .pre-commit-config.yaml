@@ -1,0 +1,88 @@
+---
+# Pre-commit hooks - run locally before git commits
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+# Bypass (not recommended): git commit --no-verify
+
+repos:
+  # Ansible-specific linting
+  - repo: https://github.com/ansible/ansible-lint.git
+    rev: v24.2.0
+    hooks:
+      - id: ansible-lint
+        name: Ansible lint
+        description: Lint Ansible playbooks and roles
+        entry: ansible-lint
+        language: python
+        types: [yaml]
+        exclude: ^inventory/
+        additional_dependencies: [ansible]
+
+  # YAML linting (catches syntax errors)
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        name: YAML lint
+        description: Lint YAML files
+        args: ['--strict', '--config-data={"extends": "default", "rules": {"line-length": {"max": 120}}}']
+        types: [yaml]
+        exclude: ^inventory/
+
+  # Jinja2 template validation (critical for your backup.sh.j2)
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        name: Jinja2 template lint
+        description: Validate Jinja2 template syntax
+        files: '\.j2$'
+        language: python
+        entry: python -c "import jinja2; jinja2.Environment().parse(open('${file}').read())" 2>/dev/null || echo "Invalid Jinja2"
+        always_run: false
+
+  # Shell script validation (for your backup-standalone.sh.j2)
+  - repo: https://github.com/shellcheck-py/shellcheck-py.git
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        description: Validate shell script syntax
+        types: [shell]
+        exclude: '\.j2$'  # Skip Jinja2 templates (not valid bash yet)
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks.git
+    rev: v4.5.0
+    hooks:
+      - id: check-yaml
+        name: Check YAML syntax
+        args: ['--unsafe']  # Required for Ansible
+      - id: check-json
+        name: Check JSON syntax
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        exclude: '\.j2$|\.yml$'
+      - id: end-of-file-fixer
+        name: Fix end of file
+      - id: detect-private-key
+        name: Detect private keys
+        exclude: 'vault.yml|.vault'
+
+  # Markdown and documentation
+  - repo: https://github.com/markdownlint/markdownlint.git
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        name: Markdown lint
+        types: [markdown]
+        exclude: ^CHANGELOG.md
+
+default_language_version:
+  python: python3
+  # Add others as needed

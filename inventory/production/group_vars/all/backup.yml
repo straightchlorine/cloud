@@ -1,0 +1,26 @@
+---
+# Global Backup Configuration
+# Shared variables for unified backup system
+
+# Backup user and group (common across all hosts)
+backup_user: backup
+backup_group: backup
+
+# Backup base path (already defined in all.yml, kept here for reference)
+# backup_base_path: /opt/backup
+
+# Restic version (consistent across all hosts)
+restic_version: "0.18.1"
+
+# Hetzner Storage Box connection details (from vault)
+# These must be defined in vault.yml:
+# - vault_backup_storage_host
+# - vault_backup_storage_user
+# - vault_backup_storage_port
+# - vault_backup_repository_base
+#
+# Example vault.yml:
+# vault_backup_storage_host: u12345.your-storagebox.de
+# vault_backup_storage_user: u12345
+# vault_backup_storage_port: 23
+# vault_backup_repository_base: /backup/restic-repos

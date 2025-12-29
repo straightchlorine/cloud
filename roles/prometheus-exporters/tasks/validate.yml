@@ -130,7 +130,7 @@
 - name: Prometheus exporters validation completed
   ansible.builtin.debug:
     msg: |
-      ✅ Prometheus Exporters Validation Complete:
+      [OK] Prometheus Exporters Validation Complete:
       - Architecture: {{ ansible_architecture }} → {{ prometheus_arch_map[ansible_architecture] }}
       - Enabled exporters: {{ [('node' if node_exporter_enabled else ''), ('pihole' if pihole_exporter_enabled else ''), ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
       - Base directory: {{ prometheus_exporters_base_dir }}

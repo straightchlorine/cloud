@@ -1,0 +1,164 @@
+---
+# Coordinator Backup Mode Tasks
+# For backup coordinator that pulls backups from multiple remote hosts
+
+- name: Create SSH keys for each coordinator target
+  ansible.builtin.openssh_keypair:
+    path: "{{ item.ssh_key }}"
+    type: ed25519
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+  become: true
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  register: target_ssh_keys
+
+- name: Display SSH public keys for target configuration
+  ansible.builtin.debug:
+    msg: |
+      [ssh public keys for coordinator targets]
+      {% for result in target_ssh_keys.results %}
+      target: {{ result.item.service_name }} ({{ result.item.hostname }})
+      key: {{ result.public_key }}
+
+      add to {{ result.item.hostname }} as root:
+      echo "{{ result.public_key }}" >> /root/.ssh/authorized_keys
+
+      {% endfor %}
+  when: target_ssh_keys.changed
+
+- name: Test SSH connectivity to each target
+  ansible.builtin.command: >
+    ssh -i {{ item.ssh_key }}
+    -o StrictHostKeyChecking=accept-new
+    -o ConnectTimeout=10
+    {{ item.ssh_user }}@{{ item.hostname }}
+    echo 'Connection successful'
+  become: true
+  become_user: "{{ backup_user }}"
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  register: target_ssh_tests
+  failed_when: false
+  changed_when: false
+
+- name: Display SSH connectivity results
+  ansible.builtin.debug:
+    msg: "{{ item.item.service_name }}: {{ 'Connected' if item.rc == 0 else 'FAILED - Check SSH key and network' }}"
+  loop: "{{ target_ssh_tests.results }}"
+  loop_control:
+    label: "{{ item.item.service_name }}"
+
+- name: Initialize restic repositories for each target
+  ansible.builtin.command: restic init
+  environment:
+    RESTIC_REPOSITORY: "{{ item.restic_repository }}"
+    RESTIC_PASSWORD: "{{ item.restic_password }}"
+  become: true
+  become_user: "{{ backup_user }}"
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  register: restic_inits
+  failed_when: false
+  changed_when: restic_inits.rc == 0
+
+- name: Check repository status for each target
+  ansible.builtin.command: restic snapshots --latest 1
+  environment:
+    RESTIC_REPOSITORY: "{{ item.restic_repository }}"
+    RESTIC_PASSWORD: "{{ item.restic_password }}"
+  become: true
+  become_user: "{{ backup_user }}"
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  register: target_repo_status
+  failed_when: false
+  changed_when: false
+
+- name: Display repository status for each target
+  ansible.builtin.debug:
+    msg: "{{ item.item.service_name }} repository: {{ 'Accessible' if item.rc == 0 else 'Not accessible or not initialized' }}"
+  loop: "{{ target_repo_status.results }}"
+  loop_control:
+    label: "{{ item.item.service_name }}"
+
+- name: Deploy coordinator backup scripts for each target
+  ansible.builtin.template:
+    src: backup-coordinator-target.sh.j2
+    dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
+  become: true
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  vars:
+    target: "{{ item }}"
+
+- name: Deploy systemd services for each target
+  ansible.builtin.template:
+    src: backup-coordinator.service.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  vars:
+    target: "{{ item }}"
+  notify: Reload systemd
+
+- name: Deploy systemd timers for each target
+  ansible.builtin.template:
+    src: backup-coordinator.timer.j2
+    dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+  vars:
+    target: "{{ item }}"
+  notify: Reload systemd
+
+- name: Flush handlers to reload systemd
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start backup timers (sequential, respecting priority)
+  ansible.builtin.systemd:
+    name: "backup-{{ item.service_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  loop: "{{ coordinator_targets | sort(attribute='priority') }}"
+  loop_control:
+    label: "{{ item.service_name }} (priority {{ item.priority }})"
+
+- name: Display coordinator backup summary
+  ansible.builtin.debug:
+    msg: |
+      [coordinator backup configured]
+      host: {{ inventory_hostname }}
+      targets: {{ coordinator_targets | length }}
+
+      {% for target in coordinator_targets | sort(attribute='priority') %}
+      target {{ target.priority }}: {{ target.service_name }}
+        hostname: {{ target.hostname }}
+        script: {{ backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
+        service: backup-{{ target.service_name }}.service
+        timer: backup-{{ target.service_name }}.timer
+        repository: {{ target.restic_repository }}
+        memory limit: {{ target.memory_limit }}
+
+      {% endfor %}

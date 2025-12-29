@@ -99,7 +99,7 @@
 - name: Display automation stack validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Automation Stack Post-Deployment Validation Results:
+      [OK] Automation Stack Post-Deployment Validation Results:
 
       Container Status:
       {{ health_status.stdout }}
@@ -112,12 +112,12 @@
       Vaultwarden: {{ 'Accessible' if (vaultwarden_test.status | default(0)) == 200 else 'Not tested or failed' }}
 
       🔒 SSL/Domain Configuration:
-      ✅ DNS01 challenge prerequisites validated
-      ✅ Domain resolution verified from multiple resolvers
-      ✅ Cloudflare API connectivity confirmed
-      ✅ Traefik routing configuration validated
-      ✅ SSL certificate management ready
+      [OK] DNS01 challenge prerequisites validated
+      [OK] Domain resolution verified from multiple resolvers
+      [OK] Cloudflare API connectivity confirmed
+      [OK] Traefik routing configuration validated
+      [OK] SSL certificate management ready
 
-      ✅ All critical services and SSL configuration validated successfully!
+      [OK] All critical services and SSL configuration validated successfully!
   tags: [post_validation]
 

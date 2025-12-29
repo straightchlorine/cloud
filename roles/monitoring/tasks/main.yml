@@ -39,18 +39,18 @@
 - name: Display monitoring stack deployment summary
   ansible.builtin.debug:
     msg: |
-      ✅ Monitoring Stack Deployment Complete for {{ inventory_hostname }}
+      [OK] Monitoring Stack Deployment Complete for {{ inventory_hostname }}
 
       Services Available:
-      🎯 Grafana: {{ primary_ip }}:{{ grafana_port }} (Unified dashboards)
-      📊 Prometheus: {{ primary_ip }}:{{ prometheus_port }} (Metrics collection)
-      📝 Loki: {{ primary_ip }}:{{ loki_port }} (Log aggregation)
+      [TARGET] Grafana: {{ primary_ip }}:{{ grafana_port }} (Unified dashboards)
+      [STATS] Prometheus: {{ primary_ip }}:{{ prometheus_port }} (Metrics collection)
+      [NOTE] Loki: {{ primary_ip }}:{{ loki_port }} (Log aggregation)
       🔍 Uptime Kuma: {{ primary_ip }}:{{ uptime_kuma_port }} (Service monitoring)
       🚨 Alertmanager: {{ primary_ip }}:{{ alertmanager_port }} (Alert routing)
 
       Configuration:
       📁 Stack Home: {{ monitoring_stack_home }}
-      💾 Data Path: {{ monitoring_data_path }}
+      [SAVE] Data Path: {{ monitoring_data_path }}
       👤 User: {{ monitoring_user }} ({{ monitoring_uid }}:{{ monitoring_gid }})
       🔒 SSL: {{ 'Enabled' if enable_ssl else 'Disabled' }}
 

@@ -134,41 +134,41 @@
 - name: Display Traefik routing validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Traefik Routing Validation Results:
+      [OK] Traefik Routing Validation Results:
 
       Container Status:
-      Traefik Container: {{ '✅ Running' if traefik_container.State == 'running' else '❌ ' + traefik_container.State }}
+      Traefik Container: {{ '[OK] Running' if traefik_container.State == 'running' else '[FAIL] ' + traefik_container.State }}
       Traefik Version: {{ traefik_api.json.version | default('Unknown') }}
 
       API Endpoints:
-      Dashboard API: {{ '✅ Accessible' if traefik_api.status == 200 else '❌ Failed' }}
-      Routers API: {{ '✅ Accessible' if traefik_routers.status == 200 else '❌ Failed' }}
-      Services API: {{ '✅ Accessible' if traefik_services.status == 200 else '❌ Failed' }}
+      Dashboard API: {{ '[OK] Accessible' if traefik_api.status == 200 else '[FAIL] Failed' }}
+      Routers API: {{ '[OK] Accessible' if traefik_routers.status == 200 else '[FAIL] Failed' }}
+      Services API: {{ '[OK] Accessible' if traefik_services.status == 200 else '[FAIL] Failed' }}
 
       Route Configuration:
       Total Routes: {{ configured_routers | length }}
       SSL-Enabled Routes: {{ ssl_routers | length }}
       {% for route in expected_routes %}
-      {{ route.name }} ({{ route.host }}): {{ '✅ Configured' if configured_routers | selectattr('rule', 'search', route.host) | list | length > 0 else '❌ Missing' }}
+      {{ route.name }} ({{ route.host }}): {{ '[OK] Configured' if configured_routers | selectattr('rule', 'search', route.host) | list | length > 0 else '[FAIL] Missing' }}
       {% endfor %}
 
       Port Connectivity:
       {% for result in port_connectivity.results %}
-      {{ result.item.service }}: {{ '✅ Listening' if result.elapsed is defined and result.elapsed < 10 else '❌ Failed' }}
+      {{ result.item.service }}: {{ '[OK] Listening' if result.elapsed is defined and result.elapsed < 10 else '[FAIL] Failed' }}
       {% endfor %}
 
       HTTPS Configuration:
-      HTTP→HTTPS Redirect: {{ '✅ Working' if https_redirect_test.status == 301 or https_redirect_test.status == 302 else '⚠️  Check configuration' }}
-      Certificate Resolver: {{ '✅ letsencrypt configured' if ssl_routers | length > 0 else '❌ No SSL routes found' }}
+      HTTP→HTTPS Redirect: {{ '[OK] Working' if https_redirect_test.status == 301 or https_redirect_test.status == 302 else '[WARN]  Check configuration' }}
+      Certificate Resolver: {{ '[OK] letsencrypt configured' if ssl_routers | length > 0 else '[FAIL] No SSL routes found' }}
 
       Security Middlewares:
       {% for middleware in required_middlewares %}
-      {{ middleware }}: {{ '✅ Present' if middleware in present_middlewares else '❌ Missing' }}
+      {{ middleware }}: {{ '[OK] Present' if middleware in present_middlewares else '[FAIL] Missing' }}
       {% endfor %}
 
       Recent SSL Activity:
       {{ traefik_ssl_logs.stdout | replace('\n', '\n      ') }}
 
-      🚀 Traefik routing validation completed!
+      [DEPLOY] Traefik routing validation completed!
   tags: [routing_validation]
 

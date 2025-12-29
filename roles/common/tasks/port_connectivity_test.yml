@@ -38,10 +38,10 @@
     msg: |
       🔗 Port Connectivity Test Results:
 
-      SSH (22): ✅ Accessible
+      SSH (22): [OK] Accessible
       {% for result in port_tests.results | default([]) %}
       {% if result.item is defined %}
-      {{ result.item.comment }} ({{ result.item.port }}): {{ '✅ Accessible' if result.rc == 0 else '❌ Failed' }}
+      {{ result.item.comment }} ({{ result.item.port }}): {{ '[OK] Accessible' if result.rc == 0 else '[FAIL] Failed' }}
       {% endif %}
       {% endfor %}
 

@@ -301,9 +301,9 @@
 - name: Display multi-repository deployment status
   ansible.builtin.debug:
     msg: |
-      ✅ Multi-Repository Strategy Deployed:
+      [OK] Multi-Repository Strategy Deployed:
 
-      📊 Repository Configuration:
+      [STATS] Repository Configuration:
       {% for repo, config in backup_repositories.items() %}
       - {{ repo | title }} Repository:
         Description: {{ config.description }}
@@ -315,19 +315,19 @@
         Status: {{ 'Healthy' if repository_health.results | selectattr('item.key', 'equalto', repo) | map(attribute='rc') | first == 0 else 'Needs Attention' }}
       {% endfor %}
 
-      🔧 Repository Management:
+      [TOOL] Repository Management:
       - Initialization: {{ backup_base_path }}/scripts/init-repositories.sh
       - Management CLI: {{ backup_base_path }}/scripts/manage-repositories.sh
       - Health Monitoring: {{ backup_base_path }}/scripts/repository-health-check.sh
       - Performance Analysis: {{ backup_base_path }}/scripts/repository-performance.py
 
-      ⚡ Automation:
+      [POWER] Automation:
       {% for repo in backup_repositories.keys() %}
       - {{ repo | title }} Timer: repository-backup@{{ repo }}.timer ({{ 'Active' if repository_health.results | selectattr('item.key', 'equalto', repo) | map(attribute='rc') | first == 0 else 'Inactive' }})
       {% endfor %}
       - Maintenance Timer: repository-maintenance.timer (Active)
 
-      🔐 Security Features:
+      [SECURE] Security Features:
       - Encryption Key Management: {{ backup_base_path }}/scripts/manage-encryption-keys.sh
       - Repository Consistency Checks: Automated via timers
       - Access Control: Backup user isolation with proper permissions
@@ -337,7 +337,7 @@
       - Health Metrics: Integrated with Prometheus
       - Performance Analytics: Deduplication efficiency, storage optimization
 
-      🎯 Enterprise Benefits:
+      [TARGET] Enterprise Benefits:
       - Service Isolation: Separate repositories for different service tiers
       - Performance Optimization: Parallel operations with priority-based scheduling
       - Risk Distribution: Repository failures don't affect entire backup strategy

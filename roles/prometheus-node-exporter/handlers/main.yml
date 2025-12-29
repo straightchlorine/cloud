@@ -1,8 +1,0 @@
-# Handlers for prometheus-node-exporter role
-
-- name: restart prometheus-node-exporter
-  systemd:
-    name: prometheus-node-exporter
-    state: restarted
-  become: yes
-

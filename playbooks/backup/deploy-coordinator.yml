@@ -41,7 +41,7 @@
     - name: Display coordinator deployment summary
       ansible.builtin.debug:
         msg: |
-          🚀 Deploying Backup Coordinator
+          [DEPLOY] Deploying Backup Coordinator
 
           Host: {{ inventory_hostname }}
           Targets: {{ backup_targets | length }} configured
@@ -73,9 +73,9 @@
           echo "Checking coordinator services..."
           {% for target in backup_targets %}
           if systemctl is-enabled backup-{{ target.service_name }}.timer >/dev/null 2>&1; then
-              echo "✅ backup-{{ target.service_name }}.timer: Enabled"
+              echo "[OK] backup-{{ target.service_name }}.timer: Enabled"
           else
-              echo "❌ backup-{{ target.service_name }}.timer: Not enabled"
+              echo "[FAIL] backup-{{ target.service_name }}.timer: Not enabled"
           fi
           {% endfor %}
 
@@ -83,9 +83,9 @@
           echo "Testing SSH connectivity..."
           {% for target in backup_targets %}
           if ssh -i "$BACKUP_BASE/.ssh/nodes/{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
-              echo "✅ {{ target.service_name }}: SSH connectivity OK"
+              echo "[OK] {{ target.service_name }}: SSH connectivity OK"
           else
-              echo "❌ {{ target.service_name }}: SSH connectivity FAILED"
+              echo "[FAIL] {{ target.service_name }}: SSH connectivity FAILED"
               echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}"
           fi
           {% endfor %}
@@ -96,14 +96,14 @@
           export RESTIC_REPOSITORY="{{ target.restic_repository }}"
           export RESTIC_PASSWORD_FILE="$BACKUP_BASE/keys/{{ target.service_name }}-password"
           if restic snapshots >/dev/null 2>&1; then
-              echo "✅ {{ target.service_name }}: Repository accessible"
+              echo "[OK] {{ target.service_name }}: Repository accessible"
           else
-              echo "⚠️  {{ target.service_name }}: Repository needs initialization"
+              echo "[WARN]  {{ target.service_name }}: Repository needs initialization"
           fi
           {% endfor %}
 
           echo ""
-          echo "🎯 Quick Test Commands:"
+          echo "[TARGET] Quick Test Commands:"
           {% for target in backup_targets %}
           echo "{{ target.service_name }}: systemctl start backup-{{ target.service_name }}.service"
           {% endfor %}
@@ -115,16 +115,15 @@
     - name: Display coordinator deployment completion
       ansible.builtin.debug:
         msg: |
-          ✅ Backup Coordinator Deployment Complete!
+          [OK] backup coordinator deployment complete
 
-          📊 Coordinator Configuration:
-          - Host: {{ inventory_hostname }}
-          - Base Path: {{ backup_base_path }}
-          - Targets: {{ backup_targets | length }} services configured
-          - Network Optimization: {{ backup_network_optimization }}
-          - Health Monitoring: {{ backup_monitoring }}
+          [stats] coordinator configuration:
+          - host: {{ inventory_hostname }}
+          - base path: {{ backup_base_path }}
+          - targets: {{ backup_targets | length }} services configured
+          - monitoring: {{ backup_monitoring }}
 
-          🔧 Deployed Services:
+          [TOOL] Deployed Services:
           {% for target in backup_targets %}
           - backup-{{ target.service_name }}.service
           - backup-{{ target.service_name }}.timer
@@ -138,7 +137,7 @@
             ssh-copy-id -i {{ backup_base_path }}/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}
           {% endfor %}
 
-          🚀 Next Steps:
+          [DEPLOY] Next Steps:
           1. Deploy SSH keys (see commands above)
           2. Verify setup: {{ backup_base_path }}/scripts/backup-verify-coordinator.sh
           3. Test operations: {{ backup_base_path }}/scripts/backup-manager.sh --status

@@ -1,0 +1,19 @@
+# SSH Config for Backup Operations
+# Managed by Ansible - Do not edit manually
+
+# Global SSH settings for all connections
+Host *
+    ControlMaster auto
+    ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
+    ControlPersist 10m
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    StrictHostKeyChecking accept-new
+
+# Hetzner Storage Box Configuration
+Host hetzner-storage
+    HostName {{ vault_backup_storage_host }}
+    User {{ vault_backup_storage_user }}
+    Port {{ vault_backup_storage_port }}
+    IdentityFile {{ backup_base_path }}/.ssh/hetzner

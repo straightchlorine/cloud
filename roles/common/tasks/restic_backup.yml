@@ -123,7 +123,7 @@
 - name: Display SSH public key for manual upload
   ansible.builtin.debug:
     msg: |
-      ⚠️  SSH Key Setup Required for {{ inventory_hostname }}:
+      [WARN]  SSH Key Setup Required for {{ inventory_hostname }}:
 
       Add this public key to your Hetzner Storage Box authorized_keys:
       {{ backup_ssh_key.public_key }}
@@ -295,7 +295,7 @@
 - name: Display backup configuration summary
   ansible.builtin.debug:
     msg: |
-      ✅ Unified Restic Backup Configured for {{ backup_service_name }}:
+      [OK] Unified Restic Backup Configured for {{ backup_service_name }}:
 
       Repository: {{ restic_repository }}
       Schedule: {{ backup_schedule }}

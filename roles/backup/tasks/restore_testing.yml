@@ -135,7 +135,7 @@
 - name: Display restore testing framework status
   ansible.builtin.debug:
     msg: |
-      ✅ Automated Restore Testing Framework Deployed:
+      [OK] Automated Restore Testing Framework Deployed:
 
       🔄 Testing Configuration:
       - Frequency: {{ restore_testing.frequency }}
@@ -143,7 +143,7 @@
       - Test Environment: {{ restore_testing.test_environment }}
       - Performance Benchmarking: {{ 'Enabled' if restore_testing.performance_benchmarking else 'Disabled' }}
 
-      📊 Validation Components:
+      [STATS] Validation Components:
       - DNS Service Restore Validation
       - Automation Stack Restore Validation
       - Music Library Restore Validation
@@ -156,11 +156,11 @@
       - Grafana Dashboard: restore-test-summary.json
       - Alert Rules: {{ backup_base_path }}/config/restore-test-alerts.yml
 
-      ⚡ Automation:
+      [POWER] Automation:
       - Systemd Timer: {{ 'Active' if restore_testing.enabled else 'Disabled' }}
       - Test Results: {{ backup_base_path }}/restore-reports/
       - Cleanup: {{ 'Enabled' if restore_testing.cleanup_after_test else 'Manual' }}
 
-      {{ '✅ Framework validation passed!' if restore_test_validation.rc == 0 else '❌ Validation failed!' }}
+      {{ '[OK] Framework validation passed!' if restore_test_validation.rc == 0 else '[FAIL] Validation failed!' }}
 
-      🎯 Next: Run 'systemctl start enterprise-restore-test.service' to execute initial test
+      [TARGET] Next: Run 'systemctl start enterprise-restore-test.service' to execute initial test

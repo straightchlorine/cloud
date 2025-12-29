@@ -113,18 +113,18 @@
 - name: Display configuration validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Configuration Validation Results:
+      [OK] Configuration Validation Results:
 
       Prometheus Config: {{ 'Valid' if prometheus_config_check.rc == 0 else 'Invalid' }}
       Prometheus Rules: {{ 'Valid' if prometheus_rules_check.rc == 0 else 'Invalid' }}
 
       Configuration files deployed:
-      📊 /etc/prometheus/prometheus.yml
+      [STATS] /etc/prometheus/prometheus.yml
       🚨 /etc/prometheus/rules/alert-rules.yml
-      📝 /etc/loki/loki.yml
+      [NOTE] /etc/loki/loki.yml
       📋 /etc/loki/loki-alert-rules.yml
       🔔 /etc/alertmanager/alertmanager.yml
       📈 /etc/grafana/provisioning/datasources/datasources.yml
-      📊 /etc/grafana/provisioning/dashboards/dashboards.yml
+      [STATS] /etc/grafana/provisioning/dashboards/dashboards.yml
 
       All monitoring services ready for restart!

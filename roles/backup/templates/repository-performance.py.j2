@@ -32,7 +32,7 @@ def run_restic_command(args):
 
 def analyze_performance():
     """Analyze repository performance"""
-    print("📊 Repository Performance Analysis")
+    print("[STATS] Repository Performance Analysis")
     print("=" * 50)
 
     # Get repository stats
@@ -52,7 +52,7 @@ def analyze_performance():
             latest = snapshots[-1]
             print(f"Latest snapshot: {latest.get('time', 'Unknown')}")
 
-    print("\n✅ Performance analysis complete")
+    print("\n[OK] Performance analysis complete")
 
 def show_help():
     """Show help information"""

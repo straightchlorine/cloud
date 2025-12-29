@@ -1,0 +1,43 @@
+[Unit]
+Description=Coordinator Backup for {{ target.service_name }}
+After=network-online.target
+Wants=network-online.target
+{% if target.priority > 1 %}
+# Sequential execution - wait for previous priority backup
+{% for dep_target in coordinator_targets if dep_target.priority < target.priority %}
+After=backup-{{ dep_target.service_name }}.service
+{% endfor %}
+{% endif %}
+
+[Service]
+Type=oneshot
+User={{ backup_user }}
+Group={{ backup_group }}
+
+# Execute backup script
+ExecStart={{ backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
+
+# Resource limits (strict for coordinator)
+MemoryMax={{ target.memory_limit }}
+MemoryHigh={{ target.memory_limit }}
+CPUQuota=50%
+IOSchedulingClass=idle
+Nice=19
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ backup_base_path }}
+
+# Timeout (generous for remote operations)
+TimeoutStartSec=7200
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=backup-{{ target.service_name }}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,219 @@
+#!/bin/bash
+# Standalone Backup Script - {{ inventory_hostname }}
+# Managed by Ansible - Do not edit manually
+# Mode: Standalone (direct backup to Hetzner)
+
+set -euo pipefail
+
+# Configuration
+export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+
+# Service configuration
+SERVICE_NAME="{{ inventory_hostname }}"
+LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+
+# Backup paths
+BACKUP_PATHS=(
+{% for path in backup_paths %}
+    "{{ path }}"
+{% endfor %}
+)
+
+# Exclude patterns
+BACKUP_EXCLUDES=(
+{% if backup_excludes is defined %}
+{% for exclude in backup_excludes %}
+    "{{ exclude }}"
+{% endfor %}
+{% endif %}
+)
+
+# Restic optimization settings
+PACK_SIZE="{{ restic_optimization.pack_size }}"
+READ_CONCURRENCY="{{ restic_optimization.read_concurrency }}"
+COMPRESSION="{{ restic_optimization.compression }}"
+
+# Retention policy
+RETENTION_DAILY="{{ retention_policy.daily }}"
+RETENTION_WEEKLY="{{ retention_policy.weekly }}"
+RETENTION_MONTHLY="{{ retention_policy.monthly }}"
+RETENTION_YEARLY="{{ retention_policy.yearly }}"
+
+# Functions
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [${SERVICE_NAME}] $*" | tee -a "$LOG_FILE"
+}
+
+error_exit() {
+    log "ERROR: $1"
+    exit "${2:-1}"
+}
+
+check_prerequisites() {
+    log "Checking backup prerequisites..."
+
+    # Check restic is available
+    if ! command -v restic >/dev/null 2>&1; then
+        error_exit "restic is not installed or not in PATH"
+    fi
+
+    # Verify restic version
+    local restic_ver=$(restic version | head -1 | awk '{print $2}')
+    log "Using restic version: $restic_ver"
+
+    # Check password is set
+    if [[ -z "$RESTIC_PASSWORD" ]]; then
+        error_exit "RESTIC_PASSWORD is not set"
+    fi
+
+    # Check cache directory exists
+    if [[ ! -d "$RESTIC_CACHE_DIR" ]]; then
+        log "Creating cache directory: $RESTIC_CACHE_DIR"
+        mkdir -p "$RESTIC_CACHE_DIR"
+    fi
+
+    # Check backup paths exist
+    local missing_paths=0
+    for path in "${BACKUP_PATHS[@]}"; do
+        if [[ ! -e "$path" ]]; then
+            log "WARNING: Backup path does not exist: $path"
+            missing_paths=$((missing_paths + 1))
+        fi
+    done
+
+    if [[ $missing_paths -gt 0 ]]; then
+        log "WARNING: $missing_paths backup path(s) do not exist"
+    fi
+
+    log "Prerequisites check completed"
+}
+
+test_repository_connectivity() {
+    log "Testing repository connectivity..."
+
+    if restic snapshots --latest 1 >/dev/null 2>&1; then
+        log "Repository connectivity test passed"
+        return 0
+    else
+        log "WARNING: Could not connect to repository (may not be initialized)"
+        return 1
+    fi
+}
+
+perform_backup() {
+    log "Starting backup for ${SERVICE_NAME}..."
+
+    # Build backup command
+    local backup_cmd="restic backup"
+
+    # Add paths
+    for path in "${BACKUP_PATHS[@]}"; do
+        backup_cmd="$backup_cmd \"$path\""
+    done
+
+    # Add tags
+    backup_cmd="$backup_cmd --tag ${SERVICE_NAME}"
+    backup_cmd="$backup_cmd --tag $(hostname)"
+    backup_cmd="$backup_cmd --tag standalone"
+    backup_cmd="$backup_cmd --tag $(date +%Y-%m-%d)"
+
+    # Add optimization flags
+    backup_cmd="$backup_cmd --pack-size ${PACK_SIZE}"
+    backup_cmd="$backup_cmd --read-concurrency ${READ_CONCURRENCY}"
+    backup_cmd="$backup_cmd --compression ${COMPRESSION}"
+
+    # Add excludes
+    for exclude in "${BACKUP_EXCLUDES[@]}"; do
+        backup_cmd="$backup_cmd --exclude '${exclude}'"
+    done
+
+    # Add verbosity
+    backup_cmd="$backup_cmd --verbose"
+
+    # Execute backup
+    log "Executing: $backup_cmd"
+    eval "$backup_cmd" >> "$LOG_FILE" 2>&1
+    local backup_exit_code=$?
+
+    if [[ $backup_exit_code -eq 0 ]]; then
+        log "Backup completed successfully"
+        return 0
+    elif [[ $backup_exit_code -eq 3 ]]; then
+        log "Backup completed with warnings (some files could not be read, but backup succeeded)"
+        return 0
+    else
+        error_exit "Backup failed with exit code $backup_exit_code" "$backup_exit_code"
+    fi
+}
+
+cleanup_old_snapshots() {
+    log "Cleaning up old snapshots..."
+
+    local cleanup_cmd="restic forget"
+    cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
+    cleanup_cmd="$cleanup_cmd --keep-daily ${RETENTION_DAILY}"
+    cleanup_cmd="$cleanup_cmd --keep-weekly ${RETENTION_WEEKLY}"
+    cleanup_cmd="$cleanup_cmd --keep-monthly ${RETENTION_MONTHLY}"
+    cleanup_cmd="$cleanup_cmd --keep-yearly ${RETENTION_YEARLY}"
+    cleanup_cmd="$cleanup_cmd --prune"
+    cleanup_cmd="$cleanup_cmd --verbose"
+
+    log "Executing: $cleanup_cmd"
+    if eval "$cleanup_cmd" >> "$LOG_FILE" 2>&1; then
+        log "Cleanup completed successfully"
+        return 0
+    else
+        log "WARNING: Cleanup failed but backup was successful"
+        return 1
+    fi
+}
+
+get_backup_stats() {
+    log "Getting backup statistics..."
+
+    if restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+        local snapshot_count=$(jq length /tmp/snapshots-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
+
+        # Get latest snapshot info
+        local latest_snapshot=$(jq -r '.[0] | "\(.time) - \(.short_id)"' /tmp/snapshots-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        log "Latest snapshot: $latest_snapshot"
+
+        rm -f /tmp/snapshots-${SERVICE_NAME}.json
+    else
+        log "Could not retrieve backup statistics"
+    fi
+
+    # Get repository stats
+    if restic stats --mode raw-data --json > /tmp/stats-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+        local total_size=$(jq -r '.total_size' /tmp/stats-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
+        local total_size_mb=$((total_size / 1024 / 1024))
+        log "Repository total size: ${total_size_mb}MB"
+
+        rm -f /tmp/stats-${SERVICE_NAME}.json
+    else
+        log "Could not retrieve repository statistics"
+    fi
+}
+
+# Main execution
+main() {
+    log "=== Starting backup for ${SERVICE_NAME} (standalone mode) ==="
+
+    check_prerequisites
+    test_repository_connectivity
+    perform_backup
+    cleanup_old_snapshots
+    get_backup_stats
+
+    log "=== Backup completed for ${SERVICE_NAME} ==="
+}
+
+# Error handling
+trap 'error_exit "Script interrupted"' INT TERM
+
+# Execute main function
+main "$@"

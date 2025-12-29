@@ -104,7 +104,7 @@
 - name: Report Docker Compose validation issues
   ansible.builtin.debug:
     msg: |
-      ⚠️  Docker Compose validation warning for {{ item.item.name }}:
+      [WARN]  Docker Compose validation warning for {{ item.item.name }}:
       {{ item.stderr | default('Unknown validation issue') }}
 
       This may indicate configuration issues that could cause deployment problems.
@@ -125,30 +125,30 @@
 - name: Display template validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Template Rendering Validation Results:
+      [OK] Template Rendering Validation Results:
 
       {% if template_test_result.results is defined %}
       Automation Templates:
       {% for result in template_test_result.results %}
-      {{ result.item.name }}: {{ '✅ Rendered successfully' if not result.failed else '❌ Failed to render' }}
+      {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}
 
       {% if dns_template_test_result.results is defined %}
       DNS Templates:
       {% for result in dns_template_test_result.results %}
-      {{ result.item.name }}: {{ '✅ Rendered successfully' if not result.failed else '❌ Failed to render' }}
+      {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}
 
       {% if music_template_test_result.results is defined %}
       Music Templates:
       {% for result in music_template_test_result.results %}
-      {{ result.item.name }}: {{ '✅ Rendered successfully' if not result.failed else '❌ Failed to render' }}
+      {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}
 
-      🔧 All templates rendered successfully with current vault variables!
+      [TOOL] All templates rendered successfully with current vault variables!
       Ready for safe deployment.
   tags: [template_validation]
 

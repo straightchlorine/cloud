@@ -99,7 +99,7 @@
 - name: Common service startup validation completed
   ansible.builtin.debug:
     msg: |
-      ✅ Common service startup requirements validated:
+      [OK] Common service startup requirements validated:
       - Docker service: {{ 'active' if docker_service_status.status.ActiveState == 'active' else 'inactive' }}
       - Network connectivity: Available for Docker network creation
       - Compose file structure: Validated where applicable

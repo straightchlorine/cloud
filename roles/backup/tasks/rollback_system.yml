@@ -206,7 +206,7 @@
 - name: Display rollback system deployment status
   ansible.builtin.debug:
     msg: |
-      ✅ Enterprise Rollback System Deployed:
+      [OK] Enterprise Rollback System Deployed:
 
       🔄 Rollback Capabilities:
       - Service-Aware Rollbacks: DNS, Automation, Music, System
@@ -214,7 +214,7 @@
       - Granular Rollbacks: Individual service/component rollback
       - Safety Validation: Pre-rollback safety checks and validations
 
-      📊 Rollback Management:
+      [STATS] Rollback Management:
       - CLI Interface: /usr/local/bin/enterprise-rollback
       - Automatic Rollback Points: Timer-based checkpoint creation
       - Rollback Catalog: Searchable snapshot inventory
@@ -226,12 +226,12 @@
       - Alert Rules: rollback-alerts.yml
       - Safety Checks: Pre-rollback validation framework
 
-      ⚡ Operations:
+      [POWER] Operations:
       - Staging Environment: {{ backup_base_path }}/rollback/staging/
       - Execution Logs: {{ backup_base_path }}/rollback/logs/
       - Emergency Procedures: {{ backup_base_path }}/scripts/emergency-rollback.sh
 
-      🎯 Usage Examples:
+      [TARGET] Usage Examples:
       # List available rollback points
       enterprise-rollback list --service dns --last 7d
 
@@ -244,6 +244,6 @@
       # Emergency system rollback
       enterprise-rollback emergency --confirm --snapshot last-known-good
 
-      {{ '✅ Rollback system validation passed!' if rollback_validation.rc == 0 else '❌ Validation failed!' }}
+      {{ '[OK] Rollback system validation passed!' if rollback_validation.rc == 0 else '[FAIL] Validation failed!' }}
 
       📋 Documentation: {{ backup_base_path }}/docs/rollback-procedures.md

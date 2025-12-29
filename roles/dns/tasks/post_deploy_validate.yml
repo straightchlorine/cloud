@@ -58,7 +58,7 @@
 - name: Display DNS validation results
   ansible.builtin.debug:
     msg: |
-      ✅ Pi-hole Post-Deployment Validation Results:
+      [OK] Pi-hole Post-Deployment Validation Results:
 
       Pi-hole Service: {{ 'Running' if pihole_web.status == 200 else 'Failed' }}
       DNS Resolution: {{ 'Working' if dns_test.rc == 0 else 'Failed' }}

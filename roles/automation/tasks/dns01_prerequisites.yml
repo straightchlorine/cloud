@@ -136,37 +136,37 @@
 - name: Display DNS01 prerequisites validation results
   ansible.builtin.debug:
     msg: |
-      🔐 DNS01 Challenge Prerequisites Validation:
+      [SECURE] DNS01 Challenge Prerequisites Validation:
 
       Cloudflare Configuration:
-      API Authentication: {{ '✅ Valid' if cloudflare_zones.json.success else '❌ Failed' }}
-      Domain Zone Access: {{ '✅ Found' if domain_zone != {} else '❌ Missing' }}
+      API Authentication: {{ '[OK] Valid' if cloudflare_zones.json.success else '[FAIL] Failed' }}
+      Domain Zone Access: {{ '[OK] Found' if domain_zone != {} else '[FAIL] Missing' }}
       Zone ID: {{ domain_zone.id | default('Not found') }}
       Zone Status: {{ domain_zone.status | default('Unknown') }}
-      DNS Record Permissions: {{ '✅ Can create/delete' if dns_record_test.json.success | default(false) else '❌ Insufficient permissions' }}
+      DNS Record Permissions: {{ '[OK] Can create/delete' if dns_record_test.json.success | default(false) else '[FAIL] Insufficient permissions' }}
 
       Let's Encrypt Connectivity:
-      ACME Server: {{ '✅ Reachable' if acme_server_test.status == 200 else '❌ Unreachable' }}
+      ACME Server: {{ '[OK] Reachable' if acme_server_test.status == 200 else '[FAIL] Unreachable' }}
       Server Type: {{ 'Staging' if letsencrypt_staging else 'Production' }}
-      Rate Limit Status: {{ '✅ Safe' if (recent_certificates | default(0) | int) < 20 else '⚠️  High certificate count' }}
+      Rate Limit Status: {{ '[OK] Safe' if (recent_certificates | default(0) | int) < 20 else '[WARN]  High certificate count' }}
 
       DNS Propagation:
-      Test Query Response: {{ '✅ DNS working' if propagation_test.rc == 0 else '⚠️  Check DNS setup' }}
+      Test Query Response: {{ '[OK] DNS working' if propagation_test.rc == 0 else '[WARN]  Check DNS setup' }}
       Propagation Speed: Fast (Cloudflare)
 
       Container Environment:
-      Traefik DNS Config: {{ '✅ Present' if 'cloudflare' in traefik_dns_config.stdout else '❌ Missing' }}
-      Cloudflare Env Vars: {{ '✅ Configured' if 'CF_API_TOKEN' in cloudflare_env_check.stdout or 'CLOUDFLARE_' in cloudflare_env_check.stdout else '⚠️  Check environment' }}
-      Container API Access: {{ '✅ Working' if 'cannot reach' not in container_api_test.stdout else '❌ Network issue' }}
+      Traefik DNS Config: {{ '[OK] Present' if 'cloudflare' in traefik_dns_config.stdout else '[FAIL] Missing' }}
+      Cloudflare Env Vars: {{ '[OK] Configured' if 'CF_API_TOKEN' in cloudflare_env_check.stdout or 'CLOUDFLARE_' in cloudflare_env_check.stdout else '[WARN]  Check environment' }}
+      Container API Access: {{ '[OK] Working' if 'cannot reach' not in container_api_test.stdout else '[FAIL] Network issue' }}
 
       Storage Configuration:
-      Certificate Directory: {{ '✅ Accessible' if traefik_data_dir.stat.exists else '❌ Missing' }}
+      Certificate Directory: {{ '[OK] Accessible' if traefik_data_dir.stat.exists else '[FAIL] Missing' }}
       Directory Permissions: {{ traefik_data_dir.stat.mode | default('Unknown') }}
       Available Space: {{ (cert_storage_space.stdout | int / 1024) | round(1) }}MB
 
-      🚀 DNS01 challenge prerequisites validated!
+      [DEPLOY] DNS01 challenge prerequisites validated!
       {% if not letsencrypt_staging %}
-      ⚠️  Production Mode: Real certificates will be issued
+      [WARN]  Production Mode: Real certificates will be issued
       {% else %}
       🔸 Staging Mode: Test certificates only
       {% endif %}

@@ -24,7 +24,7 @@
 - name: Display firewall rules summary
   ansible.builtin.debug:
     msg: |
-      ✅ Prometheus Exporters Firewall Configuration:
+      [OK] Prometheus Exporters Firewall Configuration:
       {% if node_exporter_enabled %}
       - Node Exporter: Port {{ node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
