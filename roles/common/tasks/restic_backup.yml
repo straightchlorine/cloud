@@ -245,6 +245,15 @@
   become: true
   loop: "{{ backup_paths }}"
 
+- name: Initialize restic repository if it doesn't exist
+  ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
+  become_user: backup
+  become: true
+  register: repository_init
+  changed_when: "'initialized' in repository_init.stdout"
+  failed_when: repository_init.rc != 0 and 'already exists' not in repository_init.stderr and 'already exists' not in repository_init.stdout
+  when: backup_skip_init is not defined or not backup_skip_init
+
 - name: Force handler execution
   ansible.builtin.meta: flush_handlers
 
@@ -290,15 +299,6 @@
   register: service_config_check
   changed_when: false
   failed_when: service_config_check.rc != 0
-
-- name: Initialize restic repository if it doesn't exist
-  ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
-  become_user: backup
-  become: true
-  register: repository_init
-  changed_when: "'initialized' in repository_init.stdout"
-  failed_when: repository_init.rc != 0 and 'already exists' not in repository_init.stderr and 'already exists' not in repository_init.stdout
-  when: backup_skip_init is not defined or not backup_skip_init
 
 - name: Verify deployed service configuration
   ansible.builtin.command:
