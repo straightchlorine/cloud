@@ -66,6 +66,37 @@ setup_logging() {
     log "Repository initialization started for {{ inventory_hostname }}"
 }
 
+# Check internet connectivity with exponential backoff
+check_internet_connectivity() {
+    info "Checking internet connectivity to Hetzner Storage Box..."
+
+    local max_retries=12
+    local base_delay=10
+    local max_delay=300  # Cap at 5 minutes
+    local retry_count=0
+
+    while [[ $retry_count -lt $max_retries ]]; do
+        # Ping the Hetzner storage host
+        if ping -c 1 -W 5 "{{ vault_backup_storage_host }}" >/dev/null 2>&1; then
+            success "Internet connectivity verified ({{ vault_backup_storage_host }} is reachable)"
+            return 0
+        fi
+
+        # Retry with exponential backoff
+        retry_count=$((retry_count + 1))
+        if [[ $retry_count -lt $max_retries ]]; then
+            local delay=$((base_delay * (2 ** (retry_count - 1))))
+            if [[ $delay -gt $max_delay ]]; then
+                delay=$max_delay
+            fi
+            warning "Network unreachable (attempt $retry_count/$max_retries), retrying in ${delay}s..."
+            sleep "$delay"
+        fi
+    done
+
+    error_exit "Network connectivity failed after $max_retries attempts. Repository initialization cannot proceed without internet access to {{ vault_backup_storage_host }}"
+}
+
 # Validate environment
 validate_environment() {
     info "Validating backup environment..."
@@ -84,6 +115,9 @@ validate_environment() {
     if [[ -z "${RESTIC_REPOSITORY:-}" ]]; then
         error_exit "RESTIC_REPOSITORY environment variable is not set"
     fi
+
+    # Check internet connectivity with exponential backoff
+    check_internet_connectivity
 
     # Check connectivity to repository backend
     info "Testing connectivity to repository backend..."
