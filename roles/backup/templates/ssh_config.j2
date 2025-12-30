@@ -5,12 +5,24 @@
 Host *
     ControlMaster auto
     ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
-    ControlPersist 10m
-    ServerAliveInterval 60
-    ServerAliveCountMax 3
+
+    # Keeps connection open indefinitely (until idle timeout)
+    ControlPersist -1
+
+    # Keep-alive settings for unreliable networks
+    ServerAliveInterval 30
+    # Allow 5 missed keep-alives before giving up (150 seconds = 2.5 minutes)
+    ServerAliveCountMax 10
+    # Enable TCP keep-alive at the socket level
     TCPKeepAlive yes
+
+    # Strict host key checking
     StrictHostKeyChecking accept-new
+
+    # Connection timeouts
     ConnectTimeout 30
+    # Network timeout for all operations (hanging countermeasure)
+    NetworkTimeout 300
 
 # Hetzner Storage Box Configuration
 Host hetzner-storage
@@ -20,3 +32,18 @@ Host hetzner-storage
     IdentityFile {{ backup_base_path }}/.ssh/hetzner
     BatchMode yes
     PasswordAuthentication no
+
+    # Compression helps reduce bandwidth usage during large transfers
+    Compression yes
+
+    # Connection reuse and persistence
+    ControlMaster auto
+    ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
+    ControlPersist -1
+
+    # Aggressive keep-alive for Hetzner
+    ServerAliveInterval 20
+    ServerAliveCountMax 10
+
+    # Optimized for backup workload
+    TCPKeepAlive yes
