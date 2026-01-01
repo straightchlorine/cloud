@@ -59,10 +59,10 @@ backup_excludes:
 
 # Retention policy
 retention_policy:
-  daily: 30
-  weekly: 12
-  monthly: 24
-  yearly: 3
+  daily: 7
+  weekly: 2
+  monthly: 2
+  yearly: 1
 
 # Restic optimization (optimized for speed on powerful machine)
 restic_optimization:
@@ -77,6 +77,9 @@ backup_timeout: 14400              # 4 hours timeout for large dataset
 
 # Optional: Memory limit (not needed on 32GB machine but can be set for safety)
 # restic_memory_limit: "4G"
+
+# Enable backup timer
+backup_enabled: true
 
 # Monitoring and health checks
 backup_monitoring: false
