@@ -10,7 +10,7 @@ vault_youtube_playlists:
 # Automation Server (pi-automation)
 vault_domain_name: "codextechnologies.org"
 vault_letsencrypt_email: "admin@codextechnologies.org"
-vault_traefik_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6"
+vault_traefik_basic_auth: "admin:$2y$10$your-bcrypt-hash-here"
 
 # Restic Backup Configuration
 vault_restic_automation_password: "your-32-character-secure-restic-password"
@@ -33,7 +33,7 @@ vault_vaultwarden_signups_allowed: "false"
 vault_watchtower_schedule: "0 6 * * *"  # Daily at 6 AM
 vault_watchtower_slack_webhook: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
 vault_watchtower_api_token: "your-watchtower-api-token"
-vault_watchtower_basic_auth: "admin:$2y$10$2b2cu/nJVVeyWX8MpqNLPeOT6URz8Uu7UBJcv4C5rPWP9RCj4.4H6"
+vault_watchtower_basic_auth: "admin:$2y$10$your-bcrypt-hash-here"
 
 # Dozzle Configuration
 vault_dozzle_username: "admin"
