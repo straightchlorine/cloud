@@ -337,12 +337,16 @@ main() {
 
 # Cleanup handler for interrupted execution
 cleanup_on_exit() {
+    local exit_code=$?
     log "Cleaning up on exit..."
     unmount_remote_filesystem
+    return $exit_code
 }
 
 # Error handling - ensure unmount on exit
-trap 'cleanup_on_exit; error_exit "Script interrupted"' INT TERM EXIT
+# Only call error_exit on INT/TERM signals, not on normal successful exit
+trap cleanup_on_exit EXIT
+trap 'cleanup_on_exit; error_exit "Script interrupted"' INT TERM
 
 # Execute main function
 main "$@"
