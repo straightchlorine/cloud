@@ -1,4 +1,3 @@
----
 # Backup Coordinator Configuration
 # Dell Wyse - handles backups for Raspberry Pis and small devices
 device_role: backup
@@ -20,7 +19,7 @@ backup_base_path: /opt/backup
 restic_version: "0.18.1"
 backup_restic_version: "0.18.1"
 
-# Backup targets (Raspberry Pis) - pulled by coordinator
+# Backup targets - pulled by coordinator
 coordinator_targets:
   - service_name: pi-dns
     hostname: pihole
@@ -29,15 +28,22 @@ coordinator_targets:
     ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-dns"
     backup_schedule: "*-*-* 01:00:00"
     backup_paths:
-      - /etc/pihole
-      - /etc/chrony
-      - /var/log/pihole
+      - /etc
+      - /var/lib
+      - /var/log
       - /opt/pihole
-      - /etc/dnsmasq.d
+      - /root/.ssh
     backup_excludes:
+      - /var/cache/*
+      - /var/tmp/*
+      - /var/spool/*
+      - /var/lib/apt/lists/*
+      - /tmp/*
       - "*.tmp"
-      - "cache/*"
-      - "*.log.1*"
+      - ".cache/*"
+      - "/etc/issue*"
+      - "/etc/.pihole/*"
+      - "/etc/apt/apt.conf.d/*~"
     restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-dns"
     restic_password: "{{ vault_restic_pi_dns_password }}"
     retention_policy:
@@ -59,14 +65,23 @@ coordinator_targets:
     ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-automation"
     backup_schedule: "*-*-* 02:00:00"
     backup_paths:
-      - /opt/automation
-      - /etc/traefik
+      - /etc
       - /var/lib/docker/volumes
-      - /etc/docker
+      - /var/log
+      - /home/automation
+      - /mnt/automation-data
+      - /root/.ssh
     backup_excludes:
-      - "*/logs/*"
-      - "*.log"
-      - "*/tmp/*"
+      - /var/cache/*
+      - /var/tmp/*
+      - /var/spool/*
+      - /var/lib/apt/lists/*
+      - /tmp/*
+      - "*.tmp"
+      - ".cache/*"
+      - "/etc/issue*"
+      - "/etc/apt/apt.conf.d/*~"
+      - "/var/log/journal/archive/*"
     restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-automation"
     restic_password: "{{ vault_restic_pi_automation_password }}"
     retention_policy:
@@ -88,15 +103,25 @@ coordinator_targets:
     ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-music"
     backup_schedule: "*-*-* 03:00:00"
     backup_paths:
-      - /opt/music
-      - /var/lib/music
+      - /etc
       - /var/lib/docker/volumes
-      - /etc/docker
+      - /var/log
+      - /home/media
+      - /mnt/music
+      - /root/.ssh
     backup_excludes:
-      - "*/cache/*"
+      - /var/cache/*
+      - /var/tmp/*
+      - /var/spool/*
+      - /var/lib/apt/lists/*
+      - /tmp/*
       - "*.tmp"
+      - ".cache/*"
+      - "/etc/issue*"
+      - "/etc/apt/apt.conf.d/*~"
+      - "/var/log/journal/archive/*"
       - "*/thumbnails/*"
-      - "*/logs/*"
+      - "*/media/cache/*"
     restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-music"
     restic_password: "{{ vault_restic_pi_music_password }}"
     retention_policy:
