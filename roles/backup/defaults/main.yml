@@ -46,16 +46,6 @@ backup_orchestration:
   retry_attempts: 3
   retry_delay_minutes: 15
 
-# Enterprise restore testing
-restore_testing:
-  enabled: true
-  frequency: "weekly"
-  test_percentage: 10  # Percentage of recent backups to test
-  test_environment: "/tmp/restore-test"
-  cleanup_after_test: true
-  alert_on_failure: true
-  performance_benchmarking: true
-
 # Backup performance optimization
 performance_optimization:
   cache_enabled: true
@@ -65,49 +55,6 @@ performance_optimization:
   concurrent_downloads: 4
   bandwidth_limit_mbps: 0  # 0 = unlimited
   cpu_priority: "normal"   # Options: low, normal, high
-
-# Monitoring and metrics
-backup_monitoring:
-  prometheus_metrics: true
-  metrics_port: 9102
-  detailed_timing: true
-  storage_efficiency: true
-  deduplication_stats: true
-  error_tracking: true
-
-# Security configuration
-backup_security:
-  encryption_algorithm: "AES256"
-  key_derivation: "scrypt"
-  key_rotation_enabled: true
-  key_rotation_frequency: "quarterly"
-  access_logging: true
-  audit_trail: true
-
-# Notification and alerting
-backup_notifications:
-  success_notifications: false  # Only failures and warnings
-  failure_notifications: true
-  warning_notifications: true
-  summary_reports: true
-  report_frequency: "weekly"
-
-# Enterprise compliance
-compliance:
-  retention_enforcement: true
-  immutable_backups: false  # Set to true for regulatory compliance
-  legal_hold_support: true
-  audit_logging: true
-  data_classification: true
-
-# Disaster recovery
-disaster_recovery:
-  cross_site_replication: true
-  hot_standby_repos: 1
-  recovery_time_objective_minutes: 30
-  recovery_point_objective_minutes: 15
-  automated_failover: false
-  manual_validation_required: true
 
 # Service-specific backup configuration
 service_backup_configs:
@@ -167,39 +114,6 @@ service_backup_configs:
       - "*.log"
       - "/proc/*"
       - "/sys/*"
-
-# Remote repository configuration
-remote_repositories:
-  primary:
-    type: "sftp"
-    connection_string: "{{ vault_backup_primary_repo }}"
-    bandwidth_limit: "10MB"
-    connection_timeout: 30
-    retry_attempts: 5
-
-  secondary:
-    type: "sftp"
-    connection_string: "{{ vault_backup_secondary_repo }}"
-    bandwidth_limit: "5MB"
-    connection_timeout: 30
-    retry_attempts: 3
-    replication_delay_hours: 6
-
-# Backup validation and integrity
-backup_validation:
-  checksum_verification: true
-  repository_consistency_check: true
-  random_restore_testing: true
-  data_integrity_verification: true
-  performance_regression_testing: true
-
-# Advanced features
-advanced_features:
-  backup_deduplication_analysis: true
-  storage_cost_analysis: true
-  backup_lifecycle_management: true
-  automated_cleanup: true
-  capacity_planning: true
 
 # Default repository configuration values
 # These replace the removed default filters in templates

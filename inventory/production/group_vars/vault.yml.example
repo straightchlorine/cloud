@@ -1,57 +1,70 @@
 ---
+# ==============================================================================
+# REQUIRED VARIABLES - Deployment fails without these
+# ==============================================================================
+
+# Domain & SSL Configuration
+# Validation: Domain must be valid FQDN, email must be valid format
+vault_domain_name: "yourdomain.com"
+vault_letsencrypt_email: "admin@yourdomain.com"
+
+# Cloudflare API for Let's Encrypt DNS-01 Challenge
+# Required for: Traefik SSL certificate automation
+# How to get: Cloudflare dashboard → API Tokens → Create Token (Zone:Read, DNS:Edit)
+# Validation: Must have proper permissions
+vault_cloudflare_api_token: "your-cloudflare-api-token"
+
+# Service Authentication
 # DNS Server (pi-dns)
 vault_pihole_admin_password: "your-secure-admin-password"
 vault_pihole_webpassword: "your-secure-web-password"
 
-# Music Server (pi-music)
+# Automation Stack (pi-automation)
+# Generate: htpasswd -nbB admin your-password
+vault_traefik_basic_auth: "admin:$2y$10$your-bcrypt-hash"
+# Generate: openssl rand -base64 32
+vault_influxdb3_session_secret_key: "your-session-secret-key-min-32-chars"
+
+# Monitoring Stack (debian-monitoring)
+vault_grafana_admin_password: "your-secure-grafana-password"
+
+# Backup Configuration
+# Storage connection
+vault_backup_repository_base: "sftp:backup-user@backup-server.com:/backups"
+vault_backup_storage_host: "backup-server.com"
+vault_backup_storage_user: "backup-user"
+vault_backup_storage_port: 22
+
+# Per-service backup passwords (MUST be unique, 32+ characters each)
+# Validation: Minimum 32 characters
+# Generate: openssl rand -base64 32
+vault_restic_dns_password: "your-32-character-secure-restic-password"
+vault_restic_music_password: "your-32-character-secure-restic-password"
+vault_restic_automation_password: "your-32-character-secure-restic-password"
+vault_restic_monitoring_password: "your-32-character-secure-restic-password"
+
+# ==============================================================================
+# OPTIONAL VARIABLES - Only required for specific features
+# ==============================================================================
+
+# YouTube Sync (music-stack)
+# Required only if: youtube_sync_enabled: true in host_vars
 vault_youtube_playlists:
   - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+vault_youtube_quality: "bestaudio[ext=m4a]/best[ext=mp4]/best"
+vault_youtube_concurrent: 3
+vault_youtube_extra_args: "--embed-metadata --embed-thumbnail"
 
-# Automation Server (pi-automation)
-vault_domain_name: "codextechnologies.org"
-vault_letsencrypt_email: "admin@codextechnologies.org"
-vault_traefik_basic_auth: "admin:$2y$10$your-bcrypt-hash-here"
+# SMTP Alerting (monitoring)
+# Required only if: alerting enabled
+vault_smtp_host: "smtp.gmail.com"
+vault_smtp_port: 587
+vault_smtp_username: "alerts@yourdomain.com"
+vault_smtp_password: "your-smtp-app-password"
+vault_alertmanager_email: "admin@yourdomain.com"
 
-# Restic Backup Configuration
-vault_restic_automation_password: "your-32-character-secure-restic-password"
-
-# CloudFlare DNS Challenge
-vault_cloudflare_api_token: "your-cloudflare-api-token-here"
-
-# InfluxDB Configuration
-vault_influxdb_username: "admin"
-vault_influxdb_password: "your-secure-influxdb-password"
-vault_influxdb_org: "homelab"
-vault_influxdb_bucket: "metrics"
-vault_influxdb_admin_token: "your-influxdb-admin-token-here"
-
-# Vaultwarden Configuration
+# Optional Services (automation)
 vault_vaultwarden_admin_token: "your-vaultwarden-admin-token"
-vault_vaultwarden_signups_allowed: "false"
-
-# Watchtower Configuration
-vault_watchtower_schedule: "0 6 * * *"  # Daily at 6 AM
-vault_watchtower_slack_webhook: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
 vault_watchtower_api_token: "your-watchtower-api-token"
-vault_watchtower_basic_auth: "admin:$2y$10$your-bcrypt-hash-here"
-
-# Dozzle Configuration
 vault_dozzle_username: "admin"
 vault_dozzle_password: "your-dozzle-password"
-
-# InfluxDB 3 Configuration
-vault_influxdb3_session_secret_key: "example-session-secret-key"
-
-# Monitoring Infrastructure (debian-monitoring)
-vault_grafana_admin_password: "your-secure-grafana-admin-password"
-vault_alertmanager_email: "admin@codextechnologies.org"
-vault_smtp_host: "smtp.gmail.com"
-vault_smtp_port: "587"
-vault_smtp_username: "admin@codextechnologies.org"
-vault_smtp_password: "your-smtp-app-password"
-
-# Enterprise Backup Configuration (all hosts)
-vault_restic_dns_password: "your-32-character-secure-restic-password-dns"
-vault_restic_music_password: "your-32-character-secure-restic-password-music"
-vault_restic_monitoring_password: "your-32-character-secure-restic-password-monitoring"
-vault_backup_repository_base: "sftp:backup-server:/backup/repositories"
