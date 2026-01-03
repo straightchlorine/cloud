@@ -6,12 +6,12 @@ Host *
     ControlMaster auto
     ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
 
-    # Keeps connection open indefinitely (until idle timeout)
-    ControlPersist -1
+    # Keeps connection open for 10 minutes
+    ControlPersist 600
 
     # Keep-alive settings for unreliable networks
     ServerAliveInterval 30
-    # Allow 5 missed keep-alives before giving up (150 seconds = 2.5 minutes)
+    # Allow 10 missed keep-alives before giving up
     ServerAliveCountMax 10
     # Enable TCP keep-alive at the socket level
     TCPKeepAlive yes
@@ -19,10 +19,8 @@ Host *
     # Strict host key checking
     StrictHostKeyChecking accept-new
 
-    # Connection timeouts
+    # Connection timeout
     ConnectTimeout 30
-    # Network timeout for all operations (hanging countermeasure)
-    NetworkTimeout 300
 
 # Hetzner Storage Box Configuration
 Host hetzner-storage
@@ -39,13 +37,11 @@ Host hetzner-storage
     # Connection reuse and persistence
     ControlMaster auto
     ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
-    ControlPersist -1
+    ControlPersist 600
 
     # Aggressive keep-alive for Hetzner
     ServerAliveInterval 20
     ServerAliveCountMax 10
-
-    # Optimized for backup workload
     TCPKeepAlive yes
 
 {% if backup_role == "coordinator" %}
@@ -63,7 +59,7 @@ Host {{ target.hostname }}
     # Connection reuse for efficiency
     ControlMaster auto
     ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
-    ControlPersist -1
+    ControlPersist 600
 
     # Keep-alive for SSHFS mounts
     ServerAliveInterval 30
