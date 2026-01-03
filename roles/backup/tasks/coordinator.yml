@@ -106,27 +106,25 @@
   loop_control:
     label: "{{ item.item.service_name }}"
 
-- name: Initialize restic repositories for each target
-  ansible.builtin.command: restic init
-  environment:
-    RESTIC_REPOSITORY: "{{ item.restic_repository }}"
-    RESTIC_PASSWORD: "{{ item.restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+- name: Deploy repository initialization scripts for each target
+  ansible.builtin.template:
+    src: init-repositories.sh.j2
+    dest: "{{ backup_base_path }}/scripts/init-{{ item.service_name }}.sh"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0750'
   become: true
-  become_user: "{{ backup_user }}"
   loop: "{{ coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
-  register: restic_inits
-  failed_when: false
-  changed_when: restic_inits.rc == 0
+  vars:
+    restic_repository: "{{ item.restic_repository }}"
+    restic_password: "{{ item.restic_password }}"
+    backup_directories: "{{ item.backup_paths }}"
+    device_role: "coordinator-{{ item.service_name }}"
 
-- name: Check repository status for each target
-  ansible.builtin.command: restic snapshots --latest 1
-  environment:
-    RESTIC_REPOSITORY: "{{ item.restic_repository }}"
-    RESTIC_PASSWORD: "{{ item.restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+- name: Run repository initialization for each target
+  ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ item.service_name }}.sh --check-only"
   become: true
   become_user: "{{ backup_user }}"
   loop: "{{ coordinator_targets }}"
