@@ -27,6 +27,7 @@ backup_targets:
     target_host: pihole
     ssh_user: root
     ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-dns"
+    backup_schedule: "*-*-* 01:00:00"
     backup_paths:
       - /etc/pihole
       - /etc/chrony
@@ -56,6 +57,7 @@ backup_targets:
     target_host: automation
     ssh_user: root
     ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-automation"
+    backup_schedule: "*-*-* 02:00:00"
     backup_paths:
       - /opt/automation
       - /etc/traefik
@@ -84,6 +86,7 @@ backup_targets:
     target_host: media
     ssh_user: root
     ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-music"
+    backup_schedule: "*-*-* 03:00:00"
     backup_paths:
       - /opt/music
       - /var/lib/music
