@@ -1,0 +1,57 @@
+#!/bin/bash
+
+### system-update-cron.sh
+# Weekly system updates: apt-get update, apt-get upgrade
+# For pi-dns: also runs pihole -up
+# Managed by Ansible - Do not edit manually
+###
+
+set -euo pipefail
+
+LOG_FILE="/var/log/system-updates.log"
+HOSTNAME=$(hostname)
+
+# Logging function with timestamp
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$HOSTNAME] $1" | tee -a "$LOG_FILE"
+}
+
+# Cleanup function
+cleanup() {
+    local exit_code=$?
+    exit $exit_code
+}
+trap cleanup EXIT INT TERM
+
+log "=== System Update Started ==="
+
+# APT update and upgrade
+log "Running apt-get update..."
+if apt-get update >> "$LOG_FILE" 2>&1; then
+    log "apt-get update completed successfully"
+else
+    log "ERROR: apt-get update failed"
+    exit 1
+fi
+
+log "Running apt-get upgrade..."
+if DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >> "$LOG_FILE" 2>&1; then
+    log "apt-get upgrade completed successfully"
+else
+    log "ERROR: apt-get upgrade failed"
+    exit 1
+fi
+
+# Pi-hole specific update
+if [[ "$HOSTNAME" == "pihole" || "$HOSTNAME" == "pi-dns" ]]; then
+    log "Running pihole -up..."
+    if pihole -up >> "$LOG_FILE" 2>&1; then
+        log "pihole -up completed successfully"
+    else
+        log "ERROR: pihole -up failed"
+        exit 1
+    fi
+fi
+
+log "=== System Update Completed ==="
+exit 0

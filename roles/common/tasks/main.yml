@@ -44,3 +44,6 @@
     mode: '0644'
   become: true
 
+- name: Configure system update cron job
+  ansible.builtin.include_tasks: system_update_cron.yml
+

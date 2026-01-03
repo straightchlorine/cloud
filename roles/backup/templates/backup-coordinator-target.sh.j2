@@ -185,8 +185,7 @@ mount_remote_filesystem() {
         "$MOUNT_POINT" \
         -o ssh_command="ssh -F ${SSH_CONFIG}" \
         -o reconnect \
-        -o allow_other \
-        -o default_permissions; then
+        -o allow_other; then
         log "Remote filesystem mounted successfully at ${MOUNT_POINT}"
     else
         error_exit "Failed to mount remote filesystem"

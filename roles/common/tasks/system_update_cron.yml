@@ -1,0 +1,40 @@
+---
+# System update cron job configuration
+# Runs weekly on Monday at 23:00 (UTC)
+# Updates: apt packages and pihole (on pi-dns)
+
+- name: Deploy system update cron script
+  ansible.builtin.template:
+    src: system-update-cron.sh.j2
+    dest: /usr/local/bin/system-update-cron.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Create cron job for weekly system updates (Monday 23:00)
+  ansible.builtin.cron:
+    name: "Weekly system updates (Monday 23:00)"
+    weekday: "1"
+    hour: "23"
+    minute: "0"
+    job: "/usr/local/bin/system-update-cron.sh"
+    user: "root"
+  become: true
+  tags: [cron, updates]
+
+- name: Display system update cron information
+  ansible.builtin.debug:
+    msg: |
+      System update cron job configured:
+      - Schedule: Weekly on Monday at 23:00 UTC
+      - Updates: apt-get update, apt-get upgrade
+      - Pi-hole update: runs on pi-dns hosts
+      - Log file: /var/log/system-updates.log
+
+      To manually run:
+        /usr/local/bin/system-update-cron.sh
+
+      To view logs:
+        tail -f /var/log/system-updates.log
+  tags: [cron, updates]
