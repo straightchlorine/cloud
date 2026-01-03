@@ -55,7 +55,7 @@
       when: backup_targets is defined
 
   roles:
-    - role: backup-system
+    - role: backup
 
   post_tasks:
     - name: Create coordinator verification script
