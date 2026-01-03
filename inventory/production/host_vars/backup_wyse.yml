@@ -18,6 +18,7 @@ backup_base_path: /opt/backup
 
 # Restic configuration
 restic_version: "0.18.1"
+backup_restic_version: "0.18.1"
 
 # Backup targets (Raspberry Pis) - pulled by coordinator
 backup_targets:
@@ -122,3 +123,6 @@ backup_monitoring: true
 
 # Backup service name (used for logging and identification)
 backup_service_name: "backup-coordinator"
+
+# Key rotation schedule
+backup_key_rotation_schedule: "monthly"
