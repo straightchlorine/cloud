@@ -52,7 +52,7 @@ warning() {
 
 # Info message
 info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    echo -e "${BLUE}[INFO] $1${NC}"
     log "INFO: $1"
 }
 
@@ -296,7 +296,7 @@ cleanup_coordination() {
 
 # Show coordination status
 show_status() {
-    echo "🔄 Enterprise Backup Coordinator Status"
+    echo "[STATUS] Enterprise Backup Coordinator Status"
     echo "======================================"
 
     local active_count=0
@@ -309,7 +309,7 @@ show_status() {
 
         local service=$(basename "$lock_file" .lock)
         local lock_info=$(cat "$lock_file" 2>/dev/null | jq -r '.start_time // "unknown"' 2>/dev/null || echo "unknown")
-        echo "🔒 Active: ${service} (started: ${lock_info})"
+        echo "[ACTIVE] ${service} (started: ${lock_info})"
     done
 
     # Count queued requests
@@ -319,7 +319,7 @@ show_status() {
 
         local service=$(basename "$queue_file" | sed 's/queue-\(.*\)\.json/\1/')
         local priority=$(cat "$queue_file" 2>/dev/null | jq -r '.priority // "unknown"' 2>/dev/null || echo "unknown")
-        echo "⏳ Queued: ${service} (priority: ${priority})"
+        echo "[QUEUED] ${service} (priority: ${priority})"
     done
 
     echo "======================================"

@@ -28,7 +28,7 @@
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
         msg: |
-          🔍 Playbook Variable Debug:
+          [DEBUG] Playbook Variable Debug:
           - backup_role: {{ backup_role | default('UNDEFINED') }}
           - backup_base_path: {{ backup_base_path | default('UNDEFINED') }}
           - backup_targets defined: {{ backup_targets is defined }}
@@ -49,10 +49,8 @@
 
           Target Services:
           {% for target in backup_targets %}
-          - {{ target.service_name }}: {{ target.target_host }}
+          - {{ target.service_name }}: {{ target.hostname }}
             Repository: {{ target.restic_repository }}
-            Schedule: {{ target.backup_schedule }}
-            Method: {{ target.backup_method }}
           {% endfor %}
       when: backup_targets is defined
 
@@ -67,7 +65,7 @@
           # Backup Coordinator Verification Script
 
           BACKUP_BASE="{{ backup_base_path }}"
-          echo "🔍 Verifying Backup Coordinator..."
+          echo "[INFO] Verifying Backup Coordinator..."
 
           # Check coordinator services
           echo "Checking coordinator services..."
@@ -82,11 +80,11 @@
           # Check SSH connectivity
           echo "Testing SSH connectivity..."
           {% for target in backup_targets %}
-          if ssh -i "$BACKUP_BASE/.ssh/nodes/{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.target_host }} "echo 'SSH OK'" >/dev/null 2>&1; then
+          if ssh -i "$BACKUP_BASE/.ssh/backup-{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.hostname }} "echo 'SSH OK'" >/dev/null 2>&1; then
               echo "[OK] {{ target.service_name }}: SSH connectivity OK"
           else
               echo "[FAIL] {{ target.service_name }}: SSH connectivity FAILED"
-              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}"
+              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/backup-{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.hostname }}"
           fi
           {% endfor %}
 
@@ -131,10 +129,10 @@
           - backup-health-monitor.service
           - backup-metrics.service
 
-          📋 SSH Key Deployment Required:
+          [KEYS] SSH Key Deployment Required:
           {% for target in backup_targets %}
           {{ target.service_name }}:
-            ssh-copy-id -i {{ backup_base_path }}/.ssh/nodes/{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.target_host }}
+            ssh-copy-id -i {{ backup_base_path }}/.ssh/backup-{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.hostname }}
           {% endfor %}
 
           [DEPLOY] Next Steps:
