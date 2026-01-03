@@ -17,13 +17,13 @@
           - vault_domain_name: {{ vault_domain_name | default('UNDEFINED') }}
           - vault_letsencrypt_email: {{ vault_letsencrypt_email | default('UNDEFINED') }}
 
-    - name: Force load backup_targets variable from hostvars
+    - name: Force load coordinator_targets variable from hostvars
       set_fact:
-        backup_targets: "{{ hostvars[inventory_hostname]['backup_targets'] }}"
+        coordinator_targets: "{{ hostvars[inventory_hostname]['coordinator_targets'] }}"
 
-    - name: Verify backup_targets was loaded
+    - name: Verify coordinator_targets was loaded
       debug:
-        msg: "backup_targets loaded: {{ backup_targets is defined }} ({{ backup_targets | length }} items)"
+        msg: "coordinator_targets loaded: {{ coordinator_targets is defined }} ({{ coordinator_targets | length }} items)"
 
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
@@ -31,9 +31,9 @@
           [DEBUG] Playbook Variable Debug:
           - backup_role: {{ backup_role | default('UNDEFINED') }}
           - backup_base_path: {{ backup_base_path | default('UNDEFINED') }}
-          - backup_targets defined: {{ backup_targets is defined }}
-          {% if backup_targets is defined %}
-          - backup_targets count: {{ backup_targets | length }}
+          - coordinator_targets defined: {{ coordinator_targets is defined }}
+          {% if coordinator_targets is defined %}
+          - coordinator_targets count: {{ coordinator_targets | length }}
           {% endif %}
           - device_role: {{ device_role | default('UNDEFINED') }}
           - Working directory: {{ ansible_env.PWD | default('UNDEFINED') }}
@@ -44,15 +44,15 @@
           [DEPLOY] Deploying Backup Coordinator
 
           Host: {{ inventory_hostname }}
-          Targets: {{ backup_targets | length }} configured
+          Targets: {{ coordinator_targets | length }} configured
           Base Path: {{ backup_base_path }}
 
           Target Services:
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           - {{ target.service_name }}: {{ target.hostname }}
             Repository: {{ target.restic_repository }}
           {% endfor %}
-      when: backup_targets is defined
+      when: coordinator_targets is defined
 
   roles:
     - role: backup
@@ -69,7 +69,7 @@
 
           # Check coordinator services
           echo "Checking coordinator services..."
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           if systemctl is-enabled backup-{{ target.service_name }}.timer >/dev/null 2>&1; then
               echo "[OK] backup-{{ target.service_name }}.timer: Enabled"
           else
@@ -79,7 +79,7 @@
 
           # Check SSH connectivity
           echo "Testing SSH connectivity..."
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           if ssh -i "$BACKUP_BASE/.ssh/backup-{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.hostname }} "echo 'SSH OK'" >/dev/null 2>&1; then
               echo "[OK] {{ target.service_name }}: SSH connectivity OK"
           else
@@ -90,7 +90,7 @@
 
           # Check repositories
           echo "Checking repository access..."
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           export RESTIC_REPOSITORY="{{ target.restic_repository }}"
           export RESTIC_PASSWORD_FILE="$BACKUP_BASE/keys/{{ target.service_name }}-password"
           if restic snapshots >/dev/null 2>&1; then
@@ -102,7 +102,7 @@
 
           echo ""
           echo "[TARGET] Quick Test Commands:"
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           echo "{{ target.service_name }}: systemctl start backup-{{ target.service_name }}.service"
           {% endfor %}
         dest: "{{ backup_base_path }}/scripts/backup-verify-coordinator.sh"
@@ -118,11 +118,11 @@
           [stats] coordinator configuration:
           - host: {{ inventory_hostname }}
           - base path: {{ backup_base_path }}
-          - targets: {{ backup_targets | length }} services configured
+          - targets: {{ coordinator_targets | length }} services configured
           - monitoring: {{ backup_monitoring }}
 
           [TOOL] Deployed Services:
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           - backup-{{ target.service_name }}.service
           - backup-{{ target.service_name }}.timer
           {% endfor %}
@@ -130,7 +130,7 @@
           - backup-metrics.service
 
           [KEYS] SSH Key Deployment Required:
-          {% for target in backup_targets %}
+          {% for target in coordinator_targets %}
           {{ target.service_name }}:
             ssh-copy-id -i {{ backup_base_path }}/.ssh/backup-{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.hostname }}
           {% endfor %}
