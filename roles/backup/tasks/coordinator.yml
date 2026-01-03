@@ -157,7 +157,7 @@
 - name: Display repository status for each target
   ansible.builtin.debug:
     msg: "{{ item.item.service_name }} repository: {{ 'Accessible' if item.rc == 0 else 'Not accessible or not initialized' }}"
-  loop: "{{ target_repo_status.results }}"
+  loop: "{{ repo_init_output.results }}"
   loop_control:
     label: "{{ item.item.service_name }}"
 
