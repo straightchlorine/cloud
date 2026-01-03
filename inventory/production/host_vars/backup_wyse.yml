@@ -21,7 +21,7 @@ restic_version: "0.18.1"
 backup_restic_version: "0.18.1"
 
 # Backup targets (Raspberry Pis) - pulled by coordinator
-backup_targets:
+coordinator_targets:
   - service_name: pi-dns
     hostname: pihole
     target_host: pihole
