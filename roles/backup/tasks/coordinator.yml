@@ -140,6 +140,7 @@
     label: "{{ item.service_name }}"
   vars:
     restic_repository: "{{ item.restic_repository }}"
+    restic_password_file: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     backup_directories: "{{ item.backup_paths }}"
     device_role: "coordinator-{{ item.service_name }}"
     service_name: "{{ item.service_name }}"
