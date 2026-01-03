@@ -9,12 +9,13 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ target.restic_repository }}"
 export RESTIC_PASSWORD="{{ target.restic_password }}"
 export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ target.service_name }}"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Target configuration
 SERVICE_NAME="{{ target.service_name }}"
 TARGET_HOSTNAME="{{ target.hostname }}"
 TARGET_USER="{{ target.ssh_user }}"
-SSH_KEY="{{ target.ssh_key }}"
+SSH_CONFIG="{{ backup_base_path }}/.ssh/config"
 LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 
 # Backup paths on remote system
@@ -43,9 +44,6 @@ RETENTION_DAILY="{{ target.retention_policy.daily }}"
 RETENTION_WEEKLY="{{ target.retention_policy.weekly }}"
 RETENTION_MONTHLY="{{ target.retention_policy.monthly }}"
 RETENTION_YEARLY="{{ target.retention_policy.yearly }}"
-
-# SSH options for remote connection
-SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 -o ConnectTimeout=30"
 
 # SSHFS mount point for this backup
 MOUNT_POINT="{{ backup_base_path }}/mounts/${SERVICE_NAME}"
@@ -103,9 +101,9 @@ check_prerequisites() {
     local restic_ver=$(restic version | head -1 | awk '{print $2}')
     log "Using restic version: $restic_ver"
 
-    # Check SSH key exists
-    if [[ ! -f "$SSH_KEY" ]]; then
-        error_exit "SSH key not found: $SSH_KEY"
+    # Check SSH config exists
+    if [[ ! -f "$SSH_CONFIG" ]]; then
+        error_exit "SSH config not found: $SSH_CONFIG"
     fi
 
     # Check password is set
@@ -136,7 +134,7 @@ check_prerequisites() {
 test_remote_connectivity() {
     log "Testing SSH connectivity to ${TARGET_HOSTNAME}..."
 
-    if ssh -i "${SSH_KEY}" -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "${TARGET_USER}@${TARGET_HOSTNAME}" "echo 'SSH connection successful'" >/dev/null 2>&1; then
+    if ssh -F "${SSH_CONFIG}" "${TARGET_HOSTNAME}" "echo 'SSH connection successful'" >/dev/null 2>&1; then
         log "SSH connectivity test passed"
     else
         error_exit "Cannot connect to ${TARGET_HOSTNAME} via SSH"
@@ -146,7 +144,7 @@ test_remote_connectivity() {
     log "Verifying remote backup paths..."
     local missing_paths=0
     for path in "${BACKUP_PATHS[@]}"; do
-        if ! ssh -i "${SSH_KEY}" "${TARGET_USER}@${TARGET_HOSTNAME}" "test -e '${path}'" 2>/dev/null; then
+        if ! ssh -F "${SSH_CONFIG}" "${TARGET_HOSTNAME}" "test -e '${path}'" 2>/dev/null; then
             log "WARNING: Remote path does not exist: $path"
             missing_paths=$((missing_paths + 1))
         fi
@@ -183,12 +181,9 @@ mount_remote_filesystem() {
     # Mount remote root filesystem via SSHFS
     # This gives us access to all backup paths
     if sshfs \
-        "${TARGET_USER}@${TARGET_HOSTNAME}:/" \
+        "${TARGET_HOSTNAME}:/" \
         "$MOUNT_POINT" \
-        -o IdentityFile="${SSH_KEY}" \
-        -o StrictHostKeyChecking=accept-new \
-        -o Compression=yes \
-        -o ServerAliveInterval=60 \
+        -o ssh_command="ssh -F ${SSH_CONFIG}" \
         -o reconnect \
         -o allow_other \
         -o default_permissions; then

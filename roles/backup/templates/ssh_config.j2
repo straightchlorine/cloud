@@ -47,3 +47,18 @@ Host hetzner-storage
 
     # Optimized for backup workload
     TCPKeepAlive yes
+
+{% if backup_role == "coordinator" %}
+# Coordinator Target Hosts
+{% for target in backup_targets %}
+Host {{ target.hostname }}
+    HostName {{ target.hostname }}
+    User {{ target.ssh_user }}
+    IdentityFile {{ target.ssh_key }}
+    StrictHostKeyChecking accept-new
+    Compression yes
+    ServerAliveInterval 60
+    TCPKeepAlive yes
+
+{% endfor %}
+{% endif %}
