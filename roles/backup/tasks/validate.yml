@@ -153,6 +153,18 @@
         fail_msg: "Coordinator target service_name values must be unique"
         success_msg: "All coordinator targets have unique service names"
 
+    - name: Check Hetzner SSH key file exists
+      ansible.builtin.stat:
+        path: "{{ backup_base_path }}/.ssh/hetzner"
+      register: coordinator_hetzner_key
+
+    - name: Warn if Hetzner key missing for coordinator
+      ansible.builtin.debug:
+        msg: |
+          WARNING: Hetzner SSH key not found at {{ backup_base_path }}/.ssh/hetzner
+          Manual key placement is required for backup functionality.
+      when: not coordinator_hetzner_key.stat.exists
+
 - name: Validate backup_excludes format (if defined)
   when: backup_excludes is defined
   ansible.builtin.assert:

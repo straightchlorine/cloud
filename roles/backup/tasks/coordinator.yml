@@ -15,6 +15,60 @@
     label: "{{ item.service_name }}"
   register: target_ssh_keys
 
+- name: Create SSH key subdirectory for coordinator nodes
+  ansible.builtin.file:
+    path: "{{ backup_base_path }}/.ssh/nodes"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0700'
+  become: true
+
+- name: Check if Hetzner SSH key exists
+  ansible.builtin.stat:
+    path: "{{ backup_base_path }}/.ssh/hetzner"
+  become: true
+  register: hetzner_ssh_key_stat
+
+- name: Display manual Hetzner SSH key setup instructions
+  ansible.builtin.debug:
+    msg: |
+      [SSH KEY FOR HETZNER STORAGE BOX]
+      The SSH private key does not exist at: {{ backup_base_path }}/.ssh/hetzner
+
+      To set up the single shared key:
+      1. Place your existing private key at: {{ backup_base_path }}/.ssh/hetzner
+      2. Set permissions: chmod 600 {{ backup_base_path }}/.ssh/hetzner
+      3. Set ownership: chown {{ backup_user }}:{{ backup_group }} {{ backup_base_path }}/.ssh/hetzner
+  when: not hetzner_ssh_key_stat.stat.exists
+
+- name: Deploy SSH config for coordinator connections
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ backup_base_path }}/.ssh/config"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+  become: true
+
+- name: Test SSH connectivity to Hetzner Storage Box
+  ansible.builtin.command: >
+    ssh -F {{ backup_base_path }}/.ssh/config
+    -o StrictHostKeyChecking=accept-new
+    -o ConnectTimeout=10
+    hetzner-storage
+    echo 'Connection successful'
+  become: true
+  become_user: "{{ backup_user }}"
+  register: hetzner_ssh_test
+  failed_when: false
+  changed_when: false
+
+- name: Warn if Hetzner SSH connection failed
+  ansible.builtin.debug:
+    msg: "WARNING: Could not connect to Hetzner Storage Box. Please verify SSH key is deployed."
+  when: hetzner_ssh_test.rc != 0
+
 - name: Display SSH public keys for target configuration
   ansible.builtin.debug:
     msg: |

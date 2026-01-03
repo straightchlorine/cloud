@@ -26,7 +26,7 @@ coordinator_targets:
     hostname: pihole
     target_host: pihole
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-dns"
+    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-dns"
     backup_schedule: "*-*-* 01:00:00"
     backup_paths:
       - /etc/pihole
@@ -38,7 +38,7 @@ coordinator_targets:
       - "*.tmp"
       - "cache/*"
       - "*.log.1*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-dns"
+    restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-dns"
     restic_password: "{{ vault_restic_pi_dns_password }}"
     retention_policy:
       daily: 14
@@ -56,7 +56,7 @@ coordinator_targets:
     hostname: automation
     target_host: automation
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-automation"
+    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-automation"
     backup_schedule: "*-*-* 02:00:00"
     backup_paths:
       - /opt/automation
@@ -67,7 +67,7 @@ coordinator_targets:
       - "*/logs/*"
       - "*.log"
       - "*/tmp/*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-automation"
+    restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-automation"
     restic_password: "{{ vault_restic_pi_automation_password }}"
     retention_policy:
       daily: 14
@@ -85,7 +85,7 @@ coordinator_targets:
     hostname: media
     target_host: media
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/backup-pi-music"
+    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-music"
     backup_schedule: "*-*-* 03:00:00"
     backup_paths:
       - /opt/music
@@ -97,7 +97,7 @@ coordinator_targets:
       - "*.tmp"
       - "*/thumbnails/*"
       - "*/logs/*"
-    restic_repository: "sftp:{{ vault_backup_storage_user }}@{{ vault_backup_storage_host }}:{{ vault_backup_storage_port }}{{ vault_backup_repository_base }}/pi-music"
+    restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-music"
     restic_password: "{{ vault_restic_pi_music_password }}"
     retention_policy:
       daily: 7

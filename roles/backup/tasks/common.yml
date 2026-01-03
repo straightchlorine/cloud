@@ -33,6 +33,7 @@
     - "{{ backup_base_path }}/cache"
     - "{{ backup_base_path }}/.ssh"
     - "{{ backup_base_path }}/.ssh/sockets"
+    - "{{ backup_base_path }}/.ssh/nodes"
   become: true
 
 - name: Create coordinator-specific directories

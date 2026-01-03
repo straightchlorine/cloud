@@ -50,14 +50,24 @@ Host hetzner-storage
 
 {% if backup_role == "coordinator" %}
 # Coordinator Target Hosts
-{% for target in backup_targets %}
+{% for target in coordinator_targets %}
 Host {{ target.hostname }}
     HostName {{ target.hostname }}
     User {{ target.ssh_user }}
     IdentityFile {{ target.ssh_key }}
+    BatchMode yes
+    PasswordAuthentication no
     StrictHostKeyChecking accept-new
     Compression yes
-    ServerAliveInterval 60
+
+    # Connection reuse for efficiency
+    ControlMaster auto
+    ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
+    ControlPersist -1
+
+    # Keep-alive for SSHFS mounts
+    ServerAliveInterval 30
+    ServerAliveCountMax 10
     TCPKeepAlive yes
 
 {% endfor %}
