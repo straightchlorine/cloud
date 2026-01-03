@@ -17,6 +17,7 @@
     createhome: true
     system: true
   become: true
+  ignore_errors: true
 
 - name: Create backup directory structure
   ansible.builtin.file:
