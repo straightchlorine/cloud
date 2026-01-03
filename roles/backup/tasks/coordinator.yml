@@ -2,6 +2,14 @@
 # Coordinator Backup Mode Tasks
 # For backup coordinator that pulls backups from multiple remote hosts
 
+- name: Enable user_allow_other in fuse.conf for SSHFS mounts
+  ansible.builtin.lineinfile:
+    path: /etc/fuse.conf
+    regexp: '^\s*#?\s*user_allow_other'
+    line: 'user_allow_other'
+    state: present
+  become: true
+
 - name: Create SSH keys for each coordinator target
   ansible.builtin.openssh_keypair:
     path: "{{ item.ssh_key }}"

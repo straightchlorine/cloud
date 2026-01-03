@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ target.restic_repository }}"
-export RESTIC_PASSWORD="{{ target.restic_password }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ target.service_name }}-password"
 export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ target.service_name }}"
 export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
@@ -106,9 +106,9 @@ check_prerequisites() {
         error_exit "SSH config not found: $SSH_CONFIG"
     fi
 
-    # Check password is set
-    if [[ -z "$RESTIC_PASSWORD" ]]; then
-        error_exit "RESTIC_PASSWORD is not set"
+    # Check password file exists
+    if [[ ! -f "$RESTIC_PASSWORD_FILE" ]]; then
+        error_exit "Password file not found: $RESTIC_PASSWORD_FILE"
     fi
 
     # Check cache directory exists
@@ -160,7 +160,7 @@ test_remote_connectivity() {
 test_repository_connectivity() {
     log "Testing repository connectivity for ${SERVICE_NAME}..."
 
-    if restic snapshots --latest 1 >/dev/null 2>&1; then
+    if restic snapshots -o sftp.command="$RESTIC_SFTP_COMMAND" --latest 1 >/dev/null 2>&1; then
         log "Repository connectivity test passed"
         return 0
     else
@@ -227,7 +227,7 @@ perform_backup() {
     log "Starting backup for ${SERVICE_NAME} from mounted filesystem..."
 
     # Build backup command - backup from SSHFS mount to Hetzner
-    local backup_cmd="restic backup"
+    local backup_cmd="restic backup -o sftp.command=\"$RESTIC_SFTP_COMMAND\""
 
     # Add paths from mount point
     for path in "${BACKUP_PATHS[@]}"; do
@@ -272,7 +272,7 @@ perform_backup() {
 cleanup_old_snapshots() {
     log "Cleaning up old snapshots for ${SERVICE_NAME}..."
 
-    local cleanup_cmd="restic forget"
+    local cleanup_cmd="restic forget -o sftp.command=\"$RESTIC_SFTP_COMMAND\""
     cleanup_cmd="$cleanup_cmd --tag ${SERVICE_NAME}"
     cleanup_cmd="$cleanup_cmd --keep-daily ${RETENTION_DAILY}"
     cleanup_cmd="$cleanup_cmd --keep-weekly ${RETENTION_WEEKLY}"
@@ -294,7 +294,7 @@ cleanup_old_snapshots() {
 get_backup_stats() {
     log "Getting backup statistics for ${SERVICE_NAME}..."
 
-    if restic snapshots --tag "${SERVICE_NAME}" --json > /tmp/snapshots-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+    if restic snapshots -o sftp.command="$RESTIC_SFTP_COMMAND" --tag "${SERVICE_NAME}" --json > /tmp/snapshots-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
         local snapshot_count=$(jq length /tmp/snapshots-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
         log "Total snapshots for ${SERVICE_NAME}: $snapshot_count"
 
@@ -308,7 +308,7 @@ get_backup_stats() {
     fi
 
     # Get repository stats
-    if restic stats --mode raw-data --json > /tmp/stats-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
+    if restic stats -o sftp.command="$RESTIC_SFTP_COMMAND" --mode raw-data --json > /tmp/stats-${SERVICE_NAME}.json 2>>"$LOG_FILE"; then
         local total_size=$(jq -r '.total_size' /tmp/stats-${SERVICE_NAME}.json 2>/dev/null || echo "unknown")
         local total_size_mb=$((total_size / 1024 / 1024))
         log "Repository total size: ${total_size_mb}MB"
