@@ -106,6 +106,27 @@
   loop_control:
     label: "{{ item.item.service_name }}"
 
+- name: Create keys directory for coordinator
+  ansible.builtin.file:
+    path: "{{ backup_base_path }}/keys"
+    state: directory
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0700'
+  become: true
+
+- name: Create password files for each coordinator target
+  ansible.builtin.copy:
+    content: "{{ item.restic_password }}"
+    dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
+    owner: "{{ backup_user }}"
+    group: "{{ backup_group }}"
+    mode: '0600'
+  become: true
+  loop: "{{ coordinator_targets }}"
+  loop_control:
+    label: "{{ item.service_name }}"
+
 - name: Deploy repository initialization scripts for each target
   ansible.builtin.template:
     src: init-repositories.sh.j2
@@ -119,9 +140,10 @@
     label: "{{ item.service_name }}"
   vars:
     restic_repository: "{{ item.restic_repository }}"
-    restic_password: "{{ item.restic_password }}"
     backup_directories: "{{ item.backup_paths }}"
     device_role: "coordinator-{{ item.service_name }}"
+    service_name: "{{ item.service_name }}"
+    item: "{{ item }}"
 
 - name: Run repository initialization for each target
   ansible.builtin.command: "{{ backup_base_path }}/scripts/init-{{ item.service_name }}.sh --check-only"

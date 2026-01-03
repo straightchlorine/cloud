@@ -13,7 +13,7 @@ LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
 # Restic environment configuration
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_PASSWORD_FILE="${BACKUP_BASE}/keys/{{ service_name }}-password"
 export RESTIC_SFTP_COMMAND="ssh -F ${BACKUP_BASE}/.ssh/config hetzner-storage -s sftp"
 
 # Colors for output
@@ -43,13 +43,13 @@ success() {
 
 # Warning message
 warning() {
-    echo -e "${YELLOW}[WARN]  $1${NC}"
+    echo -e "${YELLOW}[WARN] $1${NC}"
     log "WARNING: $1"
 }
 
 # Info message
 info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    echo -e "${BLUE}[INFO] $1${NC}"
     log "INFO: $1"
 }
 
@@ -210,7 +210,7 @@ create_health_check() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ service_name }}-password"
 export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Check repository integrity
@@ -251,7 +251,7 @@ create_backup_validation() {
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD="{{ restic_password }}"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ service_name }}-password"
 export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Validate backup directories exist and are accessible
