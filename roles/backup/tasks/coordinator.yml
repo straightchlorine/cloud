@@ -111,6 +111,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ item.restic_repository }}"
     RESTIC_PASSWORD: "{{ item.restic_password }}"
+    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   loop: "{{ coordinator_targets }}"
@@ -125,6 +126,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ item.restic_repository }}"
     RESTIC_PASSWORD: "{{ item.restic_password }}"
+    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   loop: "{{ coordinator_targets }}"
