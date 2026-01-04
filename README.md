@@ -2,6 +2,9 @@
 
 Ansible-based infrastructure deployment for Raspberry Pi homelab with enterprise-grade features.
 
+
+**Repository:** [Codeberg](https://codeberg.org/piotrkrzysztof/cloud) (primary) · [GitHub](https://github.com/straightchlorine/cloud) (mirror)
+
 ## Architecture and network topology
 
 ```mermaid
