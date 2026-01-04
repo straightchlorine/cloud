@@ -35,6 +35,19 @@ http:
         - body-limit
         - default-headers
 
+    kuma:
+      rule: "Host(`kuma.{{ domain_name }}`)"
+      entryPoints:
+        - websecure
+      service: kuma
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - rate-limit
+        - body-limit
+        - default-headers
+
+
     navidrome:
       rule: "Host(`navidrome.{{ domain_name }}`)"
       entryPoints:
@@ -100,6 +113,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://{{ hostvars['debian-monitoring']['primary_ip'] }}:3000"
+
+    kuma:
+      loadBalancer:
+        servers:
+          - url: "http://{{ hostvars['debian-monitoring']['primary_ip'] }}"
 
     navidrome:
       loadBalancer:
