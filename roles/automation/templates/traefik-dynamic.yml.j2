@@ -74,15 +74,15 @@ http:
   serversTransports:
     opnsense-transport:
       insecureSkipVerify: false
-      serverName: "opnsense.codextechnologies.org"
+      serverName: "opnsense.{{ domain_name }}"
 
     euler-transport:
       insecureSkipVerify: false
-      serverName: "euler.codextechnologies.org"
+      serverName: "euler.{{ domain_name }}"
 
     kepler-transport:
       insecureSkipVerify: false
-      serverName: "kepler.codextechnologies.org"
+      serverName: "kepler.{{ domain_name }}"
 
   services:
     opnsense:

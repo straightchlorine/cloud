@@ -1,18 +1,39 @@
 # Infrastructure Automation
 
-Ansible-based infrastructure deployment for Raspberry Pi homelab with enterprise-grade backup system.
+Ansible-based infrastructure deployment for Raspberry Pi homelab with enterprise-grade features.
 
-## Architecture
+## Architecture and network topology
+
+```mermaid
+graph TB
+    subgraph VLAN["Services VLAN - (192.168.20.0/24)"]
+        direction LR
+        dns["<b>pi-dns</b><br/>192.168.20.10<br/>━━━━━━━━━━━━<br/>Pi-hole DNS"]
+        music["<b>pi-music</b><br/>192.168.20.15<br/>━━━━━━━━━━━━<br/>Navidrome<br/>yt-dlp cron<br/>Beets"]
+        automation["<b>pi-automation</b><br/>192.168.20.20<br/>━━━━━━━━━━━━<br/>Traefik<br/>InfluxDB<br/>Vaultwarden<br/>Portainer<br/>Dozzle<br/>Firefly III"]
+        monitoring["<b>debian-monitoring</b><br/>192.168.20.5<br/>━━━━━━━━━━━━<br/>Grafana<br/>Prometheus<br/>Loki<br/>Alertmanager"]
+    end
+    backup["Backup Server<br/>(Restic)"]
+    cloudflare["Cloudflare<br/>(DNS + SSL)"]
+
+    VLAN -->|Backups| backup
+    VLAN -->|DNS/Certs| cloudflare
+    backup --> |SFTP| Hetzner
+    dns -.->|Monitoring| monitoring
+    music -.->|Monitoring| monitoring
+    automation -.->|Monitoring| monitoring
+```
 
 ### Hosts
-- **pi-dns** (192.168.20.10): Pi-hole DNS server + NTP
-- **pi-music** (192.168.20.15): Navidrome music server + YouTube sync
-- **pi-automation** (192.168.20.20): Traefik reverse proxy + automation services
-- **debian-monitoring** (192.168.20.5): Grafana + Prometheus + Loki monitoring stack
+- **[pi-dns](roles/dns/README.md)** (192.168.20.10): Pi-hole DNS + NTP
+- **[pi-music](roles/music-stack/README.md)** (192.168.20.15): Navidrome music streaming
+- **[pi-automation](roles/automation/README.md)** (192.168.20.20): Traefik + key services
+- **[debian-monitoring](roles/monitoring/README.md)** (192.168.20.5): Grafana + Prometheus + Loki
+
+#### Services by Host
 
 ### Network
 - **VLAN**: 192.168.20.0/24 (Services)
-- **SSH Key**: `~/.ssh/ansible_controller_key`
 - **Inventory**: `inventory/production/hosts.yml`
 
 ## Quick Deploy
@@ -46,64 +67,43 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/automation-stack.ym
 ansible-playbook -i inventory/production/hosts.yml deploy-backup.yml --ask-vault-pass
 ```
 
+## Advanced Topics
+
+- **[Backup System](docs/backup-system.md)** - Multi-repository strategy, restore testing, compliance
+- **[Monitoring Stack](docs/monitoring-stack.md)** - Infrastructure architecture, advanced configuration, optimization
+- **[Testing](docs/testing.md)** - Testing requirements and current setup
+
 ## Validation
 
-### Pre-deployment
+Comprehensive pre and post-deployment validation:
+
 ```bash
+# Pre-deployment validation
 ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --tags validation --ask-vault-pass
-```
 
-### Infrastructure health
-```bash
+# Infrastructure health check
 ansible-playbook -i inventory/production/hosts.yml validate-infrastructure.yml --ask-vault-pass
+
+# Quick mode (for monitoring)
+ansible-playbook -i inventory/production/hosts.yml validate-infrastructure.yml -e quick_mode=true --ask-vault-pass
 ```
 
-## Service Access
+## Service Roles
 
-### DNS (pi-dns)
-- **Pi-hole Admin**: http://192.168.20.10/admin
-- **Netdata**: http://192.168.20.10:19999
-- **Node Exporter**: http://192.168.20.10:9100/metrics
-
-### Music (pi-music)
-- **Navidrome**: http://192.168.20.15:4545
-- **Management**: `music-stack {start|stop|restart|status}`
-
-### Automation (pi-automation)
-- **Traefik Dashboard**: https://traefik.yourdomain.com
-- **Management**: `manage-automation {start|stop|restart|status|logs}`
-
-### Monitoring (debian-monitoring)
-- **Grafana**: http://192.168.20.5:3000
-- **Prometheus**: http://192.168.20.5:9090
-- **Loki**: http://192.168.20.5:3100
+- **[DNS Server](roles/dns/README.md)** - Pi-hole DNS
+- **[Music Stack](roles/music-stack/README.md)** - Navidrome + yt-dlp cron + Beets
+- **[Automation Stack](roles/automation/README.md)** - Traefik + InfluxDB + Vaultwarden + Portainer
+- **[Monitoring Stack](roles/monitoring/README.md)** - Grafana + Prometheus + Loki + Alertmanager
+- **[Backup System](roles/backup/README.md)** - Restic with multi-tier repositories and restore testing
 
 ## Configuration
 
-### Required Variables (vault.yml)
-```yaml
-# Domain & SSL
-vault_domain_name: "yourdomain.com"
-vault_letsencrypt_email: "your@email.com"
+All sensitive variables must be set in `inventory/production/group_vars/all/vault.yml` (not in repo).
 
-# DNS
-vault_pihole_admin_password: "secure_password"
-vault_pihole_webpassword: "secure_password"
-
-# Automation
-vault_traefik_basic_auth: "user:hashed_password"
-vault_cloudflare_api_token: "your_cloudflare_token"
-
-# Monitoring
-vault_grafana_admin_password: "secure_password"
-
-# Backup
-vault_backup_repository_base: "sftp:user@backup-server:/backups"
-vault_restic_dns_password: "32_char_password"
-vault_restic_music_password: "32_char_password"
-vault_restic_automation_password: "32_char_password"
-vault_restic_monitoring_password: "32_char_password"
-```
+See [vault.yml.example](inventory/production/group_vars/vault.yml.example) for complete variable reference with:
+- **Required variables** - Deployment will fail if missing
+- **Optional variables** - Only needed for specific features
+- **Validation hints** - Requirements and generation commands
 
 ### Host Variables
 - **DNS**: `host_vars/pi-dns.yml`
@@ -111,40 +111,18 @@ vault_restic_monitoring_password: "32_char_password"
 - **Automation**: `host_vars/pi-automation.yml`
 - **Monitoring**: `host_vars/debian-monitoring.yml`
 
-## Architecture Features
-
-### Security
-- Docker user namespace mapping (`userns-remap: default`)
-- Management interfaces bound to localhost only
-- Fail2ban SSH protection
-- Individual service password files
-- No default values (explicit configuration required)
-
-### Reliability
-- Pre-deployment validation (fail-fast)
-- Comprehensive health checks
-- Enterprise backup with retention policies
-- Systemd service management
-- Hardware detection and resource allocation
-
-### Maintainability
-- Unified validation framework (`roles/common/tasks/unified_validation.yml`)
-- Shared Docker compose generation (`roles/common/tasks/build_docker_compose.yml`)
-- Common network facts collection (`roles/common/tasks/network_facts.yml`)
-- Centralized package management (`roles/common/tasks/packages.yml`)
-
 ## Development
 
 ### Role Structure
 ```
 roles/
-├── common/           # Shared functionality
-├── dns/             # Pi-hole DNS server
-├── music-stack/     # Navidrome music server
-├── automation/      # Traefik automation services
-├── monitoring/      # Grafana/Prometheus/Loki
-├── enterprise-backup/ # Multi-repository backup
-└── firewall/        # UFW configuration
+├── common/            # Shared functionality
+├── dns/               # Pi-hole DNS server
+├── music-stack/       # Navidrome music server
+├── automation/        # Traefik automation services
+├── monitoring/        # Grafana/Prometheus/Loki
+├── backup/            # Multi-repository backup
+└── firewall/          # UFW configuration
 ```
 
 ### Adding New Services
@@ -165,50 +143,31 @@ ansible-playbook -vvv
 # Specific tags
 ansible-playbook --tags validation,docker
 
-# Skip validation (not recommended)
+# Skip validation
 ansible-playbook --skip-tags validation
 ```
 
 ## Backup & Recovery
 
-### Status Check
-```bash
-# Check all repositories
-ansible-playbook -i inventory/production/hosts.yml test-enterprise-backup-pipeline.yml
+Backup architecture for now actively supports Debian and Arch Linux distributions,
+with Gentoo being in plans.
 
-# Manual backup status
-sudo systemctl status backup-coordinator
-```
+### Differences between distributions
+
+Ther seems to be some disrepancy in the way `restic` works with `SFTP` protocol:
+
+* For **Arch Linux**, just having `RESTIC_SFTP_COMMAND` environment variable defined
+is enough to run `restic` commands, such as `restic init` or `restic snapshots`.
+
+* For **Debian 13 (trixie)** this variable doesn't seem to be used/parsed from
+the environment. As such, using option parameter is required:
+**`restic -o sftp.command=$RESTIC_SFTP_COMMAND [command]`**
 
 ### Manual Operations
 ```bash
-# Create backup
-sudo -u backup /opt/backup/scripts/backup-coordinator.sh
-
 # List snapshots
 sudo -u backup restic snapshots --password-file /opt/backup/keys/dns-password --repository [repo]
 
 # Restore
 sudo -u backup restic restore latest --target /tmp/restore --password-file /opt/backup/keys/[service]-password --repository [repo]
-```
-
-## Troubleshooting
-
-### Common Issues
-- **SSH key not found**: Verify `~/.ssh/ansible_controller_key` exists
-- **Vault access**: Check vault password and file permissions
-- **Port conflicts**: Services use specific ports, check firewall rules
-- **DNS resolution**: Domain must resolve for SSL certificates
-- **Disk space**: Ensure sufficient space for Docker images and data
-
-### Logs
-```bash
-# Service logs
-journalctl -u [service-name] -f
-
-# Docker logs
-docker compose -f /path/to/compose/docker-compose.yml logs -f
-
-# Backup logs
-tail -f /opt/backup/logs/backup-coordinator.log
 ```

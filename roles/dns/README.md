@@ -1,27 +1,88 @@
-# DNS Role - Secure Pi-hole Installation
+# DNS Role
 
-This role deploys Pi-hole DNS server using secure installation practices.
+Pi-hole DNS server service on Raspberry Pi 3B.
+
+## Services
+
+- **Pi-hole DNS Server** (:53): Ad-blocking DNS resolver
+- **Network Time Protocol** (:123): NTP server for time synchronization
+- **Monitoring**: Netdata, Node Exporter, Pi-hole Exporter
+
+## Deployment
+
+### Prerequisites
+
+- Raspberry Pi 3B or later
+- Network connectivity
+- DNS and NTP ports available
+
+### Deploy
+
+```bash
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit dns --ask-vault-pass
+```
+
+### Validation Only
+
+```bash
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit dns --tags validation --ask-vault-pass
+```
+
+## Configuration
+
+### Required Variables (vault.yml)
+
+```yaml
+# Pi-hole authentication
+vault_pihole_admin_password: "secure_password"
+vault_pihole_webpassword: "secure_password"
+
+# Backup configuration
+vault_restic_dns_password: "32_character_secure_password"
+vault_backup_repository_base: "sftp:user@backup-server:/backups"
+```
+
+### Host Variables (host_vars/pi-dns.yml)
+
+```yaml
+# Device configuration
+device_type: rpi3b
+dns_service: pihole
+dns_interface: "{{ primary_ip }}"
+
+# Pi-hole configuration
+pihole_interface: "{{ primary_interface }}"
+pihole_ipv4_address: "{{ host_ip_cidr }}"
+pihole_dns_servers:
+  - "{{ hostvars['firewall']['primary_ip'] }}#53"
+
+# Automatic updates
+auto_updates_enabled: true
+auto_updates_schedule: "0 2 * * 1"  # Monday 2 AM
+
+# NTP server
+ntp_server_enabled: true
+ntp_allowed_networks:
+  - "10.0.0.0/8"
+  - "192.168.0.0/16"
+  - "172.16.0.0/12"
+
+# Backup configuration
+restic_enabled: true
+restic_repository: "{{ vault_backup_repository_base }}/dns"
+restic_password: "{{ vault_restic_dns_password }}"
+backup_directories:
+  - "/etc/pihole"
+  - "/etc/chrony"
+  - "/var/log/pihole"
+  - "/opt/pihole"
+```
 
 ## Security Enhancements
 
-### Pi-hole Installation Security
-The role implements **secure installation practices** recommended by Pi-hole developers:
+### Pi-hole Security
+The role provides the [recommended](https://docs.pi-hole.net/main/basic-install/) way of installation:
 
-```yaml
-# Secure installation method (replaces curl-to-bash)
-✅ Official GitHub repository clone
-✅ Pinned version tags for reproducibility
-✅ Commit hash verification for integrity
-✅ Code review opportunity before installation
-✅ Verifiable source and provenance
-```
-
-**Before (Insecure)**:
-```bash
-curl -sSL https://install.pi-hole.net | bash
-```
-
-**After (Secure)**:
 ```bash
 git clone --depth 1 --branch v5.18.3 https://github.com/pi-hole/pi-hole.git
 cd pi-hole/automated\ install/
@@ -33,7 +94,7 @@ bash basic-install.sh --unattended
 #### Security Configuration
 ```yaml
 pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-pihole_version: "v5.18.3"  # Pin to verified release
+pihole_version: "v6.2"
 pihole_verify_commit: true
 ```
 
@@ -51,19 +112,31 @@ vault_pihole_admin_password: "secure-admin-password"
 4. **Configuration**: Applies Pi-hole settings from templates
 5. **Cleanup**: Removes temporary repository after installation
 
-## Security Benefits
-
-- **No Remote Code Execution**: Eliminates curl-to-bash security risk
-- **Version Pinning**: Ensures reproducible, tested deployments
-- **Source Verification**: Cryptographic verification of installation source
-- **Audit Trail**: Clear record of exact Pi-hole version deployed
-- **Code Review**: Opportunity to inspect installation script before execution
-
 ## Dependencies
 
 - `git` package (automatically installed)
-- Network connectivity to GitHub
+- Network connectivity
 - Sudo privileges for Pi-hole installation
+
+### Access Control
+
+- **Admin Interface**: Password protected at `http://<ip>/admin`
+- **DNS Interface**: Bound to specific network interface
+- **SSH**: Fail2ban protection enabled
+
+## Network Configuration
+
+### Client Setup
+
+Configure devices to use selected `ip` as primary DNS server for ad-blocking.
+
+### Router Configuration
+
+Set Pi-hole as upstream DNS in router settings, or configure DHCP to provide Pi-hole as DNS server.
+
+### Upstream DNS
+
+Pi-hole forwards to firewall/router DNS by default. Modify `pihole_dns_servers` in host_vars to change upstream servers.
 
 ## Validation
 
@@ -74,8 +147,3 @@ The role includes comprehensive validation that checks:
 - Port availability (53, 80)
 - Sufficient disk space
 - Internet connectivity
-
-Run validation before deployment:
-```bash
-ansible-playbook -i inventory validate-deployment.yml --limit pi-dns
-```

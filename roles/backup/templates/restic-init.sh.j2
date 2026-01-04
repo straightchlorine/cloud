@@ -38,7 +38,7 @@ fi
 echo "$(date): Initializing restic repository..." | tee -a "$LOG_FILE"
 if restic -o sftp.command="$RESTIC_SFTP_COMMAND" init >> "$LOG_FILE" 2>&1; then
     echo "$(date): Repository initialized successfully" | tee -a "$LOG_FILE"
-elif restic snapshots >> "$LOG_FILE" 2>&1; then
+elif restic -o sftp.command="$RESTIC_SFTP_COMMAND" snapshots >> "$LOG_FILE" 2>&1; then
     echo "$(date): Repository already exists and is accessible" | tee -a "$LOG_FILE"
 else
     echo "$(date): ERROR: Failed to initialize or access repository" | tee -a "$LOG_FILE"

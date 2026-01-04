@@ -107,7 +107,7 @@ coordinator_targets:
       - /var/lib/docker/volumes
       - /var/log
       - /home/media
-      - /mnt/music
+      - /mnt/data
       - /root/.ssh
     backup_excludes:
       - /var/cache/*
