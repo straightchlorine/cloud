@@ -1,0 +1,28 @@
+---
+- name: Verify network facts detection
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Assert network facts are defined
+      ansible.builtin.assert:
+        that:
+          - primary_interface is defined and primary_interface | length > 0
+          - primary_ip is defined and primary_ip | ansible.utils.ipv4
+          - host_ip_cidr is defined and '/' in host_ip_cidr
+          - primary_network_cidr is defined
+        fail_msg: |
+          Network facts validation failed:
+          primary_interface: {{ primary_interface | default('UNDEFINED') }}
+          primary_ip: {{ primary_ip | default('UNDEFINED') }}
+          host_ip_cidr: {{ host_ip_cidr | default('UNDEFINED') }}
+          primary_network_cidr: {{ primary_network_cidr | default('UNDEFINED') }}
+
+    - name: Display network facts
+      ansible.builtin.debug:
+        msg: |
+          ✓ Network Facts:
+          - Interface: {{ primary_interface }}
+          - IP Address: {{ primary_ip }}
+          - Host CIDR: {{ host_ip_cidr }}
+          - Network CIDR: {{ primary_network_cidr }}

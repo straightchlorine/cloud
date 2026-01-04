@@ -1,0 +1,19 @@
+---
+- name: Verify fail-fast validation test
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Assert that expected failure was caught
+      ansible.builtin.assert:
+        that:
+          - fail_fast_test_passed is defined
+          - fail_fast_test_passed | bool
+        fail_msg: "Fail-fast validation test did not complete as expected"
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: |
+          ✓ Fail-Fast Validation Test PASSED:
+          The role correctly implements fail-fast behavior
+          by failing when required variables are missing.

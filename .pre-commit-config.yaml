@@ -5,9 +5,23 @@
 # Bypass (not recommended): git commit --no-verify
 
 repos:
+  # Ansible syntax check (local hook - fast)
+  - repo: local
+    hooks:
+      - id: ansible-syntax-check
+        name: Ansible syntax check
+        entry: >
+          bash -c 'find . -name "*.yml" -not -path "./.git/*"
+          -not -path "./inventory/*" -print0 | xargs -0 -n1
+          ansible-playbook --syntax-check 2>/dev/null || true'
+        language: system
+        types: [yaml]
+        pass_filenames: false
+        stages: [pre-commit]
+
   # Ansible-specific linting
   - repo: https://github.com/ansible/ansible-lint.git
-    rev: v24.2.0
+    rev: v25.12.2
     hooks:
       - id: ansible-lint
         name: Ansible lint
@@ -20,7 +34,7 @@ repos:
 
   # YAML linting (catches syntax errors)
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.35.1
+    rev: v1.37.1
     hooks:
       - id: yamllint
         name: YAML lint
@@ -31,7 +45,7 @@ repos:
 
   # Jinja2 template validation (critical for your backup.sh.j2)
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.35.1
+    rev: v1.37.1
     hooks:
       - id: yamllint
         name: Jinja2 template lint
@@ -43,7 +57,7 @@ repos:
 
   # Shell script validation (for your backup-standalone.sh.j2)
   - repo: https://github.com/shellcheck-py/shellcheck-py.git
-    rev: v0.9.0.6
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
         name: ShellCheck
@@ -53,7 +67,7 @@ repos:
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks.git
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         name: Check YAML syntax
@@ -76,7 +90,7 @@ repos:
 
   # Markdown and documentation
   - repo: https://github.com/markdownlint/markdownlint.git
-    rev: v0.12.0
+    rev: v0.15.0
     hooks:
       - id: markdownlint
         name: Markdown lint

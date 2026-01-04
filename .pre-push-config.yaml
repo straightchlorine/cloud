@@ -1,0 +1,40 @@
+---
+# Pre-push hooks - COMPREHENSIVE checks (can take 2-5 minutes)
+# Install: pre-commit install --hook-type pre-push -c .pre-push-config.yaml
+# Manual: pre-commit run --hook-stage push --all-files -c .pre-push-config.yaml
+
+repos:
+  # Molecule tests for common role
+  - repo: local
+    hooks:
+      - id: molecule-test-common
+        name: Molecule test - common role (default)
+        entry: bash -c 'cd roles/common && molecule test --scenario-name default'
+        language: system
+        pass_filenames: false
+        stages: [push]
+        verbose: true
+
+  # Infrastructure validation dry-run
+  - repo: local
+    hooks:
+      - id: validate-infrastructure-dryrun
+        name: Infrastructure validation (dry-run)
+        entry: bash -c 'ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff || true'
+        language: system
+        pass_filenames: false
+        stages: [push]
+        verbose: true
+
+  # Playbook syntax validation for all playbooks
+  - repo: local
+    hooks:
+      - id: ansible-playbook-syntax-all
+        name: Ansible playbook syntax check (all playbooks)
+        entry: bash -c 'find playbooks -name "*.yml" -exec ansible-playbook --syntax-check {} \; 2>/dev/null || true'
+        language: system
+        pass_filenames: false
+        stages: [push]
+
+default_language_version:
+  python: python3

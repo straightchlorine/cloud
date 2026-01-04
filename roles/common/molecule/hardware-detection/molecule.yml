@@ -1,0 +1,21 @@
+---
+driver:
+  name: docker
+platforms:
+  - name: debian12-hardware
+    image: docker.io/geerlingguy/docker-debian12-ansible:latest
+    pre_build_image: true
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        timezone: UTC
+verifier:
+  name: ansible
+scenario:
+  name: hardware-detection
+  description: Test hardware platform detection and resource limit calculation

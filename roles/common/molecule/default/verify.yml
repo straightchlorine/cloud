@@ -1,0 +1,86 @@
+---
+- name: Verify role functionality
+  hosts: all
+  tasks:
+    # Re-gather facts since they don't persist between playbooks in Molecule
+    - name: Gather system facts
+      ansible.builtin.setup:
+        gather_subset:
+          - network
+          - hardware
+
+    # Network Facts Verification
+    - name: Verify network interfaces exist
+      ansible.builtin.assert:
+        that:
+          - ansible_interfaces is defined
+          - ansible_interfaces | length > 0
+        fail_msg: "No network interfaces found"
+        success_msg: "Network interfaces detected: {{ ansible_interfaces }}"
+
+    - name: Verify IP addresses are configured
+      ansible.builtin.assert:
+        that:
+          - ansible_all_ipv4_addresses is defined
+          - ansible_all_ipv4_addresses | length > 0
+        fail_msg: "No IPv4 addresses configured"
+        success_msg: "IPv4 addresses: {{ ansible_all_ipv4_addresses }}"
+
+    - name: Verify hostname is set
+      ansible.builtin.assert:
+        that:
+          - ansible_hostname is defined
+          - ansible_hostname | length > 0
+        fail_msg: "Hostname is not set"
+        success_msg: "Hostname: {{ ansible_hostname }}"
+
+    # Hardware Facts Verification
+    - name: Verify system memory is detected
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb is defined
+          - ansible_memtotal_mb | int > 0
+        fail_msg: "System memory not detected"
+        success_msg: "Total memory: {{ ansible_memtotal_mb }}MB"
+
+    - name: Verify CPU count is detected
+      ansible.builtin.assert:
+        that:
+          - ansible_processor_count is defined
+          - ansible_processor_count | int > 0
+        fail_msg: "CPU count not detected"
+        success_msg: "CPU count: {{ ansible_processor_count }}"
+
+    - name: Verify CPU cores are detected
+      ansible.builtin.assert:
+        that:
+          - ansible_processor_cores is defined
+          - ansible_processor_cores | int > 0
+        fail_msg: "CPU cores not detected"
+        success_msg: "CPU cores: {{ ansible_processor_cores }}"
+
+    # OS Verification
+    - name: Verify OS distribution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution is defined
+          - ansible_distribution in ['Debian', 'Ubuntu']
+        fail_msg: "Not running on Debian/Ubuntu"
+        success_msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    # Display verification summary
+    - name: Display verification results
+      ansible.builtin.debug:
+        msg: |
+          ✓ Network Configuration Verified
+          - Interfaces: {{ ansible_interfaces }}
+          - IPv4 Addresses: {{ ansible_all_ipv4_addresses }}
+          - Hostname: {{ ansible_hostname }}
+
+          ✓ Hardware Configuration Verified
+          - Total Memory: {{ ansible_memtotal_mb }}MB
+          - CPU Count: {{ ansible_processor_count }}
+          - CPU Cores: {{ ansible_processor_cores }}
+
+          ✓ Operating System Verified
+          - Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}

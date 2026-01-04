@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    timezone: UTC
+    fail2ban_enabled: false
+    package_cache_valid_time: 3600
+    common_packages:
+      - curl
+      - wget
+      - git
+  tasks:
+    - name: Include network facts collection
+      ansible.builtin.include_tasks: ../../tasks/network_facts.yml
+
+    - name: Include hardware detection
+      ansible.builtin.include_tasks: ../../tasks/detect_hardware.yml
+
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+      become: true

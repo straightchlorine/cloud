@@ -1,0 +1,31 @@
+---
+driver:
+  name: docker
+platforms:
+  - name: debian12-failfast
+    image: docker.io/geerlingguy/docker-debian12-ansible:latest
+    pre_build_image: true
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+provisioner:
+  name: ansible
+  # Note: Intentionally minimal inventory - no variables set
+  inventory:
+    group_vars:
+      all: {}
+verifier:
+  name: ansible
+scenario:
+  name: fail-fast-validation
+  description: Test that role fails fast when required variables are missing
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - converge  # This step should fail/be handled
+    - verify    # Verify the failure was expected
+    - cleanup
+    - destroy

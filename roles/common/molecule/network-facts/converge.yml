@@ -1,0 +1,10 @@
+---
+- name: Converge - Network facts detection
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Include network_facts task
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts

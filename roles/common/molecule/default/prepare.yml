@@ -1,0 +1,26 @@
+---
+- name: Prepare test environment
+  hosts: all
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+      become: true
+
+    - name: Install minimal utilities for testing
+      ansible.builtin.apt:
+        name:
+          - sudo
+          - curl
+          - gnupg
+        state: present
+      become: true
+
+    - name: Ensure systemd is running
+      ansible.builtin.service:
+        name: systemd-logind
+        state: started
+        enabled: true
+      become: true
+      ignore_errors: true

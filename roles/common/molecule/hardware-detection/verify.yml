@@ -1,0 +1,32 @@
+---
+- name: Verify hardware detection
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Assert hardware facts are defined
+      ansible.builtin.assert:
+        that:
+          - hardware_platform is defined
+          - hardware_details is defined
+          - hardware_limits is defined
+          - hardware_limits.cpu_limit is defined
+          - hardware_limits.memory_limit is defined
+        fail_msg: |
+          Hardware facts validation failed:
+          hardware_platform: {{ hardware_platform | default('UNDEFINED') }}
+          hardware_limits: {{ hardware_limits | default('UNDEFINED') }}
+
+    - name: Verify hardware_platform is valid
+      ansible.builtin.assert:
+        that:
+          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'pc', 'vm', 'unknown']
+        fail_msg: "Invalid hardware_platform: {{ hardware_platform }}"
+
+    - name: Display hardware detection results
+      ansible.builtin.debug:
+        msg: |
+          ✓ Hardware Detection:
+          - Platform: {{ hardware_platform }}
+          - CPU Limit: {{ hardware_limits.cpu_limit }}
+          - Memory Limit: {{ hardware_limits.memory_limit }}

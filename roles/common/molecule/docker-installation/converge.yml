@@ -1,0 +1,20 @@
+---
+# Test Docker installation with user namespace mapping
+
+- name: Converge - Docker installation
+  hosts: all
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      changed_when: false
+
+  tasks:
+    - name: Include Docker installation task
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: docker

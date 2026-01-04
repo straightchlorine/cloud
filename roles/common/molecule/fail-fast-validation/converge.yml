@@ -1,0 +1,30 @@
+---
+- name: Converge - Fail-fast validation test
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Test that variable_validation fails without required variables
+      block:
+        - name: Include variable_validation without required variables
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: variable_validation
+          vars:
+            validation_context: "fail-fast-test"
+            required_variables:
+              - this_variable_does_not_exist
+              - neither_does_this_one
+
+      rescue:
+        - name: Set fact to indicate expected failure occurred
+          ansible.builtin.set_fact:
+            fail_fast_test_passed: true
+
+        - name: Display expected failure message
+          ansible.builtin.debug:
+            msg: |
+              ✓ Fail-fast validation PASSED:
+              Role correctly failed when required variables were missing
+              This is the expected behavior!
