@@ -5,18 +5,21 @@ Testing requirements and current setup for infrastructure validation.
 ## Requirements
 
 ### Pre-deployment Validation
+
 - All required variables defined
 - Network connectivity verified
 - Dependencies resolved
 - Service ports available
 
 ### Infrastructure Validation
+
 - All services deployed correctly
 - Health checks passing
 - Backups functioning
 - Alerts configured
 
 ### Manual Testing
+
 - Service functionality verified
 - Configuration correctness validated
 - Integration between services confirmed
@@ -32,6 +35,7 @@ pre-commit run --all-files  # Run all checks locally
 ```
 
 Checks performed:
+
 - **shellcheck**: Shell script validation
 - **yamllint**: YAML format validation
 - **ansible-lint**: Ansible syntax and best practices
@@ -44,18 +48,20 @@ Comprehensive infrastructure validation:
 
 ```bash
 # Full validation
-ansible-playbook -i inventory/production/hosts.yml validate-infrastructure.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml \
+  validate-infrastructure.yml --ask-vault-pass
 
 # Specific validation type
-ansible-playbook -i inventory/production/hosts.yml validate-infrastructure.yml \
-  --ask-vault-pass -e validation_type=backup
+ansible-playbook -i inventory/production/hosts.yml \
+  validate-infrastructure.yml --ask-vault-pass -e validation_type=backup
 
 # Quick mode
-ansible-playbook -i inventory/production/hosts.yml validate-infrastructure.yml \
-  --ask-vault-pass -e quick_mode=true
+ansible-playbook -i inventory/production/hosts.yml \
+  validate-infrastructure.yml --ask-vault-pass -e quick_mode=true
 ```
 
 Validation types:
+
 - `full` - Complete infrastructure validation
 - `backup` - Backup configuration and connectivity
 - `vault` - Vault variable completeness
@@ -67,6 +73,7 @@ Validation types:
 ### Service Health Checks
 
 Deployed roles include validation tasks that verify:
+
 - Required variables are set
 - Services are running
 - Health endpoints responding
@@ -135,7 +142,8 @@ curl http://admin:password@192.168.20.5:3000/api/dashboards/db
 # Test Loki log ingestion
 curl -H "Content-Type: application/json" -XPOST \
   "http://192.168.20.5:3100/loki/api/v1/push" \
-  --data-raw '{"streams": [{"stream": {"test": "value"}, "values": [["1670000000000000000", "test message"]]}]}'
+  --data-raw '{"streams": [{"stream": {"test": "value"}, \
+  "values": [["1670000000000000000", "test message"]]}]}'
 ```
 
 ### Backup Validation

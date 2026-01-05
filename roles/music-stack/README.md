@@ -20,12 +20,15 @@ and music library organization.
 ### Deploy
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/music-stack.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/music-stack.yml \
+  --ask-vault-pass
 ```
 
 Or via main playbook:
+
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit music --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit \
+  music --ask-vault-pass
 ```
 
 ## Configuration
@@ -227,7 +230,8 @@ du -sh /mnt/data/music
 sudo -u backup /opt/backup/scripts/backup-<device_name>.sh
 
 # List snapshots
-sudo -u backup restic snapshots --password-file /opt/backup/keys/<device-name>-password --repository [repo]
+sudo -u backup restic snapshots \
+  --password-file /opt/backup/keys/<device-name>-password --repository [repo]
 
 # Restore music library
 sudo -u backup restic restore latest --target /tmp/restore \

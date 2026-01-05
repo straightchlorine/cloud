@@ -4,7 +4,8 @@ Restic-based backup system supporting coordinator and standalone modes.
 
 ## Current Features
 
-- **Coordinator Mode**: Centralized backup orchestration via systemd timers (backup_wyse host)
+- **Coordinator Mode**: Centralized backup orchestration via systemd timers
+  (backup_wyse host)
 - **Standalone Mode**: Independent backups from stronger machines (station-arch)
 - **SSH Key Authentication**: Secure Hetzner Storage Box connectivity
 - **Multi-Service Support**: DNS, music, automation, and monitoring backups
@@ -13,12 +14,14 @@ Restic-based backup system supporting coordinator and standalone modes.
 ## Architecture
 
 ### Coordinator Mode
+
 - Runs on dedicated backup host (backup_wyse)
 - Pulls backups from remote service hosts via SSH
 - Orchestrates multi-service backup sequence
 - Manages centralized repository access
 
 ### Standalone Mode
+
 - Runs directly on machines
 - Direct backups to Hetzner Storage Box
 - No external coordinator dependency
@@ -30,16 +33,19 @@ Restic-based backup system supporting coordinator and standalone modes.
 
 - SSH access configured for Hetzner Storage Box
 - `restic_enabled: true` in host variables
-- Hetzner SSH private key placed at: `/opt/enterprise-backup/.ssh/hetzner`
+- Hetzner SSH private key placed at:
+  `/opt/enterprise-backup/.ssh/hetzner`
 
 ### Deploy
 
 ```bash
 # Full deployment
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  --ask-vault-pass
 
 # Backup role only
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --tags backup --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  --tags backup --ask-vault-pass
 ```
 
 ## Configuration
@@ -60,11 +66,13 @@ vault_restic_dns_password: "..."
 vault_restic_music_password: "..."
 vault_restic_automation_password: "..."
 vault_restic_monitoring_password: "..."
+
 ```
 
 ### Host Variables
 
 **For coordinator (backup_wyse):**
+
 ```yaml
 backup_role: "coordinator"
 coordinator_targets:
@@ -78,6 +86,7 @@ coordinator_targets:
 ```
 
 **For standalone (station-arch):**
+
 ```yaml
 backup_role: "standalone"
 restic_enabled: true
@@ -89,6 +98,7 @@ backup_directories:
 ```
 
 **For managed services (dns, music, automation, monitoring):**
+
 ```yaml
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/[service]"
@@ -103,14 +113,14 @@ backup_directories:
 
 ### Differences between distributions
 
-Ther seems to be some disrepancy in the way `restic` works with `SFTP` protocol:
+There seems to be some discrepancy in the way `restic` works with `SFTP` protocol:
 
-* For **Arch Linux**, just having `RESTIC_SFTP_COMMAND` environment variable defined
-is enough to run `restic` commands, such as `restic init` or `restic snapshots`.
+- For **Arch Linux**, just having `RESTIC_SFTP_COMMAND` environment variable defined
+  is enough to run `restic` commands, such as `restic init` or `restic snapshots`.
 
-* For **Debian 13 (trixie)** this variable doesn't seem to be used/parsed from
-the environment. As such, using option parameter is required:
-**`restic -o sftp.command=$RESTIC_SFTP_COMMAND [command]`**
+- For **Debian 13 (trixie)** this variable doesn't seem to be used/parsed from the
+  environment. As such, using option parameter is required: **`restic -o
+  sftp.command=$RESTIC_SFTP_COMMAND [command]`**
 
 ### Manual Backup
 
@@ -185,7 +195,8 @@ journalctl -u backup-standalone -n 50 --all
 
 ### Troubleshooting
 
-**Backup Failures**
+#### Backup Failures
+
 ```bash
 # Check service status and errors
 sudo systemctl status backup-coordinator
@@ -200,7 +211,8 @@ sudo -u backup restic -r sftp:hetzner-storage:[path] snapshots \
   --password-file /opt/enterprise-backup/keys/[service]-password
 ```
 
-**SSH Key Issues**
+#### SSH Key Issues
+
 ```bash
 # Verify key permissions
 ls -la /opt/enterprise-backup/.ssh/hetzner
@@ -211,10 +223,12 @@ stat /opt/enterprise-backup/.ssh/hetzner
 # Should be owned by backup:backup
 
 # Test SSH config
-sudo -u backup ssh -v -i /opt/enterprise-backup/.ssh/hetzner [user]@[host]
+sudo -u backup ssh -v -i /opt/enterprise-backup/.ssh/hetzner \
+  [user]@[host]
 ```
 
-**Repository Access**
+#### Repository Access
+
 ```bash
 # Verify repository configuration
 sudo -u backup cat /opt/enterprise-backup/config/[service]-config.yml
@@ -223,12 +237,15 @@ sudo -u backup cat /opt/enterprise-backup/config/[service]-config.yml
 sudo -u backup ssh [backup-user]@[backup-server] "ls -la /backups"
 
 # Test restic directly
-sudo -u backup RESTIC_REPOSITORY="sftp:..." RESTIC_PASSWORD="..." restic list files
+sudo -u backup RESTIC_REPOSITORY="sftp:..." RESTIC_PASSWORD="..." \
+  restic list files
 ```
 
 ## Future Enhancements
 
-This role provides foundational backup infrastructure. Planned enhancements are documented in [Backup System Improvement Roadmap](../../docs/backup-improvement-roadmap.md).
+This role provides foundational backup infrastructure. Planned enhancements are
+documented in
+[Backup System Improvement Roadmap](../../docs/backup-improvement-roadmap.md).
 
 ## Files and Directories
 

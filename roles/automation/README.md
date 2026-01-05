@@ -1,6 +1,7 @@
 # Automation Stack Role
 
-Traefik reverse proxy with SSL automation and complementary services for infrastructure management.
+Traefik reverse proxy with SSL automation and complementary services for
+infrastructure management.
 
 ## Services
 
@@ -23,12 +24,15 @@ Traefik reverse proxy with SSL automation and complementary services for infrast
 ### Deploy
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/automation-stack.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml \
+  playbooks/automation-stack.yml --ask-vault-pass
 ```
 
 Or via main playbook:
+
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit automation --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit \
+  automation --ask-vault-pass
 ```
 
 ## Configuration
@@ -36,6 +40,7 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit au
 ### Required Variables (vault.yml)
 
 ```yaml
+
 # Domain and SSL (required)
 vault_domain_name: "yourdomain.com"
 vault_letsencrypt_email: "your@email.com"
@@ -48,8 +53,10 @@ vault_traefik_basic_auth: "admin:$2y$10$hashedpassword"
 vault_cloudflare_api_token: "your_cloudflare_api_token"
 # Required permissions: Zone:Read, DNS:Edit
 
+
 # InfluxDB session secret
-vault_influxdb3_session_secret_key: "your-session-secret-32-chars-min"
+vault_influxdb3_session_secret_key: >
+  "your-session-secret-32-chars-min"
 # Generate: openssl rand -base64 32
 
 # Backup configuration
@@ -185,14 +192,16 @@ curl https://vault.yourdomain.com
 ### SSL and Domain Setup
 
 Traefik automatically configures SSL via:
+
 - **DNS Provider**: Cloudflare (DNS-01 challenge)
 - **ACME Provider**: Let's Encrypt
 - **Certificate Storage**: `/mnt/automation-data/traefik/acme.json`
 
 Configuration requires:
+
 1. Domain DNS pointing to pi-automation IP
-2. Cloudflare API token with Zone:Read and DNS:Edit permissions
-3. Let's Encrypt email for certificate notices
+1. Cloudflare API token with Zone:Read and DNS:Edit permissions
+1. Let's Encrypt email for certificate notices
 
 ### Service Routing
 
@@ -210,8 +219,8 @@ dozzle.yourdomain.com      → Dozzle (:8080)
 ### Adding New Services
 
 1. Update `config/traefik/dynamic.yml` with service routing
-2. Add service container to `docker-compose.yml`
-3. Restart Traefik: `docker compose restart traefik`
+1. Add service container to `docker-compose.yml`
+1. Restart Traefik: `docker compose restart traefik`
 
 ## Monitoring
 
@@ -257,7 +266,8 @@ docker compose logs -f [service]
 sudo -u backup /opt/backup/scripts/backup-automation.sh
 
 # List snapshots
-sudo -u backup restic snapshots --password-file /opt/backup/keys/automation-password --repository [repo]
+sudo -u backup restic snapshots \
+  --password-file /opt/backup/keys/automation-password --repository [repo]
 
 # Restore Traefik certificates
 sudo -u backup restic restore latest --target /tmp/restore \
@@ -278,7 +288,8 @@ dig yourdomain.com
 dig traefik.yourdomain.com
 
 # Test Cloudflare connectivity
-curl -H "Authorization: Bearer $token" https://api.cloudflare.com/client/v4/user/tokens/verify
+curl -H "Authorization: Bearer $token" \
+  https://api.cloudflare.com/client/v4/user/tokens/verify
 
 # Check certificate file
 docker compose exec traefik cat /data/acme.json | jq .

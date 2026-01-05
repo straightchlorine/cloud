@@ -1,10 +1,12 @@
 # Backup System Improvement Roadmap
 
-Current implementation uses coordinator-based backups via systemd timers. Enterprise features are planned as incremental additions.
+Current implementation uses coordinator-based backups via systemd timers. Enterprise
+features are planned as incremental additions.
 
 ## Current State
 
 **What Works:**
+
 - Coordinator (backup_wyse) coordinates backups via systemd timers
 - Standalone backups (station-arch) for independent machines
 - SSH key-based Hetzner storage box connectivity
@@ -16,19 +18,21 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Goal:** Verify backups actually work by testing restores
 
 **Features:**
+
 - Automated restore testing framework with systemd timer scheduling
 - Tests 10% of recent backups by actually restoring them to staging
 - Service-specific validation scripts:
-  - validate-dns-restore.sh
-  - validate-automation-restore.sh
-  - validate-music-restore.sh
-  - validate-system-restore.sh
+    - validate-dns-restore.sh
+    - validate-automation-restore.sh
+    - validate-music-restore.sh
+    - validate-system-restore.sh
 - Restore performance benchmarking and analysis
 - Logs test results for audit trail with detailed reporting
 - Dry-run validation before deployment
 - Restore test configuration management
 
 **Implementation Details from Deleted Code:**
+
 - automated-restore-test.sh (main orchestrator)
 - restore-test-config.yml (configuration)
 - restore-benchmark.sh (performance testing)
@@ -37,6 +41,7 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Effort:** Medium (needs implementation)
 
 **Benefits:**
+
 - Early detection of backup corruption
 - Confidence that disaster recovery will work
 - Compliance requirement for many orgs
@@ -47,13 +52,14 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Goal:** Real-time visibility into backup health
 
 **Features:**
+
 - Backup metrics exporter for Prometheus (:9102)
 - Track per-service metrics:
-  - Backup duration, size, success rate
-  - Repository health status (ok/degraded/failed)
-  - Deduplication efficiency and savings
-  - Storage utilization trends
-  - Compression ratios
+    - Backup duration, size, success rate
+    - Repository health status (ok/degraded/failed)
+    - Deduplication efficiency and savings
+    - Storage utilization trends
+    - Compression ratios
 - Performance analytics and trending
 - Backup operation logging and audit trail
 - Repository consistency checking and validation
@@ -63,6 +69,7 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 - Alert configuration for backup windows and thresholds
 
 **Implementation Details from Deleted Code:**
+
 - backup-metrics-exporter.py (Prometheus exporter)
 - backup-performance-analyzer.py (performance analysis)
 - storage-efficiency-tracker.py (deduplication stats)
@@ -74,6 +81,7 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Effort:** Low (needs implementation)
 
 **Benefits:**
+
 - Early warning of backup issues
 - Performance trends and optimization opportunities
 - Capacity planning data
@@ -85,22 +93,24 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Goal:** Faster disaster recovery with service-aware orchestration
 
 **Features:**
+
 - Service-aware rollback orchestration engine
 - Service-specific rollback procedures:
-  - rollback-dns-service.sh
-  - rollback-automation-stack.sh
-  - rollback-music-stack.sh
-  - rollback-system-config.sh
+    - rollback-dns-service.sh
+    - rollback-automation-stack.sh
+    - rollback-music-stack.sh
+    - rollback-system-config.sh
 - Rollback safety checker with pre-flight validation
-- Rollback point management system and checkpoints
+- Rollback point management system and checkpoints for recovery
 - Emergency rollback procedures for critical failures
 - Rollback validation and health verification
 - Configuration management for rollback parameters
 - Staging environment for rollback testing
 - Recovery time optimization per service
-- Documented recovery procedures with step-by-step guides
+- Documented recovery procedures with detailed step-by-step guides
 
 **Implementation Details from Deleted Code:**
+
 - rollback-orchestrator.sh (main orchestrator)
 - rollback-safety-check.sh (safety validation)
 - rollback-config.yml (configuration)
@@ -112,6 +122,7 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Effort:** High (needs implementation and validation)
 
 **Benefits:**
+
 - Faster RTO (recovery time objective) in disaster scenarios
 - Reduced operational stress during recovery
 - Verified and tested recovery paths
@@ -123,30 +134,34 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Goal:** Compliance, analytics, and operational management
 
 **Features:**
+
 - Monthly compliance and audit reports
 - Backup coverage summary per service
 - Retention policy enforcement and validation
 - Cost analysis with storage utilization breakdown
 - Deduplication savings analysis and trends
 - Repository management tools:
-  - manage-repositories.sh (repository operations)
-  - repository-maintenance.service/timer (scheduled maintenance)
-  - repository-migration.sh (safe migration procedures)
-  - repository-orchestrator.sh (multi-repo coordination)
+    - manage-repositories.sh (repository operations)
+    - repository-maintenance.service/timer (scheduled
+      maintenance)
+    - repository-migration.sh (safe migration procedures)
+    - repository-orchestrator.sh (multi-repo coordination)
 - Encryption key management system:
-  - manage-encryption-keys.sh (key rotation and lifecycle)
+    - manage-encryption-keys.sh (key rotation and
+      lifecycle)
 - Deduplication analysis and optimization:
-  - analyze-deduplication.py (detailed analysis)
+    - analyze-deduplication.py (detailed analysis)
 - Performance analysis and reporting:
-  - repository-performance.py (performance metrics)
+    - repository-performance.py (performance metrics)
 - Notification and alerting configuration:
-  - Email alerts on backup failures
-  - Summary reports on schedule
-  - Performance trend alerts
+    - Email alerts on backup failures
+    - Summary reports on schedule
+    - Performance trend alerts
 - Grafana dashboard for long-term trending:
-  - repository-dashboard.json
+    - repository-dashboard.json
 
 **Implementation Details from Deleted Code:**
+
 - Report templates and generators
 - manage-repositories.sh (repository operations)
 - manage-encryption-keys.sh (key management)
@@ -159,20 +174,26 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 **Effort:** Low (needs implementation and scheduling)
 
 **Benefits:**
-- Audit trail for compliance and regulatory requirements
+
+- Audit trail for compliance and regulatory
+  requirements
 - Trend analysis for capacity planning
 - Justification for storage investments
 - Operational insights into backup health
 - Proactive issue identification
-- Multi-repository orchestration and management
+- Multi-repository orchestration and
+  management
 - Secure key lifecycle management
 
 ## Implementation Notes
 
 - **No breaking changes:** Each phase is additive
-- **Optional:** Features controlled by `backup_monitoring: true` flag
-- **Gradual:** Deploy Phase 1-2 together, Phase 3-4 after validation
-- **Testing:** Use station-arch (standalone) as test environment first
+- **Optional:** Features controlled by `backup_monitoring: true`
+  flag
+- **Gradual:** Deploy Phase 1-2 together, Phase 3-4 after
+  validation
+- **Testing:** Use station-arch (standalone) as test
+  environment first
 
 ## Estimated Timeline
 
@@ -192,39 +213,57 @@ Current implementation uses coordinator-based backups via systemd timers. Enterp
 
 ## Deleted Enterprise Code Reference
 
-This section documents the orphaned enterprise code that was removed, organized by phase for future implementation.
+This section documents the orphaned enterprise code that was removed, organized by
+phase for future implementation.
 
 ### Phase 1: Restore Testing (Deleted Code)
+
 **Task File:** `roles/backup/tasks/restore_testing.yml` (165 lines)
+
 **Templates Deleted:**
+
 - `restore-test-runner.sh.j2` - Main test orchestrator
 - `restore-test-config.yml.j2` - Test configuration
 - `validate-dns-restore.sh.j2` - DNS service validation
-- `validate-automation-restore.sh.j2` - Automation stack validation
+- `validate-automation-restore.sh.j2` - Automation stack
+  validation
 - `validate-music-restore.sh.j2` - Music stack validation
-- `validate-system-restore.sh.j2` - System configuration validation
+- `validate-system-restore.sh.j2` - System configuration
+  validation
 - `restore-benchmark.sh.j2` - Performance benchmarking
 
 ### Phase 2: Monitoring (Deleted Code)
+
 **Task File:** `roles/backup/tasks/monitoring.yml` (238 lines)
+
 **Templates Deleted:**
+
 - `backup-metrics-exporter.py.j2` - Prometheus metrics exporter
-- `backup-performance-analyzer.py.j2` - Performance trend analysis
-- `storage-efficiency-tracker.py.j2` - Deduplication tracking
+- `backup-performance-analyzer.py.j2` - Performance trend
+  analysis
+- `storage-efficiency-tracker.py.j2` - Deduplication
+  tracking
 - `backup-operation-logger.py.j2` - Audit trail logging
 - `repository-health-check.sh.j2` - Repository validation
-- `repository-health-monitor.sh.j2` - Health monitoring service
+- `repository-health-monitor.sh.j2` - Health monitoring
+  service
 - `repository-consistency.sh.j2` - Consistency checking
-- `repository-dashboard.json.j2` - Grafana dashboard definition
+- `repository-dashboard.json.j2` - Grafana dashboard
+  definition
 
 ### Phase 3: Rollback Infrastructure (Deleted Code)
+
 **Task File:** `roles/backup/tasks/rollback_system.yml` (248 lines)
+
 **Templates Deleted:**
+
 - `rollback-orchestrator.sh.j2` - Main rollback engine
 - `rollback-dns-service.sh.j2` - DNS service rollback
-- `rollback-automation-stack.sh.j2` - Automation stack rollback
+- `rollback-automation-stack.sh.j2` - Automation stack
+  rollback
 - `rollback-music-stack.sh.j2` - Music stack rollback
-- `rollback-system-config.sh.j2` - System configuration rollback
+- `rollback-system-config.sh.j2` - System configuration
+  rollback
 - `rollback-safety-check.sh.j2` - Pre-flight validation
 - `rollback-config.yml.j2` - Rollback configuration
 - `emergency-rollback.sh.j2` - Emergency procedures
@@ -232,20 +271,29 @@ This section documents the orphaned enterprise code that was removed, organized 
 - `manage-rollback-points.sh.j2` - Checkpoint management
 
 ### Phase 4: Management & Reporting (Deleted Code)
+
 **Templates Deleted:**
+
 - `manage-repositories.sh.j2` - Repository operations
 - `manage-encryption-keys.sh.j2` - Key management
 - `analyze-deduplication.py.j2` - Deduplication analysis
 - `repository-performance.py.j2` - Performance analysis
-- `repository-orchestrator.sh.j2` - Multi-repo orchestration
-- `repository-migration.sh.j2` - Safe migration procedures
-- `repository-maintenance.service.j2` - Maintenance service
-- `repository-maintenance.timer.j2` - Maintenance timer
-- `restore-test-runner.sh.j2` - Test report generation
+- `repository-orchestrator.sh.j2` - Multi-repo
+  orchestration
+- `repository-migration.sh.j2` - Safe migration
+  procedures
+- `repository-maintenance.service.j2` - Maintenance
+  service
+- `repository-maintenance.timer.j2` - Maintenance
+  timer
+- `restore-test-runner.sh.j2` - Test report
+  generation
 - `restore-test-*.json.j2` - Test result templates
 
 ### Deleted Configuration Sections
+
 **From:** `roles/backup/defaults/main.yml`
+
 - `restore_testing` block - Restore testing configuration
 - `backup_monitoring` block - Monitoring and metrics settings
 - `backup_security` block - Encryption and key management

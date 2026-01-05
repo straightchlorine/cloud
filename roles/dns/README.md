@@ -19,13 +19,15 @@ Pi-hole DNS server service on Raspberry Pi 3B.
 ### Deploy
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit dns --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  --limit dns --ask-vault-pass
 ```
 
 ### Validation Only
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit dns --tags validation --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml \
+  playbooks/site.yml --limit dns --tags validation --ask-vault-pass
 ```
 
 ## Configuration
@@ -81,10 +83,13 @@ backup_directories:
 ## Security Enhancements
 
 ### Pi-hole Security
-The role provides the [recommended](https://docs.pi-hole.net/main/basic-install/) way of installation:
+
+The role provides the
+[recommended](https://docs.pi-hole.net/main/basic-install/) way of installation:
 
 ```bash
-git clone --depth 1 --branch v5.18.3 https://github.com/pi-hole/pi-hole.git
+git clone --depth 1 --branch v5.18.3 \
+  https://github.com/pi-hole/pi-hole.git
 cd pi-hole/automated\ install/
 bash basic-install.sh --unattended
 ```
@@ -92,6 +97,7 @@ bash basic-install.sh --unattended
 ### Configuration Variables
 
 #### Security Configuration
+
 ```yaml
 pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
 pihole_version: "v6.2"
@@ -99,6 +105,7 @@ pihole_verify_commit: true
 ```
 
 #### Required Variables (must be in vault)
+
 ```yaml
 vault_pihole_webpassword: "secure-admin-password"
 vault_pihole_admin_password: "secure-admin-password"
@@ -107,10 +114,10 @@ vault_pihole_admin_password: "secure-admin-password"
 ## Installation Process
 
 1. **Repository Clone**: Downloads official Pi-hole repository at specified version
-2. **Verification**: Validates installer script exists and verifies commit hash
-3. **Installation**: Runs unattended installation from verified source
-4. **Configuration**: Applies Pi-hole settings from templates
-5. **Cleanup**: Removes temporary repository after installation
+1. **Verification**: Validates installer script exists and verifies commit hash
+1. **Installation**: Runs unattended installation from verified source
+1. **Configuration**: Applies Pi-hole settings from templates
+1. **Cleanup**: Removes temporary repository after installation
 
 ## Dependencies
 
@@ -132,15 +139,18 @@ Configure devices to use selected `ip` as primary DNS server for ad-blocking.
 
 ### Router Configuration
 
-Set Pi-hole as upstream DNS in router settings, or configure DHCP to provide Pi-hole as DNS server.
+Set Pi-hole as upstream DNS in router settings, or configure DHCP to provide
+Pi-hole as DNS server.
 
 ### Upstream DNS
 
-Pi-hole forwards to firewall/router DNS by default. Modify `pihole_dns_servers` in host_vars to change upstream servers.
+Pi-hole forwards to firewall/router DNS by default. Modify `pihole_dns_servers` in
+host_vars to change upstream servers.
 
 ## Validation
 
 The role includes comprehensive validation that checks:
+
 - Required variables are defined
 - Network interface availability
 - DNS server reachability

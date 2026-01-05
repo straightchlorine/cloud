@@ -21,7 +21,8 @@ Grafana, Prometheus, Loki, and Alertmanager for centralized infrastructure monit
 ### Deploy
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit monitoring --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit \
+  monitoring --ask-vault-pass
 ```
 
 ## Configuration
@@ -130,6 +131,7 @@ scrape_configs:
 ```
 
 Reload:
+
 ```bash
 curl -X POST http://localhost:9090/-/reload
 ```
@@ -151,13 +153,15 @@ groups:
           severity: critical
 
       - alert: HighCPU
-        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+          * 100) > 80
         for: 5m
         labels:
           severity: warning
 
       - alert: HighMemory
-        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 90
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) /
+          node_memory_MemTotal_bytes * 100 > 90
         for: 5m
         labels:
           severity: critical
@@ -195,6 +199,7 @@ receivers:
 Via Grafana UI: + → Import → Upload JSON file
 
 Via API:
+
 ```bash
 curl -X POST http://admin:password@localhost:3000/api/dashboards/db \
   -H "Content-Type: application/json" \
@@ -258,7 +263,8 @@ scrape_configs:
 sudo -u backup /opt/backup/scripts/backup-monitoring.sh
 
 # List snapshots
-sudo -u backup restic snapshots --password-file /opt/backup/keys/monitoring-password --repository [repo]
+sudo -u backup restic snapshots \
+  --password-file /opt/backup/keys/monitoring-password --repository [repo]
 
 # Restore Grafana dashboards
 sudo -u backup restic restore latest --target /tmp/restore \
@@ -277,7 +283,8 @@ curl 'http://localhost:9090/api/v1/query?query=up'
 # Loki ingestion test
 curl -H "Content-Type: application/json" -XPOST \
   "http://localhost:3100/loki/api/v1/push" \
-  --data-raw '{"streams": [{"stream": {"test": "value"}, "values": [["1570818238000000000", "message"]]}]}'
+  --data-raw '{"streams": [{"stream": {"test": "value"}, \
+  "values": [["1570818238000000000", "message"]]}]}'
 
 # Disk space
 df -h /var/lib/prometheus /var/lib/loki /var/lib/grafana

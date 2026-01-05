@@ -4,7 +4,8 @@ Infrastructure-level monitoring with Grafana, Prometheus, Loki, and Alertmanager
 
 ## Architecture
 
-The monitoring stack centralizes metrics, logs, and alerts from all infrastructure components:
+The monitoring stack centralizes metrics, logs, and alerts from all
+infrastructure components:
 
 ```
 Prometheus Targets                Log Sources              Alerting
@@ -39,6 +40,7 @@ Grafana :3000
 - **Config**: `/etc/prometheus/prometheus.yml`
 
 Automatic scrape targets from inventory:
+
 ```yaml
 - Node Exporter on all hosts (:9100)
 - Pi-hole Exporter on pi-dns (:9617)
@@ -53,6 +55,7 @@ Automatic scrape targets from inventory:
 - **Config**: `/etc/grafana/grafana.ini`
 
 Pre-configured dashboards:
+
 - Infrastructure Overview (node metrics)
 - Docker Metrics (container performance)
 - Pi-hole Analytics (DNS blocking)
@@ -75,6 +78,7 @@ Log sources shipped from all hosts via Promtail.
 - **Config**: `/etc/alertmanager/alertmanager.yml`
 
 Routes alerts to:
+
 - Email (SMTP via vault configuration)
 - Slack/webhooks (optional)
 - Dashboard notifications
@@ -117,6 +121,7 @@ Edit `/etc/prometheus/prometheus.yml` and add new scrape job:
 ```
 
 Reload configuration:
+
 ```bash
 curl -X POST http://localhost:9090/-/reload
 ```
@@ -136,19 +141,25 @@ groups:
           severity: critical
 
       - alert: HighCPU
-        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        expr: >
+          100 - (avg by(instance)
+          (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
         for: 5m
         labels:
           severity: warning
 
       - alert: HighMemory
-        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 90
+        expr: >
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) /
+          node_memory_MemTotal_bytes * 100 > 90
         for: 5m
         labels:
           severity: critical
 
       - alert: DiskSpaceWarning
-        expr: 100 - ((node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100) > 85
+        expr: >
+          100 - ((node_filesystem_avail_bytes / node_filesystem_size_bytes)
+          * 100) > 85
         for: 5m
         labels:
           severity: warning
@@ -253,6 +264,7 @@ receivers:
 ### Testing Alerts
 
 Test alert firing:
+
 ```bash
 # Trigger test alert
 curl -X POST http://localhost:9093/api/v1/alerts \
@@ -267,18 +279,20 @@ curl -X POST http://localhost:9093/api/v1/alerts \
 Grafana includes pre-configured dashboards:
 
 1. **Infrastructure Overview** - CPU, memory, disk, network across all hosts
-2. **Docker Metrics** - Container resource usage and performance
-3. **Pi-hole Analytics** - DNS query rates, blocked domains, query types
-4. **Service Health** - Application-specific metrics
-5. **Log Explorer** - Loki log search and analysis
+1. **Docker Metrics** - Container resource usage and performance
+1. **Pi-hole Analytics** - DNS query rates, blocked domains, query types
+1. **Service Health** - Application-specific metrics
+1. **Log Explorer** - Loki log search and analysis
 
 ### Dashboard Management
 
 Import new dashboard via Grafana UI:
+
 1. Navigate to + (Create) → Import
-2. Upload JSON file or paste JSON
+1. Upload JSON file or paste JSON
 
 Or via API:
+
 ```bash
 curl -X POST http://admin:password@localhost:3000/api/dashboards/db \
   -H "Content-Type: application/json" \
@@ -288,12 +302,14 @@ curl -X POST http://admin:password@localhost:3000/api/dashboards/db \
 ### Custom Dashboards
 
 Create dashboards via Grafana UI:
+
 1. Click + (Create) → Dashboard
-2. Add panels with PromQL or LogQL queries
-3. Configure visualizations, axes, thresholds
-4. Save dashboard
+1. Add panels with PromQL or LogQL queries
+1. Configure visualizations, axes, thresholds
+1. Save dashboard
 
 Example panel query - CPU usage:
+
 ```
 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
 ```
@@ -314,10 +330,11 @@ All service hosts automatically monitored:
 For custom applications:
 
 1. Implement Prometheus `/metrics` endpoint (text format)
-2. Add scrape config to Prometheus targeting your endpoint
-3. Query metrics in Grafana or create alerts
+1. Add scrape config to Prometheus targeting your endpoint
+1. Query metrics in Grafana or create alerts
 
 Example application metric:
+
 ```
 # HELP requests_total Total number of requests
 # TYPE requests_total counter
@@ -329,6 +346,7 @@ requests_total{method="GET",path="/api/v1/status"} 1234
 ### Storage
 
 Default storage paths:
+
 ```bash
 # Prometheus TSDB
 /var/lib/prometheus/
@@ -358,6 +376,7 @@ sudo systemctl restart loki
 ### Disk Usage
 
 Monitor storage consumption:
+
 ```bash
 du -sh /var/lib/prometheus  # Prometheus data
 du -sh /var/lib/loki        # Loki data
@@ -372,10 +391,11 @@ df -h                       # Overall filesystem usage
 For high-cardinality metrics:
 
 1. **Relabeling** - Drop unnecessary labels before ingestion
-2. **Scrape intervals** - Adjust per job (default 15s)
-3. **Recording rules** - Pre-compute expensive queries
+1. **Scrape intervals** - Adjust per job (default 15s)
+1. **Recording rules** - Pre-compute expensive queries
 
 Example scrape interval override:
+
 ```yaml
   - job_name: 'high-freq'
     scrape_interval: 5s
@@ -387,14 +407,14 @@ Example scrape interval override:
 For high-volume logs:
 
 1. **Retention** - Reduce retention period for low-priority logs
-2. **Compression** - Use compression codec
-3. **Sampling** - Drop low-priority log streams
+1. **Compression** - Use compression codec
+1. **Sampling** - Drop low-priority log streams
 
 ### Grafana Optimization
 
 1. **Dashboard refresh** - Use appropriate update intervals
-2. **Query caching** - Enable in data source configuration
-3. **Alert evaluation** - Reduce evaluation frequency if needed
+1. **Query caching** - Enable in data source configuration
+1. **Alert evaluation** - Reduce evaluation frequency if needed
 
 ## Troubleshooting
 
@@ -438,7 +458,8 @@ curl 'http://localhost:9090/api/v1/query?query=up'
 # Test Loki ingestion
 curl -H "Content-Type: application/json" -XPOST \
   "http://localhost:3100/loki/api/v1/push" \
-  --data-raw '{"streams": [{"stream": {"foo": "bar"}, "values": [["1570818238000000000", "test"]]}]}'
+  --data-raw '{"streams": [{"stream": {"foo": "bar"}, \
+  "values": [["1570818238000000000", "test"]]}]}'
 
 # Check Prometheus targets
 curl http://localhost:9090/api/v1/targets

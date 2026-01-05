@@ -16,9 +16,12 @@ Critical Repository              Services Repository           System Repository
 └── SSL certificates            └── Docker volumes            └── Cache
 ```
 
-- **Critical Repository**: System and database backups (14 daily, 8 weekly, 12 monthly, 3 yearly retention)
-- **Services Repository**: Application data backups (7 daily, 4 weekly, 6 monthly, 1 yearly retention)
-- **System Repository**: Configuration and logs (3 daily, 2 weekly, 3 monthly retention)
+- **Critical Repository**: System and database backups (14 daily, 8 weekly, 12
+  monthly, 3 yearly retention)
+- **Services Repository**: Application data backups (7 daily, 4 weekly, 6 monthly,
+  1 yearly retention)
+- **System Repository**: Configuration and logs (3 daily, 2 weekly, 3 monthly
+  retention)
 
 ### Backup Orchestration
 
@@ -46,7 +49,7 @@ Critical Repository              Services Repository           System Repository
 ├── scripts/
 │   ├── backup-coordinator.sh    # Main orchestration script
 │   ├── repository-health-monitor.sh  # Health monitoring
-│   ├── init-repositories.sh     # Repository initialization
+│   ├── init-repositories.sh         # Repository initialization
 │   └── restore-test-runner.sh   # Automated restore testing
 ├── keys/
 │   ├── dns-password             # DNS backup password
@@ -90,14 +93,16 @@ sudo -u backup /opt/enterprise-backup/scripts/init-repositories.sh
 sudo -u backup /opt/enterprise-backup/scripts/repository-health-monitor.sh
 
 # List all snapshots across repositories
-sudo -u backup restic snapshots --password-file /opt/backup/keys/dns-password --repository [dns-repo]
+sudo -u backup restic snapshots \
+  --password-file /opt/backup/keys/dns-password --repository [dns-repo]
 ```
 
 ### Restore Operations
 
 ```bash
 # List available snapshots
-sudo -u backup restic snapshots --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic snapshots \
+  --password-file /opt/backup/keys/[service]-password --repository [repo]
 
 # Restore specific snapshot
 sudo -u backup restic restore [snapshot-id] \
@@ -201,13 +206,16 @@ tail -f /opt/enterprise-backup/logs/restore-testing.log
 
 ```bash
 # Verify repository integrity
-sudo -u backup restic check --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic check --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 
 # Repository statistics and deduplication
-sudo -u backup restic stats --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic stats --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 
 # Prune old snapshots (follows retention policy)
-sudo -u backup restic forget --prune --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic forget --prune --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 ```
 
 ## Troubleshooting
@@ -223,30 +231,36 @@ journalctl -u backup-coordinator -n 50
 sudo -u backup /opt/backup/scripts/backup-dns.sh --dry-run
 
 # Check repository connectivity
-sudo -u backup restic snapshots --password-file /opt/backup/keys/dns-password --repository [repo]
+sudo -u backup restic snapshots --password-file \
+  /opt/backup/keys/dns-password --repository [repo]
 ```
 
 ### Repository Issues
 
 ```bash
 # Repository health check
-sudo -u backup restic check --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic check --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 
 # Rebuild repository index
-sudo -u backup restic rebuild-index --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic rebuild-index --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 
 # Repair repository
-sudo -u backup restic repair packs --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic repair packs --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 ```
 
 ### SSH/Connectivity Issues
 
 ```bash
 # Test SSH connectivity
-sudo -u backup ssh -i /opt/backup/.ssh/backup_key backup-user@backup-server.com
+sudo -u backup ssh -i /opt/backup/.ssh/backup_key \
+  backup-user@backup-server.com
 
 # Test repository access
-sudo -u backup restic cat config --password-file /opt/backup/keys/dns-password --repository [repo]
+sudo -u backup restic cat config --password-file \
+  /opt/backup/keys/dns-password --repository [repo]
 
 # Network troubleshooting
 ping backup-server.com
@@ -261,7 +275,8 @@ du -sh /opt/backup/cache
 sudo -u backup restic cache --cleanup
 
 # Monitor backup performance
-sudo -u backup restic stats --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic stats --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 
 # Adjust concurrent operations
 # Edit /opt/enterprise-backup/config/repository-config.yml
@@ -275,10 +290,12 @@ sudo -u backup restic stats --password-file /opt/backup/keys/[service]-password 
 tail -f /opt/enterprise-backup/logs/restore-testing.log
 
 # Manual restore test
-sudo -u backup /opt/enterprise-backup/scripts/restore-test-runner.sh --service dns --verbose
+sudo -u backup /opt/enterprise-backup/scripts/restore-test-runner.sh \
+  --service dns --verbose
 
 # Verify restore data integrity
-sudo -u backup restic verify --password-file /opt/backup/keys/[service]-password --repository [repo]
+sudo -u backup restic verify --password-file \
+  /opt/backup/keys/[service]-password --repository [repo]
 ```
 
 ## Compliance
@@ -300,9 +317,9 @@ sudo -u backup restic verify --password-file /opt/backup/keys/[service]-password
 Full infrastructure restore order:
 
 1. Restore DNS configuration first (critical services depend on it)
-2. Restore automation stack (SSL certificates, reverse proxy)
-3. Restore monitoring infrastructure (metrics, alerting)
-4. Restore music stack (user-facing services)
+1. Restore automation stack (SSL certificates, reverse proxy)
+1. Restore monitoring infrastructure (metrics, alerting)
+1. Restore music stack (user-facing services)
 
 Emergency access to backups:
 
@@ -316,9 +333,9 @@ sudo -u backup restic mount /mnt/backup-browse \
 
 ### Multi-Repository Strategy Benefits
 
-- **Risk Distribution**: Critical data in separate repositories reduces impact of corruption
-- **Performance Optimization**: Service-specific compression and retention tuned for each tier
-- **Cost Management**: Tiered storage based on data importance and recovery needs
+- **Risk Distribution**: Separate repos reduce corruption impact
+- **Performance Optimization**: Compression and retention tuned per tier
+- **Cost Management**: Storage tiered by importance and recovery needs
 
 ### Automated Operations
 
@@ -328,6 +345,6 @@ sudo -u backup restic mount /mnt/backup-browse \
 
 ### Operational Excellence
 
-- **Monitoring Integration**: Prometheus metrics enable alerting on backup health
-- **Performance Analytics**: Detailed timing and efficiency metrics for capacity planning
-- **Automated Testing**: Continuous validation of backup integrity catches issues early
+- **Monitoring Integration**: Prometheus metrics for backup health alerting
+- **Performance Analytics**: Timing and efficiency metrics for capacity planning
+- **Automated Testing**: Validate backup integrity and catch issues early
