@@ -8,7 +8,7 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://localhost:{{ prometheus_port }}
+    url: http://localhost:{{ monitoring_prometheus_port }}
     isDefault: true
     jsonData:
       timeInterval: "{{ prometheus_scrape_interval }}"
@@ -20,7 +20,7 @@ datasources:
   - name: Loki
     type: loki
     access: proxy
-    url: http://localhost:{{ loki_port }}
+    url: http://localhost:{{ monitoring_loki_port }}
     jsonData:
       maxLines: 1000
       timeout: "60s"
@@ -30,7 +30,7 @@ datasources:
   - name: Alertmanager
     type: alertmanager
     access: proxy
-    url: http://localhost:{{ alertmanager_port }}
+    url: http://localhost:{{ monitoring_alertmanager_port }}
     jsonData:
       implementation: "prometheus"
     editable: false

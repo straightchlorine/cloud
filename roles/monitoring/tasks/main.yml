@@ -42,11 +42,11 @@
       [OK] Monitoring Stack Deployment Complete for {{ inventory_hostname }}
 
       Services Available:
-      [TARGET] Grafana: {{ primary_ip }}:{{ grafana_port }} (Unified dashboards)
-      [STATS] Prometheus: {{ primary_ip }}:{{ prometheus_port }} (Metrics collection)
-      [NOTE] Loki: {{ primary_ip }}:{{ loki_port }} (Log aggregation)
-      🔍 Uptime Kuma: {{ primary_ip }}:{{ uptime_kuma_port }} (Service monitoring)
-      🚨 Alertmanager: {{ primary_ip }}:{{ alertmanager_port }} (Alert routing)
+      [TARGET] Grafana: {{ primary_ip }}:{{ monitoring_grafana_port }} (Unified dashboards)
+      [STATS] Prometheus: {{ primary_ip }}:{{ monitoring_prometheus_port }} (Metrics collection)
+      [NOTE] Loki: {{ primary_ip }}:{{ monitoring_loki_port }} (Log aggregation)
+      🔍 Uptime Kuma: {{ primary_ip }}:{{ monitoring_uptime_kuma_port }} (Service monitoring)
+      🚨 Alertmanager: {{ primary_ip }}:{{ monitoring_alertmanager_port }} (Alert routing)
 
       Configuration:
       📁 Stack Home: {{ monitoring_stack_home }}

@@ -83,11 +83,11 @@
     delay: 5
     timeout: 60
   loop:
-    - { service: "prometheus", port: "{{ prometheus_port }}" }
-    - { service: "alertmanager", port: "{{ alertmanager_port }}" }
-    - { service: "grafana", port: "{{ grafana_port }}" }
-    - { service: "loki", port: "{{ loki_port }}" }
-    - { service: "uptime-kuma", port: "{{ uptime_kuma_port }}" }
+    - { service: "prometheus", port: "{{ monitoring_prometheus_port }}" }
+    - { service: "alertmanager", port: "{{ monitoring_alertmanager_port }}" }
+    - { service: "grafana", port: "{{ monitoring_grafana_port }}" }
+    - { service: "loki", port: "{{ monitoring_loki_port }}" }
+    - { service: "uptime-kuma", port: "{{ monitoring_uptime_kuma_port }}" }
   loop_control:
     label: "{{ item.service }}:{{ item.port }}"
 
@@ -117,11 +117,11 @@
     timeout: 10
     status_code: 200
   loop:
-    - { service: "prometheus", port: "{{ prometheus_port }}", health_path: "/-/healthy" }
-    - { service: "alertmanager", port: "{{ alertmanager_port }}", health_path: "/-/healthy" }
-    - { service: "grafana", port: "{{ grafana_port }}", health_path: "/api/health" }
-    - { service: "loki", port: "{{ loki_port }}", health_path: "/ready" }
-    - { service: "uptime-kuma", port: "{{ uptime_kuma_port }}" }
+    - { service: "prometheus", port: "{{ monitoring_prometheus_port }}", health_path: "/-/healthy" }
+    - { service: "alertmanager", port: "{{ monitoring_alertmanager_port }}", health_path: "/-/healthy" }
+    - { service: "grafana", port: "{{ monitoring_grafana_port }}", health_path: "/api/health" }
+    - { service: "loki", port: "{{ monitoring_loki_port }}", health_path: "/ready" }
+    - { service: "uptime-kuma", port: "{{ monitoring_uptime_kuma_port }}" }
   loop_control:
     label: "{{ item.service }}"
   register: endpoint_checks

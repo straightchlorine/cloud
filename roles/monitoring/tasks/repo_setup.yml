@@ -4,13 +4,13 @@
 
 - name: Add Grafana GPG key
   ansible.builtin.apt_key:
-    url: "{{ grafana_apt_key_url }}"
+    url: "{{ monitoring_grafana_apt_key_url }}"
     state: present
   become: true
 
 - name: Add Grafana repository
   ansible.builtin.apt_repository:
-    repo: "{{ grafana_apt_repo }}"
+    repo: "{{ monitoring_grafana_apt_repo }}"
     state: present
     common_update_cache: true
   become: true

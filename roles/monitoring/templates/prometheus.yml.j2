@@ -13,7 +13,7 @@ alerting:
   alertmanagers:
     - static_configs:
         - targets:
-          - localhost:{{ alertmanager_port }}
+          - localhost:{{ monitoring_alertmanager_port }}
 
 # Load alerting rules
 rule_files:
@@ -23,7 +23,7 @@ scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:{{ prometheus_port }}']
+      - targets: ['localhost:{{ monitoring_prometheus_port }}']
         labels:
           service: 'prometheus'
           role: 'monitoring'
@@ -31,7 +31,7 @@ scrape_configs:
   # Alertmanager
   - job_name: 'alertmanager'
     static_configs:
-      - targets: ['localhost:{{ alertmanager_port }}']
+      - targets: ['localhost:{{ monitoring_alertmanager_port }}']
         labels:
           service: 'alertmanager'
           role: 'monitoring'

@@ -21,16 +21,16 @@ monitoring_log_path: "/var/log/monitoring"
 monitoring_stack_home: "/opt/monitoring"
 
 # Package sources
-grafana_apt_key_url: "https://apt.grafana.com/gpg.key"
-grafana_apt_repo: "deb https://apt.grafana.com stable main"
+monitoring_grafana_apt_key_url: "https://apt.grafana.com/gpg.key"
+monitoring_grafana_apt_repo: "deb https://apt.grafana.com stable main"
 prometheus_version: "latest" # Will use Debian package version
 
 # Service configuration
-grafana_port: 3000
-prometheus_port: 9090
-loki_port: 3100
-uptime_kuma_port: 3001
-alertmanager_port: 9093
+monitoring_grafana_port: 3000
+monitoring_prometheus_port: 9090
+monitoring_loki_port: 3100
+monitoring_uptime_kuma_port: 3001
+monitoring_alertmanager_port: 9093
 
 # Grafana configuration
 grafana_admin_password: "{{ vault_grafana_admin_password }}"
@@ -86,7 +86,7 @@ common_backup_paths:
   - "{{ monitoring_stack_home }}/config"
 
 # Security configuration
-basic_auth_enabled: true
+monitoring_basic_auth_enabled: true
 # vault_prometheus_basic_auth: must be set in vault - no default
 # vault_loki_basic_auth: must be set in vault - no default
 # These will be validated during deployment

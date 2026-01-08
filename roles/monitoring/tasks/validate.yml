@@ -39,11 +39,11 @@
   register: port_check
   failed_when: false
   loop:
-    - "{{ grafana_port }}"
-    - "{{ prometheus_port }}"
-    - "{{ loki_port }}"
-    - "{{ uptime_kuma_port }}"
-    - "{{ alertmanager_port }}"
+    - "{{ monitoring_grafana_port }}"
+    - "{{ monitoring_prometheus_port }}"
+    - "{{ monitoring_loki_port }}"
+    - "{{ monitoring_uptime_kuma_port }}"
+    - "{{ monitoring_alertmanager_port }}"
 
 - name: Fail if critical ports are in use
   ansible.builtin.fail:
