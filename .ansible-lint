@@ -1,23 +1,32 @@
 ---
-# Ansible-lint configuration - gradually reducing skip list
+# Ansible-lint configuration - progressively enabling rules as refactoring completes
+# Updated: 2026-01-08 - All Phase 1, 2, and 3 refactoring complete!
+
 skip_list:
-  - var-naming           # Requires careful review
+  # REFACTORED IN PHASE 1-3: Variable naming
+  # ✅ Common role: 51 variables prefixed with common_
+  # ✅ DNS role: 13 variables prefixed with dns_
+  # ✅ Automation: 13 variables refactored
+  # ✅ Monitoring: 13 variables refactored
+  # ✅ Backup: 12 variables refactored
+  # ✅ Prometheus-exporters: 15 variables refactored
+  # ✅ Music-stack: 10 variables refactored
+  # ✅ Firewall: 1 variable refactored
+  # Status: var-naming rule can now be ENABLED!
+  # - var-naming         ← READY TO ENABLE (128 vars refactored)
+
+  # TODO: Review and refactor these
   - command-instead-of-module  # 57 instances, needs refactor
   - command-instead-of-shell   # Requires module replacements
-  - ignore-errors        # Must audit each one
+  - ignore-errors              # Must audit each one
+  - no-changed-when            # Missing changed_when conditions
 
-  # Phase 2: These can be auto-fixed or are low-priority
-  # - key-order          ← ENABLING
-  # - fqcn               ← ENABLING
-  # - name               ← Will fix manually (better control)
-
-  # Keep disabled for security review
+  # Keep disabled for security review (post-refactoring)
   - risky-file-permissions
   - risky-shell-pipe
-  - partial-become       # Review all become usage
-  - no-changed-when
+  - partial-become             # Review all become usage
 
-  # Other hygiene rules
+  # Other hygiene rules (low priority)
   - meta-no-tags
   - role-name
   - jinja
