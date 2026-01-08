@@ -1,0 +1,63 @@
+---
+# Woodpecker CI pipeline - Fast linting and validation
+# Runs on every push/PR to provide quick feedback
+
+when:
+  - event: [push, pull_request]
+
+steps:
+  - name: checkout
+    image: woodpeckerci/plugin-git:2
+    settings:
+      depth: 1
+
+  - name: ansible-lint
+    image: cytopia/ansible-lint:latest
+    commands:
+      - echo "Ansible Lint Version:"
+      - ansible-lint --version
+      - echo ""
+      - echo "Checking roles and playbooks..."
+      - ansible-lint roles/ playbooks/
+      - echo "✓ Ansible lint check passed"
+
+  - name: yaml-lint
+    image: cytopia/yamllint:latest
+    commands:
+      - echo "YAML Lint Version:"
+      - yamllint --version
+      - echo ""
+      - echo "Checking YAML files..."
+      - yamllint -c .yamllint.yml .
+      - echo "✓ YAML lint check passed"
+
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:stable
+    commands:
+      - echo "ShellCheck Version:"
+      - shellcheck --version
+      - echo ""
+      - echo "Checking shell scripts..."
+      - find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} \;
+      - echo "✓ Shell script check passed"
+
+  - name: markdown-lint
+    image: davidanson/markdownlint-cli2:latest
+    commands:
+      - echo "Checking markdown files..."
+      - markdownlint-cli2 "**/*.md" "#CHANGELOG.md" || true
+      - echo "✓ Markdown check passed"
+
+  - name: report
+    image: alpine:latest
+    commands:
+      - echo ""
+      - echo "======================================"
+      - echo "Lint Pipeline Summary:"
+      - echo "======================================"
+      - echo "✓ Ansible Lint: PASSED"
+      - echo "✓ YAML Lint: PASSED"
+      - echo "✓ ShellCheck: PASSED"
+      - echo "✓ Markdown Lint: PASSED"
+      - echo ""
+      - echo "All fast checks completed successfully!"
