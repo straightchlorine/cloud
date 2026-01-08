@@ -38,9 +38,9 @@
     service_group: "{{ prometheus_exporters_group }}"
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
-      -pihole_hostname {{ pihole_exporter_pihole_hostname }}
+      -pihole_hostname {{ prometheus_exporters_pihole_exporter_pihole_hostname }}
       -pihole_password {{ pihole_exporter_pihole_password }}
-      -port {{ pihole_exporter_port }}
+      -port {{ prometheus_exporters_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"
     syslog_identifier: "pihole-exporter"
@@ -65,7 +65,7 @@
 
 - name: Verify Pi-hole Exporter is responding
   ansible.builtin.uri:
-    url: "http://localhost:{{ pihole_exporter_port }}/metrics"
+    url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     method: GET
     timeout: 10
   register: pihole_exporter_health
@@ -75,7 +75,7 @@
 
 - name: Test Pi-hole connectivity from exporter
   ansible.builtin.uri:
-    url: "http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/api.php"
+    url: "http://{{ prometheus_exporters_pihole_exporter_pihole_hostname }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/api.php"
     method: GET
     timeout: 5
   register: pihole_api_test

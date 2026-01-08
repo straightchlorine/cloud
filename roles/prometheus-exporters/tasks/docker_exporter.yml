@@ -45,7 +45,7 @@
     common_protect_system: "strict"
     common_protect_home: "yes"
     common_private_tmp: "yes"
-    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd

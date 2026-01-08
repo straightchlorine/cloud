@@ -4,7 +4,7 @@
 - name: Create Pi hardware metrics collection script
   ansible.builtin.template:
     src: pi_hardware_metrics.sh.j2
-    dest: "{{ pi_hardware_metrics_script }}"
+    dest: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
     owner: "{{ prometheus_exporters_user }}"
     group: "{{ prometheus_exporters_group }}"
     mode: "0755"
@@ -24,12 +24,12 @@
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
     service_group: "{{ prometheus_exporters_group }}"
-    exec_start: "{{ pi_hardware_metrics_script }}"
+    exec_start: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
     remain_after_exit: "false"
     common_protect_system: "strict"
     common_protect_home: "yes"
     common_private_tmp: "yes"
-    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd
@@ -57,18 +57,18 @@
 
 - name: Create initial hardware metrics
   ansible.builtin.command:
-    cmd: "{{ pi_hardware_metrics_script }}"
+    cmd: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
   become_user: "{{ prometheus_exporters_user }}"
   become: true
   changed_when: false
 
 - name: Verify Pi hardware metrics file creation
   ansible.builtin.stat:
-    path: "{{ node_exporter_textfile_dir }}/pi_hardware.prom"
+    path: "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
   register: pi_metrics_file
 
 - name: Display Pi hardware metrics sample
-  ansible.builtin.shell: head -n 5 "{{ node_exporter_textfile_dir }}/pi_hardware.prom"
+  ansible.builtin.shell: head -n 5 "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
   register: pi_metrics_sample
   changed_when: false
   when: pi_metrics_file.stat.exists
@@ -77,9 +77,9 @@
   ansible.builtin.debug:
     msg: |
       [OK] Pi Hardware Metrics Setup Complete:
-      - Metrics script: {{ pi_hardware_metrics_script }}
-      - Collection interval: {{ pi_hardware_metrics_interval }} seconds
-      - Textfile output: {{ node_exporter_textfile_dir }}/pi_hardware.prom
+      - Metrics script: {{ prometheus_exporters_pi_hardware_metrics_script }}
+      - Collection interval: {{ prometheus_exporters_pi_hardware_metrics_interval }} seconds
+      - Textfile output: {{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom
       - Service: pi-hardware-metrics.timer
       {% if pi_metrics_sample.stdout is defined %}
 

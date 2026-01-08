@@ -10,14 +10,14 @@
   become: true
   when: item.enabled
   loop:
-    - port: "{{ node_exporter_port }}"
-      enabled: "{{ node_exporter_enabled }}"
+    - port: "{{ prometheus_exporters_node_exporter_port }}"
+      enabled: "{{ prometheus_exporters_node_exporter_enabled }}"
       comment: "Prometheus Node Exporter"
-    - port: "{{ pihole_exporter_port }}"
-      enabled: "{{ pihole_exporter_enabled }}"
+    - port: "{{ prometheus_exporters_pihole_exporter_port }}"
+      enabled: "{{ prometheus_exporters_pihole_exporter_enabled }}"
       comment: "Pi-hole Prometheus Exporter"
-    - port: "{{ docker_exporter_port }}"
-      enabled: "{{ docker_exporter_enabled }}"
+    - port: "{{ prometheus_exporters_docker_exporter_port }}"
+      enabled: "{{ prometheus_exporters_docker_exporter_enabled }}"
       comment: "Docker Prometheus Metrics"
   loop_control:
     label: "{{ item.comment }}"
@@ -27,11 +27,11 @@
     msg: |
       [OK] Prometheus Exporters Firewall Configuration:
       {% if node_exporter_enabled %}
-      - Node Exporter: Port {{ node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
+      - Node Exporter: Port {{ prometheus_exporters_node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
       {% if pihole_exporter_enabled %}
-      - Pi-hole Exporter: Port {{ pihole_exporter_port }} ({{ prometheus_exporters_firewall_source }})
+      - Pi-hole Exporter: Port {{ prometheus_exporters_pihole_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
       {% if docker_exporter_enabled %}
-      - Docker Metrics: Port {{ docker_exporter_port }} ({{ prometheus_exporters_firewall_source }})
+      - Docker Metrics: Port {{ prometheus_exporters_docker_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}

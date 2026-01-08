@@ -3,7 +3,7 @@
 
 - name: Check Node Exporter health
   ansible.builtin.uri:
-    url: "http://localhost:{{ node_exporter_port }}/metrics"
+    url: "http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -13,7 +13,7 @@
 
 - name: Check Pi-hole Exporter health
   ansible.builtin.uri:
-    url: "http://localhost:{{ pihole_exporter_port }}/metrics"
+    url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -33,15 +33,15 @@
 
 - name: Verify Pi hardware metrics file
   ansible.builtin.stat:
-    path: "{{ node_exporter_textfile_dir }}/pi_hardware.prom"
+    path: "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
   register: pi_hardware_metrics_file
   when: pi_hardware_metrics_enabled
 
 - name: Check textfile metrics freshness
   ansible.builtin.shell: |
-    if [ -f "{{ node_exporter_textfile_dir }}/pi_hardware.prom" ]; then
+    if [ -f "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom" ]; then
       # Check if file is newer than 5 minutes (300 seconds)
-      if [ $(($(date +%s) - $(stat -c %Y "{{ node_exporter_textfile_dir }}/pi_hardware.prom"))) -lt 300 ]; then
+      if [ $(($(date +%s) - $(stat -c %Y "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"))) -lt 300 ]; then
         echo "fresh"
       else
         echo "stale"
@@ -58,14 +58,14 @@
     set -o pipefail
     metrics_count=0
     {% if node_exporter_enabled %}
-    if curl -s http://localhost:{{ node_exporter_port }}/metrics | grep -c '^[a-zA-Z]' >/dev/null 2>&1; then
-      node_metrics=$(curl -s http://localhost:{{ node_exporter_port }}/metrics | grep -c '^[a-zA-Z]' || echo 0)
+    if curl -s http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics | grep -c '^[a-zA-Z]' >/dev/null 2>&1; then
+      node_metrics=$(curl -s http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics | grep -c '^[a-zA-Z]' || echo 0)
       metrics_count=$((metrics_count + node_metrics))
     fi
     {% endif %}
     {% if pihole_exporter_enabled %}
-    if curl -s http://localhost:{{ pihole_exporter_port }}/metrics | grep -c '^pihole_' >/dev/null 2>&1; then
-      pihole_metrics=$(curl -s http://localhost:{{ pihole_exporter_port }}/metrics | grep -c '^pihole_' || echo 0)
+    if curl -s http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics | grep -c '^pihole_' >/dev/null 2>&1; then
+      pihole_metrics=$(curl -s http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics | grep -c '^pihole_' || echo 0)
       metrics_count=$((metrics_count + pihole_metrics))
     fi
     {% endif %}
@@ -78,7 +78,7 @@
       🏥 Prometheus Exporters Health Check Report:
 
       {% if node_exporter_enabled %}
-      Node Exporter ({{ node_exporter_port }}):
+      Node Exporter ({{ prometheus_exporters_node_exporter_port }}):
       common_Status: {{ '[OK] Healthy' if node_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if node_exporter_health_check.status == 200 %}
       Response time: {{ node_exporter_health_check.elapsed }}s
@@ -86,7 +86,7 @@
       {% endif %}
 
       {% if pihole_exporter_enabled %}
-      Pi-hole Exporter ({{ pihole_exporter_port }}):
+      Pi-hole Exporter ({{ prometheus_exporters_pihole_exporter_port }}):
       common_Status: {{ '[OK] Healthy' if pihole_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if pihole_exporter_health_check.status == 200 %}
       Response time: {{ pihole_exporter_health_check.elapsed }}s

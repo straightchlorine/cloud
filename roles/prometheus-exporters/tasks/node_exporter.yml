@@ -18,14 +18,14 @@
       block:
         - name: Download Node Exporter checksums
           ansible.builtin.get_url:
-            url: "{{ node_exporter_checksum_url }}"
+            url: "{{ prometheus_exporters_node_exporter_checksum_url }}"
             dest: "/tmp/node_exporter_checksums.txt"
             timeout: 30
 
         - name: Extract expected checksum
           ansible.builtin.shell: |
             set -o pipefail
-            grep "node_exporter-{{ node_exporter_version }}.linux-{{
+            grep "node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
                   prometheus_arch_map[ansible_architecture] }}.tar.gz" \
               /tmp/node_exporter_checksums.txt | cut -d' ' -f1
           register: expected_checksum
@@ -33,21 +33,21 @@
 
         - name: Download Node Exporter archive
           ansible.builtin.get_url:
-            url: "{{ node_exporter_binary_url }}"
-            dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+            url: "{{ prometheus_exporters_node_exporter_binary_url }}"
+            dest: "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             checksum: "sha256:{{ expected_checksum.stdout }}"
             timeout: 60
 
         - name: Extract Node Exporter archive
           ansible.builtin.unarchive:
-            src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+            src: "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             dest: "/tmp"
             remote_src: true
 
         - name: Install Node Exporter binary
           ansible.builtin.copy:
             src: >-
-              /tmp/node_exporter-{{ node_exporter_version }}.linux-{{
+              /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
               prometheus_arch_map[ansible_architecture] }}/node_exporter
             dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
             owner: "{{ prometheus_exporters_user }}"
@@ -62,8 +62,8 @@
             path: "{{ item }}"
             state: absent
           loop:
-            - "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
-            - "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}"
+            - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
+            - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}"
             - "/tmp/node_exporter_checksums.txt"
 
         - node_exporter_install_method == "binary"
@@ -99,8 +99,8 @@
       {% for collector in node_exporter_enabled_collectors %}
       --collector.{{ collector }}
       {% endfor %}
-      --collector.textfile.directory={{ node_exporter_textfile_dir }}
-      --web.listen-address=0.0.0.0:{{ node_exporter_port }}
+      --collector.textfile.directory={{ prometheus_exporters_node_exporter_textfile_dir }}
+      --web.listen-address=0.0.0.0:{{ prometheus_exporters_node_exporter_port }}
       --web.telemetry-path=/metrics
       --log.level=info
       --log.format=logfmt
@@ -113,7 +113,7 @@
     protect_control_groups: "true"
     protect_kernel_modules: "true"
     protect_kernel_tunables: "true"
-    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd
@@ -140,7 +140,7 @@
 
 - name: Verify Node Exporter is responding
   ansible.builtin.uri:
-    url: "http://localhost:{{ node_exporter_port }}/metrics"
+    url: "http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: 10
   register: node_exporter_health

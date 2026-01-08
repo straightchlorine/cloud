@@ -31,7 +31,7 @@
     - "{{ prometheus_exporters_base_dir }}/scripts"
     - "{{ prometheus_exporters_base_dir }}/logs"
     - "{{ prometheus_exporters_config_dir }}"
-    - "{{ node_exporter_textfile_dir }}"
+    - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
 
 - name: Install required packages for exporters
   ansible.builtin.apt:
