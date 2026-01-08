@@ -25,8 +25,10 @@
     append: true
   become: true
   when: backup_additional_groups is defined and backup_additional_groups | length > 0
-  # Ignore errors - user may already exist or groups may not be valid on this system
-  ignore_errors: true
+  # Suppress errors if user already exists or groups not available on this system
+  failed_when:
+    - backup_user_group_result.rc not in [0, 1]
+  register: backup_user_group_result
 
 - name: Configure sudoers for backup user
   ansible.builtin.template:
@@ -174,14 +176,19 @@
     backup_ssh_key_path: "{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-ssh-key"
   become: true
 
+- name: Check if existing systemd service exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
+  become: true
+  register: existing_service
+
 - name: Backup existing systemd service if it exists
   ansible.builtin.copy:
     src: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
     dest: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service.backup"
     remote_src: true
   become: true
-  # Ignore errors - service may not exist on first deployment
-  ignore_errors: true
+  when: existing_service.stat.exists
 
 - name: Create systemd backup service
   ansible.builtin.template:
