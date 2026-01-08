@@ -25,6 +25,7 @@
     else
       echo "rclone already installed"
     fi
+  register: rclone_install
   changed_when: "'rclone already installed' not in rclone_install.stdout"
   become: true
 
@@ -38,8 +39,8 @@
     path: "{{ item }}"
     state: directory
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0750'
+    group: backup
+    mode: "0750"
   become: true
   loop:
     - "{{ backup_base_path }}/.config"
@@ -51,8 +52,8 @@
     path: "{{ backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
     type: ed25519
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0600'
+    group: backup
+    mode: "0600"
     comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
   become: true
   loop: "{{ centralized_backup_targets }}"
@@ -63,8 +64,8 @@
     src: rclone.conf.j2
     dest: "{{ backup_base_path }}/.config/rclone/rclone.conf"
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0600'
+    group: backup
+    mode: "0600"
   become: true
 
 - name: Create centralized backup script for each target
@@ -72,8 +73,8 @@
     src: centralized-backup-script.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0755'
+    group: backup
+    mode: "0755"
   vars:
     backup_target: "{{ item }}"
     backup_service_name: "{{ item.service_name }}"
@@ -92,8 +93,8 @@
     src: centralized-restore-script.sh.j2
     dest: "{{ backup_base_path }}/scripts/restore-{{ item.service_name }}.sh"
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0755'
+    group: backup
+    mode: "0755"
   vars:
     backup_target: "{{ item }}"
     backup_service_name: "{{ item.service_name }}"
@@ -109,8 +110,8 @@
     content: "{{ item.restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: backup
-    ansible.builtin.group: backup
-    mode: '0600'
+    group: backup
+    mode: "0600"
   become: true
   no_log: true
   loop: "{{ centralized_backup_targets }}"
@@ -120,8 +121,8 @@
     src: systemd-service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
     backup: true
   vars:
     service_description: "Centralized Rclone Backup Service for {{ item.service_name }}"
@@ -161,8 +162,8 @@
     src: backup-timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   vars:
     timer_description: "Centralized Backup Timer for {{ item.service_name }}"
     timer_service: "backup-{{ item.service_name }}.service"

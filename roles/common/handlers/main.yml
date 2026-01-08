@@ -65,6 +65,7 @@
         state: absent
       become: true
       become_user: "{{ ansible_user }}"
+      # Ignore errors during rollback - container or compose file may not exist in failure state
       ignore_errors: true
 
     - name: Restore from backup if available
@@ -73,6 +74,7 @@
           mv "{{ stack_home }}/docker-compose.yml.backup" "{{ stack_home }}/docker-compose.yml"
         fi
       become_user: "{{ ansible_user }}"
+      # Ignore errors - backup may not exist or file system may be in inconsistent state
       ignore_errors: true
 
     - name: Start restored stack
@@ -81,4 +83,5 @@
         state: present
       become: true
       become_user: "{{ ansible_user }}"
+      # Ignore errors - compose file or dependencies may not be available after failed deployment
       ignore_errors: true

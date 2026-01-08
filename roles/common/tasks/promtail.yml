@@ -11,12 +11,13 @@
   ansible.builtin.user:
     name: Promtail
     system: true
-    ansible.builtin.shell: /bin/false
+    shell: /bin/false
     home: /var/lib/promtail
     create_home: true
   become: true
 
 - name: Download and install Promtail binary
+  when: not promtail_binary.stat.exists
   block:
     - name: Download Promtail
       ansible.builtin.get_url:
@@ -40,7 +41,7 @@
         dest: /usr/local/bin/promtail
         mode: '0755'
         owner: root
-        ansible.builtin.group: root
+        group: root
         remote_src: true
       become: true
 
@@ -52,14 +53,13 @@
         - /tmp/promtail.zip
         - "/tmp/promtail-linux-{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
       become: true
-  when: not promtail_binary.stat.exists
 
 - name: Create Promtail configuration directory
   ansible.builtin.file:
     path: /etc/promtail
     state: directory
     owner: promtail
-    ansible.builtin.group: promtail
+    group: promtail
     mode: '0755'
   become: true
 
@@ -68,7 +68,7 @@
     src: promtail.yml.j2
     dest: /etc/promtail/promtail.yml
     owner: promtail
-    ansible.builtin.group: promtail
+    group: promtail
     mode: '0644'
   become: true
   notify: restart promtail
@@ -110,7 +110,7 @@
     path: /var/lib/promtail
     state: directory
     owner: promtail
-    ansible.builtin.group: promtail
+    group: promtail
     mode: '0755'
   become: true
 

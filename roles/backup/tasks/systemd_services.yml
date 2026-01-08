@@ -7,8 +7,8 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: "/etc/systemd/system/backup-{{ device_role }}.service"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   vars:
     service_description: "Enterprise Backup Service for {{ device_role }}"
     service_after: ["network.target"]
@@ -42,8 +42,8 @@
     src: backup-schedule.timer.j2
     dest: "/etc/systemd/system/backup-{{ device_role }}.timer"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   notify: reload systemd
 
@@ -52,8 +52,8 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: "/etc/systemd/system/backup-coordinator-{{ device_role }}.service"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   vars:
     service_description: "Enterprise Backup Coordinator for {{ device_role }}"
     service_after: ["network.target"]

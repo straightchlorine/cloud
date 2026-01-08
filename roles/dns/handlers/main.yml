@@ -25,6 +25,7 @@
         name: Pihole-FTL
         state: stopped
       become: true
+      # Ignore errors during rollback - service may not be running or may be in failed state
       ignore_errors: true
 
     - name: Restore configuration from backup if available
@@ -34,6 +35,7 @@
           mv /etc/pihole.backup /etc/pihole
         fi
       become: true
+      # Ignore errors - backup may not exist or file system may be in inconsistent state
       ignore_errors: true
 
     - name: Start Pi-hole service
@@ -41,4 +43,5 @@
         name: Pihole-FTL
         state: started
       become: true
+      # Ignore errors - configuration may not be fully restored and startup may fail
       ignore_errors: true

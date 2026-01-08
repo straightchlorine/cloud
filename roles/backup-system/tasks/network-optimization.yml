@@ -17,16 +17,16 @@
           StrictHostKeyChecking accept-new
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0600'
+    group: "{{ backup_group }}"
+    mode: "0600"
 
 - name: Create SSH socket directory
   ansible.builtin.file:
     path: "{{ backup_base_path }}/.ssh/sockets"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0700'
+    group: "{{ backup_group }}"
+    mode: "0700"
 
 - name: Display SSH optimization status
   ansible.builtin.debug:

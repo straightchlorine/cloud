@@ -25,7 +25,7 @@ scenario:
     - destroy
     - syntax
     - create
-    - converge  # This step should fail/be handled
-    - verify    # Verify the failure was expected
+    - converge # This step should fail/be handled
+    - verify # Verify the failure was expected
     - cleanup
     - destroy

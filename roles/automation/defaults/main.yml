@@ -130,7 +130,7 @@ automation_compose_services:
     image: "influxdb:3-core"
     container_name: "influxdb3-core"
     restart: "always"
-    ansible.builtin.user: "{{ automation_uid }}:{{ automation_gid }}"
+    user: "{{ automation_uid }}:{{ automation_gid }}"
     deploy:
       resources:
         limits:

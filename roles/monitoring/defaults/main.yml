@@ -23,7 +23,7 @@ monitoring_stack_home: "/opt/monitoring"
 # Package sources
 grafana_apt_key_url: "https://apt.grafana.com/gpg.key"
 grafana_apt_repo: "deb https://apt.grafana.com stable main"
-prometheus_version: "latest"  # Will use Debian package version
+prometheus_version: "latest" # Will use Debian package version
 
 # Service configuration
 grafana_port: 3000
@@ -79,7 +79,6 @@ loki_user: "loki"
 # Service discovery targets (to be populated from inventory)
 prometheus_targets: []
 loki_targets: []
-
 # Backup configuration
 # backup_enabled: determined by restic_enabled variable validation
 backup_paths:

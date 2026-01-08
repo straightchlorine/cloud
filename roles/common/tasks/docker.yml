@@ -9,6 +9,7 @@
   changed_when: false
 
 - name: Install Docker if not present
+  when: docker_check.rc != 0
   block:
     - name: Remove conflicting Docker packages
       ansible.builtin.apt:
@@ -73,8 +74,6 @@
       become: true
       notify: restart docker
 
-  when: docker_check.rc != 0
-
 - name: Add user to docker group
   ansible.builtin.user:
     name: "{{ ansible_user }}"
@@ -96,7 +95,7 @@
       }
     dest: /etc/docker/daemon.json
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
     backup: true
   become: true

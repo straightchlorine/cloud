@@ -26,7 +26,7 @@
 
 # Pi-hole exporter setup
 - name: Create pihole-exporter user
-  ansible.builtin.user:
+  user:
     name: "{{ pihole_exporter_user }}"
     system: true
     ansible.builtin.shell: /bin/false
@@ -40,7 +40,7 @@
     path: "{{ pihole_exporter_install_dir }}"
     state: directory
     owner: "{{ pihole_exporter_user }}"
-    ansible.builtin.group: "{{ pihole_exporter_user }}"
+    group: "{{ pihole_exporter_user }}"
     mode: '0755'
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
@@ -50,7 +50,7 @@
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ pihole_exporter_install_dir }}/pihole_exporter"
     owner: "{{ pihole_exporter_user }}"
-    ansible.builtin.group: "{{ pihole_exporter_user }}"
+    group: "{{ pihole_exporter_user }}"
     mode: '0755'
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
@@ -61,7 +61,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   vars:
     service_description: "Pi-hole Prometheus Exporter"

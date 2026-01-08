@@ -36,7 +36,7 @@
     path: "{{ music_stack_home }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
   tags: [docker]
 

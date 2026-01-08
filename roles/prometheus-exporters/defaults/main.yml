@@ -18,7 +18,7 @@ prometheus_arch_map:
 node_exporter_enabled: true
 node_exporter_version: "1.8.2"
 node_exporter_port: 9100
-node_exporter_install_method: "binary"  # 'binary' or 'package'
+node_exporter_install_method: "binary" # 'binary' or 'package'
 node_exporter_binary_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/
   node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz
@@ -45,10 +45,10 @@ node_exporter_enabled_collectors:
 node_exporter_textfile_dir: "{{ prometheus_exporters_base_dir }}/textfiles"
 pi_hardware_metrics_enabled: true
 pi_hardware_metrics_script: "{{ prometheus_exporters_base_dir }}/scripts/pi_hardware_metrics.sh"
-pi_hardware_metrics_interval: 30  # seconds
+pi_hardware_metrics_interval: 30 # seconds
 
 # Pi-hole Exporter configuration
-pihole_exporter_enabled: false  # Enable only on DNS hosts
+pihole_exporter_enabled: false # Enable only on DNS hosts
 pihole_exporter_version: "v1.2.0"
 pihole_exporter_port: 9617
 pihole_exporter_binary_url: >-
@@ -58,7 +58,7 @@ pihole_exporter_pihole_hostname: "localhost"
 pihole_exporter_pihole_port: 80
 
 # Docker Exporter configuration (for container hosts)
-docker_exporter_enabled: false  # Enable only on container hosts
+docker_exporter_enabled: false # Enable only on container hosts
 docker_exporter_version: "v1.3.0"
 docker_exporter_port: 9323
 

@@ -18,13 +18,14 @@
   ansible.builtin.user:
     name: Backup
     system: true
-    ansible.builtin.shell: /bin/bash
+    shell: /bin/bash
     home: "{{ backup_base_path }}"
     create_home: true
     groups: "{{ backup_additional_groups | default([]) }}"
     append: true
   become: true
   when: backup_additional_groups is defined and backup_additional_groups | length > 0
+  # Ignore errors - user may already exist or groups may not be valid on this system
   ignore_errors: true
 
 - name: Configure sudoers for backup user
@@ -32,7 +33,7 @@
     src: backup-sudoers.j2
     dest: /etc/sudoers.d/backup-user
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0440'
     validate: 'visudo -cf %s'
   become: true
@@ -74,7 +75,7 @@
     path: "{{ item }}"
     state: directory
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0750'
   become: true
   loop:
@@ -88,7 +89,7 @@
     content: "{{ restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0600'
   become: true
   no_log: true
@@ -98,7 +99,7 @@
     path: "{{ backup_base_path }}/.ssh"
     state: directory
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0700'
   become: true
 
@@ -124,7 +125,7 @@
   ansible.builtin.file:
     path: "{{ backup_base_path }}/.ssh/hetzner"
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0600'
   become: true
   when: hetzner_key_stat.stat.exists
@@ -134,7 +135,7 @@
     path: "{{ backup_base_path }}/.ssh/sockets"
     state: directory
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0700'
   become: true
 
@@ -143,7 +144,7 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0600'
   become: true
 
@@ -152,7 +153,7 @@
     src: backup-script.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0755'
   vars:
     backup_directories: "{{ backup_paths }}"
@@ -166,7 +167,7 @@
     src: restic-init.sh.j2
     dest: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
     owner: backup
-    ansible.builtin.group: backup
+    group: backup
     mode: '0755'
   vars:
     backup_password_file: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
@@ -179,6 +180,7 @@
     dest: "/etc/systemd/system/backup-{{ backup_service_name }}.service.backup"
     remote_src: true
   become: true
+  # Ignore errors - service may not exist on first deployment
   ignore_errors: true
 
 - name: Create systemd backup service
@@ -186,7 +188,7 @@
     src: systemd-service.j2
     dest: "/etc/systemd/system/backup-{{ backup_service_name }}.service"
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
     backup: true
   vars:
@@ -225,7 +227,7 @@
     src: backup-timer.j2
     dest: "/etc/systemd/system/backup-{{ backup_service_name }}.timer"
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   vars:
     timer_description: "Backup Timer for {{ backup_service_name }}"

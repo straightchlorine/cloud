@@ -16,8 +16,8 @@
       bantime = {{ fail2ban_ssh_bantime }}
     dest: /etc/fail2ban/jail.local
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   notify: restart fail2ban
 
@@ -41,8 +41,8 @@
     src: logrotate.conf.j2
     dest: /etc/logrotate.d/system-logs
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
 
 - name: Configure system update cron job

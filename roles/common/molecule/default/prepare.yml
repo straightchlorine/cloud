@@ -19,8 +19,9 @@
 
     - name: Ensure systemd is running
       ansible.builtin.service:
-        name: Systemd-logind
+        name: systemd-logind
         state: started
         enabled: true
       become: true
+      # Ignore errors - service may not be available in test container environment
       ignore_errors: true

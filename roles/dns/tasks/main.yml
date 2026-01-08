@@ -65,7 +65,7 @@
     path: /etc/pihole
     state: directory
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0755'
   become: true
 
@@ -74,7 +74,7 @@
     src: setupVars.conf.j2
     dest: /etc/pihole/setupVars.conf
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0600'
   become: true
   notify: restart pihole-FTL

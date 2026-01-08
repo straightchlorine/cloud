@@ -6,7 +6,7 @@ galaxy_info:
   description: Comprehensive Prometheus exporters for Raspberry Pi infrastructure
   company: Infrastructure Automation
   license: MIT
-  min_ansible_version: '2.14'
+  min_ansible_version: "2.14"
 
   platforms:
     - name: Debian
@@ -14,8 +14,8 @@ galaxy_info:
         - bookworm
     - name: Ubuntu
       versions:
-        - '22.04'
-        - '24.04'
+        - "22.04"
+        - "24.04"
 
   galaxy_tags:
     - prometheus

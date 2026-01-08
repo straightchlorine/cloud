@@ -16,13 +16,13 @@
       - prometheus_environment
       - prometheus_role
       - device_type
-    vault_placeholders: []  # No vault variables for exporters
+    vault_placeholders: [] # No vault variables for exporters
     backup_directories:
       - "{{ prometheus_exporters_base_dir }}"
     critical_backup_paths:
       - "{{ prometheus_exporters_base_dir }}/bin"
     stack_home: "{{ prometheus_exporters_base_dir }}"
-    required_services: []  # No Docker services
+    required_services: [] # No Docker services
   tags: [validation]
 
 # Role-specific validation tasks that supplement unified validation
@@ -60,6 +60,10 @@
   tags: [validation]
 
 - name: Validate Pi-hole Exporter dependencies
+  when:
+    - pihole_exporter_enabled
+    - "'dns' in group_names"
+  tags: [validation]
   block:
     - name: Check if Pi-hole is installed
       ansible.builtin.stat:
@@ -85,12 +89,12 @@
           WARNING: Pi-hole web interface not accessible at
           http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/
       when: pihole_web_check.status != 200
-  when:
-    - pihole_exporter_enabled
-    - "'dns' in group_names"
-  tags: [validation]
 
 - name: Validate Docker Exporter dependencies
+  when:
+    - docker_exporter_enabled
+    - "'automation' in group_names or 'music' in group_names"
+  tags: [validation]
   block:
     - name: Check Docker service status
       ansible.builtin.systemd:
@@ -101,16 +105,12 @@
       ansible.builtin.fail:
         msg: "Docker Exporter enabled but Docker service is not active"
       when: docker_service_status.status.ActiveState != "active"
-  when:
-    - docker_exporter_enabled
-    - "'automation' in group_names or 'music' in group_names"
-  tags: [validation]
 
 - name: Validate filesystem permissions
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   become: true
   check_mode: true
   register: dir_permission_check

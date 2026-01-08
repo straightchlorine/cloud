@@ -16,7 +16,6 @@
     # Enable YouTube sync for this playbook (overrides host_vars if needed)
     youtube_sync_enabled: true
   tags: [music-stack]
-
   pre_tasks:
     - name: Update package cache
       ansible.builtin.include_role:

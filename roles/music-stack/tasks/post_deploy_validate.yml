@@ -57,7 +57,7 @@
     path: "{{ music_library_path }}/music"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
   become: true
   tags: [post_validation]

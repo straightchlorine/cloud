@@ -29,7 +29,7 @@
   ansible.builtin.file:
     path: "{{ mount_path }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Mount SSD
@@ -54,7 +54,7 @@
   ansible.builtin.file:
     path: "{{ mount_path }}"
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     recurse: true
   become: true
 
@@ -63,7 +63,7 @@
     path: "{{ mount_path }}/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
   loop: "{{ mount_subdirectories | default([]) }}"
   when: mount_subdirectories is defined

@@ -1,29 +1,29 @@
 ---
-# Ansible-lint configuration
-
+# Ansible-lint configuration - gradually reducing skip list
 skip_list:
-  - name
-  - var-naming
-  - key-order
-  - args
-  - fqcn
-  - command-instead-of-module
-  - command-instead-of-shell
-  - partial-become
-  - no-changed-when
-  - no-handler
+  - var-naming           # Requires careful review
+  - command-instead-of-module  # 57 instances, needs refactor
+  - command-instead-of-shell   # Requires module replacements
+  - ignore-errors        # Must audit each one
+
+  # Phase 2: These can be auto-fixed or are low-priority
+  # - key-order          ← ENABLING
+  # - fqcn               ← ENABLING
+  # - name               ← Will fix manually (better control)
+
+  # Keep disabled for security review
   - risky-file-permissions
   - risky-shell-pipe
-  - ignore-errors
+  - partial-become       # Review all become usage
+  - no-changed-when
+
+  # Other hygiene rules
   - meta-no-tags
   - role-name
   - jinja
+  - args
 
 exclude_paths:
   - ./inventory
   - ./.git
   - ./.woodpecker/
-  - ./playbooks/backup/deploy-full-system.yml
-  - ./roles/backup-system/
-  - ./roles/firewall/
-  - ./roles/prometheus-exporters/

@@ -33,6 +33,7 @@
   tags: [service_startup_validation]
 
 - name: Validate required Docker networks
+  tags: [service_startup_validation]
   block:
     - name: Test creating traefik-network if needed
       ansible.builtin.shell: >-
@@ -61,7 +62,6 @@
            grep -q "$(date '+%Y-%m-%d')"; then
           docker network rm music-stack 2>/dev/null || true
         fi
-  tags: [service_startup_validation]
 
 - name: Validate service restart policies
   ansible.builtin.shell: |

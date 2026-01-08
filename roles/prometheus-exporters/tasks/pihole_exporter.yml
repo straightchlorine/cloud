@@ -6,8 +6,8 @@
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
     owner: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
-    mode: '0755'
+    group: "{{ prometheus_exporters_group }}"
+    mode: "0755"
     timeout: 60
   become: true
   notify: restart pihole-exporter
@@ -17,8 +17,8 @@
     src: pihole-exporter.conf.j2
     dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
     owner: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
-    mode: '0644'
+    group: "{{ prometheus_exporters_group }}"
+    mode: "0644"
   become: true
   notify: restart pihole-exporter
 
@@ -27,8 +27,8 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   vars:
     service_description: "Pi-hole Prometheus Exporter"
     service_after: ["network.target"]

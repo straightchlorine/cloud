@@ -12,7 +12,7 @@
     src: 50unattended-upgrades.j2
     dest: /etc/apt/apt.conf.d/50unattended-upgrades
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   become: true
 
@@ -21,7 +21,7 @@
     src: 20auto-upgrades.j2
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   become: true
 
@@ -30,7 +30,7 @@
     src: pihole-update.sh.j2
     dest: /usr/local/bin/pihole-update.sh
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0755'
   become: true
 
@@ -41,7 +41,7 @@
     hour: "2"
     weekday: "1"
     job: "/usr/local/bin/pihole-update.sh >> /var/log/weekly-updates.log 2>&1"
-    ansible.builtin.user: root
+    user: root
   become: true
 
 - name: Create log rotation for update logs
@@ -49,6 +49,6 @@
     src: weekly-updates-logrotate.j2
     dest: /etc/logrotate.d/weekly-updates
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   become: true

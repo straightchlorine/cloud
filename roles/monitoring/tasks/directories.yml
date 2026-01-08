@@ -7,7 +7,7 @@
     path: "{{ item }}"
     state: directory
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0755'
   become: true
   loop:
@@ -20,7 +20,7 @@
     path: "{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
-    ansible.builtin.group: "{{ item.group }}"
+    group: "{{ item.group }}"
     mode: "{{ item.mode }}"
   become: true
   loop:
@@ -36,7 +36,7 @@
     path: "{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
-    ansible.builtin.group: "{{ item.group }}"
+    group: "{{ item.group }}"
     mode: "0755"
   become: true
   loop:

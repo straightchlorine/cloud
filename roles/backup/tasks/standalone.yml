@@ -7,8 +7,8 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0700'
+    group: "{{ backup_group }}"
+    mode: "0700"
   become: true
   loop:
     - "{{ backup_base_path }}/.ssh"
@@ -43,8 +43,8 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0600'
+    group: "{{ backup_group }}"
+    mode: "0600"
   become: true
 
 - name: Test SSH connectivity to Hetzner
@@ -86,7 +86,7 @@
         {{ 'passed' if 'success' in sftp_test.stdout else
         'failed (may be uninitialized, will be initialized below)' }}
       repository: {{ restic_repository }}
-      ansible.builtin.user: {{ backup_user }}
+      user: {{ backup_user }}
 
 - name: Initialize restic repository
   ansible.builtin.command: restic init
@@ -123,8 +123,8 @@
     src: backup-standalone.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0750'
+    group: "{{ backup_group }}"
+    mode: "0750"
   become: true
 
 - name: Deploy systemd service for standalone backup
@@ -132,8 +132,8 @@
     src: backup-standalone.service.j2
     dest: "/etc/systemd/system/backup-{{ inventory_hostname }}.service"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   notify: Reload systemd
 
@@ -142,8 +142,8 @@
     src: backup-standalone.timer.j2
     dest: "/etc/systemd/system/backup-{{ inventory_hostname }}.timer"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   notify: Reload systemd
 

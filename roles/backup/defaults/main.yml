@@ -3,8 +3,8 @@
 # Modern backup standards with multi-repository strategy and advanced operational features
 
 # Enterprise backup strategy
-backup_strategy: "multi-repository"  # Options: single, multi-repository, tiered
-backup_tier: "production"           # Options: production, staging, development
+backup_strategy: "multi-repository" # Options: single, multi-repository, tiered
+backup_tier: "production" # Options: production, staging, development
 
 # User and group configuration
 backup_user: "backup"
@@ -40,7 +40,7 @@ backup_repositories:
 # Backup scheduling and orchestration
 backup_orchestration:
   enabled: true
-  coordination_method: "systemd"  # Options: systemd, cron, kubernetes
+  coordination_method: "systemd" # Options: systemd, cron, kubernetes
   dependency_management: true
   parallel_limit: 6
   timeout_minutes: 240
@@ -51,17 +51,17 @@ backup_orchestration:
 performance_optimization:
   cache_enabled: true
   cache_size_mb: 2048
-  compression_level: "auto"  # Options: none, fast, max, auto
+  compression_level: "auto" # Options: none, fast, max, auto
   concurrent_uploads: 4
   concurrent_downloads: 4
-  bandwidth_limit_mbps: 0  # 0 = unlimited
-  cpu_priority: "normal"   # Options: low, normal, high
+  bandwidth_limit_mbps: 0 # 0 = unlimited
+  cpu_priority: "normal" # Options: low, normal, high
 
 # Service-specific backup configuration
 service_backup_configs:
   dns:
     repository: "critical"
-    schedule: "0 1 * * *"  # Daily at 1 AM
+    schedule: "0 1 * * *" # Daily at 1 AM
     pre_backup_scripts: ["pihole-flush", "dns-consistency-check"]
     post_backup_scripts: ["backup-verification"]
     include_paths:
@@ -74,7 +74,7 @@ service_backup_configs:
 
   automation:
     repository: "critical"
-    schedule: "0 2 * * *"  # Daily at 2 AM
+    schedule: "0 2 * * *" # Daily at 2 AM
     pre_backup_scripts: ["container-pause", "database-backup"]
     post_backup_scripts: ["container-resume", "backup-verification"]
     include_paths:
@@ -88,7 +88,7 @@ service_backup_configs:
 
   music:
     repository: "services"
-    schedule: "0 3 * * *"  # Daily at 3 AM
+    schedule: "0 3 * * *" # Daily at 3 AM
     pre_backup_scripts: ["media-sync", "library-consistency"]
     post_backup_scripts: ["backup-verification"]
     include_paths:
@@ -101,7 +101,7 @@ service_backup_configs:
 
   system:
     repository: "system"
-    schedule: "0 4 * * *"  # Daily at 4 AM
+    schedule: "0 4 * * *" # Daily at 4 AM
     pre_backup_scripts: ["system-snapshot"]
     post_backup_scripts: ["backup-verification"]
     include_paths:

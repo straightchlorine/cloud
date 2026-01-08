@@ -33,10 +33,10 @@
       Please set a real value in vault.yml.
   when: vars[item.var] is defined and (vars[item.var] | string) == item.value
   loop:
-    - {var: "vault_domain_name", value: "example.com"}
-    - {var: "vault_domain_name", value: "codextechnologies.org"}
-    - {var: "vault_letsencrypt_email", value: "admin@example.com"}
-    - {var: "vault_letsencrypt_email", value: "admin@codextechnologies.org"}
+    - { var: "vault_domain_name", value: "example.com" }
+    - { var: "vault_domain_name", value: "codextechnologies.org" }
+    - { var: "vault_letsencrypt_email", value: "admin@example.com" }
+    - { var: "vault_letsencrypt_email", value: "admin@codextechnologies.org" }
   tags: [vault_validation]
 
 - name: Display core vault validation success

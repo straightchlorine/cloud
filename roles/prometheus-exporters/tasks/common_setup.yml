@@ -2,15 +2,15 @@
 # Common setup for Prometheus exporters
 
 - name: Create prometheus user and group
-  ansible.builtin.group:
+  group:
     name: "{{ prometheus_exporters_group }}"
     system: true
   become: true
 
 - name: Create prometheus user
-  ansible.builtin.user:
+  user:
     name: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
+    group: "{{ prometheus_exporters_group }}"
     system: true
     ansible.builtin.shell: /bin/false
     home: "{{ prometheus_exporters_base_dir }}"
@@ -22,7 +22,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
+    group: "{{ prometheus_exporters_group }}"
     mode: '0755'
   become: true
   loop:
@@ -58,6 +58,6 @@
     src: prometheus-exporters-logrotate.j2
     dest: /etc/logrotate.d/prometheus-exporters
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   become: true

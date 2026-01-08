@@ -11,12 +11,13 @@
 - name: Create backup user
   ansible.builtin.user:
     name: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     home: "{{ backup_base_path }}"
-    ansible.builtin.shell: /bin/bash
+    shell: /bin/bash
     createhome: true
     system: true
   become: true
+  # Ignore errors - user may already exist or group may not be valid on this system
   ignore_errors: true
 
 - name: Create backup directory structure
@@ -24,7 +25,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}"
@@ -41,7 +42,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/mounts"
@@ -53,7 +54,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0700'
   loop:
     - "{{ backup_base_path }}/.ssh"

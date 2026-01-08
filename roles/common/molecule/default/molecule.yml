@@ -1,16 +1,16 @@
 ---
 driver:
-  name: Podman
+  name: podman
 
 platforms:
-  - name: Test
+  - name: test
     image: docker.io/geerlingguy/docker-debian12-ansible:latest
-    ansible.builtin.command: /lib/systemd/systemd
+    command: /lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 
 provisioner:
-  name: Ansible
+  name: ansible
 
 verifier:
-  name: Ansible
+  name: ansible

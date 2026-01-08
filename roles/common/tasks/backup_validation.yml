@@ -11,6 +11,7 @@
   tags: [backup_validation]
 
 - name: Check backup user directory requirements
+  tags: [backup_validation]
   block:
     - name: Check if backup user home directory path is accessible
       ansible.builtin.stat:
@@ -21,7 +22,7 @@
       ansible.builtin.file:
         path: /opt/backup
         state: directory
-        mode: '0755'
+        mode: "0755"
       become: true
       check_mode: true
       register: backup_home_creation_check
@@ -33,13 +34,12 @@
       when:
         - not backup_home_check.stat.exists
         - backup_home_creation_check is failed
-  tags: [backup_validation]
 
 - name: Validate backup user configuration directories can be created
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   become: true
   check_mode: true
   register: backup_dir_checks
@@ -92,7 +92,7 @@
       Insufficient disk space for backup operations.
       Available: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
       Required: 1GB minimum for backup metadata and temporary files.
-  when: (backup_disk_space.stdout | int) < 1048576  # 1GB in KB
+  when: (backup_disk_space.stdout | int) < 1048576 # 1GB in KB
   tags: [backup_validation]
 
 # Enhanced writability validation for Item #23

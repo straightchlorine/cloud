@@ -6,8 +6,8 @@
     src: pi_hardware_metrics.sh.j2
     dest: "{{ pi_hardware_metrics_script }}"
     owner: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
-    mode: '0755'
+    group: "{{ prometheus_exporters_group }}"
+    mode: "0755"
   become: true
   notify: restart pi-hardware-metrics
 
@@ -16,8 +16,8 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pi-hardware-metrics.service
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   vars:
     service_description: "Pi Hardware Metrics Collection"
     service_after: ["network.target"]
@@ -40,8 +40,8 @@
     src: pi-hardware-metrics.timer.j2
     dest: /etc/systemd/system/pi-hardware-metrics.timer
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   notify:
     - reload systemd

@@ -5,8 +5,8 @@
 - name: Enable user_allow_other in fuse.conf for SSHFS mounts
   ansible.builtin.lineinfile:
     path: /etc/fuse.conf
-    regexp: '^\s*#?\s*user_allow_other'
-    line: 'user_allow_other'
+    regexp: "^\\s*#?\\s*user_allow_other"
+    line: "user_allow_other"
     state: present
   become: true
 
@@ -15,8 +15,8 @@
     path: "{{ item.ssh_key }}"
     type: ed25519
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0600'
+    group: "{{ backup_group }}"
+    mode: "0600"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:
@@ -28,8 +28,8 @@
     path: "{{ backup_base_path }}/.ssh/nodes"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0700'
+    group: "{{ backup_group }}"
+    mode: "0700"
   become: true
 
 - name: Check if Hetzner SSH key exists
@@ -55,8 +55,8 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0600'
+    group: "{{ backup_group }}"
+    mode: "0600"
   become: true
 
 - name: Test SSH connectivity to Hetzner Storage Box
@@ -119,8 +119,8 @@
     path: "{{ backup_base_path }}/keys"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0700'
+    group: "{{ backup_group }}"
+    mode: "0700"
   become: true
 
 - name: Create password files for each coordinator target
@@ -128,8 +128,8 @@
     content: "{{ item.restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0600'
+    group: "{{ backup_group }}"
+    mode: "0600"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:
@@ -140,8 +140,8 @@
     src: restic-init.sh.j2
     dest: "{{ backup_base_path }}/scripts/init-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0750'
+    group: "{{ backup_group }}"
+    mode: "0750"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:
@@ -176,8 +176,8 @@
     src: backup-coordinator-target.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
-    mode: '0750'
+    group: "{{ backup_group }}"
+    mode: "0750"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:
@@ -190,8 +190,8 @@
     src: backup-coordinator.service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:
@@ -205,8 +205,8 @@
     src: backup-coordinator.timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
-    ansible.builtin.group: root
-    mode: '0644'
+    group: root
+    mode: "0644"
   become: true
   loop: "{{ coordinator_targets }}"
   loop_control:

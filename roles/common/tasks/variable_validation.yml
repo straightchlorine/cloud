@@ -2,7 +2,7 @@
 # Common variable validation logic
 # Used by all roles to validate required variables
 
-- name: "Validate {{ validation_context }} required variables are defined"
+- name: Validate required variables are defined - {{ validation_context }}
   ansible.builtin.fail:
     msg: "Required variable '{{ item }}' is not defined or empty"
   when: vars[item] is not defined or vars[item] == ""

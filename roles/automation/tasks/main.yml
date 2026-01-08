@@ -24,10 +24,10 @@
   tags: [packages]
 
 - name: Create automation user
-  ansible.builtin.user:
+  user:
     name: "{{ automation_user }}"
     uid: "{{ automation_uid }}"
-    ansible.builtin.group: "{{ automation_user }}"
+    group: "{{ automation_user }}"
     groups: docker
     append: true
     ansible.builtin.shell: /bin/bash
@@ -50,7 +50,7 @@
     path: "{{ automation_stack_home }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
   tags: [docker]
 
@@ -84,7 +84,7 @@
     backup_ssh_config:
       host: "{{ backup_ssh_host }}"
       port: "{{ backup_ssh_port }}"
-      ansible.builtin.user: "{{ backup_ssh_user }}"
+      user: "{{ backup_ssh_user }}"
       remote_path: "/backups"
   when: restic_enabled | default(false)
   tags: [backup]

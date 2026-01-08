@@ -3,9 +3,9 @@
 # Enterprise-grade repository management with service isolation and performance optimization
 
 - name: Create backup user
-  ansible.builtin.user:
+  user:
     name: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     home: "{{ backup_base_path }}"
     ansible.builtin.shell: /bin/bash
     system: true
@@ -17,7 +17,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
   loop:
@@ -57,7 +57,7 @@
     content: "{{ restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ device_role }}-password"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0600'
   become: true
   no_log: true
@@ -67,7 +67,7 @@
     src: init-repositories.sh.j2
     dest: "{{ backup_base_path }}/scripts/init-repositories.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -76,7 +76,7 @@
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
     dest: "{{ backup_base_path }}/scripts/backup-{{ device_role }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   vars:
     backup_service_name: "{{ device_role }}"
@@ -99,7 +99,7 @@
     src: backup-coordinator.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-coordinator.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -108,7 +108,7 @@
     src: repository-health-monitor.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-health-monitor.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -117,7 +117,7 @@
     src: repository-config.yml.j2
     dest: "{{ backup_base_path }}/config/{{ device_role }}-repository.yml"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0640'
   become: true
   loop: "{{ backup_repositories | dict2items }}"
@@ -127,7 +127,7 @@
     src: manage-repositories.sh.j2
     dest: "{{ backup_base_path }}/scripts/manage-repositories.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -136,7 +136,7 @@
     src: repository-health-check.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-health-check.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -145,7 +145,7 @@
     src: repository-performance.py.j2
     dest: "{{ backup_base_path }}/scripts/repository-performance.py"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -154,7 +154,7 @@
     src: manage-encryption-keys.sh.j2
     dest: "{{ backup_base_path }}/scripts/manage-encryption-keys.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0700'
   become: true
 
@@ -163,7 +163,7 @@
     src: repository-consistency.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-consistency.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -172,7 +172,7 @@
     src: repository-orchestrator.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-orchestrator.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -181,7 +181,7 @@
     src: repository-migration.sh.j2
     dest: "{{ backup_base_path }}/scripts/repository-migration.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -190,7 +190,7 @@
     src: analyze-deduplication.py.j2
     dest: "{{ backup_base_path }}/scripts/analyze-deduplication.py"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -297,7 +297,7 @@
     src: repository-dashboard.json.j2
     dest: "{{ backup_base_path }}/dashboards/repository-management.json"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0640'
   become: true
 

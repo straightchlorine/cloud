@@ -17,6 +17,9 @@
     else
       echo "unknown"
     fi
+  args:
+    executable: /bin/bash
+  register: hardware_detection_raw
   changed_when: false
 
 - name: Gather system resources

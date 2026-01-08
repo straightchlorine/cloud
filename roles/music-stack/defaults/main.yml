@@ -103,7 +103,7 @@ music_stack_compose_services:
       - "{{ music_library_path }}/music:/music:ro"
       - "{{ music_library_path }}/navidrome-data:/data"
     restart: "always"
-    ansible.builtin.user: "{{ ansible_uid }}:{{ ansible_gid }}"
+    user: "{{ ansible_uid }}:{{ ansible_gid }}"
 
   beets:
     image: "linuxserver/beets:latest"

@@ -51,7 +51,7 @@
               prometheus_arch_map[ansible_architecture] }}/node_exporter
             dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
             owner: "{{ prometheus_exporters_user }}"
-            ansible.builtin.group: "{{ prometheus_exporters_group }}"
+            group: "{{ prometheus_exporters_group }}"
             mode: '0755'
             remote_src: true
           become: true
@@ -84,7 +84,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/node-exporter.service
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   vars:
     service_description: "Prometheus Node Exporter"
@@ -125,7 +125,7 @@
     src: node-exporter.conf.j2
     dest: "{{ prometheus_exporters_config_dir }}/node-exporter.conf"
     owner: "{{ prometheus_exporters_user }}"
-    ansible.builtin.group: "{{ prometheus_exporters_group }}"
+    group: "{{ prometheus_exporters_group }}"
     mode: '0644'
   become: true
   notify: restart node-exporter

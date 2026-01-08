@@ -17,8 +17,8 @@
   ansible.builtin.command: |
     nslookup {{ domain_name }} {{ item }}
   loop:
-    - "1.1.1.1"  # Cloudflare
-    - "9.9.9.9"  # Quad9
+    - "1.1.1.1" # Cloudflare
+    - "9.9.9.9" # Quad9
   register: domain_resolution
   changed_when: false
   failed_when: false

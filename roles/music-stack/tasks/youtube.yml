@@ -13,7 +13,7 @@
     name: "PATH"
     env: true
     value: "/usr/local/bin:/usr/bin:/bin"
-    ansible.builtin.user: "{{ ansible_user }}"
+    user: "{{ ansible_user }}"
   when: youtube_sync_enabled
   tags: [youtube, cron]
 
@@ -22,7 +22,7 @@
     name: "PLAYLIST_URL"
     env: true
     value: "{{ vault_youtube_playlist_url }}"
-    ansible.builtin.user: "{{ ansible_user }}"
+    user: "{{ ansible_user }}"
   when: youtube_sync_enabled and vault_youtube_playlist_url is defined
   tags: [youtube, cron]
 
@@ -32,7 +32,7 @@
     hour: "2"
     minute: "30"
     job: "{{ music_stack_home }}/scripts/youtube-cron.sh >> {{ music_library_path }}/logs/youtube-cron.log 2>&1"
-    ansible.builtin.user: "{{ ansible_user }}"
+    user: "{{ ansible_user }}"
   when: youtube_sync_enabled
   tags: [youtube, cron]
 
@@ -43,6 +43,6 @@
     minute: "15"
     weekday: "0"
     job: "{{ music_stack_home }}/scripts/beets-rescan.sh >> {{ music_library_path }}/logs/beets-rescan.log 2>&1"
-    ansible.builtin.user: "{{ ansible_user }}"
+    user: "{{ ansible_user }}"
   when: youtube_sync_enabled
   tags: [youtube, cron, beets]

@@ -17,9 +17,9 @@
   register: template_test_result
   failed_when: false
   loop:
-    - {src: "roles/automation/templates/traefik-static.yml.j2", name: "traefik-static.yml"}
-    - {src: "roles/automation/templates/traefik-dynamic.yml.j2", name: "traefik-dynamic.yml"}
-    - {src: "roles/automation/templates/docker-compose.yml.j2", name: "docker-compose.yml"}
+    - { src: "roles/automation/templates/traefik-static.yml.j2", name: "traefik-static.yml" }
+    - { src: "roles/automation/templates/traefik-dynamic.yml.j2", name: "traefik-dynamic.yml" }
+    - { src: "roles/automation/templates/docker-compose.yml.j2", name: "docker-compose.yml" }
   when: "'automation' in group_names"
   tags: [template_validation]
 
@@ -31,8 +31,8 @@
   register: dns_template_test_result
   failed_when: false
   loop:
-    - {src: "roles/dns/templates/setupVars.conf.j2", name: "setupVars.conf"}
-    - {src: "roles/dns/templates/chrony.conf.j2", name: "chrony.conf"}
+    - { src: "roles/dns/templates/setupVars.conf.j2", name: "setupVars.conf" }
+    - { src: "roles/dns/templates/chrony.conf.j2", name: "chrony.conf" }
   when: "'dns' in group_names"
   tags: [template_validation]
 
@@ -44,8 +44,8 @@
   register: music_template_test_result
   failed_when: false
   loop:
-    - {src: "roles/music-stack/templates/docker-compose.yml.j2", name: "music-docker-compose.yml"}
-    - {src: "roles/music-stack/templates/youtube.env.j2", name: "youtube.env"}
+    - { src: "roles/music-stack/templates/docker-compose.yml.j2", name: "music-docker-compose.yml" }
+    - { src: "roles/music-stack/templates/youtube.env.j2", name: "youtube.env" }
   when: "'music' in group_names and youtube_sync_enabled | default(false)"
   tags: [template_validation]
 

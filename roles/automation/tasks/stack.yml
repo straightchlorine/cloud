@@ -18,8 +18,8 @@
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
   loop:
     - influxdb3/data
     - influxdb3/plugins
@@ -33,8 +33,8 @@
     path: "{{ automation_stack_home }}/config/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
   loop:
     - dozzle
     - influxdb3-explorer
@@ -44,24 +44,24 @@
     path: "{{ automation_stack_home }}/scripts"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
 
 - name: Create stack management script
   ansible.builtin.template:
     src: manage-automation.sh.j2
     dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
 
 - name: Create stack backup script
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
     dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
   vars:
     backup_service_name: "automation-stack"
     backup_directories:

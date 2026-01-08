@@ -3,7 +3,7 @@
 # Deploys centralized backup coordinator (backup-wyse)
 
 - name: Ensure backup coordinator user exists
-  ansible.builtin.user:
+  user:
     name: "{{ backup_user }}"
     ansible.builtin.shell: /bin/bash
     home: "{{ backup_base_path }}"
@@ -20,7 +20,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/scripts"
@@ -77,7 +77,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/.config"
@@ -88,7 +88,7 @@
     path: "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}"
     type: ed25519
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0600'
     comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
   loop: "{{ backup_targets }}"
@@ -102,7 +102,7 @@
 
 - name: Deploy SSH public keys to target hosts
   ansible.posix.authorized_key:
-    ansible.builtin.user: "{{ item.item.ssh_user | default(backup_user) }}"
+    user: "{{ item.item.ssh_user | default(backup_user) }}"
     state: present
     key: "{{ item.content | b64decode }}"
     comment: "backup-{{ item.item.service_name }}@{{ ansible_hostname }}"
@@ -132,7 +132,7 @@
     src: rclone-config.conf.j2
     dest: "{{ backup_base_path }}/.config/rclone/rclone.conf"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0600'
 
 - name: Create coordinator backup scripts for each target
@@ -140,7 +140,7 @@
     src: coordinator-backup.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0755'
   vars:
     backup_target: "{{ item }}"
@@ -151,7 +151,7 @@
     src: coordinator-restore.sh.j2
     dest: "{{ backup_base_path }}/scripts/enterprise-restore-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0755'
   vars:
     backup_target: "{{ item }}"
@@ -171,7 +171,7 @@
     content: "{{ item.restic_password | default(generated_restic_passwords[item.service_name]) }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0600'
   no_log: true
   loop: "{{ backup_targets }}"
@@ -181,7 +181,7 @@
     content: "{{ item.restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0600'
   loop: "{{ backup_targets }}"
   no_log: true
@@ -191,7 +191,7 @@
     src: backup.service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   vars:
     backup_target: "{{ item }}"
@@ -204,7 +204,7 @@
     src: backup.timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   vars:
     backup_target: "{{ item }}"
@@ -247,7 +247,7 @@
     src: coordinator-manager.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-manager.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create key rotation script
@@ -255,7 +255,7 @@
     src: key-rotation.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-key-rotation.sh"
     owner: "{{ backup_user }}"
-    ansible.builtin.group: "{{ backup_group }}"
+    group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create key rotation service
@@ -280,7 +280,7 @@
       WantedBy=multi-user.target
     dest: /etc/systemd/system/backup-key-rotation.service
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   notify:
     - reload systemd
@@ -301,7 +301,7 @@
       WantedBy=timers.target
     dest: /etc/systemd/system/backup-key-rotation.timer
     owner: root
-    ansible.builtin.group: root
+    group: root
     mode: '0644'
   notify:
     - reload systemd

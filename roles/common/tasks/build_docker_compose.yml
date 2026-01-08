@@ -9,7 +9,7 @@
     state: directory
     owner: "{{ compose_file_owner }}"
     group: "{{ compose_file_group }}"
-    mode: '0755'
+    mode: "0755"
 
 - name: Generate Docker Compose file header
   ansible.builtin.copy:
@@ -23,7 +23,7 @@
     dest: "{{ compose_file_path }}"
     owner: "{{ compose_file_owner }}"
     group: "{{ compose_file_group }}"
-    mode: '0644'
+    mode: "0644"
 
 - name: Add each service to compose file
   ansible.builtin.blockinfile:
@@ -40,7 +40,7 @@
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
     marker: "# {mark} ANSIBLE MANAGED NETWORKS"
-    block: |
+    block: |2
 
       networks:
       {% for network in compose_networks %}
@@ -58,7 +58,7 @@
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
     marker: "# {mark} ANSIBLE MANAGED VOLUMES"
-    block: |
+    block: |2
 
       volumes:
       {% for volume in compose_volumes %}

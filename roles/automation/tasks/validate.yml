@@ -71,8 +71,8 @@
     path: "{{ item.item }}"
     state: directory
     owner: "{{ automation_user }}"
-    ansible.builtin.group: "{{ automation_user }}"
-    mode: '0755'
+    group: "{{ automation_user }}"
+    mode: "0755"
   when: not item.stat.exists
   loop: "{{ dir_check.results }}"
   loop_control:

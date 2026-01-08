@@ -26,7 +26,7 @@
       - restic_repository
       - restic_password
     vault_placeholders:
-      - {var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"}
+      - { var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" }
     backup_directories:
       - "{{ music_library_path }}"
       - "{{ music_stack_home }}"
@@ -62,8 +62,8 @@
     path: "{{ item.item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    ansible.builtin.group: "{{ ansible_user }}"
-    mode: '0755'
+    group: "{{ ansible_user }}"
+    mode: "0755"
   when: not item.stat.exists
   loop: "{{ music_dir_check.results }}"
   loop_control:
@@ -91,7 +91,7 @@
     msg: |
       WARNING: Available space: {{ (music_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
       Music libraries require significant space.
-  when: (music_disk_space.stdout | int) < 10485760  # Less than 10GB
+  when: (music_disk_space.stdout | int) < 10485760 # Less than 10GB
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
