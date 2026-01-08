@@ -47,8 +47,10 @@
 
 - name: Validate specified interface exists
   ansible.builtin.fail:
-    msg: "Network interface {{ pihole_interface }} does not exist. Available: {{ ansible_interfaces | join(', ') }}"
-  when: pihole_interface not in ansible_interfaces
+    msg: |
+      Network interface {{{ dns_pihole_interface }}} does not exist.
+      Available: {{ ansible_interfaces | join(', ') }}
+  when: dns_pihole_interface not in ansible_interfaces
 
 - name: Validate IPv4 address format
   ansible.builtin.fail:

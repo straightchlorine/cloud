@@ -1,5 +1,5 @@
 # Pi-hole Setup Variables
-PIHOLE_INTERFACE={{ pihole_interface }}
+PIHOLE_INTERFACE={{{ dns_pihole_interface }}}
 IPV4_ADDRESS={{ pihole_ipv4_address }}
 IPV6_ADDRESS={{ pihole_ipv6_address }}
 {% for dns_server in pihole_dns_servers %}

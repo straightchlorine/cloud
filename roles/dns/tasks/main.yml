@@ -16,14 +16,14 @@
     name: Common
     tasks_from: packages
   vars:
-    role_specific_packages: "{{ pihole_packages }}"
+    role_specific_packages: "{{{ dns_pihole_packages }}}"
   tags: [packages]
 
 - name: Clone Pi-hole repository for secure installation
   ansible.builtin.git:
-    repo: "{{ pihole_git_repo }}"
+    repo: "{{{ dns_pihole_git_repo }}}"
     dest: /tmp/pi-hole-repo
-    version: "{{ pihole_version }}"
+    version: "{{{ dns_pihole_version }}}"
     depth: 1
     force: true
   become: true
@@ -47,7 +47,7 @@
   ansible.builtin.debug:
     msg: |
       Pi-hole repository cloned successfully
-      Version: {{ pihole_version }}
+      Version: {{{ dns_pihole_version }}}
       Commit: {{ pihole_commit_hash.stdout }}
       Install script location: /tmp/pi-hole-repo/automated install/basic-install.sh
       Script size: {{ pihole_installer.stat.size }} bytes
