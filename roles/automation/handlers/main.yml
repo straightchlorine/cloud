@@ -1,12 +1,12 @@
+---
 # Handlers for automation role - use common handlers with variables
 
-- name: restart automation stack
+- name: Restart automation stack
   ansible.builtin.set_fact:
     stack_home: "{{ automation_stack_home }}"
   notify: restart docker compose stack
 
-- name: rollback automation stack
+- name: Rollback automation stack
   ansible.builtin.set_fact:
     stack_home: "{{ automation_stack_home }}"
   notify: rollback docker compose stack
-

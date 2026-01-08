@@ -1,3 +1,4 @@
+---
 # Main tasks for prometheus-exporters role
 
 - name: Include validation tasks

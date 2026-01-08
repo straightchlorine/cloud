@@ -1,3 +1,4 @@
+---
 # Service management for monitoring stack
 # Manages systemd services for Prometheus, Grafana, Loki, Uptime Kuma
 
@@ -28,7 +29,7 @@
     protect_control_groups: "yes"
     limit_nofile: "65536"
     memory_max: "512M"
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart loki
@@ -55,7 +56,7 @@
     private_tmp: "yes"
     read_write_paths: ["/opt/uptime-kuma/data"]
     memory_max: "256M"
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart uptime-kuma
@@ -64,9 +65,9 @@
   ansible.builtin.systemd:
     name: "{{ item }}"
     state: started
-    enabled: yes
-    daemon_reload: yes
-  become: yes
+    enabled: true
+    daemon_reload: true
+  become: true
   loop:
     - prometheus
     - prometheus-alertmanager
@@ -133,7 +134,8 @@
       [OK] Monitoring Services Status:
 
       {% for check in endpoint_checks.results %}
-      {{ check.item.service | title }}: {{ '[OK] Running' if check.status == 200 else '[FAIL] Failed' }} ({{ check.item.port }})
+      {{ check.item.service | title }}: {{
+          '[OK] Running' if check.status == 200 else '[FAIL] Failed' }} ({{ check.item.port }})
       {% endfor %}
 
       All monitoring services are running and accessible!
@@ -143,4 +145,4 @@
     src: monitoring-logrotate.j2
     dest: /etc/logrotate.d/monitoring
     mode: '0644'
-  become: yes
+  become: true

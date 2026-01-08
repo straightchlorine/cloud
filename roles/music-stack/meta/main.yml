@@ -1,3 +1,4 @@
+---
 galaxy_info:
   author: Ansible Admin
   description: Music Stack for Raspberry Pi with Navidrome, Beets, YouTube downloading, and automated backups
@@ -32,4 +33,3 @@ dependencies:
   - role: common
   - role: firewall
   - role: prometheus-exporters
-

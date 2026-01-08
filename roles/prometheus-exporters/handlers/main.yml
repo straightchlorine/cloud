@@ -1,48 +1,49 @@
+---
 # Handlers for prometheus-exporters role
 # Note: reload systemd uses common handler
 
-- name: restart node-exporter
+- name: Restart node-exporter
   ansible.builtin.systemd:
-    name: node-exporter
+    name: Node-exporter
     state: restarted
-  become: yes
+  become: true
   when: node_exporter_enabled
 
-- name: restart pihole-exporter
+- name: Restart pihole-exporter
   ansible.builtin.systemd:
-    name: pihole-exporter
+    name: Pihole-exporter
     state: restarted
-  become: yes
+  become: true
   when: pihole_exporter_enabled
 
-- name: restart pi-hardware-metrics
+- name: Restart pi-hardware-metrics
   ansible.builtin.systemd:
-    name: pi-hardware-metrics.service
+    name: Pi-hardware-metrics.service
     state: restarted
-  become: yes
+  become: true
   when: pi_hardware_metrics_enabled
 
-- name: restart pi-hardware-metrics-timer
+- name: Restart pi-hardware-metrics-timer
   ansible.builtin.systemd:
-    name: pi-hardware-metrics.timer
+    name: Pi-hardware-metrics.timer
     state: restarted
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   when: pi_hardware_metrics_enabled
 
-- name: restart docker-metrics
+- name: Restart docker-metrics
   ansible.builtin.systemd:
-    name: docker-metrics.service
+    name: Docker-metrics.service
     state: restarted
-  become: yes
+  become: true
   when: docker_exporter_enabled
 
-- name: restart docker-metrics-timer
+- name: Restart docker-metrics-timer
   ansible.builtin.systemd:
-    name: docker-metrics.timer
+    name: Docker-metrics.timer
     state: restarted
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   when: docker_exporter_enabled
 
 # restart docker uses common handler

@@ -1,3 +1,4 @@
+---
 # Firewall configuration for Prometheus exporters
 
 - name: Configure firewall rules for exporters
@@ -6,7 +7,7 @@
     port: "{{ item.port }}"
     src: "{{ prometheus_exporters_firewall_source }}"
     comment: "{{ item.comment }}"
-  become: yes
+  become: true
   when: item.enabled
   loop:
     - port: "{{ node_exporter_port }}"

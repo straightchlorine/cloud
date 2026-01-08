@@ -28,7 +28,9 @@
       - vault_backup_storage_user is defined
       - vault_backup_storage_port is defined
       - vault_backup_repository_base is defined
-    fail_msg: "Missing Hetzner storage configuration. Required: vault_backup_storage_host, vault_backup_storage_user, vault_backup_storage_port, vault_backup_repository_base"
+    fail_msg: >-
+      Missing Hetzner storage configuration. Required: vault_backup_storage_host,
+      vault_backup_storage_user, vault_backup_storage_port, vault_backup_repository_base
     success_msg: "Hetzner storage configuration validated"
 
 # Standalone mode validation
@@ -133,7 +135,8 @@
           - item.restic_optimization.read_concurrency is defined
           - item.restic_optimization.compression is defined
           - item.restic_optimization.pack_size is defined
-        fail_msg: "Target {{ item.service_name }}: restic_optimization must define read_concurrency, compression, pack_size"
+        fail_msg: |
+          Target {{ item.service_name }}: restic_optimization must define read_concurrency, compression, pack_size
         success_msg: "Target {{ item.service_name }} optimization validated"
       loop: "{{ coordinator_targets }}"
       loop_control:
@@ -205,4 +208,3 @@
       - "restic version: {{ restic_version }}"
       - "{% if backup_role == 'standalone' %}backup paths: {{ backup_paths | length }}{% endif %}"
       - "{% if backup_role == 'coordinator' %}coordinator targets: {{ coordinator_targets | length }}{% endif %}"
-

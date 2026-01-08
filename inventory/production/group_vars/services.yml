@@ -1,3 +1,4 @@
+---
 # Service-specific variables for service hosts
 
 # DNS Configuration
@@ -56,4 +57,3 @@ common_ssd_config:
   ssd_filesystem: "ext4"
   ssd_mount_options: "defaults,noatime,errors=remount-ro"
   ssd_format: false
-

@@ -1,9 +1,10 @@
+---
 # Automation stack deployment validation
 # Uses unified validation framework to eliminate redundancy
 
 - name: Run automation stack comprehensive validation
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: unified_validation
   vars:
     validation_context: "automation stack"
@@ -70,13 +71,13 @@
     path: "{{ item.item }}"
     state: directory
     owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
+    ansible.builtin.group: "{{ automation_user }}"
     mode: '0755'
   when: not item.stat.exists
   loop: "{{ dir_check.results }}"
   loop_control:
     label: "{{ item.item }}"
-  become: yes
+  become: true
 
 - name: Check if automation user exists
   ansible.builtin.getent:
@@ -88,7 +89,9 @@
 - name: Validate UID/GID are numeric
   ansible.builtin.fail:
     msg: "automation_uid and automation_gid must be numeric values"
-  when: not (automation_uid | string | regex_search('^[0-9]+$')) or not (automation_gid | string | regex_search('^[0-9]+$'))
+  when: >-
+    not (automation_uid | string | regex_search('^[0-9]+$')) or
+    not (automation_gid | string | regex_search('^[0-9]+$'))
 
 - name: Check required ports are available
   ansible.builtin.wait_for:
@@ -111,7 +114,7 @@
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
-    name: docker
+    name: Docker
   register: docker_status
 
 - name: Fail if Docker is not active
@@ -138,7 +141,9 @@
 
 - name: Fail if insufficient disk space
   ansible.builtin.fail:
-    msg: "Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 5GB minimum"
+    msg: >-
+      Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Required: 5GB minimum
   when: (disk_space.stdout | int) < 5242880
 
 - name: Validate domain name format

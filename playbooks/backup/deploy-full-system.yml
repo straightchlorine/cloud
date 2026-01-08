@@ -29,7 +29,7 @@
   tasks:
     - name: Deploy enterprise backup coordinator
       ansible.builtin.include_role:
-        name: backup-system
+        name: Backup-system
 
   post_tasks:
     - name: Display SSH key deployment instructions
@@ -41,7 +41,8 @@
           {{ target.service_name }}:
           SSH Key: {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub
           Target: {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
-          Command: ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
+          Command: ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub \
+            {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
 
           {% endfor %}
 

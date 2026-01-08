@@ -1,0 +1,29 @@
+---
+# Ansible-lint configuration
+
+skip_list:
+  - name
+  - var-naming
+  - key-order
+  - args
+  - fqcn
+  - command-instead-of-module
+  - command-instead-of-shell
+  - partial-become
+  - no-changed-when
+  - no-handler
+  - risky-file-permissions
+  - risky-shell-pipe
+  - ignore-errors
+  - meta-no-tags
+  - role-name
+  - jinja
+
+exclude_paths:
+  - ./inventory
+  - ./.git
+  - ./.woodpecker/
+  - ./playbooks/backup/deploy-full-system.yml
+  - ./roles/backup-system/
+  - ./roles/firewall/
+  - ./roles/prometheus-exporters/

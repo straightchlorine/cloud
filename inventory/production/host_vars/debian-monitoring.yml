@@ -1,3 +1,4 @@
+---
 # Monitoring Infrastructure Host Configuration
 # Dedicated Debian host for centralized monitoring stack
 
@@ -110,4 +111,3 @@ required_monitoring_vars:
   - vault_smtp_host
   - vault_smtp_port
   - vault_restic_monitoring_password
-

@@ -20,7 +20,9 @@ repos:
     hooks:
       - id: validate-infrastructure-dryrun
         name: Infrastructure validation (dry-run)
-        entry: bash -c 'ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff || true'
+        entry: >-
+          bash -c 'ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment
+          --check --diff || true'
         language: system
         pass_filenames: false
         stages: [push]

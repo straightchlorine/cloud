@@ -1,8 +1,9 @@
+---
 # Prometheus exporters validation using unified framework
 
 - name: Run prometheus exporters comprehensive validation
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: unified_validation
   vars:
     validation_context: "prometheus exporters"
@@ -80,7 +81,9 @@
 
     - name: Warn if Pi-hole web interface unreachable
       ansible.builtin.debug:
-        msg: "WARNING: Pi-hole web interface not accessible at http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/"
+        msg: >-
+          WARNING: Pi-hole web interface not accessible at
+          http://{{ pihole_exporter_pihole_hostname }}:{{ pihole_exporter_pihole_port }}/admin/
       when: pihole_web_check.status != 200
   when:
     - pihole_exporter_enabled
@@ -91,7 +94,7 @@
   block:
     - name: Check Docker service status
       ansible.builtin.systemd:
-        name: docker
+        name: Docker
       register: docker_service_status
 
     - name: Fail if Docker required but not available
@@ -108,8 +111,8 @@
     path: "{{ item }}"
     state: directory
     mode: '0755'
-  become: yes
-  check_mode: yes
+  become: true
+  check_mode: true
   register: dir_permission_check
   failed_when: false
   loop:
@@ -132,7 +135,10 @@
     msg: |
       [OK] Prometheus Exporters Validation Complete:
       - Architecture: {{ ansible_architecture }} → {{ prometheus_arch_map[ansible_architecture] }}
-      - Enabled exporters: {{ [('node' if node_exporter_enabled else ''), ('pihole' if pihole_exporter_enabled else ''), ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
+      - Enabled exporters: >-
+          {{ [('node' if node_exporter_enabled else ''),
+          ('pihole' if pihole_exporter_enabled else ''),
+          ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
       - Base directory: {{ prometheus_exporters_base_dir }}
       - Port validation: Completed
       - Dependencies: Verified

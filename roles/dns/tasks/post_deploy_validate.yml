@@ -1,3 +1,4 @@
+---
 # Post-deployment validation for DNS services
 # Verifies Pi-hole and related services are working correctly
 
@@ -42,7 +43,7 @@
 
 - name: Check NTP service if enabled
   ansible.builtin.systemd:
-    name: chrony
+    name: Chrony
   register: ntp_status
   when: ntp_server_enabled | default(false)
   tags: [post_validation]
@@ -69,4 +70,3 @@
 
       Pi-hole deployment validated successfully!
   tags: [post_validation]
-

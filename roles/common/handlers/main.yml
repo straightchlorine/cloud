@@ -1,38 +1,39 @@
+---
 # Handlers for common role
 
-- name: restart fail2ban
+- name: Restart fail2ban
   ansible.builtin.systemd:
-    name: fail2ban
+    name: Fail2ban
     state: restarted
   become: true
 
-- name: restart rsyslog
+- name: Restart rsyslog
   ansible.builtin.systemd:
-    name: rsyslog
+    name: Rsyslog
     state: restarted
   become: true
 
-- name: restart docker
+- name: Restart docker
   ansible.builtin.systemd:
-    name: docker
+    name: Docker
     state: restarted
   become: true
 
 # Common systemd handler - used by multiple roles
-- name: reload systemd
+- name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
   become: true
 
 # Generic systemd service restart handler - parameterized for any service
-- name: restart systemd service
+- name: Restart systemd service
   ansible.builtin.systemd:
     name: "{{ service_name }}"
     state: restarted
   become: true
 
 # Backup service restart handler
-- name: restart backup service
+- name: Restart backup service
   ansible.builtin.systemd:
     name: "backup-{{ backup_service_name }}.service"
     state: restarted
@@ -40,7 +41,7 @@
   become: true
 
 # Backup timer restart handler
-- name: restart backup timer
+- name: Restart backup timer
   ansible.builtin.systemd:
     name: "backup-{{ backup_service_name }}.timer"
     state: restarted
@@ -49,19 +50,20 @@
   become: true
 
 # Common Docker Compose stack restart handler - parameterized for different stacks
-- name: restart docker compose stack
+- name: Restart docker compose stack
   community.docker.docker_compose_v2:
     project_src: "{{ stack_home }}"
     state: restarted
   become_user: "{{ ansible_user }}"
 
 # Common Docker Compose stack rollback handler - parameterized for different stacks
-- name: rollback docker compose stack
+- name: Rollback docker compose stack
   block:
     - name: Stop current stack
       community.docker.docker_compose_v2:
         project_src: "{{ stack_home }}"
         state: absent
+      become: true
       become_user: "{{ ansible_user }}"
       ignore_errors: true
 
@@ -77,6 +79,6 @@
       community.docker.docker_compose_v2:
         project_src: "{{ stack_home }}"
         state: present
+      become: true
       become_user: "{{ ansible_user }}"
       ignore_errors: true
-

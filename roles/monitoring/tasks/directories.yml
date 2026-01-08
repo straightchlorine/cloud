@@ -1,3 +1,4 @@
+---
 # Directory management for monitoring stack
 # Creates necessary directories with proper ownership and permissions
 
@@ -6,9 +7,9 @@
     path: "{{ item }}"
     state: directory
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0755'
-  become: yes
+  become: true
   loop:
     - "{{ monitoring_data_path }}"
     - "{{ monitoring_log_path }}"
@@ -19,9 +20,9 @@
     path: "{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
-    group: "{{ item.group }}"
+    ansible.builtin.group: "{{ item.group }}"
     mode: "{{ item.mode }}"
-  become: yes
+  become: true
   loop:
     - { path: "/var/lib/prometheus", owner: "prometheus", group: "prometheus", mode: "0755" }
     - { path: "/var/lib/grafana", owner: "grafana", group: "grafana", mode: "0755" }
@@ -35,9 +36,9 @@
     path: "{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
-    group: "{{ item.group }}"
+    ansible.builtin.group: "{{ item.group }}"
     mode: "0755"
-  become: yes
+  become: true
   loop:
     - { path: "/var/log/prometheus", owner: "prometheus", group: "prometheus" }
     - { path: "/var/log/grafana", owner: "grafana", group: "grafana" }
@@ -50,7 +51,7 @@
     path: /etc/logrotate.d
     state: directory
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Verify directory permissions
   ansible.builtin.stat:

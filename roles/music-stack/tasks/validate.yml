@@ -1,9 +1,10 @@
+---
 # Music stack deployment validation
 # Uses unified validation framework to eliminate redundancy
 
 - name: Run music stack comprehensive validation
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: unified_validation
   vars:
     validation_context: "music stack"
@@ -25,7 +26,7 @@
       - restic_repository
       - restic_password
     vault_placeholders:
-      - { var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" }
+      - {var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"}
     backup_directories:
       - "{{ music_library_path }}"
       - "{{ music_stack_home }}"
@@ -61,13 +62,13 @@
     path: "{{ item.item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   when: not item.stat.exists
   loop: "{{ music_dir_check.results }}"
   loop_control:
     label: "{{ item.item }}"
-  become: yes
+  become: true
 
 - name: Check SSD device availability
   ansible.builtin.stat:
@@ -87,12 +88,14 @@
 
 - name: Warn if low disk space for music
   ansible.builtin.debug:
-    msg: "WARNING: Available space: {{ (music_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Music libraries require significant space."
+    msg: |
+      WARNING: Available space: {{ (music_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Music libraries require significant space.
   when: (music_disk_space.stdout | int) < 10485760  # Less than 10GB
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
-    name: docker
+    name: Docker
   register: docker_status
 
 - name: Fail if Docker is not active

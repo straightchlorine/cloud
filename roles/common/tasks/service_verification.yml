@@ -1,3 +1,4 @@
+---
 # Standardized service verification for all playbooks
 # Eliminates post-task duplication across playbooks
 
@@ -15,7 +16,9 @@
 
 - name: Display service status
   ansible.builtin.debug:
-    msg: "{{ item.item.name }}: {{ 'UP' if item.status in (item.item.valid_codes | default([200])) else 'DOWN' }} ({{ item.status | default('No response') }})"
+    msg: >-
+      {{ item.item.name }}: {{ 'UP' if item.status in (item.item.valid_codes | default([200])) else 'DOWN' }}
+      ({{ item.status | default('No response') }})
   loop: "{{ service_check.results }}"
   loop_control:
     label: "{{ item.item.name }}"

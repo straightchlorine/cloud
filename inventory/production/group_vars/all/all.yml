@@ -1,3 +1,4 @@
+---
 # Global configuration variables for all hosts
 
 # Common system settings
@@ -61,4 +62,3 @@ required_vars:
   - domain_name
   - vault_domain_name
   - vault_letsencrypt_email
-

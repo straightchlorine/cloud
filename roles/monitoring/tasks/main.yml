@@ -1,3 +1,4 @@
+---
 # Main monitoring stack deployment tasks
 # Deploys Grafana, Prometheus, Loki, Uptime Kuma via native Debian packages
 
@@ -7,7 +8,7 @@
 
 - name: Include common requirements
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: network_facts
   tags: [network]
 
@@ -17,7 +18,7 @@
 
 - name: Install monitoring packages using common package management
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ monitoring_packages }}"
@@ -34,7 +35,6 @@
 - name: Include service management
   ansible.builtin.include_tasks: services.yml
   tags: [services]
-
 
 - name: Display monitoring stack deployment summary
   ansible.builtin.debug:

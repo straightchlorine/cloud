@@ -1,3 +1,4 @@
+---
 # DNS server specific configuration - Pi-hole on Debian Bookworm
 dns_service: pihole
 dns_port: 53
@@ -18,7 +19,6 @@ pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
-
 
 # Automatic updates configuration
 auto_updates_enabled: true
@@ -41,20 +41,20 @@ firewall_ports:
   - {port: 123, comment: "NTP server", proto: "udp"}
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
-  - {port: 19999, comment: "Netdata",}
+  - {port: 19999, comment: "Netdata"}
 
 # Additional services for Pi 3B
 additional_services:
-  - name: netdata
+  - name: Netdata
     description: "System monitoring"
     port: 19999
-  - name: prometheus-node-exporter
+  - name: Prometheus-node-exporter
     description: "Metrics collection"
     port: 9100
-  - name: chrony
+  - name: Chrony
     description: "NTP server"
     port: 123
-  - name: pihole-exporter
+  - name: Pihole-exporter
     description: "Pi-hole metrics exporter"
     port: 9617
 
@@ -75,5 +75,3 @@ backup_exclude_patterns:
   - "*.tmp"
   - "*.log.1*"
   - "/var/log/pihole/pihole.log.*"
-
-

@@ -1,22 +1,23 @@
+---
 - name: Run automation stack deployment validation
   ansible.builtin.include_tasks: validate.yml
   tags: [validation]
 
 - name: Detect hardware for resource allocation
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: detect_hardware
   tags: [hardware, validation]
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: network_facts
   tags: [network, facts]
 
 - name: Include common package management
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ automation_specific_packages }}"
@@ -26,10 +27,10 @@
   ansible.builtin.user:
     name: "{{ automation_user }}"
     uid: "{{ automation_uid }}"
-    group: "{{ automation_user }}"
+    ansible.builtin.group: "{{ automation_user }}"
     groups: docker
     append: true
-    shell: /bin/bash
+    ansible.builtin.shell: /bin/bash
     home: "/home/{{ automation_user }}"
     create_home: true
   become: true
@@ -40,7 +41,7 @@
 
 - name: Include common Docker setup
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: docker
   tags: [docker]
 
@@ -49,7 +50,7 @@
     path: "{{ automation_stack_home }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   tags: [docker]
 
@@ -64,7 +65,7 @@
 
 - name: Configure unified restic backup
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: restic_backup
   vars:
     backup_service_name: "automation"
@@ -83,19 +84,19 @@
     backup_ssh_config:
       host: "{{ backup_ssh_host }}"
       port: "{{ backup_ssh_port }}"
-      user: "{{ backup_ssh_user }}"
+      ansible.builtin.user: "{{ backup_ssh_user }}"
       remote_path: "/backups"
   when: restic_enabled | default(false)
   tags: [backup]
 
 - name: Configure firewall
   ansible.builtin.include_role:
-    name: firewall
+    name: Firewall
   tags: [firewall, security]
 
 - name: Create Docker stack systemd service
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: docker_stack_service
   vars:
     stack_service_name: "automation-stack"
@@ -111,4 +112,3 @@
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
   tags: [post_validation, never]
-

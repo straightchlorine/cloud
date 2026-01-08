@@ -1,54 +1,54 @@
+---
 # Automatic updates configuration for Debian
 
 - name: Install unattended-upgrades package
-  apt:
-    name: unattended-upgrades
+  ansible.builtin.apt:
+    name: Unattended-upgrades
     state: present
-  become: yes
+  become: true
 
 - name: Configure unattended-upgrades
-  template:
+  ansible.builtin.template:
     src: 50unattended-upgrades.j2
     dest: /etc/apt/apt.conf.d/50unattended-upgrades
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true
 
 - name: Enable automatic updates
-  template:
+  ansible.builtin.template:
     src: 20auto-upgrades.j2
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true
 
 - name: Create Pi-hole update script
-  template:
+  ansible.builtin.template:
     src: pihole-update.sh.j2
     dest: /usr/local/bin/pihole-update.sh
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create weekly update cron job
-  cron:
+  ansible.builtin.cron:
     name: "Weekly system and Pi-hole updates"
     minute: "0"
     hour: "2"
     weekday: "1"
     job: "/usr/local/bin/pihole-update.sh >> /var/log/weekly-updates.log 2>&1"
-    user: root
-  become: yes
+    ansible.builtin.user: root
+  become: true
 
 - name: Create log rotation for update logs
-  template:
+  ansible.builtin.template:
     src: weekly-updates-logrotate.j2
     dest: /etc/logrotate.d/weekly-updates
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
-
+  become: true

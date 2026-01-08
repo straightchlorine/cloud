@@ -1,6 +1,7 @@
+---
 - name: Create standardized Docker Compose file
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: build_docker_compose
   vars:
     compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
@@ -17,7 +18,7 @@
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   loop:
     - influxdb3/data
@@ -32,7 +33,7 @@
     path: "{{ automation_stack_home }}/config/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   loop:
     - dozzle
@@ -43,7 +44,7 @@
     path: "{{ automation_stack_home }}/scripts"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create stack management script
@@ -51,7 +52,7 @@
     src: manage-automation.sh.j2
     dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create stack backup script
@@ -59,7 +60,7 @@
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
     dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   vars:
     backup_service_name: "automation-stack"
@@ -69,10 +70,11 @@
 
 - name: Create Docker network for Traefik
   community.docker.docker_network:
-    name: traefik-network
+    name: Traefik-network
     driver: bridge
     state: present
     scope: local
+  become: true
   become_user: "{{ ansible_user }}"
   tags: [docker, network, traefik]
 
@@ -147,4 +149,3 @@
 
       Data locations:
       - Traefik: {{ automation_data_path }}/traefik
-

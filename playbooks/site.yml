@@ -1,12 +1,13 @@
+---
 - name: Pre-deployment validation
   hosts: all
-  gather_facts: yes
-  become: no
+  gather_facts: true
+  become: false
   tags: [validation, pre_validation]
   tasks:
     - name: Run backup validation for all hosts
       ansible.builtin.include_role:
-        name: common
+        name: Common
         tasks_from: backup_validation
       tags: [backup_validation]
       when: run_validation
@@ -15,25 +16,25 @@
       block:
         - name: DNS validation for Pi-hole hosts
           ansible.builtin.include_role:
-            name: dns
+            name: Dns
             tasks_from: validate
           when: "'dns' in group_names"
 
         - name: Automation validation for automation hosts
           ansible.builtin.include_role:
-            name: automation
+            name: Automation
             tasks_from: validate
           when: "'automation' in group_names"
 
         - name: Music stack validation for music hosts
           ansible.builtin.include_role:
-            name: music-stack
+            name: Music-stack
             tasks_from: validate
           when: "'music' in group_names"
 
         - name: Monitoring validation for monitoring hosts
           ansible.builtin.include_role:
-            name: monitoring
+            name: Monitoring
             tasks_from: validate
           when: "'monitoring' in group_names"
       when: run_validation
@@ -46,7 +47,7 @@
   pre_tasks:
     - name: Update package cache
       ansible.builtin.include_role:
-        name: common
+        name: Common
         tasks_from: package_cache_update
 
   roles:
@@ -100,11 +101,10 @@
     - role: monitoring
       tags: [monitoring, grafana, prometheus, loki]
 
-- name: Configure enterprise backup across all infrastructure hosts
+- name: Configure backup across all infrastructure hosts
   hosts: services,monitoring
   become: true
   gather_facts: true
   roles:
-    - role: enterprise-backup
-      tags: [backup, enterprise_backup]
-
+    - role: backup
+      tags: [backup]

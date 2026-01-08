@@ -1,3 +1,4 @@
+---
 # Backup System - Monitoring and Health Checks
 
 - name: Create monitoring directory structure
@@ -5,7 +6,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/monitoring"
@@ -17,7 +18,7 @@
     src: health-monitor.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-health-monitor.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create backup metrics collector script
@@ -25,7 +26,7 @@
     src: metrics-collector.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-metrics.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create health monitoring service
@@ -46,7 +47,7 @@
       WantedBy=multi-user.target
     dest: /etc/systemd/system/backup-health-monitor.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
 
 - name: Create health monitoring timer
@@ -64,7 +65,7 @@
       WantedBy=timers.target
     dest: /etc/systemd/system/backup-health-monitor.timer
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
 
 - name: Create metrics collection service
@@ -85,7 +86,7 @@
       WantedBy=multi-user.target
     dest: /etc/systemd/system/backup-metrics.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
 
 - name: Create metrics collection timer
@@ -103,7 +104,7 @@
       WantedBy=timers.target
     dest: /etc/systemd/system/backup-metrics.timer
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
 
 - name: Enable and start monitoring services
@@ -121,6 +122,6 @@
     src: grafana-dashboard.json.j2
     dest: "{{ backup_base_path }}/dashboards/backup-dashboard.json"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0644'
   when: backup_grafana_integration | default(false)

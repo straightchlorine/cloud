@@ -19,7 +19,7 @@
 
     - name: Ensure systemd is running
       ansible.builtin.service:
-        name: systemd-logind
+        name: Systemd-logind
         state: started
         enabled: true
       become: true

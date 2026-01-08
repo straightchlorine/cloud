@@ -1,13 +1,10 @@
 ---
-# Ansible Galaxy collections required for testing and deployment
-# Install: ansible-galaxy collection install -r requirements.yml
-
 collections:
-  - name: ansible.utils
+  - name: Ansible.utils
     version: ">=2.10.0"
 
-  - name: community.general
+  - name: Community.general
     version: ">=7.0.0"
 
-  - name: containers.podman
+  - name: Containers.podman
     version: ">=1.10.0"

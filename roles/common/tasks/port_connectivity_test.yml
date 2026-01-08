@@ -1,3 +1,4 @@
+---
 # Common port connectivity tests for post-deployment validation
 # Tests that configured firewall ports are actually accessible
 
@@ -14,7 +15,7 @@
   loop: "{{ firewall_ports | default([]) }}"
   when:
     - firewall_ports is defined
-    - item.port != 22 # Skip SSH as it's tested separately
+    - item.port != 22  # Skip SSH as it's tested separately
   loop_control:
     label: "{{ item.comment }} ({{ item.port }})"
   tags: [post_validation, connectivity]
@@ -48,4 +49,3 @@
       Network connectivity validation complete!
   when: port_tests.results is defined
   tags: [post_validation, connectivity]
-

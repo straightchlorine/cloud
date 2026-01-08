@@ -15,7 +15,7 @@
     path: "{{ item.ssh_key }}"
     type: ed25519
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -28,7 +28,7 @@
     path: "{{ backup_base_path }}/.ssh/nodes"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0700'
   become: true
 
@@ -55,7 +55,7 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   become: true
 
@@ -119,7 +119,7 @@
     path: "{{ backup_base_path }}/keys"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0700'
   become: true
 
@@ -128,7 +128,7 @@
     content: "{{ item.restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -140,7 +140,7 @@
     src: restic-init.sh.j2
     dest: "{{ backup_base_path }}/scripts/init-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -164,7 +164,9 @@
 
 - name: Display repository status for each target
   ansible.builtin.debug:
-    msg: "{{ item.item.service_name }} repository: {{ 'Accessible' if item.rc == 0 else 'Not accessible or not initialized' }}"
+    msg: >-
+      {{ item.item.service_name }} repository:
+      {{ 'Accessible' if item.rc == 0 else 'Not accessible or not initialized' }}
   loop: "{{ repo_init_output.results }}"
   loop_control:
     label: "{{ item.item.service_name }}"
@@ -174,7 +176,7 @@
     src: backup-coordinator-target.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -188,7 +190,7 @@
     src: backup-coordinator.service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -203,7 +205,7 @@
     src: backup-coordinator.timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
   loop: "{{ coordinator_targets }}"
@@ -238,7 +240,7 @@
       target {{ target.priority }}: {{ target.service_name }}
         hostname: {{ target.hostname }}
         script: {{ backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
-        service: backup-{{ target.service_name }}.service
+        ansible.builtin.service: backup-{{ target.service_name }}.service
         timer: backup-{{ target.service_name }}.timer
         repository: {{ target.restic_repository }}
         memory limit: {{ target.memory_limit }}

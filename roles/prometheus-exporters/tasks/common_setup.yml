@@ -1,29 +1,30 @@
+---
 # Common setup for Prometheus exporters
 
 - name: Create prometheus user and group
   ansible.builtin.group:
     name: "{{ prometheus_exporters_group }}"
-    system: yes
-  become: yes
+    system: true
+  become: true
 
 - name: Create prometheus user
   ansible.builtin.user:
     name: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
-    system: yes
-    shell: /bin/false
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
+    system: true
+    ansible.builtin.shell: /bin/false
     home: "{{ prometheus_exporters_base_dir }}"
-    create_home: no
-  become: yes
+    create_home: false
+  become: true
 
 - name: Create Prometheus exporters directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0755'
-  become: yes
+  become: true
   loop:
     - "{{ prometheus_exporters_base_dir }}"
     - "{{ prometheus_exporters_base_dir }}/bin"
@@ -42,21 +43,21 @@
       - jq
       - bc
     state: present
-    update_cache: yes
-  become: yes
+    update_cache: true
+  become: true
 
 - name: Create systemd service template directory
   ansible.builtin.file:
     path: /etc/systemd/system
     state: directory
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Set up logrotate for exporter logs
   ansible.builtin.template:
     src: prometheus-exporters-logrotate.j2
     dest: /etc/logrotate.d/prometheus-exporters
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true

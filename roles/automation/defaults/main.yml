@@ -1,3 +1,4 @@
+---
 # Automation-specific packages (common packages inherited from common role)
 automation_specific_packages:
   - ncdu
@@ -18,7 +19,6 @@ services_enabled:
   traefik: true
 
 # SSD configuration (common variables inherited from common role)
-
 
 # Backup configuration now handled by unified backup system
 # restic_enabled: must be set in host_vars - no default
@@ -63,7 +63,7 @@ automation_compose_services:
       - "TRAEFIK_API_DASHBOARD=true"
       - "TRAEFIK_API_INSECURE=true"
       - "CF_DNS_API_TOKEN={{ vault_cloudflare_api_token }}"
-    command:
+    ansible.builtin.command:
       - "--configFile=/config/traefik.yml"
     networks:
       - "traefik-network"
@@ -130,7 +130,7 @@ automation_compose_services:
     image: "influxdb:3-core"
     container_name: "influxdb3-core"
     restart: "always"
-    user: "{{ automation_uid }}:{{ automation_gid }}"
+    ansible.builtin.user: "{{ automation_uid }}:{{ automation_gid }}"
     deploy:
       resources:
         limits:
@@ -141,7 +141,7 @@ automation_compose_services:
           cpus: "{{ hardware_limits.influxdb3.cpus_reservation }}"
     ports:
       - "8181:8181"
-    command:
+    ansible.builtin.command:
       - "influxdb3"
       - "serve"
       - "--node-id=node0"
@@ -164,7 +164,7 @@ automation_compose_services:
     image: "influxdata/influxdb3-ui:1.2.0"
     container_name: "influxdb3-explorer"
     restart: "always"
-    command: ["--mode=admin"]
+    ansible.builtin.command: ["--mode=admin"]
     deploy:
       resources:
         limits:
@@ -252,4 +252,3 @@ automation_compose_volumes:
       o: "bind"
       type: "none"
       device: "{{ automation_data_path }}/traefik"
-

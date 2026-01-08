@@ -1,3 +1,4 @@
+---
 # Additional monitoring services for DNS server
 
 - name: Install Netdata for system monitoring
@@ -7,31 +8,31 @@
         url: https://my-netdata.io/kickstart.sh
         dest: /tmp/netdata-kickstart.sh
         mode: '0755'
-      become: yes
+      become: true
 
     - name: Install Netdata from verified script
       ansible.builtin.shell: |
         /tmp/netdata-kickstart.sh --dont-wait --disable-telemetry
       args:
         creates: /usr/sbin/netdata
-      become: yes
+      become: true
 
     - name: Remove Netdata installer script
       ansible.builtin.file:
         path: /tmp/netdata-kickstart.sh
         state: absent
-      become: yes
+      become: true
   when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
 
 # Pi-hole exporter setup
 - name: Create pihole-exporter user
   ansible.builtin.user:
     name: "{{ pihole_exporter_user }}"
-    system: yes
-    shell: /bin/false
+    system: true
+    ansible.builtin.shell: /bin/false
     home: "{{ pihole_exporter_install_dir }}"
-    create_home: no
-  become: yes
+    create_home: false
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Create pihole-exporter installation directory
@@ -39,9 +40,9 @@
     path: "{{ pihole_exporter_install_dir }}"
     state: directory
     owner: "{{ pihole_exporter_user }}"
-    group: "{{ pihole_exporter_user }}"
+    ansible.builtin.group: "{{ pihole_exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Download pihole-exporter binary
@@ -49,9 +50,9 @@
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ pihole_exporter_install_dir }}/pihole_exporter"
     owner: "{{ pihole_exporter_user }}"
-    group: "{{ pihole_exporter_user }}"
+    ansible.builtin.group: "{{ pihole_exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
   notify: restart pihole-exporter
 
@@ -60,7 +61,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Pi-hole Prometheus Exporter"
@@ -83,7 +84,7 @@
     protect_home: "yes"
     private_tmp: "yes"
     read_write_paths: ["{{ pihole_exporter_install_dir }}"]
-  become: yes
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
   notify:
     - reload systemd
@@ -91,11 +92,11 @@
 
 - name: Enable and start pihole-exporter service
   ansible.builtin.systemd:
-    name: pihole-exporter
-    enabled: yes
+    name: Pihole-exporter
+    enabled: true
     state: started
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Configure firewall for pihole-exporter
@@ -103,6 +104,5 @@
     rule: allow
     port: "{{ pihole_exporter_port }}"
     comment: "Pi-hole Prometheus exporter"
-  become: yes
+  become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
-

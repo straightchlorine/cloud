@@ -3,13 +3,13 @@
 # Tests Docker setup with user namespace mapping for security
 
 driver:
-  name: docker
+  name: Docker
 
 platforms:
-  - name: debian12-docker
+  - name: Debian12-docker
     image: docker.io/geerlingguy/docker-debian12-ansible:latest
     pre_build_image: true
-    command: /lib/systemd/systemd
+    ansible.builtin.command: /lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Note: Privileged required for Docker-in-Podman testing
@@ -23,7 +23,7 @@ platforms:
       container: podman
 
 provisioner:
-  name: ansible
+  name: Ansible
   config_options:
     defaults:
       interpreter_python: auto_silent
@@ -35,10 +35,10 @@ provisioner:
         package_cache_valid_time: 3600
 
 verifier:
-  name: ansible
+  name: Ansible
 
 scenario:
-  name: docker-installation
+  name: Docker-installation
   description: Test Docker installation with user namespace mapping (userns-remap)
   test_sequence:
     - dependency

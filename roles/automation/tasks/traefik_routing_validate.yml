@@ -1,3 +1,4 @@
+---
 # Traefik routing validation for DNS01 SSL setup
 # Validates dynamic routing configuration and service accessibility
 
@@ -6,6 +7,7 @@
     cd "{{ automation_stack_home }}"
     docker compose ps traefik --format json
   register: traefik_status
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [routing_validation]
@@ -83,7 +85,9 @@
 
 - name: Validate SSL certificate resolver configuration
   ansible.builtin.set_fact:
-    ssl_routers: "{{ configured_routers | selectattr('tls', 'defined') | selectattr('tls.certResolver', 'equalto', 'letsencrypt') | list }}"
+    ssl_routers: >-
+      {{ configured_routers | selectattr('tls', 'defined') |
+      selectattr('tls.certResolver', 'equalto', 'letsencrypt') | list }}
   tags: [routing_validation]
 
 - name: Test internal service connectivity
@@ -100,9 +104,11 @@
 
 - name: Check Traefik logs for SSL certificate errors
   ansible.builtin.shell: |
+    set -o pipefail
     cd "{{ automation_stack_home }}"
-    docker compose logs traefik --tail=50 | grep -i "error\|fail\|certificate" | tail -10 || echo "No recent SSL errors found"
-  register: traefik_ssl_logs
+    docker compose logs traefik --tail=50 | grep -i "error\|fail\|certificate" | tail -10 ||
+    echo "No recent SSL errors found"
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [routing_validation]
@@ -137,7 +143,8 @@
       [OK] Traefik Routing Validation Results:
 
       Container Status:
-      Traefik Container: {{ '[OK] Running' if traefik_container.State == 'running' else '[FAIL] ' + traefik_container.State }}
+      Traefik Container: {{
+          '[OK] Running' if traefik_container.State == 'running' else '[FAIL] ' + traefik_container.State }}
       Traefik Version: {{ traefik_api.json.version | default('Unknown') }}
 
       API Endpoints:
@@ -149,17 +156,23 @@
       Total Routes: {{ configured_routers | length }}
       SSL-Enabled Routes: {{ ssl_routers | length }}
       {% for route in expected_routes %}
-      {{ route.name }} ({{ route.host }}): {{ '[OK] Configured' if configured_routers | selectattr('rule', 'search', route.host) | list | length > 0 else '[FAIL] Missing' }}
+      {{ route.name }} ({{ route.host }}): {{ '[OK] Configured'
+        if configured_routers | selectattr('rule', 'search', route.host) | list | length > 0
+        else '[FAIL] Missing' }}
       {% endfor %}
 
       Port Connectivity:
       {% for result in port_connectivity.results %}
-      {{ result.item.service }}: {{ '[OK] Listening' if result.elapsed is defined and result.elapsed < 10 else '[FAIL] Failed' }}
+      {{ result.item.service }}: {{
+          '[OK] Listening' if result.elapsed is defined and result.elapsed < 10 else '[FAIL] Failed' }}
       {% endfor %}
 
       HTTPS Configuration:
-      HTTP→HTTPS Redirect: {{ '[OK] Working' if https_redirect_test.status == 301 or https_redirect_test.status == 302 else '[WARN]  Check configuration' }}
-      Certificate Resolver: {{ '[OK] letsencrypt configured' if ssl_routers | length > 0 else '[FAIL] No SSL routes found' }}
+      HTTP→HTTPS Redirect: {{
+          '[OK] Working' if https_redirect_test.status == 301 or https_redirect_test.status == 302
+          else '[WARN]  Check configuration' }}
+      Certificate Resolver: {{
+          '[OK] letsencrypt configured' if ssl_routers | length > 0 else '[FAIL] No SSL routes found' }}
 
       Security Middlewares:
       {% for middleware in required_middlewares %}
@@ -171,4 +184,3 @@
 
       [DEPLOY] Traefik routing validation completed!
   tags: [routing_validation]
-

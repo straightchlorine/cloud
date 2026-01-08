@@ -11,9 +11,9 @@
 - name: Create backup user
   ansible.builtin.user:
     name: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     home: "{{ backup_base_path }}"
-    shell: /bin/bash
+    ansible.builtin.shell: /bin/bash
     createhome: true
     system: true
   become: true
@@ -24,7 +24,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}"
@@ -41,7 +41,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/mounts"
@@ -53,7 +53,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0700'
   loop:
     - "{{ backup_base_path }}/.ssh"
@@ -94,7 +94,9 @@
   block:
     - name: Download restic binary
       ansible.builtin.get_url:
-        url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_amd64.bz2"
+        url: >-
+          https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{
+          restic_version }}_linux_amd64.bz2
         dest: "/tmp/restic_{{ restic_version }}_linux_amd64.bz2"
         mode: '0644'
       become: true

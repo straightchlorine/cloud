@@ -1,9 +1,10 @@
+---
 # Default values for common role
 
 # System Configuration
 timezone: UTC
 
-# Security Configuration  
+# Security Configuration
 fail2ban_enabled: true
 fail2ban_ssh_maxretry: 3
 fail2ban_ssh_bantime: 600
@@ -52,4 +53,3 @@ restart_sec: "5"
 wanted_by: "multi-user.target"
 enable_security_hardening: true
 no_new_privileges: "true"
-

@@ -1,8 +1,9 @@
+---
 # Storage setup for automation stack - using common storage logic
 
 - name: Include common storage setup
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: storage
   vars:
     mount_path: "{{ automation_data_path }}"

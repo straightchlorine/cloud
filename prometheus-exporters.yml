@@ -1,11 +1,12 @@
+---
 # Prometheus exporters deployment playbook
 # Deploys and configures Prometheus exporters across all infrastructure
 # Usage: ansible-playbook -i inventory prometheus-exporters.yml
 
 - name: Deploy Prometheus exporters on all hosts
   hosts: prometheus
-  gather_facts: yes
-  become: yes
+  gather_facts: true
+  become: true
 
   tasks:
     - name: Display Prometheus exporters deployment start
@@ -33,7 +34,7 @@
 
     - name: Deploy Prometheus exporters
       ansible.builtin.include_role:
-        name: prometheus-exporters
+        name: Prometheus-exporters
       tags: [prometheus, exporters, monitoring]
 
     - name: Display deployment summary
@@ -62,20 +63,20 @@
           📋 Log rotation configured
 
   handlers:
-    - name: prometheus exporters deployment complete
+    - name: Prometheus exporters deployment complete
       ansible.builtin.debug:
         msg: "[STATS] All Prometheus exporters deployed successfully"
 
 # Validation and health check play
 - name: Validate Prometheus exporters health
   hosts: prometheus
-  gather_facts: no
-  become: no
+  gather_facts: false
+  become: false
 
   tasks:
     - name: Run exporters health checks
       ansible.builtin.include_role:
-        name: prometheus-exporters
+        name: Prometheus-exporters
         tasks_from: health_checks
       tags: [health_check, validation]
 
@@ -91,4 +92,3 @@
           1. Configure your Prometheus server to scrape these endpoints
           2. Set up Grafana dashboards for visualization
           3. Configure alerting rules based on these metrics
-

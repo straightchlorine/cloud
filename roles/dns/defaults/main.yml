@@ -1,8 +1,9 @@
+---
 # Default values for DNS role (Pi-hole)
 
 # Pi-hole Installation Security
 pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-pihole_version: "v5.18.3" # Pin to verified release version
+pihole_version: "v5.18.3"  # Pin to verified release version
 pihole_verify_commit: true
 
 # Pi-hole Configuration
@@ -35,5 +36,5 @@ pihole_exporter_user: "pihole-exporter"
 pihole_exporter_install_dir: "/opt/pihole-exporter"
 pihole_exporter_port: 9617
 pihole_exporter_version: "0.3.0"
-pihole_exporter_binary_url: "https://github.com/eko/pihole-exporter/releases/download/v{{ pihole_exporter_version }}/pihole_exporter-linux-arm64"
-
+pihole_exporter_binary_url: |
+  https://github.com/eko/pihole-exporter/releases/download/v{{ pihole_exporter_version }}/pihole_exporter-linux-arm64

@@ -1,3 +1,4 @@
+---
 # Template rendering pre-validation
 # Tests template rendering with current variables to catch issues before deployment
 
@@ -59,7 +60,10 @@
   when:
     - item.failed is defined
     - item.failed
-  loop: "{{ (template_test_result.results | default([])) + (dns_template_test_result.results | default([])) + (music_template_test_result.results | default([])) }}"
+  loop: >-
+    {{ (template_test_result.results | default([])) +
+    (dns_template_test_result.results | default([])) +
+    (music_template_test_result.results | default([])) }}
   loop_control:
     label: "{{ item.item.name | default('unknown') }}"
   tags: [template_validation]
@@ -151,4 +155,3 @@
       [TOOL] All templates rendered successfully with current vault variables!
       Ready for safe deployment.
   tags: [template_validation]
-

@@ -1,7 +1,7 @@
+---
 # Handlers for music-stack role - use common handlers with variables
 
-- name: restart music stack
+- name: Restart music stack
   ansible.builtin.set_fact:
     stack_home: "{{ music_stack_home }}"
   notify: restart docker compose stack
-

@@ -1,3 +1,4 @@
+---
 # Backup directory validation for all roles
 # Ensures backup directories are accessible and writable before deployment
 
@@ -87,7 +88,10 @@
 
 - name: Validate sufficient disk space for backup operations
   ansible.builtin.fail:
-    msg: "Insufficient disk space for backup operations. Available: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 1GB minimum for backup metadata and temporary files."
+    msg: >-
+      Insufficient disk space for backup operations.
+      Available: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Required: 1GB minimum for backup metadata and temporary files.
   when: (backup_disk_space.stdout | int) < 1048576  # 1GB in KB
   tags: [backup_validation]
 
@@ -161,8 +165,10 @@
     msg: |
       [OK] Common backup directories validated:
       - Backup user home: /opt/backup ({{ 'exists' if backup_home_check.stat.exists else 'will be created' }})
-      - System Docker config: {{ system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list | join(', ') or 'none found' }}
+      - System Docker config: {{
+          system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list |
+          join(', ') or 'none found' }}
       - Available space: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB
-      - Writability test: [OK] PASSED - Backup directories are writable
-      - Log directory: [OK] VERIFIED - Backup logging will work correctly
+      - Writability test: [OK] PASSED - Directories are writable
+      - Log directory: [OK] VERIFIED - Logging will work correctly
   tags: [backup_validation]

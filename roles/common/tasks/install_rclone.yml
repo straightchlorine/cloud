@@ -1,15 +1,16 @@
+---
 # Install rclone on individual hosts
 # Use this when you need rclone on target hosts for other purposes
 
 - name: Install rclone
   ansible.builtin.shell: |
+    set -o pipefail
     if ! command -v rclone &> /dev/null; then
       curl https://rclone.org/install.sh | bash
       echo "rclone installed"
     else
       echo "rclone already installed"
     fi
-  register: rclone_install
   changed_when: "'rclone installed' in rclone_install.stdout"
   become: true
 

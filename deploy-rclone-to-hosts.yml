@@ -9,7 +9,7 @@
 
   tasks:
     - name: Install rclone
-      include_tasks: roles/common/tasks/install_rclone.yml
+      ansible.builtin.include_tasks: roles/common/tasks/install_rclone.yml
 
   post_tasks:
     - name: Display installation summary

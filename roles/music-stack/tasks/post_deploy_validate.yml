@@ -1,3 +1,4 @@
+---
 # Post-deployment validation for music stack
 # Verifies music services and YouTube sync are working correctly
 
@@ -12,7 +13,7 @@
     cd "{{ music_stack_home }}"
     docker compose ps --format json
   register: music_container_status
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
   tags: [post_validation]
@@ -56,9 +57,9 @@
     path: "{{ music_library_path }}/music"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
-  become: yes
+  become: true
   tags: [post_validation]
 
 - name: Test YouTube sync script if enabled
@@ -68,6 +69,7 @@
         python3 -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)"
       register: ytdlp_test
       changed_when: false
+      become: true
       become_user: "{{ ansible_user }}"
 
     - name: Verify YouTube sync script exists
@@ -80,6 +82,7 @@
         python3 -m py_compile "{{ music_library_path }}/scripts/youtube-sync.py"
       when: youtube_script.stat.exists
       changed_when: false
+      become: true
       become_user: "{{ ansible_user }}"
 
   when: youtube_sync_enabled
@@ -90,7 +93,7 @@
     cd "{{ music_stack_home }}"
     docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
   register: music_health_status
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
   tags: [post_validation]

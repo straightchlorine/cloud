@@ -1,21 +1,21 @@
 ---
 driver:
-  name: docker
+  name: Docker
 platforms:
-  - name: debian12-hardware
+  - name: Debian12-hardware
     image: docker.io/geerlingguy/docker-debian12-ansible:latest
     pre_build_image: true
-    command: /lib/systemd/systemd
+    ansible.builtin.command: /lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:
-  name: ansible
+  name: Ansible
   inventory:
     group_vars:
       all:
         timezone: UTC
 verifier:
-  name: ansible
+  name: Ansible
 scenario:
-  name: hardware-detection
+  name: Hardware-detection
   description: Test hardware platform detection and resource limit calculation

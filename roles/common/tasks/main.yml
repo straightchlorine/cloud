@@ -1,3 +1,4 @@
+---
 # Common tasks for all hosts running Debian Bookworm
 
 - name: Install essential packages using common package management
@@ -15,14 +16,14 @@
       bantime = {{ fail2ban_ssh_bantime }}
     dest: /etc/fail2ban/jail.local
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
   notify: restart fail2ban
 
 - name: Start and enable fail2ban
   ansible.builtin.systemd:
-    name: fail2ban
+    name: Fail2ban
     state: started
     enabled: true
   become: true
@@ -40,10 +41,9 @@
     src: logrotate.conf.j2
     dest: /etc/logrotate.d/system-logs
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
 
 - name: Configure system update cron job
   ansible.builtin.include_tasks: system_update_cron.yml
-

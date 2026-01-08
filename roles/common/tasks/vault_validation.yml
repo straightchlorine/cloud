@@ -1,10 +1,14 @@
+---
 # Common vault variable validation framework
 # Validates that required vault variables are defined and properly formatted
 
 - name: Validate core vault variables (required by all roles)
   ansible.builtin.fail:
-    msg: "Required vault variable '{{ item }}' is not defined or empty. Check your vault.yml file."
-  when: vars[item] is not defined or vars[item] == "" or vars[item] == "CHANGEME" or vars[item] == "your-" in (vars[item] | string)
+    msg: >-
+      Required vault variable '{{ item }}' is not defined or empty. Check your vault.yml file.
+  when: >-
+    vars[item] is not defined or vars[item] == "" or vars[item] == "CHANGEME" or
+    "your-" in (vars[item] | string)
   loop:
     - vault_domain_name
     - vault_letsencrypt_email
@@ -24,7 +28,9 @@
 
 - name: Check for placeholder values in core variables
   ansible.builtin.fail:
-    msg: "Vault variable '{{ item.var }}' contains placeholder value '{{ item.value }}'. Please set a real value in vault.yml."
+    msg: >-
+      Vault variable '{{ item.var }}' contains placeholder value '{{ item.value }}'.
+      Please set a real value in vault.yml.
   when: vars[item.var] is defined and (vars[item.var] | string) == item.value
   loop:
     - {var: "vault_domain_name", value: "example.com"}
@@ -40,4 +46,3 @@
       Domain: {{ vault_domain_name }}
       Email: {{ vault_letsencrypt_email }}
   tags: [vault_validation]
-

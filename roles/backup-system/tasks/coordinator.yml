@@ -1,10 +1,11 @@
+---
 # Backup System - Coordinator Deployment
 # Deploys centralized backup coordinator (backup-wyse)
 
 - name: Ensure backup coordinator user exists
   ansible.builtin.user:
     name: "{{ backup_user }}"
-    shell: /bin/bash
+    ansible.builtin.shell: /bin/bash
     home: "{{ backup_base_path }}"
     create_home: true
     groups: ["sudo"]
@@ -19,7 +20,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/scripts"
@@ -56,7 +57,9 @@
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
-    url: "https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{ backup_restic_version }}_linux_amd64.bz2"
+    url: >-
+      https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{
+      backup_restic_version }}_linux_amd64.bz2
     dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
     mode: '0644'
 
@@ -74,7 +77,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   loop:
     - "{{ backup_base_path }}/.config"
@@ -85,7 +88,7 @@
     path: "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}"
     type: ed25519
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
     comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
   loop: "{{ backup_targets }}"
@@ -99,7 +102,7 @@
 
 - name: Deploy SSH public keys to target hosts
   ansible.posix.authorized_key:
-    user: "{{ item.item.ssh_user | default(backup_user) }}"
+    ansible.builtin.user: "{{ item.item.ssh_user | default(backup_user) }}"
     state: present
     key: "{{ item.content | b64decode }}"
     comment: "backup-{{ item.item.service_name }}@{{ ansible_hostname }}"
@@ -110,6 +113,7 @@
 
 - name: Verify SSH connectivity to targets
   ansible.builtin.shell: |
+    set -o pipefail
     ssh -i "{{ backup_base_path }}/.ssh/nodes/{{ item.service_name }}" \
         -F /dev/null \
         -o ConnectTimeout=10 \
@@ -117,7 +121,6 @@
         -o StrictHostKeyChecking=accept-new \
         "{{ item.ssh_user | default(backup_user) }}@{{ item.target_host }}" \
         "echo 'SSH connectivity verified'"
-  become_user: "{{ backup_user }}"
   loop: "{{ backup_targets }}"
   register: ssh_connectivity_test
   failed_when: ssh_connectivity_test.rc != 0
@@ -129,7 +132,7 @@
     src: rclone-config.conf.j2
     dest: "{{ backup_base_path }}/.config/rclone/rclone.conf"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
 
 - name: Create coordinator backup scripts for each target
@@ -137,7 +140,7 @@
     src: coordinator-backup.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
   vars:
     backup_target: "{{ item }}"
@@ -148,7 +151,7 @@
     src: coordinator-restore.sh.j2
     dest: "{{ backup_base_path }}/scripts/enterprise-restore-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
   vars:
     backup_target: "{{ item }}"
@@ -156,7 +159,9 @@
 
 - name: Generate secure restic passwords for targets without existing passwords
   ansible.builtin.set_fact:
-    generated_restic_passwords: "{{ generated_restic_passwords | default({}) | combine({item.service_name: lookup('password', '/dev/null chars=ascii_letters,digits,!@#$%^&*() length=32')}) }}"
+    generated_restic_passwords: >-
+      {{ generated_restic_passwords | default({}) |
+      combine({item.service_name: lookup('password', '/dev/null chars=ascii_letters,digits,!@#$%^&*() length=32')}) }}
   when: item.restic_password is not defined
   loop: "{{ backup_targets }}"
   no_log: true
@@ -166,7 +171,7 @@
     content: "{{ item.restic_password | default(generated_restic_passwords[item.service_name]) }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password.vault"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   no_log: true
   loop: "{{ backup_targets }}"
@@ -176,18 +181,17 @@
     content: "{{ item.restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   loop: "{{ backup_targets }}"
   no_log: true
-
 
 - name: Create systemd services for each target
   ansible.builtin.template:
     src: backup.service.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     backup_target: "{{ item }}"
@@ -200,7 +204,7 @@
     src: backup.timer.j2
     dest: "/etc/systemd/system/backup-{{ item.service_name }}.timer"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     backup_target: "{{ item }}"
@@ -232,6 +236,7 @@
     else
       echo "Repository already exists for {{ item.service_name }}"
     fi
+  become: true
   become_user: "{{ backup_user }}"
   register: repository_init
   changed_when: "'Repository initialized' in repository_init.stdout"
@@ -242,7 +247,7 @@
     src: coordinator-manager.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-manager.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create key rotation script
@@ -250,7 +255,7 @@
     src: key-rotation.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-key-rotation.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0755'
 
 - name: Create key rotation service
@@ -275,7 +280,7 @@
       WantedBy=multi-user.target
     dest: /etc/systemd/system/backup-key-rotation.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   notify:
     - reload systemd
@@ -296,14 +301,14 @@
       WantedBy=timers.target
     dest: /etc/systemd/system/backup-key-rotation.timer
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   notify:
     - reload systemd
 
 - name: Enable key rotation timer
   ansible.builtin.systemd:
-    name: backup-key-rotation.timer
+    name: Backup-key-rotation.timer
     enabled: true
     state: started
     daemon_reload: true

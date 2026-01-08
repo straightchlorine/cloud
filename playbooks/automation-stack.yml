@@ -1,3 +1,4 @@
+---
 - name: Deploy Automation Stack
   hosts: pi-automation
   become: true
@@ -13,7 +14,7 @@
   pre_tasks:
     - name: Update package cache
       ansible.builtin.include_role:
-        name: common
+        name: Common
         tasks_from: package_cache_update
 
     - name: Install additional system packages
@@ -50,14 +51,15 @@
 
     - name: Verify Docker network exists
       community.docker.docker_network_info:
-        name: traefik-network
+        name: Traefik-network
       register: traefik_network_info
+      become: true
       become_user: "{{ ansible_user }}"
       tags: [verification]
 
     - name: Verify automation stack services
       ansible.builtin.include_role:
-        name: common
+        name: Common
         tasks_from: service_verification
       vars:
         services_to_verify:
@@ -67,4 +69,3 @@
           - name: "Traefik Dashboard"
             url: "http://{{ primary_ip }}:{{ traefik_dashboard_port }}"
             valid_codes: [200, 301, 302, 401, 403]
-

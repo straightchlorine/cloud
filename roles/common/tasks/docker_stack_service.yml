@@ -1,3 +1,4 @@
+---
 # Common Docker Stack Systemd Service Creation
 # Eliminates duplication between automation and music-stack roles
 # Usage: Include this task with required variables
@@ -7,7 +8,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: "/etc/systemd/system/{{ stack_service_name }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "{{ stack_description }}"

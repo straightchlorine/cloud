@@ -1,3 +1,4 @@
+---
 # Default variables for music-stack role
 
 # Music-specific packages (common packages inherited from common role)
@@ -9,8 +10,6 @@ music_stack_specific_packages:
 navidrome_port: 4545
 
 # SSD configuration (common variables inherited from common role)
-
-
 
 beets_genres:
   - Rock
@@ -58,7 +57,6 @@ music_library_directories:
   - logs
   - navidrome-data
 
-
 # start_stack: inherited from common role
 
 # Docker Compose services configuration
@@ -105,7 +103,7 @@ music_stack_compose_services:
       - "{{ music_library_path }}/music:/music:ro"
       - "{{ music_library_path }}/navidrome-data:/data"
     restart: "always"
-    user: "{{ ansible_uid }}:{{ ansible_gid }}"
+    ansible.builtin.user: "{{ ansible_uid }}:{{ ansible_gid }}"
 
   beets:
     image: "linuxserver/beets:latest"
@@ -134,7 +132,7 @@ music_stack_compose_services:
     image: "amir20/dozzle:latest"
     container_name: "dozzle-agent"
     restart: "always"
-    command: "agent"
+    ansible.builtin.command: "agent"
     deploy:
       resources:
         limits:
@@ -172,4 +170,3 @@ music_stack_compose_services:
 music_stack_compose_networks:
   default:
     name: "music-stack"
-

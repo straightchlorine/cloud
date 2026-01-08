@@ -1,3 +1,4 @@
+---
 # Post-deployment validation for automation stack
 # Verifies all containers are running and services are accessible
 
@@ -12,7 +13,7 @@
     cd "{{ automation_stack_home }}"
     docker compose ps --format json
   register: container_status
-  become: yes
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [post_validation]
@@ -25,13 +26,14 @@
 - name: Verify critical containers are running
   ansible.builtin.fail:
     msg: "Container {{ item.Service }} is not running (State: {{ item.State }})"
-  when: item.State != "running"
+  when:
+    - item.State != "running"
+    - item.Service in critical_services
   loop: "{{ containers }}"
   loop_control:
     label: "{{ item.Service }}"
   vars:
     critical_services: ["traefik", "vaultwarden", "influxdb3-core"]
-  when: item.Service in critical_services
   tags: [post_validation]
 
 - name: Test Traefik dashboard accessibility
@@ -79,7 +81,7 @@
     cd "{{ automation_stack_home }}"
     docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
   register: health_status
-  become: yes
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [post_validation]
@@ -120,4 +122,3 @@
 
       [OK] All critical services and SSL configuration validated successfully!
   tags: [post_validation]
-

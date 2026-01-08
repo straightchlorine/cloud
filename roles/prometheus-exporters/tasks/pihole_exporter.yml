@@ -1,3 +1,4 @@
+---
 # Pi-hole Exporter setup tasks
 
 - name: Download Pi-hole Exporter binary
@@ -5,10 +6,10 @@
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0755'
     timeout: 60
-  become: yes
+  become: true
   notify: restart pihole-exporter
 
 - name: Create Pi-hole Exporter configuration file
@@ -16,9 +17,9 @@
     src: pihole-exporter.conf.j2
     dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0644'
-  become: yes
+  become: true
   notify: restart pihole-exporter
 
 - name: Create Pi-hole Exporter systemd service
@@ -26,7 +27,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pihole-exporter.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Pi-hole Prometheus Exporter"
@@ -49,18 +50,18 @@
     protect_home: "yes"
     private_tmp: "yes"
     read_write_paths: ["{{ prometheus_exporters_base_dir }}/bin"]
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart pihole-exporter
 
 - name: Enable and start Pi-hole Exporter service
   ansible.builtin.systemd:
-    name: pihole-exporter
-    enabled: yes
+    name: Pihole-exporter
+    enabled: true
     state: started
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
 
 - name: Verify Pi-hole Exporter is responding
   ansible.builtin.uri:

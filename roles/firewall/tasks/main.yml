@@ -1,8 +1,9 @@
+---
 # Firewall configuration tasks
 
 - name: Install UFW using common package management
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: packages
   vars:
     role_specific_packages:
@@ -65,11 +66,10 @@
     port: "{{ item | string }}"
     comment: "{{ item }} service"
   loop: "{{ firewall_ports }}"
-  when: firewall_ports is defined
+  when: firewall_ports is defined and firewall_ports | length > 0
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  when: firewall_ports is defined and firewall_ports | length > 0
 
 - name: Configure advanced firewall rules
   community.general.ufw:
@@ -80,11 +80,10 @@
     dest: "{{ item.dest if item.dest is defined else omit }}"
     comment: "{{ item.comment if item.comment is defined else 'Custom rule' }}"
   loop: "{{ firewall_rules }}"
-  when: firewall_rules is defined
+  when: firewall_rules is defined and firewall_rules | length > 0
   become: true
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  when: firewall_rules is defined and firewall_rules | length > 0
 
 - name: Enable UFW
   community.general.ufw:
@@ -93,4 +92,3 @@
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   when: firewall_enabled
-

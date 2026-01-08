@@ -1,3 +1,4 @@
+---
 # Backup Coordinator Configuration
 # Dell Wyse - handles backups for Raspberry Pis and small devices
 device_role: backup

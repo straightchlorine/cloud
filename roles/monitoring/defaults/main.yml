@@ -1,3 +1,4 @@
+---
 # Monitoring stack configuration
 # Centralized monitoring machine with native Debian packages for Grafana, Prometheus, Loki
 

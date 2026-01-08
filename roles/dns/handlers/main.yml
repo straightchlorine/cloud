@@ -1,27 +1,28 @@
-- name: restart pihole-FTL
+---
+- name: Restart pihole-FTL
   ansible.builtin.set_fact:
     service_name: "pihole-FTL"
   notify: restart systemd service
 
-- name: reload pihole
+- name: Reload pihole
   ansible.builtin.shell: pihole restartdns
   become: true
 
-- name: restart pihole-exporter
+- name: Restart pihole-exporter
   ansible.builtin.set_fact:
     service_name: "pihole-exporter"
   notify: restart systemd service
 
-- name: restart chrony
+- name: Restart chrony
   ansible.builtin.set_fact:
     service_name: "chrony"
   notify: restart systemd service
 
-- name: rollback pihole
+- name: Rollback pihole
   block:
     - name: Stop Pi-hole service
       ansible.builtin.systemd:
-        name: pihole-FTL
+        name: Pihole-FTL
         state: stopped
       become: true
       ignore_errors: true
@@ -37,8 +38,7 @@
 
     - name: Start Pi-hole service
       ansible.builtin.systemd:
-        name: pihole-FTL
+        name: Pihole-FTL
         state: started
       become: true
       ignore_errors: true
-

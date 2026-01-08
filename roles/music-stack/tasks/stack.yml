@@ -1,8 +1,9 @@
+---
 # Music stack deployment
 
 - name: Create standardized Docker Compose file
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: build_docker_compose
   vars:
     compose_file_path: "{{ music_stack_home }}/docker-compose.yml"
@@ -18,7 +19,7 @@
     path: "{{ music_stack_home }}/config/beets"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create Beets configuration
@@ -26,7 +27,7 @@
     src: beets-config.yaml.j2
     dest: "{{ music_stack_home }}/config/beets/config.yaml"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
 
 - name: Create genres whitelist for Beets
@@ -34,7 +35,7 @@
     content: "{{ beets_genres | join('\n') }}\n"
     dest: "{{ music_stack_home }}/config/beets/genres.txt"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
 
 - name: Create additional Beets directories
@@ -42,7 +43,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   loop:
     - "{{ music_stack_home }}/archive"
@@ -54,7 +55,7 @@
     path: "{{ music_stack_home }}/config/beets/library.db"
     state: touch
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   tags: [beets, database]
 
@@ -63,7 +64,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   loop:
     - "{{ music_stack_home }}/config/cache"
@@ -75,7 +76,7 @@
     path: "{{ music_stack_home }}/config/navidrome"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create logs directory
@@ -83,7 +84,7 @@
     path: "{{ music_stack_home }}/logs"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Check if JWT secret file exists
@@ -102,7 +103,7 @@
     content: "{{ jwt_secret_generated.stdout }}"
     dest: "{{ music_stack_home }}/.navidrome_jwt_secret"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0600'
   when: not jwt_secret_file.stat.exists
   no_log: true
@@ -118,7 +119,7 @@
     src: env.j2
     dest: "{{ music_stack_home }}/.env"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0600'
   vars:
     navidrome_jwt_secret: "{{ jwt_secret_content.content | b64decode | trim }}"
@@ -126,7 +127,7 @@
 
 - name: Install yt-dlp dependencies using common package management
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ ytdlp_dependencies }}"
@@ -142,6 +143,7 @@
     url: https://github.com/yt-dlp/yt-dlp/raw/master/public.key
     dest: /tmp/yt-dlp-public.key
     mode: '0644'
+  become: true
   become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp, security]
 
@@ -158,8 +160,11 @@
     dest: "/tmp/{{ item.dest }}"
     mode: '0644'
   loop:
-    - {url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS", dest: "SHA2-256SUMS"}
-    - {url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS.sig", dest: "SHA2-256SUMS.sig"}
+    - url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS"
+      dest: "SHA2-256SUMS"
+    - url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/SHA2-256SUMS.sig"
+      dest: "SHA2-256SUMS.sig"
+  become: true
   become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp, security]
 
@@ -176,14 +181,15 @@
     url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ ytdlp_version }}/yt-dlp_linux_{{ ytdlp_arch }}"
     dest: /tmp/yt-dlp_binary
     mode: '0755'
+  become: true
   become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp]
 
 - name: Verify yt-dlp binary checksum
   ansible.builtin.shell: |
+    set -o pipefail
     cd /tmp
     grep "yt-dlp_linux_{{ ytdlp_arch }}$" SHA2-256SUMS | sha256sum -c -
-  become_user: "{{ ansible_user }}"
   changed_when: false
   tags: [youtube, ytdlp, security]
 
@@ -193,7 +199,7 @@
     dest: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
-    group: root
+    ansible.builtin.group: root
     remote_src: true
     backup: true
   become: true
@@ -209,6 +215,7 @@
     - SHA2-256SUMS.sig
     - yt-dlp_binary
     - yt-dlp-public.key
+  become: true
   become_user: "{{ ansible_user }}"
   tags: [youtube, ytdlp]
 
@@ -217,7 +224,7 @@
     path: /usr/local/bin/yt-dlp
     mode: '0755'
     owner: root
-    group: root
+    ansible.builtin.group: root
   become: true
   tags: [youtube, ytdlp]
 
@@ -228,14 +235,12 @@
   become: true
   tags: [youtube, ytdlp]
 
-
-
 - name: Create YouTube download configuration
   ansible.builtin.template:
     src: yt-dlp.conf.j2
     dest: "{{ music_stack_home }}/config/yt-dlp.conf"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   tags: [youtube, ytdlp, config]
 
@@ -244,27 +249,25 @@
     src: youtube-sync.sh.j2
     dest: "{{ music_stack_home }}/scripts/youtube-sync.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   tags: [youtube, ytdlp, scripts]
-
 
 - name: Create YouTube environment configuration file
   ansible.builtin.template:
     src: youtube.env.j2
     dest: "{{ music_stack_home }}/config/youtube.env"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   tags: [youtube, config]
-
 
 - name: Create YouTube cron wrapper script
   ansible.builtin.template:
     src: youtube-cron.sh.j2
     dest: "{{ music_stack_home }}/scripts/youtube-cron.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   tags: [youtube, scripts, cron]
 
@@ -273,7 +276,7 @@
     src: beets-rescan.sh.j2
     dest: "{{ music_stack_home }}/scripts/beets-rescan.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   tags: [youtube, scripts, beets]
 
@@ -282,7 +285,7 @@
     src: test-beets-import.sh.j2
     dest: "{{ music_stack_home }}/scripts/test-beets-import.sh"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
   tags: [youtube, scripts, beets, test]
 
@@ -290,6 +293,7 @@
   community.docker.docker_compose_v2:
     project_src: "{{ music_stack_home }}"
     state: present
+  become: true
   become_user: "{{ ansible_user }}"
   when: start_stack
 
@@ -303,4 +307,3 @@
   delay: 2
   when: start_stack
   failed_when: false
-

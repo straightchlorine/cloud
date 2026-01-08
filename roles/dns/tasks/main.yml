@@ -1,3 +1,4 @@
+---
 # DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
 - name: Run Pi-hole deployment validation
@@ -6,13 +7,13 @@
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: network_facts
   tags: [network, facts]
 
 - name: Include common package management
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ pihole_packages }}"
@@ -24,7 +25,7 @@
     dest: /tmp/pi-hole-repo
     version: "{{ pihole_version }}"
     depth: 1
-    force: yes
+    force: true
   become: true
   register: pihole_clone
 
@@ -64,7 +65,7 @@
     path: /etc/pihole
     state: directory
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0755'
   become: true
 
@@ -73,11 +74,10 @@
     src: setupVars.conf.j2
     dest: /etc/pihole/setupVars.conf
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0600'
   become: true
   notify: restart pihole-FTL
-
 
 - name: Install Pi-hole using verified repository
   ansible.builtin.shell: |
@@ -107,7 +107,7 @@
 
 - name: Configure firewall
   ansible.builtin.include_role:
-    name: firewall
+    name: Firewall
   tags: [firewall, security]
 
 - name: Configure chrony NTP server

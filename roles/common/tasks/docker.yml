@@ -1,3 +1,4 @@
+---
 # Common Docker setup with user namespace mapping
 # Used by automation and music-stack roles
 
@@ -46,8 +47,12 @@
 
     - name: Add Docker repository to Apt sources
       ansible.builtin.shell: |
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-      become: true
+        set -o pipefail
+        ARCH=$(dpkg --print-architecture)
+        CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+        echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] \
+        https://download.docker.com/linux/debian $CODENAME stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
       args:
         creates: /etc/apt/sources.list.d/docker.list
 
@@ -91,7 +96,7 @@
       }
     dest: /etc/docker/daemon.json
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
     backup: true
   become: true
@@ -99,7 +104,7 @@
 
 - name: Enable and start Docker service
   ansible.builtin.systemd:
-    name: docker
+    name: Docker
     enabled: true
     state: started
   become: true
@@ -107,12 +112,13 @@
 - name: Verify Docker Compose plugin installation
   ansible.builtin.command: docker compose version
   register: docker_compose_check
+  become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
 
 - name: Test Docker installation with namespace mapping
   ansible.builtin.command: docker run --rm hello-world
   register: docker_test
+  become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
-

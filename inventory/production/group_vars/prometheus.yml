@@ -1,3 +1,4 @@
+---
 # Prometheus exporters group variables
 
 # Global Prometheus configuration
@@ -25,4 +26,3 @@ prometheus_exporters_firewall_source: "192.168.20.0/24" # Adjust to your Prometh
 # Health check configuration
 prometheus_exporters_health_check_enabled: true
 prometheus_exporters_health_check_timeout: 10
-

@@ -1,3 +1,4 @@
+---
 # Raspberry Pi 3 specific configuration
 
 device_type: rpi3b
@@ -30,7 +31,7 @@ firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
   - {port: 9001, comment: "Portainer Agent"}
-  - {port: 2376, comment: "Docker API",}
+  - {port: 2376, comment: "Docker API"}
 
 docker_log_driver: "json-file"
 docker_log_max_size: "10m"

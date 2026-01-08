@@ -1,3 +1,4 @@
+---
 # Traefik reverse proxy setup
 
 - name: Create Traefik configuration directory
@@ -5,7 +6,7 @@
     path: "{{ automation_stack_home }}/config/traefik"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create Traefik data directory
@@ -13,7 +14,7 @@
     path: "{{ automation_data_path }}/traefik"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0755'
 
 - name: Create acme.json file for Let's Encrypt certificates
@@ -21,7 +22,7 @@
     path: "{{ automation_data_path }}/traefik/acme.json"
     state: touch
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0600'
 
 - name: Create Traefik static configuration
@@ -29,7 +30,7 @@
     src: traefik-static.yml.j2
     dest: "{{ automation_stack_home }}/config/traefik/traefik.yml"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   notify: restart automation stack
 
@@ -38,7 +39,7 @@
     src: traefik-dynamic.yml.j2
     dest: "{{ automation_stack_home }}/config/traefik/dynamic.yml"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   notify: restart automation stack
 
@@ -47,7 +48,6 @@
     src: traefik-dynamic.yml.j2
     dest: "{{ automation_stack_home }}/config/traefik/dynamic.yml"
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    ansible.builtin.group: "{{ ansible_user }}"
     mode: '0644'
   notify: restart automation stack
-

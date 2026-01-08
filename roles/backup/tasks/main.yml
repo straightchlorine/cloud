@@ -27,7 +27,7 @@
       [backup deployment complete]
       host: {{ inventory_hostname }}
       mode: {{ backup_role }}
-      user: {{ backup_user }}
+      ansible.builtin.user: {{ backup_user }}
       base path: {{ backup_base_path }}
       {% if backup_role == 'standalone' %}
       repository: {{ restic_repository }}

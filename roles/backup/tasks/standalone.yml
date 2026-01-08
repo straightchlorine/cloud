@@ -7,7 +7,7 @@
     path: "{{ item }}"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0700'
   become: true
   loop:
@@ -43,7 +43,7 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
   become: true
 
@@ -67,6 +67,7 @@
 
 - name: Test SFTP connectivity with restic
   ansible.builtin.shell: |
+    set -o pipefail
     export RESTIC_REPOSITORY="{{ restic_repository }}"
     export RESTIC_PASSWORD="{{ restic_password }}"
     export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
@@ -81,9 +82,11 @@
   ansible.builtin.debug:
     msg: |
       [sftp connectivity test]
-      result: {{ 'passed' if 'success' in sftp_test.stdout else 'failed (may be uninitialized, will be initialized below)' }}
+      result: >-
+        {{ 'passed' if 'success' in sftp_test.stdout else
+        'failed (may be uninitialized, will be initialized below)' }}
       repository: {{ restic_repository }}
-      user: {{ backup_user }}
+      ansible.builtin.user: {{ backup_user }}
 
 - name: Initialize restic repository
   ansible.builtin.command: restic init
@@ -111,14 +114,16 @@
 
 - name: Display repository status
   ansible.builtin.debug:
-    msg: "Repository status: {{ 'Initialized and accessible' if restic_snapshots.rc == 0 else 'Not accessible or not initialized' }}"
+    msg: >-
+      Repository status:
+      {{ 'Initialized and accessible' if restic_snapshots.rc == 0 else 'Not accessible or not initialized' }}
 
 - name: Deploy standalone backup script
   ansible.builtin.template:
     src: backup-standalone.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0750'
   become: true
 
@@ -127,7 +132,7 @@
     src: backup-standalone.service.j2
     dest: "/etc/systemd/system/backup-{{ inventory_hostname }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
   notify: Reload systemd
@@ -137,7 +142,7 @@
     src: backup-standalone.timer.j2
     dest: "/etc/systemd/system/backup-{{ inventory_hostname }}.timer"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   become: true
   notify: Reload systemd
@@ -159,7 +164,7 @@
       [backup configured]
       host: {{ inventory_hostname }}
       script: {{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh
-      service: backup-{{ inventory_hostname }}.service
+      ansible.builtin.service: backup-{{ inventory_hostname }}.service
       timer: backup-{{ inventory_hostname }}.timer
       schedule: {{ backup_schedule }}
       repository: {{ restic_repository }}

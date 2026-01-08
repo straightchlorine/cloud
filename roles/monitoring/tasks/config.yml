@@ -1,3 +1,4 @@
+---
 # Configuration management for monitoring stack
 # Generates and deploys configuration files for all monitoring services
 
@@ -6,7 +7,7 @@
     path: "{{ item }}"
     state: directory
     mode: '0755'
-  become: yes
+  become: true
   loop:
     - /etc/prometheus
     - /etc/prometheus/rules
@@ -22,8 +23,8 @@
     src: prometheus.yml.j2
     dest: /etc/prometheus/prometheus.yml
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart prometheus
 
 - name: Generate Prometheus alerting rules
@@ -31,8 +32,8 @@
     src: alert-rules.yml.j2
     dest: /etc/prometheus/rules/alert-rules.yml
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart prometheus
 
 - name: Generate Loki configuration
@@ -40,8 +41,8 @@
     src: loki.yml.j2
     dest: /etc/loki/loki.yml
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart loki
 
 - name: Generate Loki alerting rules
@@ -49,8 +50,8 @@
     src: loki-alert-rules.yml.j2
     dest: /etc/loki/loki-alert-rules.yml
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart loki
 
 - name: Generate Alertmanager configuration
@@ -58,8 +59,8 @@
     src: alertmanager.yml.j2
     dest: /etc/alertmanager/alertmanager.yml
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart alertmanager
 
 - name: Generate Grafana datasource configuration
@@ -67,7 +68,7 @@
     src: grafana-datasources.yml.j2
     dest: /etc/grafana/provisioning/datasources/datasources.yml
     mode: '0644'
-  become: yes
+  become: true
   notify: restart grafana
 
 - name: Generate Grafana dashboard provisioning
@@ -75,7 +76,7 @@
     src: grafana-dashboards.yml.j2
     dest: /etc/grafana/provisioning/dashboards/dashboards.yml
     mode: '0644'
-  become: yes
+  become: true
   notify: restart grafana
 
 - name: Create Grafana dashboard directory
@@ -83,32 +84,32 @@
     path: /var/lib/grafana/dashboards
     state: directory
     owner: grafana
-    group: grafana
+    ansible.builtin.group: grafana
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Copy unified infrastructure dashboard
   ansible.builtin.template:
     src: infrastructure-dashboard.json.j2
     dest: /var/lib/grafana/dashboards/infrastructure-overview.json
     owner: grafana
-    group: grafana
+    ansible.builtin.group: grafana
     mode: '0644'
-  become: yes
+  become: true
 
 - name: Validate Prometheus configuration
   ansible.builtin.command: promtool check config /etc/prometheus/prometheus.yml
   register: prometheus_config_check
   failed_when: prometheus_config_check.rc != 0
   changed_when: false
-  become: yes
+  become: true
 
 - name: Validate Prometheus alerting rules
   ansible.builtin.command: promtool check rules /etc/prometheus/rules/alert-rules.yml
   register: prometheus_rules_check
   failed_when: prometheus_rules_check.rc != 0
   changed_when: false
-  become: yes
+  become: true
 
 - name: Display configuration validation results
   ansible.builtin.debug:

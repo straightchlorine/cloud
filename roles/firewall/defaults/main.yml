@@ -1,3 +1,4 @@
+---
 # Default firewall configuration
 firewall_enabled: true
 firewall_policy_incoming: deny
@@ -12,4 +13,3 @@ firewall_rules: []
 
 # Logging configuration
 firewall_logging: "off"
-

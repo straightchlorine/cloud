@@ -1,3 +1,4 @@
+---
 # Unified Restic Backup Implementation
 # Eliminates redundancy between automation and enterprise-backup roles
 # Provides scalable backup solution with enterprise features when needed
@@ -15,9 +16,9 @@
 
 - name: Create backup user (if not already created)
   ansible.builtin.user:
-    name: backup
+    name: Backup
     system: true
-    shell: /bin/bash
+    ansible.builtin.shell: /bin/bash
     home: "{{ backup_base_path }}"
     create_home: true
     groups: "{{ backup_additional_groups | default([]) }}"
@@ -31,7 +32,7 @@
     src: backup-sudoers.j2
     dest: /etc/sudoers.d/backup-user
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0440'
     validate: 'visudo -cf %s'
   become: true
@@ -44,7 +45,7 @@
 
 - name: Install restic on Arch Linux
   community.general.pacman:
-    name: restic
+    name: Restic
     state: present
     update_cache: true
   become: true
@@ -54,7 +55,7 @@
 
 - name: Install restic on Debian/Ubuntu
   ansible.builtin.apt:
-    name: restic
+    name: Restic
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -73,7 +74,7 @@
     path: "{{ item }}"
     state: directory
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0750'
   become: true
   loop:
@@ -87,7 +88,7 @@
     content: "{{ restic_password }}"
     dest: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0600'
   become: true
   no_log: true
@@ -97,7 +98,7 @@
     path: "{{ backup_base_path }}/.ssh"
     state: directory
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0700'
   become: true
 
@@ -123,7 +124,7 @@
   ansible.builtin.file:
     path: "{{ backup_base_path }}/.ssh/hetzner"
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0600'
   become: true
   when: hetzner_key_stat.stat.exists
@@ -133,7 +134,7 @@
     path: "{{ backup_base_path }}/.ssh/sockets"
     state: directory
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0700'
   become: true
 
@@ -142,7 +143,7 @@
     src: ssh_config.j2
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0600'
   become: true
 
@@ -151,7 +152,7 @@
     src: backup-script.sh.j2
     dest: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0755'
   vars:
     backup_directories: "{{ backup_paths }}"
@@ -165,7 +166,7 @@
     src: restic-init.sh.j2
     dest: "{{ backup_base_path }}/scripts/init-{{ backup_service_name }}.sh"
     owner: backup
-    group: backup
+    ansible.builtin.group: backup
     mode: '0755'
   vars:
     backup_password_file: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
@@ -185,7 +186,7 @@
     src: systemd-service.j2
     dest: "/etc/systemd/system/backup-{{ backup_service_name }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
     backup: true
   vars:
@@ -224,7 +225,7 @@
     src: backup-timer.j2
     dest: "/etc/systemd/system/backup-{{ backup_service_name }}.timer"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     timer_description: "Backup Timer for {{ backup_service_name }}"
@@ -251,7 +252,9 @@
   become: true
   register: repository_init
   changed_when: "'initialized' in repository_init.stdout"
-  failed_when: repository_init.rc != 0 and 'already exists' not in repository_init.stderr and 'already exists' not in repository_init.stdout
+  failed_when: >-
+    repository_init.rc != 0 and 'already exists' not in repository_init.stderr and
+    'already exists' not in repository_init.stdout
   when: backup_skip_init is not defined or not backup_skip_init
 
 - name: Force handler execution

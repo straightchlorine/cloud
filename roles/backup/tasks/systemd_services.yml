@@ -1,3 +1,4 @@
+---
 # Enterprise Backup Systemd Services Configuration
 # Creates and manages systemd services for backup operations
 
@@ -6,7 +7,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: "/etc/systemd/system/backup-{{ device_role }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Enterprise Backup Service for {{ device_role }}"
@@ -33,7 +34,7 @@
     protect_home: "true"
     private_tmp: "true"
     read_write_paths: ["{{ backup_base_path }}"]
-  become: yes
+  become: true
   notify: reload systemd
 
 - name: Create backup timer file
@@ -41,9 +42,9 @@
     src: backup-schedule.timer.j2
     dest: "/etc/systemd/system/backup-{{ device_role }}.timer"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true
   notify: reload systemd
 
 - name: Create backup coordinator service file
@@ -51,7 +52,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: "/etc/systemd/system/backup-coordinator-{{ device_role }}.service"
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Enterprise Backup Coordinator for {{ device_role }}"
@@ -85,24 +86,24 @@
     restrict_namespaces: "true"
     memory_max: "512M"
     cpu_quota: "50%"
-  become: yes
+  become: true
   notify: reload systemd
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
 
 - name: Enable backup timer
   ansible.builtin.systemd:
     name: "backup-{{ device_role }}.timer"
     enabled: "{{ backup_timer_enabled }}"
     state: "{{ backup_timer_enabled | ternary('started', 'stopped') }}"
-  become: yes
+  become: true
 
 - name: Enable backup coordinator service
   ansible.builtin.systemd:
     name: "backup-coordinator-{{ device_role }}.service"
     enabled: "{{ backup_coordinator_enabled }}"
     state: "{{ backup_coordinator_enabled | ternary('started', 'stopped') }}"
-  become: yes
+  become: true

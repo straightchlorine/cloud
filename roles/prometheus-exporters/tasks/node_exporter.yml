@@ -1,15 +1,17 @@
+---
 # Node Exporter setup tasks
 
 - name: Install Node Exporter via binary (recommended)
   block:
     - name: Check current Node Exporter version
       ansible.builtin.shell: |
+        set -o pipefail
         if [ -f "{{ prometheus_exporters_base_dir }}/bin/node_exporter" ]; then
-          {{ prometheus_exporters_base_dir }}/bin/node_exporter --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
+          {{ prometheus_exporters_base_dir }}/bin/node_exporter --version 2>/dev/null | head -n 1 |
+          grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
         else
           echo "not_installed"
         fi
-      register: current_node_exporter_version
       changed_when: false
 
     - name: Download and install Node Exporter
@@ -22,7 +24,10 @@
 
         - name: Extract expected checksum
           ansible.builtin.shell: |
-            grep "node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz" /tmp/node_exporter_checksums.txt | cut -d' ' -f1
+            set -o pipefail
+            grep "node_exporter-{{ node_exporter_version }}.linux-{{
+                  prometheus_arch_map[ansible_architecture] }}.tar.gz" \
+              /tmp/node_exporter_checksums.txt | cut -d' ' -f1
           register: expected_checksum
           changed_when: false
 
@@ -37,17 +42,19 @@
           ansible.builtin.unarchive:
             src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
             dest: "/tmp"
-            remote_src: yes
+            remote_src: true
 
         - name: Install Node Exporter binary
           ansible.builtin.copy:
-            src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}/node_exporter"
+            src: >-
+              /tmp/node_exporter-{{ node_exporter_version }}.linux-{{
+              prometheus_arch_map[ansible_architecture] }}/node_exporter
             dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
             owner: "{{ prometheus_exporters_user }}"
-            group: "{{ prometheus_exporters_group }}"
+            ansible.builtin.group: "{{ prometheus_exporters_group }}"
             mode: '0755'
-            remote_src: yes
-          become: yes
+            remote_src: true
+          become: true
           notify: restart node-exporter
 
         - name: Clean up downloaded files
@@ -59,7 +66,6 @@
             - "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}"
             - "/tmp/node_exporter_checksums.txt"
 
-      when:
         - node_exporter_install_method == "binary"
         - current_node_exporter_version.stdout != node_exporter_version
 
@@ -67,10 +73,10 @@
 
 - name: Install Node Exporter via package manager (fallback)
   ansible.builtin.apt:
-    name: prometheus-node-exporter
+    name: Prometheus-node-exporter
     state: present
-    update_cache: yes
-  become: yes
+    update_cache: true
+  become: true
   when: node_exporter_install_method == "package"
 
 - name: Create Node Exporter service file
@@ -78,7 +84,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/node-exporter.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Prometheus Node Exporter"
@@ -108,7 +114,7 @@
     protect_kernel_modules: "true"
     protect_kernel_tunables: "true"
     read_write_paths: ["{{ node_exporter_textfile_dir }}"]
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart node-exporter
@@ -119,18 +125,18 @@
     src: node-exporter.conf.j2
     dest: "{{ prometheus_exporters_config_dir }}/node-exporter.conf"
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0644'
-  become: yes
+  become: true
   notify: restart node-exporter
 
 - name: Enable and start Node Exporter service
   ansible.builtin.systemd:
     name: "{{ 'node-exporter' if node_exporter_install_method == 'binary' else 'prometheus-node-exporter' }}"
-    enabled: yes
+    enabled: true
     state: started
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
 
 - name: Verify Node Exporter is responding
   ansible.builtin.uri:

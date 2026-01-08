@@ -1,36 +1,37 @@
+---
 # Chrony NTP server configuration for pi-dns
 
 - name: Stop systemd-timesyncd service
-  systemd:
-    name: systemd-timesyncd
+  ansible.builtin.systemd:
+    name: Systemd-timesyncd
     state: stopped
-    enabled: no
-  become: yes
-  ignore_errors: yes
+    enabled: false
+  become: true
+  ignore_errors: true
 
 - name: Install chrony package
-  apt:
-    name: chrony
+  ansible.builtin.apt:
+    name: Chrony
     state: present
-  become: yes
+  become: true
 
 - name: Create chrony configuration
-  template:
+  ansible.builtin.template:
     src: chrony.conf.j2
     dest: /etc/chrony/chrony.conf
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart chrony
 
 - name: Enable and start chrony service
-  systemd:
-    name: chrony
+  ansible.builtin.systemd:
+    name: Chrony
     state: started
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
 
 - name: Configure firewall for NTP
   ufw:
@@ -38,19 +39,18 @@
     port: "123"
     proto: udp
     comment: "Allow NTP (chrony)"
-  become: yes
+  become: true
 
 - name: Wait for chrony to sync
-  wait_for:
+  ansible.builtin.wait_for:
     timeout: 30
 
 - name: Check chrony sources
-  command: chronyc sources
+  ansible.builtin.command: chronyc sources
   register: chrony_sources
   changed_when: false
-  become: yes
+  become: true
 
 - name: Display chrony sources
-  debug:
+  ansible.builtin.debug:
     var: chrony_sources.stdout_lines
-

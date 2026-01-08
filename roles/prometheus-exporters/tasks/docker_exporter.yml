@@ -1,3 +1,4 @@
+---
 # Docker metrics via Node Exporter (no separate exporter needed)
 
 - name: Enable Docker metrics in Docker daemon
@@ -9,10 +10,10 @@
       }
     dest: /etc/docker/daemon.json
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   notify: restart docker
   when: docker_exporter_enabled
 
@@ -21,16 +22,16 @@
     src: docker_metrics.sh.j2
     dest: "{{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh"
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create systemd service for Docker metrics collection
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/docker-metrics.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Docker Metrics Collection"
@@ -45,7 +46,7 @@
     protect_home: "yes"
     private_tmp: "yes"
     read_write_paths: ["{{ node_exporter_textfile_dir }}"]
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart docker-metrics
@@ -55,20 +56,20 @@
     src: docker-metrics.timer.j2
     dest: /etc/systemd/system/docker-metrics.timer
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart docker-metrics-timer
 
 - name: Enable and start Docker metrics timer
   ansible.builtin.systemd:
-    name: docker-metrics.timer
-    enabled: yes
+    name: Docker-metrics.timer
+    enabled: true
     state: started
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
   when: docker_exporter_enabled
 
 - name: Test Docker metrics endpoint

@@ -1,8 +1,44 @@
+---
+# Ansible-optimized YAML formatter configuration
+# Aligns with Ansible best practices and project standards (CLAUDE.md)
+
 formatter:
   type: basic
+  # Core formatting
   indent: 2
-  max_line_length: 0
+  indent_root_array: true
+  array_indent: 2
+
+  # Document structure (Ansible requires this)
+  include_document_start: true
+
+  # Line handling
+  max_line_length: 120
   retain_line_breaks: true
   retain_line_breaks_single: false
-  trim_trailing_whitespace: false
-  eof_newline: false
+  trim_trailing_whitespace: true
+  eof_newline: true
+
+  # Quote and style handling
+  force_quote_style: double  # Consistent with Ansible conventions
+
+  # Flow vs Block style (Ansible prefers block style for readability)
+  force_array_style: block
+
+# File patterns
+include:
+  - "**/*.yml"
+  - "**/*.yaml"
+
+# Exclude patterns
+exclude:
+  - ".git"
+  - "node_modules"
+  - ".venv"
+  - "venv"
+
+# Continue on invalid YAML files
+continue_on_error: false
+
+# Use gitignore for exclude paths
+gitignore_excludes: true

@@ -1,3 +1,4 @@
+---
 # Backup System - SSH Connection Optimization
 # Keep it simple: connection pooling, keep-alive, and host key checking
 # Restic handles compression, no need for SSH-level compression
@@ -16,7 +17,7 @@
           StrictHostKeyChecking accept-new
     dest: "{{ backup_base_path }}/.ssh/config"
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0600'
 
 - name: Create SSH socket directory
@@ -24,7 +25,7 @@
     path: "{{ backup_base_path }}/.ssh/sockets"
     state: directory
     owner: "{{ backup_user }}"
-    group: "{{ backup_group }}"
+    ansible.builtin.group: "{{ backup_group }}"
     mode: '0700'
 
 - name: Display SSH optimization status
@@ -34,4 +35,3 @@
       connection pooling: enabled
       keep-alive interval: 60 seconds
       connection timeout: 10 minutes
-

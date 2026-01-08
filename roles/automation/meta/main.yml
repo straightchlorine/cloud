@@ -1,3 +1,4 @@
+---
 galaxy_info:
   author: Ansible Admin
   description: Automation stack for Raspberry Pi 4B with Traefik reverse proxy
@@ -30,4 +31,3 @@ dependencies:
   - role: common
   - role: firewall
   - role: prometheus-exporters
-

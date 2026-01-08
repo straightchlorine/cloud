@@ -1,23 +1,23 @@
 ---
 driver:
-  name: docker
+  name: Docker
 platforms:
-  - name: debian12-failfast
+  - name: Debian12-failfast
     image: docker.io/geerlingguy/docker-debian12-ansible:latest
     pre_build_image: true
-    command: /lib/systemd/systemd
+    ansible.builtin.command: /lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:
-  name: ansible
+  name: Ansible
   # Note: Intentionally minimal inventory - no variables set
   inventory:
     group_vars:
       all: {}
 verifier:
-  name: ansible
+  name: Ansible
 scenario:
-  name: fail-fast-validation
+  name: Fail-fast-validation
   description: Test that role fails fast when required variables are missing
   test_sequence:
     - dependency

@@ -1,9 +1,10 @@
+---
 # Monitoring stack deployment validation
 # Ensures all requirements are met before monitoring stack deployment begins
 
 - name: Run monitoring stack comprehensive validation
   ansible.builtin.include_role:
-    name: common
+    name: Common
     tasks_from: unified_validation
   vars:
     validation_context: "monitoring stack"
@@ -59,5 +60,7 @@
 
 - name: Fail if insufficient disk space
   ansible.builtin.fail:
-    msg: "Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 10GB minimum for monitoring data retention"
+    msg: >-
+      Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Required: 10GB minimum for monitoring data retention
   when: (disk_space.stdout | int) < 10485760

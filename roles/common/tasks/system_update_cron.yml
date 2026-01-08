@@ -8,7 +8,7 @@
     src: system-update-cron.sh.j2
     dest: /usr/local/bin/system-update-cron.sh
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0755'
   become: true
 
@@ -19,7 +19,7 @@
     hour: "23"
     minute: "0"
     job: "/usr/local/bin/system-update-cron.sh"
-    user: "root"
+    ansible.builtin.user: "root"
   become: true
   tags: [cron, updates]
 

@@ -6,5 +6,5 @@
   tasks:
     - name: Include detect_hardware task
       ansible.builtin.include_role:
-        name: common
+        name: Common
         tasks_from: detect_hardware

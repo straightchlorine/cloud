@@ -9,7 +9,7 @@
 
   pre_tasks:
     - name: Debug vault variables
-      debug:
+      ansible.builtin.debug:
         msg: |
           Vault variables check:
           - vault_backup_repository_base: {{ vault_backup_repository_base | default('UNDEFINED') }}
@@ -18,12 +18,14 @@
           - vault_letsencrypt_email: {{ vault_letsencrypt_email | default('UNDEFINED') }}
 
     - name: Force load coordinator_targets variable from hostvars
-      set_fact:
+      ansible.builtin.set_fact:
         coordinator_targets: "{{ hostvars[inventory_hostname]['coordinator_targets'] }}"
 
     - name: Verify coordinator_targets was loaded
-      debug:
-        msg: "coordinator_targets loaded: {{ coordinator_targets is defined }} ({{ coordinator_targets | length }} items)"
+      ansible.builtin.debug:
+        msg: >-
+          coordinator_targets loaded: {{ coordinator_targets is defined }}
+          ({{ coordinator_targets | length }} items)
 
     - name: Debug variable access in playbook context
       ansible.builtin.debug:
@@ -80,11 +82,14 @@
           # Check SSH connectivity
           echo "Testing SSH connectivity..."
           {% for target in coordinator_targets %}
-          if ssh -i "$BACKUP_BASE/.ssh/backup-{{ target.service_name }}" -o ConnectTimeout=5 -o BatchMode=yes {{ target.ssh_user }}@{{ target.hostname }} "echo 'SSH OK'" >/dev/null 2>&1; then
+          if ssh -i "$BACKUP_BASE/.ssh/backup-{{ target.service_name }}" \
+              -o ConnectTimeout=5 -o BatchMode=yes \
+              {{ target.ssh_user }}@{{ target.hostname }} "echo 'SSH OK'" >/dev/null 2>&1; then
               echo "[OK] {{ target.service_name }}: SSH connectivity OK"
           else
               echo "[FAIL] {{ target.service_name }}: SSH connectivity FAILED"
-              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/backup-{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.hostname }}"
+              echo "   Deploy key: ssh-copy-id -i $BACKUP_BASE/.ssh/backup-{{ target.service_name }}.pub \
+                    {{ target.ssh_user }}@{{ target.hostname }}"
           fi
           {% endfor %}
 
@@ -107,7 +112,7 @@
           {% endfor %}
         dest: "{{ backup_base_path }}/scripts/backup-verify-coordinator.sh"
         owner: "{{ backup_user }}"
-        group: "{{ backup_group }}"
+        ansible.builtin.group: "{{ backup_group }}"
         mode: '0755'
 
     - name: Display coordinator deployment completion
@@ -132,7 +137,8 @@
           [KEYS] SSH Key Deployment Required:
           {% for target in coordinator_targets %}
           {{ target.service_name }}:
-            ssh-copy-id -i {{ backup_base_path }}/.ssh/backup-{{ target.service_name }}.pub {{ target.ssh_user }}@{{ target.hostname }}
+            ssh-copy-id -i {{ backup_base_path }}/.ssh/backup-{{ target.service_name }}.pub
+            {{ target.ssh_user }}@{{ target.hostname }}
           {% endfor %}
 
           [DEPLOY] Next Steps:

@@ -1,3 +1,4 @@
+---
 # DNS01 challenge prerequisites validation
 # Tests all requirements for successful Let's Encrypt DNS01 certificate generation
 
@@ -20,7 +21,9 @@
 
 - name: Validate domain zone exists in Cloudflare
   ansible.builtin.fail:
-    msg: "Domain {{ domain_name }} not found in Cloudflare account. Available zones: {{ cloudflare_zones.json.result | map(attribute='name') | list }}"
+    msg: |
+      Domain {{ domain_name }} not found in Cloudflare account.
+      Available zones: {{ cloudflare_zones.json.result | map(attribute='name') | list }}
   when: domain_zone == {}
   tags: [dns01_validation]
 
@@ -45,7 +48,8 @@
 
 - name: Clean up test DNS record
   ansible.builtin.uri:
-    url: "https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records/{{ dns_record_test.json.result.id }}"
+    url: |
+      https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records/{{ dns_record_test.json.result.id }}
     method: DELETE
     headers:
       Authorization: "Bearer {{ vault_cloudflare_api_token }}"
@@ -80,13 +84,16 @@
 
 - name: Count recent certificates for rate limit check
   ansible.builtin.set_fact:
-    recent_certificates: "{{ certificate_transparency.json | default([]) | selectattr('not_after', 'match', '.*') | list | length }}"
+    recent_certificates: |
+      {{ certificate_transparency.json | default([]) | selectattr('not_after', 'match', '.*') | list | length }}
   when: certificate_transparency.status == 200
   tags: [dns01_validation]
 
 - name: Test connectivity to Let's Encrypt ACME server
   ansible.builtin.uri:
-    url: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if letsencrypt_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
+    url: >-
+      {{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if letsencrypt_staging
+      else 'https://acme-v02.api.letsencrypt.org/directory' }}
     method: GET
     timeout: 15
   register: acme_server_test
@@ -94,27 +101,36 @@
 
 - name: Validate Traefik DNS challenge configuration
   ansible.builtin.shell: |
+    set -o pipefail
     cd "{{ automation_stack_home }}"
-    docker compose config | grep -A 10 -B 5 "dnsChallenge\|provider.*cloudflare" || echo "No DNS challenge config found"
-  register: traefik_dns_config
+    docker compose config | \
+      grep -A 10 -B 5 "dnsChallenge\|provider.*cloudflare" || \
+      echo "No DNS challenge config found"
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [dns01_validation]
 
 - name: Check if required environment variables are set
   ansible.builtin.shell: |
+    set -o pipefail
     cd "{{ automation_stack_home }}"
-    docker compose config | grep -E "CF_API_TOKEN|CLOUDFLARE_" || echo "No Cloudflare env vars found"
-  register: cloudflare_env_check
+    docker compose config | \
+      grep -E "CF_API_TOKEN|CLOUDFLARE_" || \
+      echo "No Cloudflare env vars found"
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   tags: [dns01_validation]
 
 - name: Test Docker container access to Cloudflare API
   ansible.builtin.shell: |
+    set -o pipefail
     cd "{{ automation_stack_home }}"
-    docker compose exec -T traefik wget -q --spider https://api.cloudflare.com/client/v4/user || echo "Container cannot reach Cloudflare API"
-  register: container_api_test
+    docker compose exec -T traefik wget -q --spider \
+      https://api.cloudflare.com/client/v4/user || \
+      echo "Container cannot reach Cloudflare API"
+  become: true
   become_user: "{{ automation_user }}"
   changed_when: false
   failed_when: false
@@ -128,8 +144,8 @@
 
 - name: Check disk space for certificate storage
   ansible.builtin.shell: |
+    set -o pipefail
     df "{{ automation_data_path }}" | tail -1 | awk '{print $4}'
-  register: cert_storage_space
   changed_when: false
   tags: [dns01_validation]
 
@@ -143,12 +159,16 @@
       Domain Zone Access: {{ '[OK] Found' if domain_zone != {} else '[FAIL] Missing' }}
       Zone ID: {{ domain_zone.id | default('Not found') }}
       Zone Status: {{ domain_zone.status | default('Unknown') }}
-      DNS Record Permissions: {{ '[OK] Can create/delete' if dns_record_test.json.success | default(false) else '[FAIL] Insufficient permissions' }}
+      DNS Record Permissions: {{
+          '[OK] Can create/delete' if dns_record_test.json.success | default(false)
+          else '[FAIL] Insufficient permissions' }}
 
       Let's Encrypt Connectivity:
-      ACME Server: {{ '[OK] Reachable' if acme_server_test.status == 200 else '[FAIL] Unreachable' }}
+      ACME Server: {{
+          '[OK] Reachable' if acme_server_test.status == 200 else '[FAIL] Unreachable' }}
       Server Type: {{ 'Staging' if letsencrypt_staging else 'Production' }}
-      Rate Limit Status: {{ '[OK] Safe' if (recent_certificates | default(0) | int) < 20 else '[WARN]  High certificate count' }}
+      Rate Limit Status: {{
+          '[OK] Safe' if (recent_certificates | default(0) | int) < 20 else '[WARN]  High certificate count' }}
 
       DNS Propagation:
       Test Query Response: {{ '[OK] DNS working' if propagation_test.rc == 0 else '[WARN]  Check DNS setup' }}
@@ -156,8 +176,11 @@
 
       Container Environment:
       Traefik DNS Config: {{ '[OK] Present' if 'cloudflare' in traefik_dns_config.stdout else '[FAIL] Missing' }}
-      Cloudflare Env Vars: {{ '[OK] Configured' if 'CF_API_TOKEN' in cloudflare_env_check.stdout or 'CLOUDFLARE_' in cloudflare_env_check.stdout else '[WARN]  Check environment' }}
-      Container API Access: {{ '[OK] Working' if 'cannot reach' not in container_api_test.stdout else '[FAIL] Network issue' }}
+      Cloudflare Env Vars: {{ '[OK] Configured'
+        if 'CF_API_TOKEN' in cloudflare_env_check.stdout or 'CLOUDFLARE_' in cloudflare_env_check.stdout
+        else '[WARN]  Check environment' }}
+      Container API Access: {{
+          '[OK] Working' if 'cannot reach' not in container_api_test.stdout else '[FAIL] Network issue' }}
 
       Storage Configuration:
       Certificate Directory: {{ '[OK] Accessible' if traefik_data_dir.stat.exists else '[FAIL] Missing' }}
@@ -173,4 +196,3 @@
 
       Ready for secure DNS01 certificate generation with no exposed ports! 🔒
   tags: [dns01_validation]
-

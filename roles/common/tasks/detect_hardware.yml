@@ -1,8 +1,10 @@
+---
 # Hardware detection for all systems (Pi, PC, VM)
 # Sets hardware-appropriate resource limits based on detected hardware
 
 - name: Detect hardware platform
   ansible.builtin.shell: |
+    set -o pipefail
     # Check for Raspberry Pi
     if [ -f /proc/device-tree/model ]; then
       cat /proc/device-tree/model
@@ -15,7 +17,6 @@
     else
       echo "unknown"
     fi
-  register: hardware_detection_raw
   changed_when: false
 
 - name: Gather system resources
@@ -167,7 +168,6 @@
         cpus_reservation: "1.0"
   when: hardware_platform == "pc"
 
-
 - name: Set conservative resource limits for unknown hardware
   ansible.builtin.set_fact:
     hardware_limits:
@@ -222,4 +222,3 @@
       Total Memory: {{ ansible_memtotal_mb }}MB
       CPU Cores: {{ ansible_processor_cores }}
       VCPUs: {{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}
-

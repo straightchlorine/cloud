@@ -18,17 +18,17 @@
   gather_facts: true
   become: false
 
-  vars:
-    # Validation type control - determines which validations to run
-    # validation_type must be passed via -e validation_type=<type> - no default allowed
-
-    # Control flags - must be explicitly set when needed
-    # quick_mode: must be passed via -e quick_mode=true - no default
+  # Validation type control - determines which validations to run
+  # validation_type must be passed via -e validation_type=<type> - no default allowed
+  # Control flags - must be explicitly set when needed
+  # quick_mode: must be passed via -e quick_mode=true - no default
 
   pre_tasks:
     - name: Validate required parameters
       ansible.builtin.fail:
-        msg: "validation_type must be explicitly set via -e validation_type=<type>. Valid types: full, backup, vault, pre_deployment, post_deployment, service_startup, ssl_domain"
+        msg: >-
+          validation_type must be explicitly set via -e validation_type=<type>.
+          Valid types: full, backup, vault, pre_deployment, post_deployment, service_startup, ssl_domain
       when: validation_type is not defined
 
     - name: Set validation scope based on type
@@ -88,7 +88,9 @@
 
         - name: Fail if insufficient disk space
           ansible.builtin.fail:
-            msg: "Insufficient root disk space. Available: {{ (root_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB. Required: 2GB minimum"
+            msg: >-
+              Insufficient root disk space. Available: {{ (root_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+              Required: 2GB minimum
           when: (root_disk_space.stdout | int) < 2097152
       when: run_pre_deployment_validation
 
@@ -97,7 +99,7 @@
       block:
         - name: Run common backup validation
           ansible.builtin.include_role:
-            name: common
+            name: Common
             tasks_from: backup_validation
 
         - name: Run role-specific backup validation
@@ -126,7 +128,7 @@
 
         - name: Run template rendering validation
           ansible.builtin.include_role:
-            name: common
+            name: Common
             tasks_from: template_validation
           when: quick_mode is defined and quick_mode is not defined or not quick_mode
       when: run_vault_validation
@@ -136,7 +138,7 @@
       block:
         - name: Run common service startup validation
           ansible.builtin.include_role:
-            name: common
+            name: Common
             tasks_from: service_startup_validation
 
         - name: Run role-specific service startup validation
@@ -155,17 +157,17 @@
       block:
         - name: Validate domain resolution and SSL prerequisites
           ansible.builtin.include_role:
-            name: automation
+            name: Automation
             tasks_from: ssl_domain_validate
 
         - name: Validate Traefik routing configuration
           ansible.builtin.include_role:
-            name: automation
+            name: Automation
             tasks_from: traefik_routing_validate
 
         - name: Validate DNS01 challenge prerequisites
           ansible.builtin.include_role:
-            name: automation
+            name: Automation
             tasks_from: dns01_prerequisites
       when:
         - run_ssl_domain_validation
@@ -176,7 +178,7 @@
       block:
         - name: Run common port connectivity tests
           ansible.builtin.include_role:
-            name: common
+            name: Common
             tasks_from: port_connectivity_test
 
         - name: Run role-specific post-deployment validation
@@ -203,7 +205,9 @@
             msg: "Core vault variable '{{ item }}' is missing or contains placeholder"
           when:
             - vars[item] is not defined or vars[item] == ""
-            - '"your-" in (vars[item] | string) or "example" in (vars[item] | string) or "CHANGEME" in (vars[item] | string)'
+            - >-
+              "your-" in (vars[item] | string) or "example" in (vars[item] | string) or
+              "CHANGEME" in (vars[item] | string)
           loop:
             - vault_domain_name
             - vault_letsencrypt_email
@@ -281,6 +285,6 @@
       when: not quick_mode
 
   handlers:
-    - name: validation complete
+    - name: Validation complete
       ansible.builtin.debug:
         msg: "[OK] {{ validation_type.title() }} validation completed for all targeted hosts"

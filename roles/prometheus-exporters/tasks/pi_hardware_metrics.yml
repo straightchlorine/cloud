@@ -1,3 +1,4 @@
+---
 # Pi-specific hardware metrics collection
 
 - name: Create Pi hardware metrics collection script
@@ -5,9 +6,9 @@
     src: pi_hardware_metrics.sh.j2
     dest: "{{ pi_hardware_metrics_script }}"
     owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
+    ansible.builtin.group: "{{ prometheus_exporters_group }}"
     mode: '0755'
-  become: yes
+  become: true
   notify: restart pi-hardware-metrics
 
 - name: Create systemd service for Pi hardware metrics
@@ -15,7 +16,7 @@
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/pi-hardware-metrics.service
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
   vars:
     service_description: "Pi Hardware Metrics Collection"
@@ -29,7 +30,7 @@
     protect_home: "yes"
     private_tmp: "yes"
     read_write_paths: ["{{ node_exporter_textfile_dir }}"]
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart pi-hardware-metrics
@@ -39,26 +40,26 @@
     src: pi-hardware-metrics.timer.j2
     dest: /etc/systemd/system/pi-hardware-metrics.timer
     owner: root
-    group: root
+    ansible.builtin.group: root
     mode: '0644'
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart pi-hardware-metrics-timer
 
 - name: Enable and start Pi hardware metrics timer
   ansible.builtin.systemd:
-    name: pi-hardware-metrics.timer
-    enabled: yes
+    name: Pi-hardware-metrics.timer
+    enabled: true
     state: started
-    daemon_reload: yes
-  become: yes
+    daemon_reload: true
+  become: true
 
 - name: Create initial hardware metrics
   ansible.builtin.command:
     cmd: "{{ pi_hardware_metrics_script }}"
   become_user: "{{ prometheus_exporters_user }}"
-  become: yes
+  become: true
   changed_when: false
 
 - name: Verify Pi hardware metrics file creation

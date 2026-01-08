@@ -1,3 +1,4 @@
+---
 # Common package management tasks
 # Standardizes package installation across all roles
 
@@ -20,4 +21,3 @@
     state: present
   become: true
   when: role_specific_packages is defined
-

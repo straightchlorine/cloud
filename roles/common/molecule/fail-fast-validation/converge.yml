@@ -9,7 +9,7 @@
       block:
         - name: Include variable_validation without required variables
           ansible.builtin.include_role:
-            name: common
+            name: Common
             tasks_from: variable_validation
           vars:
             validation_context: "fail-fast-test"

@@ -1,3 +1,4 @@
+---
 # Promtail agent deployment for log shipping to Loki
 # Deploys Promtail on service machines to ship logs to central Loki instance
 
@@ -8,28 +9,30 @@
 
 - name: Create promtail user
   ansible.builtin.user:
-    name: promtail
-    system: yes
-    shell: /bin/false
+    name: Promtail
+    system: true
+    ansible.builtin.shell: /bin/false
     home: /var/lib/promtail
-    create_home: yes
-  become: yes
+    create_home: true
+  become: true
 
 - name: Download and install Promtail binary
   block:
     - name: Download Promtail
       ansible.builtin.get_url:
-        url: "https://github.com/grafana/loki/releases/download/v2.9.0/promtail-linux-{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}.zip"
+        url: "https://github.com/grafana/loki/releases/download/v2.9.0/promtail-linux-{{ arch }}.zip"
         dest: /tmp/promtail.zip
         mode: '0644'
-      become: yes
+      vars:
+        arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+      become: true
 
     - name: Extract Promtail binary
       ansible.builtin.unarchive:
         src: /tmp/promtail.zip
         dest: /tmp
-        remote_src: yes
-      become: yes
+        remote_src: true
+      become: true
 
     - name: Install Promtail binary
       ansible.builtin.copy:
@@ -37,9 +40,9 @@
         dest: /usr/local/bin/promtail
         mode: '0755'
         owner: root
-        group: root
-        remote_src: yes
-      become: yes
+        ansible.builtin.group: root
+        remote_src: true
+      become: true
 
     - name: Clean up downloaded files
       ansible.builtin.file:
@@ -48,7 +51,7 @@
       loop:
         - /tmp/promtail.zip
         - "/tmp/promtail-linux-{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
-      become: yes
+      become: true
   when: not promtail_binary.stat.exists
 
 - name: Create Promtail configuration directory
@@ -56,18 +59,18 @@
     path: /etc/promtail
     state: directory
     owner: promtail
-    group: promtail
+    ansible.builtin.group: promtail
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Generate Promtail configuration
   ansible.builtin.template:
     src: promtail.yml.j2
     dest: /etc/promtail/promtail.yml
     owner: promtail
-    group: promtail
+    ansible.builtin.group: promtail
     mode: '0644'
-  become: yes
+  become: true
   notify: restart promtail
 
 - name: Create Promtail systemd service
@@ -97,7 +100,7 @@
     protect_control_groups: "yes"
     limit_nofile: "65536"
     memory_max: "128M"
-  become: yes
+  become: true
   notify:
     - reload systemd
     - restart promtail
@@ -107,17 +110,17 @@
     path: /var/lib/promtail
     state: directory
     owner: promtail
-    group: promtail
+    ansible.builtin.group: promtail
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Start and enable Promtail service
   ansible.builtin.systemd:
-    name: promtail
+    name: Promtail
     state: started
-    enabled: yes
-    daemon_reload: yes
-  become: yes
+    enabled: true
+    daemon_reload: true
+  become: true
 
 - name: Verify Promtail is running and healthy
   ansible.builtin.wait_for:
@@ -148,4 +151,3 @@
       Status: {{ '[OK] Running' if promtail_metrics.status == 200 else '[FAIL] Failed' }}
 
       Next: Logs are now being shipped to Loki for centralized aggregation!
-
