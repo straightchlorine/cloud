@@ -15,7 +15,7 @@ User={{ backup_user }}
 Group={{ backup_group }}
 
 # Execute backup script
-ExecStart={{ backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
+ExecStart={{{ common_backup_base_path }}}/scripts/backup-{{ target.service_name }}.sh
 
 # Resource limits (strict for coordinator)
 MemoryMax={{ target.memory_limit }}
@@ -29,7 +29,7 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths={{ backup_base_path }}
+ReadWritePaths={{{ common_backup_base_path }}}
 
 # Timeout (generous for remote operations)
 TimeoutStartSec=7200

@@ -26,7 +26,7 @@
     vault_placeholders:
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
       - { var: "vault_pihole_admin_password", value: "your-secure-admin-password" }
-    backup_directories:
+    common_backup_directories:
       - "/etc/pihole"
       - "/opt/pihole"
     critical_backup_paths: []  # Pi-hole dirs created during deployment

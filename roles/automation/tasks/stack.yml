@@ -63,8 +63,8 @@
     group: "{{ ansible_user }}"
     mode: "0755"
   vars:
-    backup_service_name: "automation-stack"
-    backup_directories:
+    common_backup_service_name: "automation-stack"
+    common_backup_directories:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
 

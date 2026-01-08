@@ -7,16 +7,16 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ target.restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ target.service_name }}-password"
-export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ target.service_name }}"
-export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_base_path }}}/keys/{{ target.service_name }}-password"
+export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache/{{ target.service_name }}"
+export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
 # Target configuration
 SERVICE_NAME="{{ target.service_name }}"
 TARGET_HOSTNAME="{{ target.hostname }}"
 TARGET_USER="{{ target.ssh_user }}"
-SSH_CONFIG="{{ backup_base_path }}/.ssh/config"
-LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+SSH_CONFIG="{{{ common_backup_base_path }}}/.ssh/config"
+LOG_FILE="{{{ common_backup_base_path }}}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 
 # Backup paths on remote system
 BACKUP_PATHS=(
@@ -46,7 +46,7 @@ RETENTION_MONTHLY="{{ target.retention_policy.monthly }}"
 RETENTION_YEARLY="{{ target.retention_policy.yearly }}"
 
 # SSHFS mount point for this backup
-MOUNT_POINT="{{ backup_base_path }}/mounts/${SERVICE_NAME}"
+MOUNT_POINT="{{{ common_backup_base_path }}}/mounts/${SERVICE_NAME}"
 
 # Functions
 log() {

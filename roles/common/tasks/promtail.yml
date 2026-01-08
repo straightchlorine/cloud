@@ -13,7 +13,7 @@
     system: true
     shell: /bin/false
     home: /var/lib/promtail
-    create_home: true
+    common_create_home: true
   become: true
 
 - name: Download and install Promtail binary
@@ -80,7 +80,7 @@
     mode: '0644'
   vars:
     service_description: "Promtail log shipping agent"
-    service_wants: ["network-online.target"]
+    common_service_wants: ["network-online.target"]
     service_after: ["network-online.target"]
     service_type: "simple"
     service_user: "promtail"
@@ -91,10 +91,10 @@
     syslog_identifier: "promtail"
     kill_mode: "mixed"
     kill_signal: "SIGINT"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["/var/lib/promtail"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["/var/lib/promtail"]
     protect_kernel_tunables: "yes"
     protect_kernel_modules: "yes"
     protect_control_groups: "yes"
@@ -148,6 +148,6 @@
       [NOTE] Logs: /var/log/promtail.log
       [TARGET] Target: {{ loki_server }}:{{ loki_port }}
 
-      Status: {{ '[OK] Running' if promtail_metrics.status == 200 else '[FAIL] Failed' }}
+      common_Status: {{ '[OK] Running' if promtail_metrics.status == 200 else '[FAIL] Failed' }}
 
       Next: Logs are now being shipped to Loki for centralized aggregation!

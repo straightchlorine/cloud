@@ -12,5 +12,5 @@
   ansible.builtin.apt_repository:
     repo: "{{ grafana_apt_repo }}"
     state: present
-    update_cache: true
+    common_update_cache: true
   become: true

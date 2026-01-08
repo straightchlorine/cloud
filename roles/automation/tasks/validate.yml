@@ -36,7 +36,7 @@
       - { var: "vault_cloudflare_api_token", value: "your-cloudflare-api-token-here" }
       - { var: "vault_restic_automation_password", value: "your-32-character-secure-restic-password" }
       - { var: "vault_influxdb3_session_secret_key", value: "example-session-secret-key" }
-    backup_directories:
+    common_backup_directories:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
     critical_backup_paths:

@@ -7,16 +7,16 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
-export RESTIC_CACHE_DIR="{{ backup_cache_dir }}"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_password_file }}}"
+export RESTIC_CACHE_DIR="{{{ common_backup_cache_dir }}}"
 
 # Service configuration
-SERVICE_NAME="{{ backup_service_name }}"
+SERVICE_NAME="{{{ common_backup_service_name }}}"
 TARGET_HOST="{{ backup_target.target_host }}"
 SSH_USER="{{ backup_target.ssh_user | default('backup') }}"
-SSH_KEY="{{ backup_base_path }}/keys/{{ backup_service_name }}-ssh-key"
-RESTORE_DIR="{{ backup_base_path }}/restore-staging/${SERVICE_NAME}"
-LOG_FILE="{{ backup_log_dir }}/restore-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+SSH_KEY="{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-ssh-key"
+RESTORE_DIR="{{{ common_backup_base_path }}}/restore-staging/${SERVICE_NAME}"
+LOG_FILE="{{{ common_backup_log_dir }}}/restore-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 
 # Enhanced configuration
 {% if backup_target.restore_pushback_enabled is defined and backup_target.restore_pushback_enabled %}

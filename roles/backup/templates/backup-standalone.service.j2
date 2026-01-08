@@ -9,7 +9,7 @@ User={{ backup_user }}
 Group={{ backup_group }}
 
 # Execute backup script
-ExecStart={{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh
+ExecStart={{{ common_backup_base_path }}}/scripts/backup-{{ inventory_hostname }}.sh
 
 # Resource limits
 {% if restic_memory_limit is defined %}
@@ -24,7 +24,7 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths={{ backup_base_path }}
+ReadWritePaths={{{ common_backup_base_path }}}
 
 # Timeout
 TimeoutStartSec={{ backup_timeout }}

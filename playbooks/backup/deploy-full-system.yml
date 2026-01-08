@@ -9,7 +9,7 @@
 
   vars:
     backup_role: "coordinator"
-    backup_base_path: "/opt/enterprise-backup"
+    common_backup_base_path: "/opt/enterprise-backup"
     backup_user: "backup"
     backup_group: "backup"
     backup_restic_version: "0.18.1"
@@ -23,7 +23,7 @@
 
           coordinator: {{ inventory_hostname }}
           targets: {{ backup_targets | length }} configured
-          base path: {{ backup_base_path }}
+          base path: {{{ common_backup_base_path }}}
           monitoring: {{ backup_monitoring }}
 
   tasks:
@@ -39,9 +39,9 @@
 
           {% for target in backup_targets %}
           {{ target.service_name }}:
-          SSH Key: {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub
+          SSH Key: {{{ common_backup_base_path }}}/keys/{{ target.service_name }}-ssh-key.pub
           Target: {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
-          Command: ssh-copy-id -i {{ backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub \
+          Command: ssh-copy-id -i {{{ common_backup_base_path }}}/keys/{{ target.service_name }}-ssh-key.pub \
             {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
 
           {% endfor %}
@@ -57,9 +57,10 @@
         msg: |
           Variable check at PLAY level (before role):
           - backup_role from inventory: {{ hostvars[inventory_hostname].backup_role | default('NOT FOUND') }}
-          - backup_base_path from inventory: {{ hostvars[inventory_hostname].backup_base_path | default('NOT FOUND') }}
+          - common_backup_base_path from inventory:
+              {{ hostvars[inventory_hostname].common_backup_base_path | default('NOT FOUND') }}
           - backup_role direct: {{ backup_role | default('NOT FOUND') }}
-          - backup_base_path direct: {{ backup_base_path | default('NOT FOUND') }}
+          - common_backup_base_path direct: {{ common_backup_base_path | default('NOT FOUND') }}
 
   roles:
     - backup-system
@@ -84,9 +85,9 @@
           {% set targets = hostvars[host]['backup_targets'] | default([]) %}
           {% for target in targets %}
           - {{ target.service_name }}: {{ target.target_host }}
-            Schedule: {{ target.backup_schedule | default('*-*-* 02:00:00') }}
+            common_Schedule: {{ target.backup_schedule | default('*-*-* 02:00:00') }}
             Method: {{ target.backup_method | default('hybrid_enhanced') }}
-            Repository: {{ target.restic_repository }}
+            common_Repository: {{ target.restic_repository }}
           {% endfor %}
           {% endfor %}
 

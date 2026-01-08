@@ -52,7 +52,7 @@ prometheus_role: "automation"
 # Enterprise backup configuration
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
 restic_password: "{{ vault_restic_automation_password }}"
-backup_directories:
+common_backup_directories:
   - "{{ automation_stack_home }}"
   - "{{ automation_data_path }}"
   - "/var/lib/docker/volumes"
@@ -65,7 +65,7 @@ backup_exclude_patterns:
 
 # Systemd and backup configuration inherited from group_vars/services.yml
 # common_systemd_config and common_backup_config
-backup_service_name: "automation"
+common_backup_service_name: "automation"
 
 # Vault variables that must be defined
 vault_watchtower_api_token: "{{ vault_watchtower_api_token }}"

@@ -27,19 +27,19 @@ prometheus_node_exporter_port: 9100
 common_systemd_config:
   service_type: "oneshot"
   remain_after_exit: "true"
-  standard_output: "journal"
-  standard_error: "journal"
+  common_standard_output: "journal"
+  common_standard_error: "journal"
   restart_policy: "on-failure"
   restart_sec: "5"
-  wanted_by: "multi-user.target"
+  common_wanted_by: "multi-user.target"
   enable_security_hardening: true
   no_new_privileges: "true"
 
 # Common Enterprise Backup Configuration (eliminates duplication)
 # Used by all service hosts
 common_backup_config:
-  backup_cache_dir: "{{ backup_base_path }}/cache"
-  backup_log_dir: "{{ backup_base_path }}/logs"
+  common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
+  common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
   retention_policy:
     daily: "7"
     weekly: "4"

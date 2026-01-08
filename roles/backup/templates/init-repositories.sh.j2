@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_BASE="{{ backup_base_path }}"
+BACKUP_BASE="{{{ common_backup_base_path }}}"
 BACKUP_USER="{{ backup_user | default('backup') }}"
 LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
@@ -211,7 +211,7 @@ set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
-export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
 # Check repository integrity
 echo "Checking repository integrity..."
@@ -252,7 +252,7 @@ set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
-export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
 # Validate backup directories exist and are accessible
 {% for dir in backup_directories %}

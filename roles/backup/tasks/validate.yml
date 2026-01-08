@@ -76,7 +76,7 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       register: backup_path_check
-      loop: "{{ backup_paths }}"
+      loop: "{{{ common_backup_paths }}}"
       failed_when: false
       changed_when: false
 
@@ -158,13 +158,13 @@
 
     - name: Check Hetzner SSH key file exists
       ansible.builtin.stat:
-        path: "{{ backup_base_path }}/.ssh/hetzner"
+        path: "{{{ common_backup_base_path }}}/.ssh/hetzner"
       register: coordinator_hetzner_key
 
     - name: Warn if Hetzner key missing for coordinator
       ansible.builtin.debug:
         msg: |
-          WARNING: Hetzner SSH key not found at {{ backup_base_path }}/.ssh/hetzner
+          WARNING: Hetzner SSH key not found at {{{ common_backup_base_path }}}/.ssh/hetzner
           Manual key placement is required for backup functionality.
       when: not coordinator_hetzner_key.stat.exists
 
@@ -204,7 +204,7 @@
       - "[backup configuration validation summary]"
       - "mode: {{ backup_role }}"
       - "user: {{ backup_user }}"
-      - "base path: {{ backup_base_path }}"
+      - "base path: {{{ common_backup_base_path }}}"
       - "restic version: {{ restic_version }}"
       - "{% if backup_role == 'standalone' %}backup paths: {{ backup_paths | length }}{% endif %}"
       - "{% if backup_role == 'coordinator' %}coordinator targets: {{ coordinator_targets | length }}{% endif %}"

@@ -1,23 +1,23 @@
 #!/bin/bash
 # Unified Restic Repository Initialization Script
 # {{ ansible_managed }}
-# Service: {{ backup_service_name }}
+# Service: {{{ common_backup_service_name }}}
 
 set -euo pipefail
 
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
-export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache"
-export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_password_file }}}"
+export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache"
+export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
-LOG_FILE="{{ backup_base_path }}/logs/init-{{ backup_service_name }}-$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="{{{ common_backup_base_path }}}/logs/init-{{{ common_backup_service_name }}}-$(date +%Y%m%d_%H%M%S).log"
 
-echo "$(date): Initializing restic repository for {{ backup_service_name }}..." | tee -a "$LOG_FILE"
+echo "$(date): Initializing restic repository for {{{ common_backup_service_name }}}..." | tee -a "$LOG_FILE"
 echo "Repository: $RESTIC_REPOSITORY" | tee -a "$LOG_FILE"
 
 # Test SSH connection first
 echo "$(date): Testing SSH connection..." | tee -a "$LOG_FILE"
-if ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage exit "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
+if ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage exit "echo 'SSH connection successful'" >> "$LOG_FILE" 2>&1; then
     echo "$(date): SSH connection test passed" | tee -a "$LOG_FILE"
 else
     echo "$(date): ERROR: SSH connection failed. Check SSH key configuration." | tee -a "$LOG_FILE"
@@ -28,7 +28,7 @@ fi
 # Extract repository path and create remote directory
 REPO_PATH="${RESTIC_REPOSITORY#sftp:hetzner-storage:}"
 echo "$(date): Creating repository directory on remote storage: $REPO_PATH" | tee -a "$LOG_FILE"
-if ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage mkdir -p "$REPO_PATH" >> "$LOG_FILE" 2>&1; then
+if ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage mkdir -p "$REPO_PATH" >> "$LOG_FILE" 2>&1; then
     echo "$(date): Remote directory created successfully" | tee -a "$LOG_FILE"
 else
     echo "$(date): WARNING: Could not create remote directory (may already exist)" | tee -a "$LOG_FILE"
@@ -45,4 +45,4 @@ else
     exit 1
 fi
 
-echo "$(date): Repository initialization completed successfully for {{ backup_service_name }}" | tee -a "$LOG_FILE"
+echo "$(date): Repository initialization completed successfully for {{{ common_backup_service_name }}}" | tee -a "$LOG_FILE"

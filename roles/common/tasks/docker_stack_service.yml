@@ -14,10 +14,10 @@
     service_description: "{{ stack_description }}"
     service_requires: ["docker.service"]
     service_after: ["docker.service", "network-online.target"]
-    service_wants: ["network.target"]
+    common_service_wants: ["network.target"]
     service_type: "oneshot"
     remain_after_exit: "true"
-    working_directory: "{{ stack_home_directory }}"
+    common_working_directory: "{{ stack_home_directory }}"
     service_user: "{{ stack_user }}"
     service_group: "{{ stack_user }}"
     service_environment: "{{ stack_environment_vars }}"
@@ -25,14 +25,14 @@
     exec_stop: "/usr/bin/docker compose down"
     exec_reload: "/usr/bin/docker compose restart"
     syslog_identifier: "{{ stack_service_name }}"
-    timeout_start_sec: "0"
+    common_timeout_start_sec: "0"
     kill_mode: "none"
     # Common security hardening
-    standard_output: "journal"
-    standard_error: "journal"
+    common_standard_output: "journal"
+    common_standard_error: "journal"
     restart_policy: "on-failure"
     restart_sec: "5"
-    wanted_by: "multi-user.target"
+    common_wanted_by: "multi-user.target"
     enable_security_hardening: true
     no_new_privileges: "true"
   become: true

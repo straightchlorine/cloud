@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{ backup_base_path }}"
+BACKUP_BASE="{{{ common_backup_base_path }}}"
 BACKUP_USER="{{ backup_user }}"
 HEALTH_LOG="$BACKUP_BASE/logs/health-monitor-$(date +%Y%m%d).log"
 ALERT_THRESHOLD_HOURS="{{ backup_alert_threshold_hours | default('25') }}"

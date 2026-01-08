@@ -26,10 +26,10 @@
     service_group: "{{ prometheus_exporters_group }}"
     exec_start: "{{ pi_hardware_metrics_script }}"
     remain_after_exit: "false"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd

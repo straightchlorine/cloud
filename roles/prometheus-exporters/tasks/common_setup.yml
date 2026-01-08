@@ -14,7 +14,7 @@
     system: true
     ansible.builtin.shell: /bin/false
     home: "{{ prometheus_exporters_base_dir }}"
-    create_home: false
+    common_create_home: false
   become: true
 
 - name: Create Prometheus exporters directories
@@ -43,7 +43,7 @@
       - jq
       - bc
     state: present
-    update_cache: true
+    common_update_cache: true
   become: true
 
 - name: Create systemd service template directory

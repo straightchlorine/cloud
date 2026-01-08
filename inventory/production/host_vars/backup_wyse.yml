@@ -14,7 +14,7 @@ backup_role: coordinator
 # User and paths
 backup_user: backup
 backup_group: backup
-backup_base_path: /opt/backup
+common_backup_base_path: /opt/backup
 
 # Restic configuration
 restic_version: "0.18.1"
@@ -26,9 +26,9 @@ coordinator_targets:
     hostname: pihole
     target_host: pihole
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-dns"
+    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-dns"
     backup_schedule: "*-*-* 01:00:00"
-    backup_paths:
+    common_backup_paths:
       - /etc
       - /var/lib
       - /var/log
@@ -63,9 +63,9 @@ coordinator_targets:
     hostname: automation
     target_host: automation
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-automation"
+    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-automation"
     backup_schedule: "*-*-* 02:00:00"
-    backup_paths:
+    common_backup_paths:
       - /etc
       - /var/lib/docker/volumes
       - /var/log
@@ -101,9 +101,9 @@ coordinator_targets:
     hostname: media
     target_host: media
     ssh_user: root
-    ssh_key: "{{ backup_base_path }}/.ssh/nodes/pi-music"
+    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-music"
     backup_schedule: "*-*-* 03:00:00"
-    backup_paths:
+    common_backup_paths:
       - /etc
       - /var/lib/docker/volumes
       - /var/log
@@ -151,7 +151,7 @@ firewall_backup_ports:
 backup_monitoring: true
 
 # Backup service name (used for logging and identification)
-backup_service_name: "backup-coordinator"
+common_backup_service_name: "backup-coordinator"
 
 # Key rotation schedule
 backup_key_rotation_schedule: "monthly"

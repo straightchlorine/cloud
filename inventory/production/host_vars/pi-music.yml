@@ -47,7 +47,7 @@ prometheus_role: "music"
 restic_enabled: true
 restic_repository: "{{ vault_backup_repository_base }}/music"
 restic_password: "{{ vault_restic_music_password }}"
-backup_directories:
+common_backup_directories:
   - "{{ music_stack_home }}"
   - "{{ music_library_path }}"
   - "/var/lib/docker/volumes"
@@ -64,4 +64,4 @@ navidrome_port: 4545
 
 # Systemd and backup configuration inherited from group_vars/services.yml
 # common_systemd_config and common_backup_config
-backup_service_name: "music"
+common_backup_service_name: "music"

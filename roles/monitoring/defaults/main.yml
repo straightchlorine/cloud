@@ -81,7 +81,7 @@ prometheus_targets: []
 loki_targets: []
 # Backup configuration
 # backup_enabled: determined by restic_enabled variable validation
-backup_paths:
+common_backup_paths:
   - "{{ monitoring_data_path }}"
   - "{{ monitoring_stack_home }}/config"
 

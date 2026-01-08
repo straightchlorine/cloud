@@ -9,7 +9,7 @@
     mode: "0644"
   vars:
     service_description: "Loki log aggregation system"
-    service_wants: ["network-online.target"]
+    common_service_wants: ["network-online.target"]
     service_after: ["network-online.target"]
     service_type: "simple"
     service_user: "loki"
@@ -20,10 +20,10 @@
     syslog_identifier: "loki"
     kill_mode: "mixed"
     kill_signal: "SIGINT"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["/var/lib/loki", "/var/log/loki"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["/var/lib/loki", "/var/log/loki"]
     protect_kernel_tunables: "yes"
     protect_kernel_modules: "yes"
     protect_control_groups: "yes"
@@ -41,20 +41,20 @@
     mode: "0644"
   vars:
     service_description: "Uptime Kuma monitoring dashboard"
-    service_wants: ["network-online.target"]
+    common_service_wants: ["network-online.target"]
     service_after: ["network-online.target"]
     service_type: "simple"
     service_user: "uptime-kuma"
     service_group: "uptime-kuma"
-    working_directory: "/opt/uptime-kuma"
+    common_working_directory: "/opt/uptime-kuma"
     exec_start: "/usr/bin/node server/server.js"
     restart_policy: "always"
     restart_sec: "5"
     syslog_identifier: "uptime-kuma"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["/opt/uptime-kuma/data"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["/opt/uptime-kuma/data"]
     memory_max: "256M"
   become: true
   notify:

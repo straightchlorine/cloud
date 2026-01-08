@@ -5,7 +5,7 @@
 timezone: UTC
 
 # Security Configuration
-fail2ban_enabled: true
+common_fail2ban_enabled: true
 fail2ban_ssh_maxretry: 3
 fail2ban_ssh_bantime: 600
 
@@ -46,10 +46,10 @@ start_stack: true
 
 # Systemd service defaults
 remain_after_exit: "false"
-standard_output: "journal"
-standard_error: "journal"
+common_standard_output: "journal"
+common_standard_error: "journal"
 restart_policy: "no"
 restart_sec: "5"
-wanted_by: "multi-user.target"
+common_wanted_by: "multi-user.target"
 enable_security_hardening: true
 no_new_privileges: "true"

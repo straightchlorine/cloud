@@ -79,7 +79,7 @@
 
       {% if node_exporter_enabled %}
       Node Exporter ({{ node_exporter_port }}):
-      Status: {{ '[OK] Healthy' if node_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
+      common_Status: {{ '[OK] Healthy' if node_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if node_exporter_health_check.status == 200 %}
       Response time: {{ node_exporter_health_check.elapsed }}s
       {% endif %}
@@ -87,7 +87,7 @@
 
       {% if pihole_exporter_enabled %}
       Pi-hole Exporter ({{ pihole_exporter_port }}):
-      Status: {{ '[OK] Healthy' if pihole_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
+      common_Status: {{ '[OK] Healthy' if pihole_exporter_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if pihole_exporter_health_check.status == 200 %}
       Response time: {{ pihole_exporter_health_check.elapsed }}s
       {% endif %}
@@ -95,7 +95,7 @@
 
       {% if docker_exporter_enabled %}
       Docker Metrics (9323):
-      Status: {{ '[OK] Healthy' if docker_metrics_health_check.status == 200 else '[FAIL] Unhealthy' }}
+      common_Status: {{ '[OK] Healthy' if docker_metrics_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if docker_metrics_health_check.status == 200 %}
       Response time: {{ docker_metrics_health_check.elapsed }}s
       {% endif %}

@@ -11,7 +11,7 @@ backup_user: "backup"
 backup_group: "backup"
 
 # Repository configuration
-backup_base_path: "/opt/enterprise-backup"
+common_backup_base_path: "/opt/enterprise-backup"
 backup_repositories:
   critical:
     description: "Critical system and database backups"

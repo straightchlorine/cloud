@@ -7,16 +7,16 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
-export RESTIC_CACHE_DIR="{{ backup_cache_dir }}"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_password_file }}}"
+export RESTIC_CACHE_DIR="{{{ common_backup_cache_dir }}}"
 
 # Service configuration
-SERVICE_NAME="{{ backup_service_name }}"
+SERVICE_NAME="{{{ common_backup_service_name }}}"
 RCLONE_REMOTE="{{ rclone_remote }}"
 RCLONE_CONFIG="{{ rclone_config }}"
 STAGING_DIR="/tmp/backup-staging-${SERVICE_NAME}"
-LOG_FILE="{{ backup_log_dir }}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
-METRICS_FILE="{{ backup_log_dir }}/metrics-${SERVICE_NAME}.json"
+LOG_FILE="{{{ common_backup_log_dir }}}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+METRICS_FILE="{{{ common_backup_log_dir }}}/metrics-${SERVICE_NAME}.json"
 
 # Enhanced configuration
 {% if backup_target.network_optimization is defined and backup_target.network_optimization %}

@@ -36,16 +36,16 @@
   vars:
     service_description: "Docker Metrics Collection"
     service_after: ["network.target", "docker.service"]
-    service_wants: ["docker.service"]
+    common_service_wants: ["docker.service"]
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
     service_group: "{{ prometheus_exporters_group }}"
     exec_start: "{{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh"
     remain_after_exit: "false"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd

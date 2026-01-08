@@ -71,7 +71,7 @@ monitoring_backup_directories:
 restic_enabled: true
 restic_repository: "{{ vault_backup_repository_base }}/monitoring"
 restic_password: "{{ vault_restic_monitoring_password }}"
-backup_directories:
+common_backup_directories:
   - "{{ monitoring_data_path }}"
   - "{{ monitoring_config_path }}"
   - "/var/lib/prometheus"
@@ -95,9 +95,9 @@ grafana_database_type: "sqlite3"
 grafana_allow_embedding: "false"
 
 # Backup script configuration
-backup_service_name: "monitoring"
-backup_cache_dir: "{{ backup_base_path }}/cache"
-backup_log_dir: "{{ backup_base_path }}/logs"
+common_backup_service_name: "monitoring"
+common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
+common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
 retention_policy:
   daily: "7"
   weekly: "4"

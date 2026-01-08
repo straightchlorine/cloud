@@ -12,28 +12,28 @@
   vars:
     service_description: "Enterprise Backup Service for {{ device_role }}"
     service_after: ["network.target"]
-    service_wants: ["network.target"]
+    common_service_wants: ["network.target"]
     service_type: "oneshot"
     remain_after_exit: "true"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    working_directory: "{{ backup_base_path }}"
+    common_working_directory: "{{{ common_backup_base_path }}}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
-    exec_start: "{{ backup_base_path }}/scripts/backup-{{ device_role }}.sh"
-    standard_output: "journal"
-    standard_error: "journal"
+      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ device_role }}"
+    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{ device_role }}.sh"
+    common_standard_output: "journal"
+    common_standard_error: "journal"
     restart_policy: "no"
     restart_sec: "5"
-    wanted_by: "multi-user.target"
+    common_wanted_by: "multi-user.target"
     enable_security_hardening: true
     no_new_privileges: "true"
-    protect_system: "strict"
-    protect_home: "true"
-    private_tmp: "true"
-    read_write_paths: ["{{ backup_base_path }}"]
+    common_protect_system: "strict"
+    common_protect_home: "true"
+    common_private_tmp: "true"
+    common_read_write_paths: ["{{{ common_backup_base_path }}}"]
   become: true
   notify: reload systemd
 
@@ -57,22 +57,22 @@
   vars:
     service_description: "Enterprise Backup Coordinator for {{ device_role }}"
     service_after: ["network.target"]
-    service_wants: ["network.target"]
+    common_service_wants: ["network.target"]
     service_type: "simple"
     remain_after_exit: "false"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    working_directory: "{{ backup_base_path }}"
+    common_working_directory: "{{{ common_backup_base_path }}}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{ backup_base_path }}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{ backup_base_path }}/cache/{{ device_role }}"
-    exec_start: "{{ backup_base_path }}/scripts/backup-coordinator.sh monitor"
-    standard_output: "journal"
-    standard_error: "journal"
+      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ device_role }}"
+    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-coordinator.sh monitor"
+    common_standard_output: "journal"
+    common_standard_error: "journal"
     restart_policy: "on-failure"
     restart_sec: "30"
-    wanted_by: "multi-user.target"
+    common_wanted_by: "multi-user.target"
     enable_security_hardening: true
     no_new_privileges: "true"
     start_limit_burst: "3"

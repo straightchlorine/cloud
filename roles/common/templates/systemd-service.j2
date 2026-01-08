@@ -37,7 +37,7 @@ User={{ service_user }}
 Group={{ service_group }}
 {% endif %}
 {% if working_directory is defined %}
-WorkingDirectory={{ working_directory }}
+WorkingDirectory={{{ common_working_directory }}}
 {% endif %}
 
 # Command configuration
@@ -72,8 +72,8 @@ EnvironmentFile={{ environment_file }}
 {% endif %}
 
 # Logging configuration
-StandardOutput={{ standard_output }}
-StandardError={{ standard_error }}
+StandardOutput={{{ common_standard_output }}}
+StandardError={{{ common_standard_error }}}
 {% if syslog_identifier is defined %}
 SyslogIdentifier={{ syslog_identifier }}
 {% endif %}
@@ -82,7 +82,7 @@ SyslogIdentifier={{ syslog_identifier }}
 Restart={{ restart_policy }}
 RestartSec={{ restart_sec }}
 {% if timeout_start_sec is defined %}
-TimeoutStartSec={{ timeout_start_sec }}
+TimeoutStartSec={{{ common_timeout_start_sec }}}
 {% endif %}
 {% if timeout_stop_sec is defined %}
 TimeoutStopSec={{ timeout_stop_sec }}
@@ -96,13 +96,13 @@ KillMode={{ kill_mode }}
 # Process security
 NoNewPrivileges={{ no_new_privileges }}
 {% if protect_system is defined %}
-ProtectSystem={{ protect_system }}
+ProtectSystem={{{ common_protect_system }}}
 {% endif %}
 {% if protect_home is defined %}
-ProtectHome={{ protect_home }}
+ProtectHome={{{ common_protect_home }}}
 {% endif %}
 {% if private_tmp is defined %}
-PrivateTmp={{ private_tmp }}
+PrivateTmp={{{ common_private_tmp }}}
 {% endif %}
 {% if read_only_paths is defined %}
 {% for path in read_only_paths %}
@@ -192,4 +192,4 @@ StartLimitIntervalSec={{ start_limit_interval_sec }}
 {% endif %}
 
 [Install]
-WantedBy={{ wanted_by }}
+WantedBy={{{ common_wanted_by }}}

@@ -2,19 +2,19 @@
 # Common Backup Script Template
 # Standardized backup functionality to eliminate script duplication
 # Managed by Ansible - Do not edit manually
-# Generated for: {{ backup_service_name }}
+# Generated for: {{{ common_backup_service_name }}}
 
 set -euo pipefail
 
 # Configuration - Set explicitly since systemd+sudo environment inheritance is unreliable
 export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_password_file }}"
-export RESTIC_CACHE_DIR="{{ backup_cache_dir }}"
-export RESTIC_SFTP_COMMAND="ssh -i {{ backup_base_path }}/.ssh/hetzner -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }} -s sftp"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_password_file }}}"
+export RESTIC_CACHE_DIR="{{{ common_backup_cache_dir }}}"
+export RESTIC_SFTP_COMMAND="ssh -i {{{ common_backup_base_path }}}/.ssh/hetzner -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }} -s sftp"
 
 # Service-specific configuration
-SERVICE_NAME="{{ backup_service_name }}"
-LOG_FILE="{{ backup_log_dir }}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+SERVICE_NAME="{{{ common_backup_service_name }}}"
+LOG_FILE="{{{ common_backup_log_dir }}}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 BACKUP_PATHS=(
 {% for path in backup_directories %}
     "{{ path }}"

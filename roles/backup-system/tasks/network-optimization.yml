@@ -9,20 +9,20 @@
       # Backup SSH Connection Optimization
       Host *
           ControlMaster auto
-          ControlPath {{ backup_base_path }}/.ssh/sockets/%r@%h-%p
+          ControlPath {{{ common_backup_base_path }}}/.ssh/sockets/%r@%h-%p
           ControlPersist 10m
           ServerAliveInterval 60
           ServerAliveCountMax 3
           TCPKeepAlive yes
           StrictHostKeyChecking accept-new
-    dest: "{{ backup_base_path }}/.ssh/config"
+    dest: "{{{ common_backup_base_path }}}/.ssh/config"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: "0600"
 
 - name: Create SSH socket directory
   ansible.builtin.file:
-    path: "{{ backup_base_path }}/.ssh/sockets"
+    path: "{{{ common_backup_base_path }}}/.ssh/sockets"
     state: directory
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"

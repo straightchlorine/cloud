@@ -14,7 +14,7 @@ backup_role: standalone
 # User and paths
 backup_user: backup
 backup_group: backup
-backup_base_path: /opt/backup
+common_backup_base_path: /opt/backup
 
 # Restic configuration
 restic_version: "0.18.1"
@@ -22,7 +22,7 @@ restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/stat
 restic_password: "{{ vault_restic_station_arch_password }}"
 
 # Backup paths
-backup_paths:
+common_backup_paths:
   - /etc
   - /home
   - /var/lib
@@ -85,4 +85,4 @@ backup_enabled: true
 backup_monitoring: false
 
 # Backup service name (used for logging and identification)
-backup_service_name: "station-arch"
+common_backup_service_name: "station-arch"

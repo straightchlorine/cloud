@@ -9,14 +9,14 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{ backup_base_path }}/monitoring"
-    - "{{ backup_base_path }}/alerts"
-    - "{{ backup_base_path }}/dashboards"
+    - "{{{ common_backup_base_path }}}/monitoring"
+    - "{{{ common_backup_base_path }}}/alerts"
+    - "{{{ common_backup_base_path }}}/dashboards"
 
 - name: Create enterprise backup health monitor script
   ansible.builtin.template:
     src: health-monitor.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-health-monitor.sh"
+    dest: "{{{ common_backup_base_path }}}/scripts/backup-health-monitor.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -24,7 +24,7 @@
 - name: Create backup metrics collector script
   ansible.builtin.template:
     src: metrics-collector.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-metrics.sh"
+    dest: "{{{ common_backup_base_path }}}/scripts/backup-metrics.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -39,7 +39,7 @@
       [Service]
       Type=oneshot
       User={{ backup_user }}
-      ExecStart={{ backup_base_path }}/scripts/backup-health-monitor.sh
+      ExecStart={{{ common_backup_base_path }}}/scripts/backup-health-monitor.sh
       StandardOutput=journal
       StandardError=journal
 
@@ -78,7 +78,7 @@
       [Service]
       Type=oneshot
       User={{ backup_user }}
-      ExecStart={{ backup_base_path }}/scripts/backup-metrics.sh
+      ExecStart={{{ common_backup_base_path }}}/scripts/backup-metrics.sh
       StandardOutput=journal
       StandardError=journal
 
@@ -120,7 +120,7 @@
 - name: Create Grafana dashboard configuration
   ansible.builtin.template:
     src: grafana-dashboard.json.j2
-    dest: "{{ backup_base_path }}/dashboards/backup-dashboard.json"
+    dest: "{{{ common_backup_base_path }}}/dashboards/backup-dashboard.json"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0644'

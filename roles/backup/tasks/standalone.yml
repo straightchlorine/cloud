@@ -11,12 +11,12 @@
     mode: "0700"
   become: true
   loop:
-    - "{{ backup_base_path }}/.ssh"
-    - "{{ backup_base_path }}/.ssh/sockets"
+    - "{{{ common_backup_base_path }}}/.ssh"
+    - "{{{ common_backup_base_path }}}/.ssh/sockets"
 
 - name: Check if Hetzner SSH key exists
   ansible.builtin.stat:
-    path: "{{ backup_base_path }}/.ssh/hetzner"
+    path: "{{{ common_backup_base_path }}}/.ssh/hetzner"
   become: true
   register: hetzner_ssh_key_stat
 
@@ -24,12 +24,12 @@
   ansible.builtin.debug:
     msg: |
       [ssh key for hetzner storage box]
-      The SSH private key does not exist at: {{ backup_base_path }}/.ssh/hetzner
+      The SSH private key does not exist at: {{{ common_backup_base_path }}}/.ssh/hetzner
 
       To set up the single shared key:
-      1. Place your existing private key at: {{ backup_base_path }}/.ssh/hetzner
-      2. Set permissions: chmod 600 {{ backup_base_path }}/.ssh/hetzner
-      3. Set ownership: chown {{ backup_user }}:{{ backup_group }} {{ backup_base_path }}/.ssh/hetzner
+      1. Place your existing private key at: {{{ common_backup_base_path }}}/.ssh/hetzner
+      2. Set permissions: chmod 600 {{{ common_backup_base_path }}}/.ssh/hetzner
+      3. Set ownership: chown {{ backup_user }}:{{ backup_group }} {{{ common_backup_base_path }}}/.ssh/hetzner
 
       If you don't have a key yet, generate it on your storage box:
       - ssh {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }}
@@ -41,7 +41,7 @@
 - name: Create SSH config for Hetzner connection
   ansible.builtin.template:
     src: ssh_config.j2
-    dest: "{{ backup_base_path }}/.ssh/config"
+    dest: "{{{ common_backup_base_path }}}/.ssh/config"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: "0600"
@@ -49,7 +49,7 @@
 
 - name: Test SSH connectivity to Hetzner
   ansible.builtin.command: >
-    ssh -F {{ backup_base_path }}/.ssh/config
+    ssh -F {{{ common_backup_base_path }}}/.ssh/config
     -o StrictHostKeyChecking=accept-new
     -o ConnectTimeout=10
     hetzner-storage
@@ -70,7 +70,7 @@
     set -o pipefail
     export RESTIC_REPOSITORY="{{ restic_repository }}"
     export RESTIC_PASSWORD="{{ restic_password }}"
-    export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+    export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
     restic snapshots --latest 1 >/dev/null 2>&1 && echo "success" || echo "failed"
   become: true
   become_user: "{{ backup_user }}"
@@ -93,7 +93,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ restic_repository }}"
     RESTIC_PASSWORD: "{{ restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+    RESTIC_SFTP_COMMAND: "ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   register: restic_init
@@ -105,7 +105,7 @@
   environment:
     RESTIC_REPOSITORY: "{{ restic_repository }}"
     RESTIC_PASSWORD: "{{ restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+    RESTIC_SFTP_COMMAND: "ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
   register: restic_snapshots
@@ -121,7 +121,7 @@
 - name: Deploy standalone backup script
   ansible.builtin.template:
     src: backup-standalone.sh.j2
-    dest: "{{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh"
+    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ inventory_hostname }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: "0750"
@@ -163,7 +163,7 @@
     msg: |
       [backup configured]
       host: {{ inventory_hostname }}
-      script: {{ backup_base_path }}/scripts/backup-{{ inventory_hostname }}.sh
+      script: {{{ common_backup_base_path }}}/scripts/backup-{{ inventory_hostname }}.sh
       ansible.builtin.service: backup-{{ inventory_hostname }}.service
       timer: backup-{{ inventory_hostname }}.timer
       schedule: {{ backup_schedule }}

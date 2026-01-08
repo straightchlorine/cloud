@@ -75,7 +75,7 @@
   ansible.builtin.apt:
     name: Prometheus-node-exporter
     state: present
-    update_cache: true
+    common_update_cache: true
   become: true
   when: node_exporter_install_method == "package"
 
@@ -88,7 +88,7 @@
     mode: '0644'
   vars:
     service_description: "Prometheus Node Exporter"
-    service_wants: ["network-online.target"]
+    common_service_wants: ["network-online.target"]
     service_after: ["network-online.target"]
     service_type: "simple"
     service_user: "{{ prometheus_exporters_user }}"
@@ -108,12 +108,12 @@
     restart_policy: "always"
     restart_sec: "1"
     start_limit_interval_sec: "0"
-    protect_home: "true"
-    protect_system: "strict"
+    common_protect_home: "true"
+    common_protect_system: "strict"
     protect_control_groups: "true"
     protect_kernel_modules: "true"
     protect_kernel_tunables: "true"
-    read_write_paths: ["{{ node_exporter_textfile_dir }}"]
+    common_read_write_paths: ["{{ node_exporter_textfile_dir }}"]
   become: true
   notify:
     - reload systemd

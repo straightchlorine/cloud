@@ -8,18 +8,18 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ backup_target.restic_repository }}"
-export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ backup_target.service_name }}-password"
-export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache/{{ backup_target.service_name }}"
+export RESTIC_PASSWORD_FILE="{{{ common_backup_base_path }}}/keys/{{ backup_target.service_name }}-password"
+export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache/{{ backup_target.service_name }}"
 
 # Service configuration
 SERVICE_NAME="{{ backup_target.service_name }}"
 TARGET_HOST="{{ backup_target.target_host }}"
 SSH_USER="{{ backup_target.ssh_user | default(backup_user) }}"
-SSH_KEY="{{ backup_base_path }}/.ssh/nodes/{{ backup_target.service_name }}"
-RCLONE_CONFIG="{{ backup_base_path }}/.config/rclone/rclone.conf"
-STAGING_DIR="{{ backup_base_path }}/staging/${SERVICE_NAME}"
-LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
-METRICS_FILE="{{ backup_base_path }}/metrics/backup-${SERVICE_NAME}.json"
+SSH_KEY="{{{ common_backup_base_path }}}/.ssh/nodes/{{ backup_target.service_name }}"
+RCLONE_CONFIG="{{{ common_backup_base_path }}}/.config/rclone/rclone.conf"
+STAGING_DIR="{{{ common_backup_base_path }}}/staging/${SERVICE_NAME}"
+LOG_FILE="{{{ common_backup_base_path }}}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+METRICS_FILE="{{{ common_backup_base_path }}}/metrics/backup-${SERVICE_NAME}.json"
 
 # Enhanced configuration
 BACKUP_METHOD="{{ backup_target.backup_method | default('hybrid_enhanced') }}"

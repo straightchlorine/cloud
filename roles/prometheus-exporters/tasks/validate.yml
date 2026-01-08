@@ -17,7 +17,7 @@
       - prometheus_role
       - device_type
     vault_placeholders: [] # No vault variables for exporters
-    backup_directories:
+    common_backup_directories:
       - "{{ prometheus_exporters_base_dir }}"
     critical_backup_paths:
       - "{{ prometheus_exporters_base_dir }}/bin"

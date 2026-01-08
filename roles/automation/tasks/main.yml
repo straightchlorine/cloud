@@ -32,7 +32,7 @@
     append: true
     ansible.builtin.shell: /bin/bash
     home: "/home/{{ automation_user }}"
-    create_home: true
+    common_create_home: true
   become: true
 
 - name: Include storage setup
@@ -68,8 +68,8 @@
     name: Common
     tasks_from: restic_backup
   vars:
-    backup_service_name: "automation"
-    backup_paths:
+    common_backup_service_name: "automation"
+    common_backup_paths:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
     backup_schedule: "0 3 * * *"

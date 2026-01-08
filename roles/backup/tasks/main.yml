@@ -28,7 +28,7 @@
       host: {{ inventory_hostname }}
       mode: {{ backup_role }}
       user: {{ backup_user }}
-      base path: {{ backup_base_path }}
+      base path: {{{ common_backup_base_path }}}
       {% if backup_role == 'standalone' %}
       repository: {{ restic_repository }}
       backup paths: {{ backup_paths | length }}

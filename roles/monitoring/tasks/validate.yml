@@ -26,7 +26,7 @@
       - restic_password
     vault_placeholders:
       - { var: "vault_grafana_admin_password", value: "your-secure-grafana-admin-password" }
-    backup_directories:
+    common_backup_directories:
       - "{{ monitoring_data_path }}"
       - "{{ monitoring_config_path }}"
     critical_backup_paths:

@@ -66,7 +66,7 @@ prometheus_role: "dns"
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
 restic_password: "{{ vault_restic_dns_password }}"
-backup_directories:
+common_backup_directories:
   - "/etc/pihole"
   - "/etc/chrony"
   - "/var/log/pihole"

@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{ backup_base_path }}"
+BACKUP_BASE="{{{ common_backup_base_path }}}"
 METRICS_DIR="$BACKUP_BASE/metrics"
 MONITORING_DIR="$BACKUP_BASE/monitoring"
 METRICS_LOG="$BACKUP_BASE/logs/metrics-$(date +%Y%m%d).log"

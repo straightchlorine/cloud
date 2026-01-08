@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{ backup_base_path }}"
+BACKUP_BASE="{{{ common_backup_base_path }}}"
 BACKUP_USER="{{ backup_user }}"
 BACKUP_GROUP="{{ backup_group }}"
 KEYS_DIR="$BACKUP_BASE/keys"

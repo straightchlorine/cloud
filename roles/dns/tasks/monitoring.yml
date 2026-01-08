@@ -31,7 +31,7 @@
     system: true
     ansible.builtin.shell: /bin/false
     home: "{{ pihole_exporter_install_dir }}"
-    create_home: false
+    common_create_home: false
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
@@ -66,7 +66,7 @@
   vars:
     service_description: "Pi-hole Prometheus Exporter"
     service_after: ["network.target"]
-    service_wants: ["network.target"]
+    common_service_wants: ["network.target"]
     service_type: "simple"
     service_user: "{{ pihole_exporter_user }}"
     service_group: "{{ pihole_exporter_user }}"
@@ -80,10 +80,10 @@
     syslog_identifier: "pihole-exporter"
     kill_mode: "mixed"
     timeout_stop_sec: "5"
-    protect_system: "strict"
-    protect_home: "yes"
-    private_tmp: "yes"
-    read_write_paths: ["{{ pihole_exporter_install_dir }}"]
+    common_protect_system: "strict"
+    common_protect_home: "yes"
+    common_private_tmp: "yes"
+    common_read_write_paths: ["{{ pihole_exporter_install_dir }}"]
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
   notify:
