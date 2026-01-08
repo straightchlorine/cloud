@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{{ common_backup_password_file }}}"
 export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache"
 export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"

@@ -96,20 +96,20 @@
     - name: Download restic binary
       ansible.builtin.get_url:
         url: >-
-          https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{
+          https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{
           restic_version }}_linux_amd64.bz2
-        dest: "/tmp/restic_{{ restic_version }}_linux_amd64.bz2"
+        dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
         mode: '0644'
       become: true
 
     - name: Extract restic binary
-      ansible.builtin.command: "bunzip2 -f /tmp/restic_{{ restic_version }}_linux_amd64.bz2"
+      ansible.builtin.command: "bunzip2 -f /tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
       become: true
       changed_when: true
 
     - name: Install restic to /usr/local/bin
       ansible.builtin.copy:
-        src: "/tmp/restic_{{ restic_version }}_linux_amd64"
+        src: "/tmp/restic_{{ backup_restic_version }}_linux_amd64"
         dest: /usr/local/bin/restic
         mode: '0755'
         remote_src: true
@@ -117,7 +117,7 @@
 
     - name: Clean up downloaded restic file
       ansible.builtin.file:
-        path: "/tmp/restic_{{ restic_version }}_linux_amd64"
+        path: "/tmp/restic_{{ backup_restic_version }}_linux_amd64"
         state: absent
       become: true
 

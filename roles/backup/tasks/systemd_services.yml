@@ -5,12 +5,12 @@
 - name: Create backup service file
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
-    dest: "/etc/systemd/system/backup-{{ device_role }}.service"
+    dest: "/etc/systemd/system/backup-{{ backup_device_role }}.service"
     owner: root
     group: root
     mode: "0644"
   vars:
-    service_description: "Enterprise Backup Service for {{ device_role }}"
+    service_description: "Enterprise Backup Service for {{ backup_device_role }}"
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
     service_type: "oneshot"
@@ -19,10 +19,10 @@
     service_group: "{{ backup_group }}"
     common_working_directory: "{{{ common_backup_base_path }}}"
     service_environment:
-      - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ device_role }}"
-    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{ device_role }}.sh"
+      - "RESTIC_REPOSITORY={{ backup_restic_repository }}"
+      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
+    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{ backup_device_role }}.sh"
     common_standard_output: "journal"
     common_standard_error: "journal"
     restart_policy: "no"
@@ -40,7 +40,7 @@
 - name: Create backup timer file
   ansible.builtin.template:
     src: backup-schedule.timer.j2
-    dest: "/etc/systemd/system/backup-{{ device_role }}.timer"
+    dest: "/etc/systemd/system/backup-{{ backup_device_role }}.timer"
     owner: root
     group: root
     mode: "0644"
@@ -50,12 +50,12 @@
 - name: Create backup coordinator service file
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
-    dest: "/etc/systemd/system/backup-coordinator-{{ device_role }}.service"
+    dest: "/etc/systemd/system/backup-coordinator-{{ backup_device_role }}.service"
     owner: root
     group: root
     mode: "0644"
   vars:
-    service_description: "Enterprise Backup Coordinator for {{ device_role }}"
+    service_description: "Enterprise Backup Coordinator for {{ backup_device_role }}"
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
     service_type: "simple"
@@ -64,9 +64,9 @@
     service_group: "{{ backup_group }}"
     common_working_directory: "{{{ common_backup_base_path }}}"
     service_environment:
-      - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
-      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ device_role }}"
+      - "RESTIC_REPOSITORY={{ backup_restic_repository }}"
+      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
     exec_start: "{{{ common_backup_base_path }}}/scripts/backup-coordinator.sh monitor"
     common_standard_output: "journal"
     common_standard_error: "journal"
@@ -77,7 +77,7 @@
     no_new_privileges: "true"
     start_limit_burst: "3"
     start_limit_interval_sec: "600"
-    syslog_identifier: "backup-coordinator-{{ device_role }}"
+    syslog_identifier: "backup-coordinator-{{ backup_device_role }}"
     protect_kernel_tunables: "true"
     protect_kernel_modules: "true"
     protect_control_groups: "true"
@@ -96,14 +96,14 @@
 
 - name: Enable backup timer
   ansible.builtin.systemd:
-    name: "backup-{{ device_role }}.timer"
+    name: "backup-{{ backup_device_role }}.timer"
     enabled: "{{ backup_timer_enabled }}"
     state: "{{ backup_timer_enabled | ternary('started', 'stopped') }}"
   become: true
 
 - name: Enable backup coordinator service
   ansible.builtin.systemd:
-    name: "backup-coordinator-{{ device_role }}.service"
+    name: "backup-coordinator-{{ backup_device_role }}.service"
     enabled: "{{ backup_coordinator_enabled }}"
     state: "{{ backup_coordinator_enabled | ternary('started', 'stopped') }}"
   become: true

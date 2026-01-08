@@ -15,7 +15,7 @@ common_backup_base_path: "/opt/enterprise-backup"
 backup_repositories:
   critical:
     description: "Critical system and database backups"
-    retention_policy: "14 daily, 8 weekly, 12 monthly, 3 yearly"
+    backup_retention_policy: "14 daily, 8 weekly, 12 monthly, 3 yearly"
     priority: 1
     max_parallel_operations: 2
     compression: "max"
@@ -23,7 +23,7 @@ backup_repositories:
 
   services:
     description: "Application and service data backups"
-    retention_policy: "7 daily, 4 weekly, 6 monthly, 1 yearly"
+    backup_retention_policy: "7 daily, 4 weekly, 6 monthly, 1 yearly"
     priority: 2
     max_parallel_operations: 3
     compression: "auto"
@@ -31,7 +31,7 @@ backup_repositories:
 
   system:
     description: "System configuration and logs"
-    retention_policy: "3 daily, 2 weekly, 3 monthly"
+    backup_retention_policy: "3 daily, 2 weekly, 3 monthly"
     priority: 3
     max_parallel_operations: 4
     compression: "fast"
@@ -58,7 +58,7 @@ performance_optimization:
   cpu_priority: "normal" # Options: low, normal, high
 
 # Service-specific backup configuration
-service_backup_configs:
+backup_service_backup_configs:
   dns:
     repository: "critical"
     schedule: "0 1 * * *" # Daily at 1 AM
@@ -118,10 +118,10 @@ service_backup_configs:
 
 # Default repository configuration values
 # These replace the removed default filters in templates
-retention_daily: "7"
-retention_weekly: "4"
-retention_monthly: "6"
-retention_yearly: "1"
+backup_retention_daily: "7"
+backup_retention_weekly: "4"
+backup_retention_monthly: "6"
+backup_retention_yearly: "1"
 backup_frequency: "daily"
 backup_time: "02:00"
 timezone: "UTC"

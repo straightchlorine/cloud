@@ -68,8 +68,8 @@
 - name: Test SFTP connectivity with restic
   ansible.builtin.shell: |
     set -o pipefail
-    export RESTIC_REPOSITORY="{{ restic_repository }}"
-    export RESTIC_PASSWORD="{{ restic_password }}"
+    export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
+    export RESTIC_PASSWORD="{{ backup_restic_password }}"
     export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
     restic snapshots --latest 1 >/dev/null 2>&1 && echo "success" || echo "failed"
   become: true
@@ -85,14 +85,14 @@
       result: >-
         {{ 'passed' if 'success' in sftp_test.stdout else
         'failed (may be uninitialized, will be initialized below)' }}
-      repository: {{ restic_repository }}
+      repository: {{ backup_restic_repository }}
       user: {{ backup_user }}
 
 - name: Initialize restic repository
   ansible.builtin.command: restic init
   environment:
-    RESTIC_REPOSITORY: "{{ restic_repository }}"
-    RESTIC_PASSWORD: "{{ restic_password }}"
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD: "{{ backup_restic_password }}"
     RESTIC_SFTP_COMMAND: "ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
@@ -103,8 +103,8 @@
 - name: Check repository status
   ansible.builtin.command: restic snapshots --latest 1
   environment:
-    RESTIC_REPOSITORY: "{{ restic_repository }}"
-    RESTIC_PASSWORD: "{{ restic_password }}"
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD: "{{ backup_restic_password }}"
     RESTIC_SFTP_COMMAND: "ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
   become: true
   become_user: "{{ backup_user }}"
@@ -167,4 +167,4 @@
       ansible.builtin.service: backup-{{ inventory_hostname }}.service
       timer: backup-{{ inventory_hostname }}.timer
       schedule: {{ backup_schedule }}
-      repository: {{ restic_repository }}
+      repository: {{ backup_restic_repository }}

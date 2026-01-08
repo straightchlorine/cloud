@@ -36,17 +36,17 @@
 - name: Install restic backup tool
   ansible.builtin.get_url:
     url: >-
-      https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{
+      https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{
       restic_version }}_linux_amd64.bz2
-    dest: "/tmp/restic_{{ restic_version }}_linux_amd64.bz2"
+    dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
     mode: '0644'
   become: true
 
 - name: Extract and install restic
   ansible.builtin.shell: |
     cd /tmp
-    bunzip2 restic_{{ restic_version }}_linux_amd64.bz2
-    mv restic_{{ restic_version }}_linux_amd64 /usr/local/bin/restic
+    bunzip2 restic_{{ backup_restic_version }}_linux_amd64.bz2
+    mv restic_{{ backup_restic_version }}_linux_amd64 /usr/local/bin/restic
     chmod +x /usr/local/bin/restic
   become: true
   args:
@@ -54,8 +54,8 @@
 
 - name: Create restic password file
   ansible.builtin.copy:
-    content: "{{ restic_password }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+    content: "{{ backup_restic_password }}"
+    dest: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -74,24 +74,24 @@
 - name: Generate service backup script
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ device_role }}.sh"
+    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ backup_device_role }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
   vars:
-    common_backup_service_name: "{{ device_role }}"
+    common_backup_service_name: "{{ backup_device_role }}"
     common_backup_directories: "{{ service_backup_configs[device_role].directories }}"
     backup_excludes: "{{ service_backup_configs[device_role].excludes }}"
     pre_backup_commands: "{{ service_backup_configs[device_role].pre_backup_scripts }}"
     post_backup_commands: "{{ service_backup_configs[device_role].post_backup_scripts }}"
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
     common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
     common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
-    retention_policy:
-      daily: "{{ retention_daily }}"
-      weekly: "{{ retention_weekly }}"
-      monthly: "{{ retention_monthly }}"
-      yearly: "{{ retention_yearly }}"
+    backup_retention_policy:
+      daily: "{{ backup_retention_daily }}"
+      weekly: "{{ backup_retention_weekly }}"
+      monthly: "{{ backup_retention_monthly }}"
+      yearly: "{{ backup_retention_yearly }}"
   become: true
 
 - name: Generate backup coordinator script
@@ -115,7 +115,7 @@
 - name: Create repository-specific configuration files
   ansible.builtin.template:
     src: repository-config.yml.j2
-    dest: "{{{ common_backup_base_path }}}/config/{{ device_role }}-repository.yml"
+    dest: "{{{ common_backup_base_path }}}/config/{{ backup_device_role }}-repository.yml"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0640'
@@ -236,8 +236,8 @@
     --repository {{ item.key }}
     --check-only
   environment:
-    RESTIC_REPOSITORY: "{{ restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
   register: repository_status
   become_user: backup
   become: true
@@ -251,8 +251,8 @@
     --repository {{ item.item.key }}
     --initialize
   environment:
-    RESTIC_REPOSITORY: "{{ restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
   become_user: backup
   become: true
   when: item.rc != 0
@@ -283,8 +283,8 @@
     --repository {{ item.key }}
     --quick-check
   environment:
-    RESTIC_REPOSITORY: "{{ restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
   register: repository_health
   become_user: backup
   become: true

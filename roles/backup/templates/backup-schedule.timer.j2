@@ -1,9 +1,9 @@
-# Enterprise Backup Timer for {{ device_role }}
+# Enterprise Backup Timer for {{ backup_device_role }}
 # {{ ansible_managed }}
 
 [Unit]
-Description=Enterprise Backup Timer for {{ device_role }}
-Requires=backup-{{ device_role }}.service
+Description=Enterprise Backup Timer for {{ backup_device_role }}
+Requires=backup-{{ backup_device_role }}.service
 
 [Timer]
 OnCalendar={{ backup_schedule | default('*-*-* 02:00:00') }}

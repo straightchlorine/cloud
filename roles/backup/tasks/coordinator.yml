@@ -18,7 +18,7 @@
     group: "{{ backup_group }}"
     mode: "0600"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   register: target_ssh_keys
@@ -100,7 +100,7 @@
     echo 'Connection successful'
   become: true
   become_user: "{{ backup_user }}"
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   register: target_ssh_tests
@@ -131,7 +131,7 @@
     group: "{{ backup_group }}"
     mode: "0600"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
 
@@ -143,11 +143,11 @@
     group: "{{ backup_group }}"
     mode: "0750"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   vars:
-    restic_repository: "{{ item.restic_repository }}"
+    backup_restic_repository: "{{ item.restic_repository }}"
     common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
     common_backup_service_name: "{{ item.service_name }}"
 
@@ -155,7 +155,7 @@
   ansible.builtin.command: "{{{ common_backup_base_path }}}/scripts/init-{{ item.service_name }}.sh"
   become: true
   become_user: "{{ backup_user }}"
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   register: repo_init_output
@@ -179,7 +179,7 @@
     group: "{{ backup_group }}"
     mode: "0750"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   vars:
@@ -193,7 +193,7 @@
     group: root
     mode: "0644"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   vars:
@@ -208,7 +208,7 @@
     group: root
     mode: "0644"
   become: true
-  loop: "{{ coordinator_targets }}"
+  loop: "{{ backup_coordinator_targets }}"
   loop_control:
     label: "{{ item.service_name }}"
   vars:

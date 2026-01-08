@@ -1,7 +1,7 @@
 #!/bin/bash
 # Enterprise Backup Repository Initialization Script
 # {{ ansible_managed }}
-# Service: {{ device_role }} ({{ inventory_hostname }})
+# Service: {{ backup_device_role }} ({{ inventory_hostname }})
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ BACKUP_USER="{{ backup_user | default('backup') }}"
 LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
 # Restic environment configuration
-export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
 export RESTIC_SFTP_COMMAND="ssh -F ${BACKUP_BASE}/.ssh/config hetzner-storage -s sftp"
 
@@ -202,14 +202,14 @@ test_repository() {
 create_health_check() {
     info "Creating repository health check script..."
 
-    cat > "${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh" << 'EOF'
+    cat > "${BACKUP_BASE}/scripts/health-check-{{ backup_device_role }}.sh" << 'EOF'
 #!/bin/bash
-# Repository Health Check Script for {{ device_role }}
+# Repository Health Check Script for {{ backup_device_role }}
 # {{ ansible_managed }}
 
 set -euo pipefail
 
-export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
 export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
@@ -232,10 +232,10 @@ else
     echo "[WARN]  No recent snapshots found"
 fi
 
-echo "Repository health check completed for {{ device_role }}"
+echo "Repository health check completed for {{ backup_device_role }}"
 EOF
 
-    chmod +x "${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh"
+    chmod +x "${BACKUP_BASE}/scripts/health-check-{{ backup_device_role }}.sh"
     success "Health check script created"
 }
 
@@ -243,14 +243,14 @@ EOF
 create_backup_validation() {
     info "Creating backup validation script..."
 
-    cat > "${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh" << 'EOF'
+    cat > "${BACKUP_BASE}/scripts/validate-backup-{{ backup_device_role }}.sh" << 'EOF'
 #!/bin/bash
-# Backup Validation Script for {{ device_role }}
+# Backup Validation Script for {{ backup_device_role }}
 # {{ ansible_managed }}
 
 set -euo pipefail
 
-export RESTIC_REPOSITORY="{{ restic_repository }}"
+export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ restic_password_file }}"
 export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
 
@@ -277,10 +277,10 @@ else
     exit 1
 fi
 
-echo "Backup validation completed for {{ device_role }}"
+echo "Backup validation completed for {{ backup_device_role }}"
 EOF
 
-    chmod +x "${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh"
+    chmod +x "${BACKUP_BASE}/scripts/validate-backup-{{ backup_device_role }}.sh"
     success "Backup validation script created"
 }
 
@@ -288,15 +288,15 @@ EOF
 create_monitoring_service() {
     info "Creating systemd monitoring service..."
 
-    cat > "/tmp/backup-health-{{ device_role }}.service" << EOF
+    cat > "/tmp/backup-health-{{ backup_device_role }}.service" << EOF
 [Unit]
-Description=Backup Health Check for {{ device_role }}
+Description=Backup Health Check for {{ backup_device_role }}
 After=network.target
 
 [Service]
 Type=oneshot
 User=${BACKUP_USER}
-ExecStart=${BACKUP_BASE}/scripts/health-check-{{ device_role }}.sh
+ExecStart=${BACKUP_BASE}/scripts/health-check-{{ backup_device_role }}.sh
 StandardOutput=journal
 StandardError=journal
 
@@ -304,10 +304,10 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-    cat > "/tmp/backup-health-{{ device_role }}.timer" << EOF
+    cat > "/tmp/backup-health-{{ backup_device_role }}.timer" << EOF
 [Unit]
-Description=Run backup health check for {{ device_role }}
-Requires=backup-health-{{ device_role }}.service
+Description=Run backup health check for {{ backup_device_role }}
+Requires=backup-health-{{ backup_device_role }}.service
 
 [Timer]
 OnCalendar=daily
@@ -325,7 +325,7 @@ main() {
     echo "[DEPLOY] Enterprise Backup Repository Initialization"
     echo "=============================================="
     echo "Host: {{ inventory_hostname }}"
-    echo "Service: {{ device_role }}"
+    echo "Service: {{ backup_device_role }}"
     echo "Repository: ${RESTIC_REPOSITORY:-Not Set}"
     echo "=============================================="
 
@@ -342,10 +342,10 @@ main() {
     success "Repository initialization completed successfully!"
     echo
     echo "Next steps:"
-    echo "1. Install systemd services: sudo systemctl enable backup-health-{{ device_role }}.timer"
-    echo "2. Start health monitoring: sudo systemctl start backup-health-{{ device_role }}.timer"
-    echo "3. Run first backup: ${BACKUP_BASE}/scripts/backup-{{ device_role }}.sh"
-    echo "4. Verify with: ${BACKUP_BASE}/scripts/validate-backup-{{ device_role }}.sh"
+    echo "1. Install systemd services: sudo systemctl enable backup-health-{{ backup_device_role }}.timer"
+    echo "2. Start health monitoring: sudo systemctl start backup-health-{{ backup_device_role }}.timer"
+    echo "3. Run first backup: ${BACKUP_BASE}/scripts/backup-{{ backup_device_role }}.sh"
+    echo "4. Verify with: ${BACKUP_BASE}/scripts/validate-backup-{{ backup_device_role }}.sh"
     echo
     echo "Log file: ${LOG_FILE}"
 }
@@ -381,7 +381,7 @@ done
 
 # Set repository URL based on type
 if [[ -n "$REPO_TYPE" ]]; then
-    export RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-{{ restic_repository }}}-${REPO_TYPE}"
+    export RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-{{ backup_restic_repository }}}-${REPO_TYPE}"
 fi
 
 # Execute based on action

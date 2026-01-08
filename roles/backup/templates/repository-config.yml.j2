@@ -1,15 +1,15 @@
-# Repository Configuration for {{ device_role }}
+# Repository Configuration for {{ backup_device_role }}
 # {{ ansible_managed }}
 
 service:
-  name: "{{ device_role }}"
+  name: "{{ backup_device_role }}"
   host: "{{ inventory_hostname }}"
   type: "{{ device_type }}"
 
 repository:
-  url: "{{ restic_repository }}"
-  password_file: "{{{ common_backup_base_path }}}/keys/{{ device_role }}-password"
-  cache_dir: "{{{ common_backup_base_path }}}/cache/{{ device_role }}"
+  url: "{{ backup_restic_repository }}"
+  password_file: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+  cache_dir: "{{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
 
 backup:
   directories:
@@ -25,10 +25,10 @@ backup:
 {% endif %}
 
   retention:
-    daily: {{ retention_daily }}
-    weekly: {{ retention_weekly }}
-    monthly: {{ retention_monthly }}
-    yearly: {{ retention_yearly }}
+    daily: {{ backup_retention_daily }}
+    weekly: {{ backup_retention_weekly }}
+    monthly: {{ backup_retention_monthly }}
+    yearly: {{ backup_retention_yearly }}
 
   schedule:
     frequency: "{{ backup_frequency }}"
