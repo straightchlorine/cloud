@@ -7,10 +7,10 @@ set -euo pipefail
 
 # Configuration
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly MUSIC_STACK_HOME="{{ music_stack_home }}"
-readonly DOWNLOAD_DIR="{{ music_library_path }}/downloads"
+readonly MUSIC_STACK_HOME="{{ music_stack_music_stack_home }}"
+readonly DOWNLOAD_DIR="{{ music_stack_music_library_path }}/downloads"
 readonly CONFIG_FILE="$MUSIC_STACK_HOME/config/yt-dlp.conf"
-readonly LOG_FILE="{{ music_library_path }}/logs/youtube-sync.log"
+readonly LOG_FILE="{{ music_stack_music_library_path }}/logs/youtube-sync.log"
 readonly YTDLP_BINARY="/usr/local/bin/yt-dlp"
 readonly LOCK_FILE="/tmp/youtube-sync.lock"
 
@@ -157,7 +157,7 @@ cleanup_old_files() {
     fi
 
     # Remove old archives (7+ days)
-    find "{{ music_library_path }}/archive" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    find "{{ music_stack_music_library_path }}/archive" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
 }
 
 # Main execution

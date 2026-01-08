@@ -6,7 +6,7 @@
     name: Common
     tasks_from: packages
   vars:
-    role_specific_packages:
+    firewall_role_specific_packages:
       - ufw
 
 - name: Reset UFW to defaults

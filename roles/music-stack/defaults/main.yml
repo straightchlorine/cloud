@@ -2,16 +2,16 @@
 # Default variables for music-stack role
 
 # Music-specific packages (common packages inherited from common role)
-music_stack_specific_packages:
+music_stack_music_stack_specific_packages:
   - python3-pip
   - ffmpeg
 
 # Service ports (defaults)
-navidrome_port: 4545
+music_stack_navidrome_port: 4545
 
 # SSD configuration (common variables inherited from common role)
 
-beets_genres:
+music_stack_beets_genres:
   - Rock
   - Pop
   - Hip-Hop
@@ -44,12 +44,12 @@ beets_genres:
   - Speech
 
 # YouTube download configuration
-ytdlp_version: "2025.08.27"
-ytdlp_dependencies:
+music_stack_ytdlp_version: "2025.08.27"
+music_stack_ytdlp_dependencies:
   - python3-pip
   - ffmpeg
 
-music_library_directories:
+music_stack_music_library_directories:
   - music
   - downloads
   - processing
@@ -60,12 +60,12 @@ music_library_directories:
 # start_stack: inherited from common role
 
 # Docker Compose services configuration
-music_stack_compose_services:
+music_stack_music_stack_compose_services:
   navidrome:
     image: "deluan/navidrome:latest"
     container_name: "navidrome"
     ports:
-      - "{{ navidrome_port }}:4533"
+      - "{{ music_stack_navidrome_port }}:4533"
     deploy:
       resources:
         limits:
@@ -100,8 +100,8 @@ music_stack_compose_services:
       - "ND_ENABLECOVERANIMATION=true"
       - "ND_MAXSIDEBARPLAYLISTS=50"
     volumes:
-      - "{{ music_library_path }}/music:/music:ro"
-      - "{{ music_library_path }}/navidrome-data:/data"
+      - "{{ music_stack_music_library_path }}/music:/music:ro"
+      - "{{ music_stack_music_library_path }}/navidrome-data:/data"
     restart: "always"
     user: "{{ ansible_uid }}:{{ ansible_gid }}"
 
@@ -121,9 +121,9 @@ music_stack_compose_services:
       - "PGID={{ ansible_gid }}"
       - "TZ={{ timezone }}"
     volumes:
-      - "{{ music_stack_home }}/config/beets:/config"
-      - "{{ music_library_path }}/music:/music"
-      - "{{ music_library_path }}/downloads:/downloads"
+      - "{{ music_stack_music_stack_home }}/config/beets:/config"
+      - "{{ music_stack_music_library_path }}/music:/music"
+      - "{{ music_stack_music_library_path }}/downloads:/downloads"
     restart: "no"
     profiles:
       - "tools"
@@ -167,6 +167,6 @@ music_stack_compose_services:
       - "AGENT_CLUSTER_ADDR=tasks.agent"
 
 # Docker Compose networks configuration
-music_stack_compose_networks:
+music_stack_music_stack_compose_networks:
   default:
     name: "music-stack"

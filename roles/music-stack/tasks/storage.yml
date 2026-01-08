@@ -6,5 +6,5 @@
     name: Common
     tasks_from: storage
   vars:
-    mount_path: "{{ music_library_path }}"
-    mount_subdirectories: "{{ music_library_directories }}"
+    mount_path: "{{ music_stack_music_library_path }}"
+    mount_subdirectories: "{{ music_stack_music_library_directories }}"

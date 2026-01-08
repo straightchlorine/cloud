@@ -28,12 +28,12 @@
     vault_placeholders:
       - { var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" }
     common_backup_directories:
-      - "{{ music_library_path }}"
-      - "{{ music_stack_home }}"
+      - "{{ music_stack_music_library_path }}"
+      - "{{ music_stack_music_stack_home }}"
     critical_backup_paths:
-      - "{{ music_library_path }}"
-      - "{{ music_stack_home }}"
-    stack_home: "{{ music_stack_home }}"
+      - "{{ music_stack_music_library_path }}"
+      - "{{ music_stack_music_stack_home }}"
+    stack_home: "{{ music_stack_music_stack_home }}"
     required_services:
       - navidrome
       - beets
@@ -46,16 +46,16 @@
   register: parent_path_check
   failed_when: not parent_path_check.stat.exists or not parent_path_check.stat.isdir
   loop:
-    - "{{ music_library_path }}"
-    - "{{ music_stack_home }}"
+    - "{{ music_stack_music_library_path }}"
+    - "{{ music_stack_music_stack_home }}"
 
 - name: Check if music directories exist
   ansible.builtin.stat:
     path: "{{ item }}"
   register: music_dir_check
   loop:
-    - "{{ music_library_path }}"
-    - "{{ music_stack_home }}"
+    - "{{ music_stack_music_library_path }}"
+    - "{{ music_stack_music_stack_home }}"
 
 - name: Create music directories if they don't exist
   ansible.builtin.file:

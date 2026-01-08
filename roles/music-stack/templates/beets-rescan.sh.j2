@@ -9,8 +9,8 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MUSIC_STACK_HOME="{{ music_stack_home }}"
-MUSIC_DIR="{{ music_library_path }}/music"
+MUSIC_STACK_HOME="{{ music_stack_music_stack_home }}"
+MUSIC_DIR="{{ music_stack_music_library_path }}/music"
 YOUTUBE_DOWNLOADS_DIR="$MUSIC_DIR/misc"
 LOG_FILE="$MUSIC_STACK_HOME/logs/beets-rescan.log"
 LOCK_FILE="/tmp/beets-rescan.lock"

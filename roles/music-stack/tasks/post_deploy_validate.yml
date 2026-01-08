@@ -10,7 +10,7 @@
 
 - name: Check Docker containers are running
   ansible.builtin.shell: |
-    cd "{{ music_stack_home }}"
+    cd "{{ music_stack_music_stack_home }}"
     docker compose ps --format json
   register: music_container_status
   become: true
@@ -34,13 +34,13 @@
 
 - name: Test Navidrome accessibility
   ansible.builtin.wait_for:
-    port: "{{ navidrome_port }}"
+    port: "{{ music_stack_navidrome_port }}"
     timeout: 60
   tags: [post_validation]
 
 - name: Test Navidrome web interface
   ansible.builtin.uri:
-    url: "http://{{ primary_ip }}:{{ navidrome_port }}"
+    url: "http://{{ primary_ip }}:{{ music_stack_navidrome_port }}"
     method: GET
     timeout: 15
   register: navidrome_web
@@ -48,13 +48,13 @@
 
 - name: Check music library directory access
   ansible.builtin.stat:
-    path: "{{ music_library_path }}/music"
+    path: "{{ music_stack_music_library_path }}/music"
   register: music_dir
   tags: [post_validation]
 
 - name: Verify music library permissions
   ansible.builtin.file:
-    path: "{{ music_library_path }}/music"
+    path: "{{ music_stack_music_library_path }}/music"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -74,12 +74,12 @@
 
     - name: Verify YouTube sync script exists
       ansible.builtin.stat:
-        path: "{{ music_library_path }}/scripts/youtube-sync.py"
+        path: "{{ music_stack_music_library_path }}/scripts/youtube-sync.py"
       register: youtube_script
 
     - name: Test YouTube sync script syntax
       ansible.builtin.command: |
-        python3 -m py_compile "{{ music_library_path }}/scripts/youtube-sync.py"
+        python3 -m py_compile "{{ music_stack_music_library_path }}/scripts/youtube-sync.py"
       when: youtube_script.stat.exists
       changed_when: false
       become: true
@@ -90,7 +90,7 @@
 
 - name: Check container health status
   ansible.builtin.shell: |
-    cd "{{ music_stack_home }}"
+    cd "{{ music_stack_music_stack_home }}"
     docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
   register: music_health_status
   become: true
@@ -108,7 +108,7 @@
 
       Service Health:
       Navidrome Web Interface: {{ 'Accessible' if navidrome_web.status == 200 else 'Failed' }}
-      Navidrome Port ({{ navidrome_port }}): Listening
+      Navidrome Port ({{ music_stack_navidrome_port }}): Listening
       Music Library: {{ 'Accessible' if music_dir.stat.exists else 'Missing' }}
       Library Permissions: {{ 'Correct' if music_dir.stat.mode == '0755' else 'Check Required' }}
 
