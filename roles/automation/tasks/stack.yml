@@ -71,7 +71,7 @@
 - name: Create Docker network for Traefik
   community.docker.docker_network:
     name: Traefik-network
-    driver: bridge
+    automation_driver: bridge
     state: present
     scope: local
   become: true
@@ -87,7 +87,7 @@
 
 - name: Verify Traefik is responding
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ traefik_dashboard_port }}/api/rawdata"
+    url: "http://127.0.0.1:{{ automation_traefik_dashboard_port }}/api/rawdata"
     method: GET
   register: traefik_health
   until: traefik_health.status == 200
@@ -141,7 +141,7 @@
       Automation Stack Deployment Complete!
 
       Services:
-      - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
+      - Traefik Dashboard: https://{{ automation_subdomain_traefik }}.{{ automation_domain_name }}
 
       Management:
       - Stack control: manage-automation {start|stop|restart|status|logs}

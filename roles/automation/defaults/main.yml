@@ -5,15 +5,19 @@ automation_specific_packages:
   - tree
 
 # Traefik ports
-traefik_web_port: 80
-traefik_websecure_port: 443
-traefik_dashboard_port: 8080
+automation_traefik_web_port: 80
+automation_traefik_websecure_port: 443
+automation_traefik_dashboard_port: 8080
 
-# Default subdomain
-subdomain_traefik: "traefik"
+# Default subdomains
+automation_subdomain_traefik: "traefik"
+
+# Short domain reference for labels (used to shorten line length)
+automation_domain: "{{ automation_domain_name }}"
+automation_explorer_sub: "{{ automation_subdomain_explorer }}"
 
 # SSL configuration
-letsencrypt_staging: false
+automation_letsencrypt_staging: false
 
 services_enabled:
   traefik: true
@@ -43,9 +47,9 @@ automation_compose_services:
     container_name: "traefik"
     restart: "always"
     ports:
-      - "{{ traefik_web_port }}:80"
-      - "{{ traefik_websecure_port }}:443"
-      - "127.0.0.1:{{ traefik_dashboard_port }}:8080"
+      - "{{ automation_traefik_web_port }}:80"
+      - "{{ automation_traefik_websecure_port }}:443"
+      - "127.0.0.1:{{ automation_traefik_dashboard_port }}:8080"
     deploy:
       resources:
         limits:
@@ -62,14 +66,14 @@ automation_compose_services:
     environment:
       - "TRAEFIK_API_DASHBOARD=true"
       - "TRAEFIK_API_INSECURE=true"
-      - "CF_DNS_API_TOKEN={{ vault_cloudflare_api_token }}"
+      - "CF_DNS_API_TOKEN={{ automation_vault_cloudflare_api_token }}"
     ansible.builtin.command:
       - "--configFile=/config/traefik.yml"
     networks:
       - "traefik-network"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`{{ subdomain_traefik }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`{{ automation_subdomain_traefik }}.{{ automation_domain_name }}`)"
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.service=api@internal"
@@ -97,7 +101,7 @@ automation_compose_services:
       - "DOZZLE_REMOTE_AGENT=media:7007,pascal:7007,kepler-services-lxc:7007"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dozzle.rule=Host(`{{ subdomain_dozzle }}.{{ domain_name }}`)"
+      - "traefik.http.routers.dozzle.rule=Host(`{{ automation_subdomain_dozzle }}.{{ automation_domain_name }}`)"
       - "traefik.http.routers.dozzle.entrypoints=websecure"
       - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
@@ -121,7 +125,7 @@ automation_compose_services:
       - "traefik-network"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`{{ subdomain_portainer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.portainer.rule=Host(`{{ automation_subdomain_portainer }}.{{ automation_domain_name }}`)"
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
@@ -155,7 +159,7 @@ automation_compose_services:
       - "traefik-network"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.influxdb.rule=Host(`{{ subdomain_influxdb }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb.rule=Host(`{{ automation_subdomain_influxdb }}.{{ automation_domain_name }}`)"
       - "traefik.http.routers.influxdb.entrypoints=websecure"
       - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
       - "traefik.http.services.influxdb.loadbalancer.server.port=8181"
@@ -184,7 +188,7 @@ automation_compose_services:
       - "traefik-network"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.influxdb-explorer.rule=Host(`{{ subdomain_explorer }}.{{ domain_name }}`)"
+      - "traefik.http.routers.influxdb-explorer.rule=Host(`{{ automation_explorer_sub }}.{{ automation_domain }}`)"
       - "traefik.http.routers.influxdb-explorer.entrypoints=websecure"
       - "traefik.http.routers.influxdb-explorer.tls.certresolver=letsencrypt"
       - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
@@ -204,12 +208,12 @@ automation_compose_services:
     volumes:
       - "{{ automation_data_path }}/vaultwarden:/data"
     environment:
-      - "DOMAIN=https://{{ subdomain_vaultwarden }}.{{ domain_name }}"
+      - "DOMAIN=https://{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
     networks:
       - "traefik-network"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.vaultwarden.rule=Host(`{{ subdomain_vaultwarden }}.{{ domain_name }}`)"
+      - "traefik.http.routers.vaultwarden.rule=Host(`{{ automation_subdomain_vaultwarden }}.{{ automation_domain }}`)"
       - "traefik.http.routers.vaultwarden.entrypoints=websecure"
       - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
       - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
@@ -247,7 +251,7 @@ automation_compose_networks:
 # Docker Compose volumes configuration
 automation_compose_volumes:
   traefik-data:
-    driver: "local"
+    automation_driver: "local"
     driver_opts:
       o: "bind"
       type: "none"

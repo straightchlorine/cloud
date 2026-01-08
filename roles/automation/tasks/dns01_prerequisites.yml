@@ -7,7 +7,7 @@
     url: "https://api.cloudflare.com/client/v4/zones"
     method: GET
     headers:
-      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
   register: cloudflare_zones
@@ -22,7 +22,7 @@
 - name: Validate domain zone exists in Cloudflare
   ansible.builtin.fail:
     msg: |
-      Domain {{ domain_name }} not found in Cloudflare account.
+      Domain {{ automation_domain_name }} not found in Cloudflare account.
       Available zones: {{ cloudflare_zones.json.result | map(attribute='name') | list }}
   when: domain_zone == {}
   tags: [dns01_validation]
@@ -32,12 +32,12 @@
     url: "https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records"
     method: POST
     headers:
-      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     body_format: json
     body:
       type: "TXT"
-      name: "_acme-challenge-test.{{ domain_name }}"
+      name: "_acme-challenge-test.{{ automation_domain_name }}"
       content: "ansible-validation-test-{{ ansible_date_time.epoch }}"
       ttl: 120
     timeout: 15
@@ -52,7 +52,7 @@
       https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records/{{ dns_record_test.json.result.id }}
     method: DELETE
     headers:
-      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
   when: dns_record_test.json.success | default(false)
@@ -67,7 +67,7 @@
 
 - name: Test DNS propagation speed
   ansible.builtin.command: |
-    dig +short TXT _acme-challenge.{{ domain_name }} @1.1.1.1
+    dig +short TXT _acme-challenge.{{ automation_domain_name }} @1.1.1.1
   register: propagation_test
   changed_when: false
   failed_when: false
@@ -75,7 +75,7 @@
 
 - name: Check Let's Encrypt rate limits status
   ansible.builtin.uri:
-    url: "https://crt.sh/?q={{ domain_name }}&output=json"
+    url: "https://crt.sh/?q={{ automation_domain_name }}&output=json"
     method: GET
     timeout: 10
   register: certificate_transparency

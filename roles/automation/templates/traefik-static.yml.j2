@@ -8,7 +8,7 @@ serversTransport:
 
 entryPoints:
   web:
-    address: ":{{ traefik_web_port }}"
+    address: ":{{ automation_traefik_web_port }}"
     http:
       redirections:
         entrypoint:
@@ -17,13 +17,13 @@ entryPoints:
           permanent: true
 
   websecure:
-    address: ":{{ traefik_websecure_port }}"
+    address: ":{{ automation_traefik_websecure_port }}"
     http:
       tls:
         certResolver: letsencrypt
 
   traefik:
-    address: ":{{ traefik_dashboard_port }}"
+    address: ":{{ automation_traefik_dashboard_port }}"
 
 certificatesResolvers:
   letsencrypt:

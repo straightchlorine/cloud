@@ -3,7 +3,7 @@ http:
   routers:
 
     opnsense:
-      rule: "Host(`opnsense.{{ domain_name }}`)"
+      rule: "Host(`opnsense.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: opnsense
@@ -11,7 +11,7 @@ http:
         certResolver: letsencrypt
 
     pihole:
-      rule: "Host(`dns.{{ domain_name }}`)"
+      rule: "Host(`dns.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: pihole
@@ -24,7 +24,7 @@ http:
         - default-headers
 
     grafana:
-      rule: "Host(`grafana.{{ domain_name }}`)"
+      rule: "Host(`grafana.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: grafana
@@ -36,7 +36,7 @@ http:
         - default-headers
 
     kuma:
-      rule: "Host(`kuma.{{ domain_name }}`)"
+      rule: "Host(`kuma.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: kuma
@@ -49,7 +49,7 @@ http:
 
 
     navidrome:
-      rule: "Host(`navidrome.{{ domain_name }}`)"
+      rule: "Host(`navidrome.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: navidrome
@@ -61,7 +61,7 @@ http:
         - default-headers
 
     euler:
-      rule: "Host(`euler.{{ domain_name }}`)"
+      rule: "Host(`euler.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: euler
@@ -73,7 +73,7 @@ http:
         - default-headers
 
     kepler:
-      rule: "Host(`kepler.{{ domain_name }}`)"
+      rule: "Host(`kepler.{{ automation_domain_name }}`)"
       entryPoints:
         - websecure
       service: kepler
@@ -87,15 +87,15 @@ http:
   serversTransports:
     opnsense-transport:
       insecureSkipVerify: false
-      serverName: "opnsense.{{ domain_name }}"
+      serverName: "opnsense.{{ automation_domain_name }}"
 
     euler-transport:
       insecureSkipVerify: false
-      serverName: "euler.{{ domain_name }}"
+      serverName: "euler.{{ automation_domain_name }}"
 
     kepler-transport:
       insecureSkipVerify: false
-      serverName: "kepler.{{ domain_name }}"
+      serverName: "kepler.{{ automation_domain_name }}"
 
   services:
     opnsense:

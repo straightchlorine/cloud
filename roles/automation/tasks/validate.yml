@@ -100,9 +100,9 @@
   register: port_check
   failed_when: false
   loop:
-    - "{{ traefik_web_port }}"
-    - "{{ traefik_websecure_port }}"
-    - "{{ traefik_dashboard_port }}"
+    - "{{ automation_traefik_web_port }}"
+    - "{{ automation_traefik_websecure_port }}"
+    - "{{ automation_traefik_dashboard_port }}"
 
 - name: Fail if critical ports are in use
   ansible.builtin.fail:
@@ -152,12 +152,12 @@
   when: not (domain_name | regex_search('^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}$'))
 
 - name: Test DNS resolution for domain
-  ansible.builtin.command: nslookup {{ domain_name }}
+  ansible.builtin.command: nslookup {{ automation_domain_name }}
   register: domain_dns_check
   failed_when: false
   changed_when: false
 
 - name: Warn if domain DNS not configured
   ansible.builtin.debug:
-    msg: "WARNING: Domain {{ domain_name }} does not resolve. SSL certificates may fail."
+    msg: "WARNING: Domain {{ automation_domain_name }} does not resolve. SSL certificates may fail."
   when: domain_dns_check.rc != 0

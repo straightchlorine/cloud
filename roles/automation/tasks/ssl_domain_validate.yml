@@ -15,7 +15,7 @@
 
 - name: Test domain resolution from external resolvers
   ansible.builtin.command: |
-    nslookup {{ domain_name }} {{ item }}
+    nslookup {{ automation_domain_name }} {{ item }}
   loop:
     - "1.1.1.1" # Cloudflare
     - "9.9.9.9" # Quad9
@@ -26,7 +26,7 @@
 
 - name: Validate domain resolves from all resolvers
   ansible.builtin.fail:
-    msg: "Domain {{ domain_name }} failed to resolve from {{ item.item }}"
+    msg: "Domain {{ automation_domain_name }} failed to resolve from {{ item.item }}"
   when: item.rc != 0
   loop: "{{ domain_resolution.results }}"
   loop_control:
@@ -35,14 +35,14 @@
 
 - name: Test subdomain resolution for all configured services
   ansible.builtin.command: |
-    nslookup {{ item }}.{{ domain_name }} 1.1.1.1
+    nslookup {{ item }}.{{ automation_domain_name }} 1.1.1.1
   loop:
-    - "{{ subdomain_traefik  }}"
-    - "{{ subdomain_influxdb }}"
-    - "{{ subdomain_explorer }}"
-    - "{{ subdomain_dozzle }}"
-    - "{{ subdomain_portainer }}"
-    - "{{ subdomain_vaultwarden }}"
+    - "{{ automation_subdomain_traefik }}"
+    - "{{ automation_subdomain_influxdb }}"
+    - "{{ automation_subdomain_explorer }}"
+    - "{{ automation_subdomain_dozzle }}"
+    - "{{ automation_subdomain_portainer }}"
+    - "{{ automation_subdomain_vaultwarden }}"
   register: subdomain_resolution
   changed_when: false
   failed_when: false
@@ -53,7 +53,7 @@
     url: "https://api.cloudflare.com/client/v4/user"
     method: GET
     headers:
-      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 10
   register: cloudflare_api_test
@@ -112,7 +112,7 @@
 
 - name: Test Traefik DNS resolvers from configuration
   ansible.builtin.command: |
-    nslookup {{ domain_name }} {{ item }}
+    nslookup {{ automation_domain_name }} {{ item }}
   loop:
     - "9.9.9.9"
     - "149.112.112.112"
@@ -123,7 +123,7 @@
 
 - name: Check DNS propagation delay (important for DNS01)
   ansible.builtin.command: |
-    dig +short TXT _acme-challenge.{{ domain_name }} @1.1.1.1
+    dig +short TXT _acme-challenge.{{ automation_domain_name }} @1.1.1.1
   register: acme_challenge_test
   changed_when: false
   failed_when: false
@@ -153,9 +153,9 @@
       [OK] SSL/Domain Validation Results for DNS01 Setup:
 
       Domain Resolution:
-      Primary Domain ({{ domain_name }}): [OK] Resolves from all resolvers
+      Primary Domain ({{ automation_domain_name }}): [OK] Resolves from all resolvers
       {% for subdomain in ['traefik', 'influxdb', 'vault', 'portainer', 'dozzle'] %}
-      {{ subdomain }}.{{ domain_name }}: {{
+      {{ subdomain }}.{{ automation_domain_name }}: {{
           '[OK] Resolves' if subdomain_resolution.results[loop.index0].rc == 0 else '[FAIL] Failed' }}
       {% endfor %}
 

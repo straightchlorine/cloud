@@ -37,7 +37,7 @@
           Automation Stack Deployment Complete!
 
           Services:
-          - Traefik Dashboard: https://{{ subdomain_traefik }}.{{ domain_name }}
+          - Traefik Dashboard: https://{{ automation_subdomain_traefik }}.{{ automation_domain_name }}
 
           Management:
           - Stack control: manage-automation {start|stop|restart|status|logs}
@@ -64,8 +64,8 @@
       vars:
         services_to_verify:
           - name: "Traefik HTTP"
-            url: "http://{{ primary_ip }}:{{ traefik_web_port }}"
+            url: "http://{{ primary_ip }}:{{ automation_traefik_web_port }}"
             valid_codes: [200, 301, 302, 401, 403]
           - name: "Traefik Dashboard"
-            url: "http://{{ primary_ip }}:{{ traefik_dashboard_port }}"
+            url: "http://{{ primary_ip }}:{{ automation_traefik_dashboard_port }}"
             valid_codes: [200, 301, 302, 401, 403]

@@ -25,7 +25,7 @@
 
 - name: Test Traefik API accessibility
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_dashboard_port }}/api/version"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/version"
     method: GET
     timeout: 10
   register: traefik_api
@@ -33,7 +33,7 @@
 
 - name: Get Traefik router configuration
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_dashboard_port }}/api/http/routers"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/routers"
     method: GET
     timeout: 10
   register: traefik_routers
@@ -41,7 +41,7 @@
 
 - name: Get Traefik service configuration
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_dashboard_port }}/api/http/services"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/services"
     method: GET
     timeout: 10
   register: traefik_services
@@ -56,17 +56,17 @@
   ansible.builtin.set_fact:
     expected_routes:
       - name: "dashboard"
-        host: "{{ subdomain_traefik }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_traefik }}.{{ automation_domain_name }}"
       - name: "dozzle"
-        host: "{{ subdomain_dozzle }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_dozzle }}.{{ automation_domain_name }}"
       - name: "portainer"
-        host: "{{ subdomain_portainer }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_portainer }}.{{ automation_domain_name }}"
       - name: "influxdb"
-        host: "{{ subdomain_influxdb }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_influxdb }}.{{ automation_domain_name }}"
       - name: "influxdb-explorer"
-        host: "{{ subdomain_explorer }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_explorer }}.{{ automation_domain_name }}"
       - name: "vaultwarden"
-        host: "{{ subdomain_vaultwarden }}.{{ domain_name }}"
+        host: "{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
   tags: [routing_validation]
 
 - name: Check if all expected routes are present
@@ -96,9 +96,9 @@
     port: "{{ item.port }}"
     timeout: 10
   loop:
-    - {service: "traefik-dashboard", port: "{{ traefik_dashboard_port }}"}
-    - {service: "traefik-web", port: "{{ traefik_web_port }}"}
-    - {service: "traefik-websecure", port: "{{ traefik_websecure_port }}"}
+    - {service: "traefik-dashboard", port: "{{ automation_traefik_dashboard_port }}"}
+    - {service: "traefik-web", port: "{{ automation_traefik_web_port }}"}
+    - {service: "traefik-websecure", port: "{{ automation_traefik_websecure_port }}"}
   register: port_connectivity
   tags: [routing_validation]
 
@@ -115,7 +115,7 @@
 
 - name: Validate middleware configuration
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_dashboard_port }}/api/http/middlewares"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/middlewares"
     method: GET
     timeout: 10
   register: traefik_middlewares
@@ -129,7 +129,7 @@
 
 - name: Test HTTPS redirect functionality
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_web_port }}"
+    url: "http://localhost:{{ automation_traefik_web_port }}"
     method: GET
     follow_redirects: none
     timeout: 10

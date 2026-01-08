@@ -38,7 +38,7 @@
 
 - name: Test Traefik dashboard accessibility
   ansible.builtin.uri:
-    url: "http://localhost:{{ traefik_dashboard_port }}"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}"
     method: GET
     timeout: 10
   register: traefik_dashboard
@@ -46,19 +46,19 @@
 
 - name: Test Traefik web port
   ansible.builtin.wait_for:
-    port: "{{ traefik_web_port }}"
+    port: "{{ automation_traefik_web_port }}"
     timeout: 30
   tags: [post_validation]
 
 - name: Test HTTPS port
   ansible.builtin.wait_for:
-    port: "{{ traefik_websecure_port }}"
+    port: "{{ automation_traefik_websecure_port }}"
     timeout: 30
   tags: [post_validation]
 
 - name: Test Vaultwarden accessibility (if enabled)
   ansible.builtin.uri:
-    url: "https://{{ subdomain_vaultwarden }}.{{ domain_name }}"
+    url: "https://{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
     method: GET
     timeout: 10
     validate_certs: false
@@ -108,8 +108,8 @@
 
       Service Health:
       Traefik Dashboard: {{ 'Accessible' if traefik_dashboard.status == 200 else 'Failed' }}
-      HTTP Port ({{ traefik_web_port }}): Listening
-      HTTPS Port ({{ traefik_websecure_port }}): Listening
+      HTTP Port ({{ automation_traefik_web_port }}): Listening
+      HTTPS Port ({{ automation_traefik_websecure_port }}): Listening
       InfluxDB Health: {{ 'Healthy' if influxdb_health.status == 200 else 'Check Required' }}
       Vaultwarden: {{ 'Accessible' if (vaultwarden_test.status | default(0)) == 200 else 'Not tested or failed' }}
 
