@@ -63,7 +63,7 @@ steps:
   - name: molecule-test
     image: quay.io/podman/stable:latest
     privileged: true
-    pull: always
+    pull: true
     commands:
       # Install dependencies
       - dnf install -y python3 python3-pip git
