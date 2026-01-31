@@ -35,11 +35,20 @@ steps:
     settings:
       depth: 1
 
+  # Install Ansible collections - only run once
+  - name: install-collections
+    image: cytopia/ansible:latest-tools
+    commands:
+      - mkdir -p collections
+      - ansible-galaxy collection install -r requirements.yml -p collections
+    when:
+      matrix:
+        PLATFORM: debian12
+
   # Linting - only run once
   - name: lint
     image: cytopia/ansible-lint:latest
     commands:
-      - ansible-galaxy collection install -r requirements.yml || true
       - ansible-lint roles/ playbooks/
     when:
       matrix:

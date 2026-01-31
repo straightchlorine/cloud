@@ -13,22 +13,25 @@ steps:
     settings:
       depth: 0  # Full history for tags
 
+  - name: install-collections
+    image: cytopia/ansible:latest-tools
+    commands:
+      - mkdir -p collections
+      - ansible-galaxy collection install -r requirements.yml -p collections
+
   - name: pre-deployment-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - ansible-galaxy collection install -r requirements.yml || true
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff
 
   - name: vault-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - ansible-galaxy collection install -r requirements.yml || true
       - ansible-playbook validate-infrastructure.yml -e validation_type=vault --check || true
 
   - name: backup-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - ansible-galaxy collection install -r requirements.yml || true
       - ansible-playbook validate-infrastructure.yml -e validation_type=backup --check || true
 
   - name: molecule-comprehensive
