@@ -78,4 +78,3 @@ steps:
         Branch: ${CI_COMMIT_BRANCH}
         Tag: ${CI_COMMIT_TAG}
         Status: Infrastructure is ready for production deployment
-    failure: ignore
