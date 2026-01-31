@@ -14,6 +14,6 @@
     - name: Display success message
       ansible.builtin.debug:
         msg: |
-          ✓ Fail-Fast Validation Test PASSED:
+          [OK] Fail-Fast Validation Test PASSED:
           The role correctly implements fail-fast behavior
           by failing when required variables are missing.

@@ -5,7 +5,7 @@
     - name: Display fail-fast validation check
       ansible.builtin.debug:
         msg: |
-          ✓ Firewall Fail-Fast Validation Test Complete
+          [OK] Firewall Fail-Fast Validation Test Complete
 
           Test Scenario: Missing required firewall configuration
           - firewall_enabled: NOT SET

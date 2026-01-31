@@ -25,6 +25,6 @@
         - name: Display expected failure message
           ansible.builtin.debug:
             msg: |
-              ✓ Fail-fast validation PASSED:
+              [OK] Fail-fast validation PASSED:
               Role correctly failed when required variables were missing
               This is the expected behavior!

@@ -22,5 +22,5 @@
         - name: Display validation failure message
           ansible.builtin.debug:
             msg: |
-              ✓ Validation correctly failed (expected behavior)
+              [OK] Validation correctly failed (expected behavior)
               Error: {{ validation_error }}

@@ -11,12 +11,12 @@
         that:
           - ansible_facts.packages['ufw'] is defined
         fail_msg: "UFW package is not installed"
-        success_msg: "✓ UFW package is installed"
+        success_msg: "[OK] UFW package is installed"
 
     - name: Display firewall with-rules verification results
       ansible.builtin.debug:
         msg: |
-          ✓ Firewall Rules Verification Complete
+          [OK] Firewall Rules Verification Complete
 
           Configuration verified:
           - UFW Installation: Verified

@@ -5,7 +5,7 @@
     - name: Confirm fail-fast-validation test completed
       ansible.builtin.debug:
         msg: |
-          ✓ DNS Fail-Fast Validation Test Complete
+          [OK] DNS Fail-Fast Validation Test Complete
 
           Test Scenario: Missing required configuration
           - vault_pihole_webpassword: NOT SET (required)

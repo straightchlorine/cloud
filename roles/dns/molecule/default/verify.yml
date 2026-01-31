@@ -11,26 +11,26 @@
         that:
           - ansible_facts.packages['git'] is defined
         fail_msg: "Git package is not installed"
-        success_msg: "✓ Git package is installed"
+        success_msg: "[OK] Git package is installed"
 
     - name: Check curl is installed
       ansible.builtin.assert:
         that:
           - ansible_facts.packages['curl'] is defined
         fail_msg: "curl package is not installed"
-        success_msg: "✓ curl package is installed"
+        success_msg: "[OK] curl package is installed"
 
     - name: Check wget is installed
       ansible.builtin.assert:
         that:
           - ansible_facts.packages['wget'] is defined
         fail_msg: "wget package is not installed"
-        success_msg: "✓ wget package is installed"
+        success_msg: "[OK] wget package is installed"
 
     - name: Display DNS verification results
       ansible.builtin.debug:
         msg: |
-          ✓ DNS Role Verification Complete
+          [OK] DNS Role Verification Complete
 
           DNS Prerequisite Packages:
           - Git: Installed

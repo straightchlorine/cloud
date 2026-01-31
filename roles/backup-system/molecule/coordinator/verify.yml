@@ -18,7 +18,7 @@
           - backup_path_stat.stat.exists
           - backup_path_stat.stat.isdir
         fail_msg: "Backup base path /mnt/backups does not exist"
-        success_msg: "✓ Backup base path /mnt/backups exists"
+        success_msg: "[OK] Backup base path /mnt/backups exists"
 
     # Verify coordinator target directories exist
     - name: Verify node1 backup directory
@@ -37,13 +37,13 @@
           - node1_dir.stat.exists
           - node2_dir.stat.exists
         fail_msg: "Target backup directories not found"
-        success_msg: "✓ All target backup directories verified"
+        success_msg: "[OK] All target backup directories verified"
 
     # Display verification summary
     - name: Display coordinator verification results
       ansible.builtin.debug:
         msg: |
-          ✓ Coordinator Backup System Verification Complete
+          [OK] Coordinator Backup System Verification Complete
 
           Configuration:
           - Role: coordinator

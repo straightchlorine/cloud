@@ -5,7 +5,7 @@
     - name: Confirm fail-fast-validation test completed
       ansible.builtin.debug:
         msg: |
-          ✓ Fail-fast validation scenario verified
+          [OK] Fail-fast validation scenario verified
 
           Note: Validation correctly failed in converge step
           when required variables were missing
@@ -15,7 +15,7 @@
     - name: Display fail-fast validation verification
       ansible.builtin.debug:
         msg: |
-          ✓ Fail-Fast Validation Test Complete
+          [OK] Fail-Fast Validation Test Complete
 
           Test Scenario: Missing required variables
           - backup_role: NOT SET (required)

@@ -30,5 +30,5 @@
         - name: Display failure message
           ansible.builtin.debug:
             msg: |
-              ✓ Firewall validation failed
+              [OK] Firewall validation failed
               Error: {{ validation_error }}

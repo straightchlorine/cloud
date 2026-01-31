@@ -21,7 +21,7 @@
     - name: Display network facts
       ansible.builtin.debug:
         msg: |
-          ✓ Network Facts:
+          [OK] Network Facts:
           - Interface: {{ primary_interface }}
           - IP Address: {{ primary_ip }}
           - Host CIDR: {{ host_ip_cidr }}

@@ -70,7 +70,7 @@
     - name: Display verification summary
       ansible.builtin.debug:
         msg: |
-          ✓ Docker Installation Verified:
+          [OK] Docker Installation Verified:
           - Docker: {{ docker_version.stdout }}
           - Compose: {{ compose_version.stdout }}
           - Service: Active ({{ docker_service.status.ActiveState }})

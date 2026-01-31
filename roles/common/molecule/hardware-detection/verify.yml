@@ -26,7 +26,7 @@
     - name: Display hardware detection results
       ansible.builtin.debug:
         msg: |
-          ✓ Hardware Detection:
+          [OK] Hardware Detection:
           - Platform: {{ hardware_platform }}
           - CPU Limit: {{ hardware_limits.cpu_limit }}
           - Memory Limit: {{ hardware_limits.memory_limit }}

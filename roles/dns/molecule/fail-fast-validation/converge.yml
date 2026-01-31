@@ -17,5 +17,5 @@
         - name: Display validation failure message
           ansible.builtin.debug:
             msg: |
-              ✓ DNS validation correctly failed (expected behavior)
+              [OK] DNS validation correctly failed (expected behavior)
               Error: Missing required variable: vault_pihole_webpassword

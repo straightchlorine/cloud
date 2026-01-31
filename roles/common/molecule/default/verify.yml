@@ -72,15 +72,15 @@
     - name: Display verification results
       ansible.builtin.debug:
         msg: |
-          ✓ Network Configuration Verified
+          [OK] Network Configuration Verified
           - Interfaces: {{ ansible_interfaces }}
           - IPv4 Addresses: {{ ansible_all_ipv4_addresses }}
           - Hostname: {{ ansible_hostname }}
 
-          ✓ Hardware Configuration Verified
+          [OK] Hardware Configuration Verified
           - Total Memory: {{ ansible_memtotal_mb }}MB
           - CPU Count: {{ ansible_processor_count }}
           - CPU Cores: {{ ansible_processor_cores }}
 
-          ✓ Operating System Verified
+          [OK] Operating System Verified
           - Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}

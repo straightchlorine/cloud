@@ -18,7 +18,7 @@
           - backup_path_stat.stat.exists
           - backup_path_stat.stat.isdir
         fail_msg: "Backup base path /mnt/backups does not exist"
-        success_msg: "✓ Backup base path /mnt/backups exists"
+        success_msg: "[OK] Backup base path /mnt/backups exists"
 
     # Verify backup user exists
     - name: Check if backup user exists
@@ -32,7 +32,7 @@
         that:
           - backup_user_check.ansible_facts.getent_passwd['backup'] is defined
         fail_msg: "Backup user does not exist"
-        success_msg: "✓ Backup user exists"
+        success_msg: "[OK] Backup user exists"
 
     # Verify required configurations
     - name: Verify backup configurations exist
@@ -40,13 +40,13 @@
         that:
           - backup_path_stat.stat.exists
         fail_msg: "Backup path not properly configured"
-        success_msg: "✓ Backup configuration verified"
+        success_msg: "[OK] Backup configuration verified"
 
     # Display verification summary
     - name: Display backup system verification results
       ansible.builtin.debug:
         msg: |
-          ✓ Backup System Verification Complete
+          [OK] Backup System Verification Complete
 
           Configuration Verified:
           - Base Path: /mnt/backups - EXISTS
