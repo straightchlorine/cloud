@@ -41,8 +41,8 @@ steps:
       - ansible-lint roles/ playbooks/
       - echo "Linting passed"
     when:
-      - matrix:
-          PLATFORM: debian12
+      matrix:
+        PLATFORM: debian12
 
   # Syntax check - only run once
   - name: syntax-check
@@ -56,8 +56,8 @@ steps:
         | xargs -n1 ansible-playbook --syntax-check
       - echo "Syntax check passed"
     when:
-      - matrix:
-          PLATFORM: debian12
+      matrix:
+        PLATFORM: debian12
 
   # Molecule tests with Podman - runs for each matrix platform and role
   - name: molecule-test
@@ -98,8 +98,8 @@ steps:
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check
       - echo "Infrastructure validation passed"
     when:
-      - matrix:
-          PLATFORM: debian12
+      matrix:
+        PLATFORM: debian12
 
   # Test report
   - name: test-report
@@ -123,6 +123,6 @@ steps:
       - echo "Matrix: 5 roles x 3 platforms = 15 test jobs"
       - echo "Current: ${ROLE} on ${PLATFORM}"
     when:
-      - status:
-          - success
-          - failure
+      status:
+        - success
+        - failure

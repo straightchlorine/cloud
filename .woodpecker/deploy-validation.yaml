@@ -68,7 +68,7 @@ steps:
   - name: notification
     image: plugins/slack:latest
     when:
-      - status: [success]
+      status: success
     settings:
       webhook_id:
         from_secret: slack_webhook
