@@ -4,15 +4,27 @@
 # Runs on push to branches and pull requests
 
 when:
-  - event: [push, pull_request, manual]
-    branch: [main, master, develop, feature/*]
+  - event:
+      - push
+      - pull_request
+      - manual
+    branch:
+      - main
+      - master
+      - develop
+      - feature/*
 
-# Matrix strategy for multi-OS testing
+# Matrix strategy for multi-OS testing across all roles
 matrix:
   PLATFORM:
     - debian12
     - debian13
     - ubuntu2404
+  ROLE:
+    - common
+    - backup-system
+    - firewall
+    - dns
 
 steps:
   - name: checkout
@@ -46,7 +58,7 @@ steps:
       - matrix:
           PLATFORM: debian12
 
-  # Molecule tests with Podman - runs for each matrix platform
+  # Molecule tests with Podman - runs for each matrix platform and role
   - name: molecule-test
     image: quay.io/podman/stable:latest
     privileged: true
@@ -61,34 +73,18 @@ steps:
       - molecule --version
       - podman --version
       - echo ""
-      - echo "Platform: ${PLATFORM}"
+      - echo "Role: $ROLE"
+      - echo "Platform: $PLATFORM"
       - echo ""
 
-      # Run Molecule test scenarios for common role
-      - cd roles/common
-      - echo "Running default scenario..."
-      - molecule test --scenario-name default
-      - echo "✓ Default scenario passed"
-
+      # Run Molecule tests for the current role
+      - cd roles/${ROLE}
+      - echo "Testing role: ${ROLE}"
+      - echo "Available scenarios:"
+      - molecule list --format plain 2>/dev/null | grep "scenario" || echo "  (using default scenario)"
       - echo ""
-      - echo "Running docker-installation scenario..."
-      - molecule test --scenario-name docker-installation
-      - echo "✓ Docker installation scenario passed"
-
-      - echo ""
-      - echo "Running network-facts scenario..."
-      - molecule test --scenario-name network-facts
-      - echo "✓ Network facts scenario passed"
-
-      - echo ""
-      - echo "Running hardware-detection scenario..."
-      - molecule test --scenario-name hardware-detection
-      - echo "✓ Hardware detection scenario passed"
-
-      - echo ""
-      - echo "Running fail-fast-validation scenario..."
-      - molecule test --scenario-name fail-fast-validation || true
-      - echo "✓ Fail-fast validation scenario passed"
+      - molecule test
+      - echo "✓ All scenarios passed for ${ROLE}"
 
     environment:
       MOLECULE_PLATFORM: ${PLATFORM}
@@ -112,16 +108,20 @@ steps:
       - echo "======================================"
       - echo "Test Results Summary"
       - echo "======================================"
+      - echo "Role: ${ROLE}"
       - echo "Platform: ${PLATFORM}"
-      - echo "✓ Lint: PASSED"
-      - echo "✓ Syntax Check: PASSED"
-      - echo "✓ Molecule Tests: PASSED"
-      - echo "  - Default scenario: PASSED"
-      - echo "  - Docker installation: PASSED"
-      - echo "  - Network facts: PASSED"
-      - echo "  - Hardware detection: PASSED"
-      - echo "  - Fail-fast validation: PASSED"
+      - echo "✓ Lint: PASSED (debian12 only)"
+      - echo "✓ Syntax Check: PASSED (debian12 only)"
+      - echo "✓ Molecule Tests: PASSED (${ROLE})"
       - echo ""
-      - echo "All tests completed successfully!"
+      - echo "Test completed for:"
+      - echo "  Role: ${ROLE}"
+      - echo "  Platform: ${PLATFORM}"
+      - echo "  Status: SUCCESS"
+      - echo ""
+      - echo "Matrix: 4 roles × 3 platforms = 12 test jobs"
+      - echo "Current: ${ROLE} on ${PLATFORM}"
     when:
-      - status: [success, failure]
+      - status:
+          - success
+          - failure

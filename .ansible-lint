@@ -12,8 +12,8 @@ skip_list:
   # ✅ Prometheus-exporters: 15 variables refactored
   # ✅ Music-stack: 10 variables refactored
   # ✅ Firewall: 1 variable refactored
-  # Status: var-naming rule can now be ENABLED!
-  # - var-naming         ← READY TO ENABLE (128 vars refactored)
+  # Status: var-naming rule ENABLED as of 2026-01-08
+  # All 128 variables across 7 roles are already refactored with proper prefixes
 
   # TODO: Review and refactor these
   - command-instead-of-module  # 57 instances, needs refactor

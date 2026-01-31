@@ -1,0 +1,54 @@
+---
+- name: Verify backup-system coordinator mode
+  hosts: all
+  tasks:
+    - name: Verify coordinator deployment message
+      ansible.builtin.debug:
+        msg: "Testing backup-system coordinator mode"
+
+    # Verify backup directories exist
+    - name: Verify backup base path exists
+      ansible.builtin.stat:
+        path: /mnt/backups
+      register: backup_path_stat
+
+    - name: Assert backup path exists
+      ansible.builtin.assert:
+        that:
+          - backup_path_stat.stat.exists
+          - backup_path_stat.stat.isdir
+        fail_msg: "Backup base path /mnt/backups does not exist"
+        success_msg: "✓ Backup base path /mnt/backups exists"
+
+    # Verify coordinator target directories exist
+    - name: Verify node1 backup directory
+      ansible.builtin.stat:
+        path: /mnt/backups/node1
+      register: node1_dir
+
+    - name: Verify node2 backup directory
+      ansible.builtin.stat:
+        path: /mnt/backups/node2
+      register: node2_dir
+
+    - name: Assert target directories exist
+      ansible.builtin.assert:
+        that:
+          - node1_dir.stat.exists
+          - node2_dir.stat.exists
+        fail_msg: "Target backup directories not found"
+        success_msg: "✓ All target backup directories verified"
+
+    # Display verification summary
+    - name: Display coordinator verification results
+      ansible.builtin.debug:
+        msg: |
+          ✓ Coordinator Backup System Verification Complete
+
+          Configuration:
+          - Role: coordinator
+          - Base Path: /mnt/backups
+          - Configured Target Directories: Present
+          - Monitoring: enabled
+
+          Coordinator ready to manage backup targets

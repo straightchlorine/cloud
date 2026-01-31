@@ -1,0 +1,45 @@
+---
+- name: Converge - Firewall Default Configuration
+  hosts: all
+  vars:
+    timezone: UTC
+    firewall_enabled: true
+    firewall_reset: true
+    firewall_policy_incoming: deny
+    firewall_policy_outgoing: allow
+    firewall_policy_routed: deny
+    firewall_logging: "low"
+    common_packages:
+      - curl
+      - wget
+      - git
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Install UFW if not present
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+      become: true
+
+    - name: Verify UFW installation
+      ansible.builtin.command: which ufw
+      register: ufw_path
+      changed_when: false
+
+    - name: Display firewall configuration status
+      ansible.builtin.debug:
+        msg: |
+          Firewall configuration:
+          - Role: firewall
+          - UFW installed at: {{ ufw_path.stdout }}
+          - Policy incoming: {{ firewall_policy_incoming }}
+          - Policy outgoing: {{ firewall_policy_outgoing }}
+          - Firewall enabled: {{ firewall_enabled }}
+
+          Note: Firewall rules configuration is skipped in container test
+          (requires kernel/iptables access not available in containers)

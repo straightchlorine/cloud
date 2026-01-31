@@ -1,0 +1,40 @@
+---
+- name: Converge - DNS Role (Pi-hole Prerequisites)
+  hosts: all
+  vars:
+    timezone: UTC
+    common_packages:
+      - curl
+      - wget
+      - git
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Gather facts (network)
+      ansible.builtin.setup:
+        gather_subset: network
+
+    - name: Install DNS prerequisite packages
+      ansible.builtin.apt:
+        name: "{{ common_packages }}"
+        state: present
+      become: true
+
+    - name: Verify DNS packages installed
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Display DNS role configuration
+      ansible.builtin.debug:
+        msg: |
+          DNS Role Configuration:
+          - Role: dns
+          - Timezone: {{ timezone }}
+          - Packages installed: {{ common_packages | length }}
+
+          Note: Full DNS validation (Pi-hole specific) skipped in container test
+          (requires network access and external DNS services)

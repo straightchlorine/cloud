@@ -1,0 +1,37 @@
+---
+- name: Converge - Default (Standalone Backup)
+  hosts: all
+  vars:
+    timezone: UTC
+    backup_role: standalone
+    backup_base_path: /mnt/backups
+    backup_monitoring: true
+    restic_repository: /mnt/backups/restic
+    restic_password: "test-password-12345"
+    backup_paths:
+      - /home
+      - /etc
+    vault_backup_repository_base: /mnt/backups
+  pre_tasks:
+    - name: Create backup directory
+      ansible.builtin.file:
+        path: /mnt/backups
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Create backup user
+      ansible.builtin.user:
+        name: backup
+        shell: /usr/sbin/nologin
+        home: /nonexistent
+        createhome: false
+      become: true
+
+  tasks:
+    - name: Gather facts (replaces network facts for testing)
+      ansible.builtin.setup:
+        gather_subset: network
+
+    - name: Include backup-system validation tasks
+      ansible.builtin.include_tasks: ../../tasks/validation.yml

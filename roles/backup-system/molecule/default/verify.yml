@@ -1,0 +1,54 @@
+---
+- name: Verify backup-system role
+  hosts: all
+  tasks:
+    - name: Verify backup-system deployment message
+      ansible.builtin.debug:
+        msg: "Testing backup-system standalone mode"
+
+    # Verify backup directories exist
+    - name: Verify backup base path exists
+      ansible.builtin.stat:
+        path: /mnt/backups
+      register: backup_path_stat
+
+    - name: Assert backup path exists
+      ansible.builtin.assert:
+        that:
+          - backup_path_stat.stat.exists
+          - backup_path_stat.stat.isdir
+        fail_msg: "Backup base path /mnt/backups does not exist"
+        success_msg: "✓ Backup base path /mnt/backups exists"
+
+    # Verify backup user exists
+    - name: Check if backup user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: backup
+      register: backup_user_check
+
+    - name: Assert backup user exists
+      ansible.builtin.assert:
+        that:
+          - backup_user_check.ansible_facts.getent_passwd['backup'] is defined
+        fail_msg: "Backup user does not exist"
+        success_msg: "✓ Backup user exists"
+
+    # Verify required configurations
+    - name: Verify backup configurations exist
+      ansible.builtin.assert:
+        that:
+          - backup_path_stat.stat.exists
+        fail_msg: "Backup path not properly configured"
+        success_msg: "✓ Backup configuration verified"
+
+    # Display verification summary
+    - name: Display backup system verification results
+      ansible.builtin.debug:
+        msg: |
+          ✓ Backup System Verification Complete
+
+          Configuration Verified:
+          - Base Path: /mnt/backups - EXISTS
+          - Backup User: backup - EXISTS
+          - System: Ready for backup operations

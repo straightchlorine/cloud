@@ -1,5 +1,7 @@
 ---
 galaxy_info:
+  role_name: firewall
+  namespace: local
   author: Ansible Admin
   description: Centralized UFW firewall management
   company: Local

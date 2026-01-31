@@ -1,0 +1,41 @@
+---
+- name: Verify DNS role prerequisites
+  hosts: all
+  tasks:
+    - name: Verify required DNS packages are installed
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Check Git is installed
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.packages['git'] is defined
+        fail_msg: "Git package is not installed"
+        success_msg: "✓ Git package is installed"
+
+    - name: Check curl is installed
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.packages['curl'] is defined
+        fail_msg: "curl package is not installed"
+        success_msg: "✓ curl package is installed"
+
+    - name: Check wget is installed
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.packages['wget'] is defined
+        fail_msg: "wget package is not installed"
+        success_msg: "✓ wget package is installed"
+
+    - name: Display DNS verification results
+      ansible.builtin.debug:
+        msg: |
+          ✓ DNS Role Verification Complete
+
+          DNS Prerequisite Packages:
+          - Git: Installed
+          - curl: Installed
+          - wget: Installed
+
+          Note: Full DNS role verification (Pi-hole specific) skipped in container test
+          (requires network access and external DNS services)

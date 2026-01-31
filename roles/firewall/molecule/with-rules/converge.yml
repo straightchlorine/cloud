@@ -1,0 +1,64 @@
+---
+- name: Converge - Firewall with Custom Rules
+  hosts: all
+  vars:
+    timezone: UTC
+    firewall_enabled: true
+    firewall_reset: true
+    firewall_policy_incoming: deny
+    firewall_policy_outgoing: allow
+    firewall_policy_routed: deny
+    firewall_logging: "medium"
+    common_firewall_ports:
+      - port: 80
+        comment: HTTP
+        proto: tcp
+      - port: 443
+        comment: HTTPS
+        proto: tcp
+    firewall_ports:
+      - 8080
+      - 8443
+    firewall_rules:
+      - rule: allow
+        port: 53
+        proto: udp
+        comment: DNS
+      - rule: allow
+        port: 3306
+        src: 192.168.1.0/24
+        comment: MySQL (internal only)
+    common_packages:
+      - curl
+      - wget
+      - git
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Install UFW if not present
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+      become: true
+
+    - name: Verify UFW installation
+      ansible.builtin.command: which ufw
+      register: ufw_path
+      changed_when: false
+
+    - name: Display firewall with-rules configuration
+      ansible.builtin.debug:
+        msg: |
+          Firewall configuration (with rules):
+          - Role: firewall
+          - UFW installed at: {{ ufw_path.stdout }}
+          - Firewall enabled: {{ firewall_enabled }}
+          - Common ports configured: {{ common_firewall_ports | length }}
+          - Host-specific ports: {{ firewall_ports | length }}
+          - Advanced rules: {{ firewall_rules | length }}
+
+          Configuration loaded but rules not applied (container environment limitation)

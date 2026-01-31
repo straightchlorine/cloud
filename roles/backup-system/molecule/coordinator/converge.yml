@@ -1,0 +1,46 @@
+---
+- name: Converge - Coordinator Mode
+  hosts: all
+  vars:
+    timezone: UTC
+    backup_role: coordinator
+    backup_base_path: /mnt/backups
+    backup_monitoring: true
+    backup_strategy: hybrid
+    vault_backup_repository_base: /mnt/backups
+    backup_targets:
+      - service_name: node1
+        target_host: 192.168.1.10
+        backup_paths:
+          - /home
+          - /etc
+        restic_repository: /mnt/backups/node1
+      - service_name: node2
+        target_host: 192.168.1.11
+        backup_paths:
+          - /var/www
+          - /srv
+        restic_repository: /mnt/backups/node2
+    # Standalone validation doesn't apply to coordinator
+    restic_repository: /tmp/restic
+    restic_password: "test-password"
+    backup_paths: []
+  pre_tasks:
+    - name: Create backup directory
+      ansible.builtin.file:
+        path: /mnt/backups
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Create coordinator subdirectories
+      ansible.builtin.file:
+        path: "/mnt/backups/{{ item.service_name }}"
+        state: directory
+        mode: '0755'
+      become: true
+      loop: "{{ backup_targets }}"
+
+  tasks:
+    - name: Include backup-system validation tasks
+      ansible.builtin.include_tasks: ../../tasks/validation.yml

@@ -66,7 +66,7 @@
     msg: |
       [OK] Backup Validation Passed:
       - role: {{ backup_role }}
-      - base path: {{{ common_backup_base_path }}}
+      - base path: {{ backup_base_path }}
       {% if backup_role == "coordinator" %}
       - targets: {{ backup_targets | length }} configured
       {% endif %}

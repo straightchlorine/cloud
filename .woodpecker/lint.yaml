@@ -28,7 +28,7 @@ steps:
       - yamllint --version
       - echo ""
       - echo "Checking YAML files..."
-      - yamllint -c .yamllint.yml .
+      - yamllint -c .yamllint .
       - echo "✓ YAML lint check passed"
 
   - name: shellcheck
