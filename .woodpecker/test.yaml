@@ -58,7 +58,6 @@ steps:
   # Molecule tests with Podman - runs for each matrix platform and role
   - name: molecule-test
     image: quay.io/podman/stable:latest
-    privileged: true
     pull: true
     commands:
       - dnf install -y python3 python3-pip git
