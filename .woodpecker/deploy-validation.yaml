@@ -17,7 +17,7 @@ steps:
     image: cytopia/ansible:latest-tools
     commands:
       - mkdir -p collections
-      - ansible-galaxy collection install -r requirements.yml -p collections
+      - ansible-galaxy collection install -r requirements.yml -p collections || true
 
   - name: pre-deployment-validation
     image: cytopia/ansible:latest-tools

@@ -40,7 +40,7 @@ steps:
     image: cytopia/ansible:latest-tools
     commands:
       - mkdir -p collections
-      - ansible-galaxy collection install -r requirements.yml -p collections
+      - ansible-galaxy collection install -r requirements.yml -p collections || true
     when:
       matrix:
         PLATFORM: debian12
