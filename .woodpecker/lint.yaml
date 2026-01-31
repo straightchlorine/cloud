@@ -19,7 +19,7 @@ steps:
       - echo ""
       - echo "Checking roles and playbooks..."
       - ansible-lint roles/ playbooks/
-      - echo "✓ Ansible lint check passed"
+      - echo "[OK] Ansible lint check passed"
 
   - name: yaml-lint
     image: cytopia/yamllint:latest
@@ -29,7 +29,7 @@ steps:
       - echo ""
       - echo "Checking YAML files..."
       - yamllint -c .yamllint .
-      - echo "✓ YAML lint check passed"
+      - echo "[OK] YAML lint check passed"
 
   - name: shellcheck
     image: koalaman/shellcheck-alpine:stable
@@ -39,14 +39,14 @@ steps:
       - echo ""
       - echo "Checking shell scripts..."
       - find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} \;
-      - echo "✓ Shell script check passed"
+      - echo "[OK] Shell script check passed"
 
   - name: markdown-lint
     image: davidanson/markdownlint-cli2:latest
     commands:
       - echo "Checking markdown files..."
       - markdownlint-cli2 "**/*.md" "#CHANGELOG.md" || true
-      - echo "✓ Markdown check passed"
+      - echo "[OK] Markdown check passed"
 
   - name: report
     image: alpine:latest
@@ -55,9 +55,9 @@ steps:
       - echo "======================================"
       - echo "Lint Pipeline Summary:"
       - echo "======================================"
-      - echo "✓ Ansible Lint: PASSED"
-      - echo "✓ YAML Lint: PASSED"
-      - echo "✓ ShellCheck: PASSED"
-      - echo "✓ Markdown Lint: PASSED"
+      - echo "[OK] Ansible Lint: PASSED"
+      - echo "[OK] YAML Lint: PASSED"
+      - echo "[OK] ShellCheck: PASSED"
+      - echo "[OK] Markdown Lint: PASSED"
       - echo ""
       - echo "All fast checks completed successfully!"

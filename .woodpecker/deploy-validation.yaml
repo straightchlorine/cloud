@@ -18,21 +18,21 @@ steps:
     commands:
       - echo "Running pre-deployment validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff
-      - echo "✓ Pre-deployment validation passed"
+      - echo "[OK] Pre-deployment validation passed"
 
   - name: vault-validation
     image: cytopia/ansible:latest-tools
     commands:
       - echo "Running vault validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=vault --check || true
-      - echo "✓ Vault validation completed"
+      - echo "[OK] Vault validation completed"
 
   - name: backup-validation
     image: cytopia/ansible:latest-tools
     commands:
       - echo "Running backup validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=backup --check || true
-      - echo "✓ Backup validation completed"
+      - echo "[OK] Backup validation completed"
 
   - name: molecule-comprehensive
     image: quay.io/podman/stable:latest
@@ -47,7 +47,7 @@ steps:
       - cd roles/common
       - echo "Running comprehensive Molecule tests..."
       - molecule test --all || true
-      - echo "✓ All Molecule tests completed"
+      - echo "[OK] All Molecule tests completed"
 
   - name: deployment-readiness
     image: alpine:latest
@@ -56,10 +56,10 @@ steps:
       - echo "======================================"
       - echo "Deployment Readiness Check"
       - echo "======================================"
-      - echo "✓ Pre-deployment validation: PASSED"
-      - echo "✓ Vault validation: PASSED"
-      - echo "✓ Backup validation: PASSED"
-      - echo "✓ Molecule tests: PASSED"
+      - echo "[OK] Pre-deployment validation: PASSED"
+      - echo "[OK] Vault validation: PASSED"
+      - echo "[OK] Backup validation: PASSED"
+      - echo "[OK] Molecule tests: PASSED"
       - echo ""
       - echo "Deployment Status: READY FOR PRODUCTION"
       - echo ""
