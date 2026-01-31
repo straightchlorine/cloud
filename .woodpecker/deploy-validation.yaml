@@ -74,8 +74,8 @@ steps:
         from_secret: slack_webhook
       message: |
         Deployment Validation Successful
-        common_Repository: ${CI_REPO}
+        Repository: ${CI_REPO}
         Branch: ${CI_COMMIT_BRANCH}
         Tag: ${CI_COMMIT_TAG}
-        common_Status: Infrastructure is ready for production deployment
+        Status: Infrastructure is ready for production deployment
     failure: ignore
