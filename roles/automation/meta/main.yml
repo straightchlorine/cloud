@@ -1,5 +1,7 @@
 ---
 galaxy_info:
+  namespace: local
+  role_name: automation
   author: Ansible Admin
   description: Automation stack for Raspberry Pi 4B with Traefik reverse proxy
   company: Local
