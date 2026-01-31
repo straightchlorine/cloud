@@ -14,18 +14,6 @@ repos:
         pass_filenames: false
         verbose: true
 
-  # Infrastructure validation dry-run
-  - repo: local
-    hooks:
-      - id: validate-infrastructure-dryrun
-        name: Infrastructure validation (dry-run)
-        entry: >-
-          bash -c 'ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment
-          --check || true'
-        language: system
-        pass_filenames: false
-        verbose: true
-
   # Playbook syntax validation for all playbooks
   - repo: local
     hooks:
