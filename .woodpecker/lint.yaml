@@ -14,50 +14,19 @@ steps:
   - name: ansible-lint
     image: cytopia/ansible-lint:latest
     commands:
-      - echo "Ansible Lint Version:"
-      - ansible-lint --version
-      - echo ""
-      - echo "Checking roles and playbooks..."
       - ansible-lint roles/ playbooks/
-      - echo "[OK] Ansible lint check passed"
 
   - name: yaml-lint
     image: cytopia/yamllint:latest
     commands:
-      - echo "YAML Lint Version:"
-      - yamllint --version
-      - echo ""
-      - echo "Checking YAML files..."
       - yamllint -c .yamllint .
-      - echo "[OK] YAML lint check passed"
 
   - name: shellcheck
     image: koalaman/shellcheck-alpine:stable
     commands:
-      - echo "ShellCheck Version:"
-      - shellcheck --version
-      - echo ""
-      - echo "Checking shell scripts..."
       - find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} \;
-      - echo "[OK] Shell script check passed"
 
   - name: markdown-lint
     image: davidanson/markdownlint-cli2:latest
     commands:
-      - echo "Checking markdown files..."
       - markdownlint-cli2 "**/*.md" "#CHANGELOG.md" || true
-      - echo "[OK] Markdown check passed"
-
-  - name: report
-    image: alpine:latest
-    commands:
-      - echo ""
-      - echo "======================================"
-      - echo "Lint Pipeline Summary:"
-      - echo "======================================"
-      - echo "[OK] Ansible Lint: PASSED"
-      - echo "[OK] YAML Lint: PASSED"
-      - echo "[OK] ShellCheck: PASSED"
-      - echo "[OK] Markdown Lint: PASSED"
-      - echo ""
-      - echo "All fast checks completed successfully!"

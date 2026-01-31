@@ -16,65 +16,24 @@ steps:
   - name: pre-deployment-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - echo "Running pre-deployment validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff
-      - echo "[OK] Pre-deployment validation passed"
 
   - name: vault-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - echo "Running vault validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=vault --check || true
-      - echo "[OK] Vault validation completed"
 
   - name: backup-validation
     image: cytopia/ansible:latest-tools
     commands:
-      - echo "Running backup validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=backup --check || true
-      - echo "[OK] Backup validation completed"
 
   - name: molecule-comprehensive
     image: quay.io/podman/stable:latest
     privileged: true
     pull: true
     commands:
-      # Install dependencies
       - dnf install -y python3 python3-pip git
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
-
-      # Run all Molecule scenarios for common role
       - cd roles/common
-      - echo "Running comprehensive Molecule tests..."
       - molecule test --all || true
-      - echo "[OK] All Molecule tests completed"
-
-  - name: deployment-readiness
-    image: alpine:latest
-    commands:
-      - echo ""
-      - echo "======================================"
-      - echo "Deployment Readiness Check"
-      - echo "======================================"
-      - echo "[OK] Pre-deployment validation: PASSED"
-      - echo "[OK] Vault validation: PASSED"
-      - echo "[OK] Backup validation: PASSED"
-      - echo "[OK] Molecule tests: PASSED"
-      - echo ""
-      - echo "Deployment Status: READY FOR PRODUCTION"
-      - echo ""
-      - echo "Infrastructure is validated and ready for deployment"
-
-  - name: notification
-    image: plugins/slack:latest
-    when:
-      status: success
-    settings:
-      webhook_id:
-        from_secret: slack_webhook
-      message: |
-        Deployment Validation Successful
-        Repository: ${CI_REPO}
-        Branch: ${CI_COMMIT_BRANCH}
-        Tag: ${CI_COMMIT_TAG}
-        Status: Infrastructure is ready for production deployment

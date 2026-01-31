@@ -37,9 +37,7 @@ steps:
   - name: lint
     image: cytopia/ansible-lint:latest
     commands:
-      - ansible-lint --version
       - ansible-lint roles/ playbooks/
-      - echo "Linting passed"
     when:
       matrix:
         PLATFORM: debian12
@@ -48,13 +46,11 @@ steps:
   - name: syntax-check
     image: cytopia/ansible:latest-tools
     commands:
-      - echo "Syntax checking all playbooks..."
       - >-
         find . -name "*.yml"
         -not -path "./.git/*"
         -not -path "./inventory/*"
         | xargs -n1 ansible-playbook --syntax-check
-      - echo "Syntax check passed"
     when:
       matrix:
         PLATFORM: debian12
@@ -65,28 +61,10 @@ steps:
     privileged: true
     pull: true
     commands:
-      # Install dependencies
       - dnf install -y python3 python3-pip git
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman] containers-common
-
-      # Verify installations
-      - ansible --version
-      - molecule --version
-      - podman --version
-      - echo ""
-      - echo "Role: $ROLE"
-      - echo "Platform: $PLATFORM"
-      - echo ""
-
-      # Run Molecule tests for the current role
       - cd roles/${ROLE}
-      - echo "Testing role: ${ROLE}"
-      - echo "Available scenarios:"
-      - molecule list --format plain 2>/dev/null | grep "scenario" || echo "  (using default scenario)"
-      - echo ""
       - molecule test
-      - echo "All scenarios passed for ${ROLE}"
-
     environment:
       MOLECULE_PLATFORM: ${PLATFORM}
 
@@ -94,35 +72,8 @@ steps:
   - name: validate-infrastructure
     image: cytopia/ansible:latest-tools
     commands:
-      - echo "Running infrastructure validation..."
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check
-      - echo "Infrastructure validation passed"
     when:
       matrix:
         PLATFORM: debian12
 
-  # Test report
-  - name: test-report
-    image: alpine:latest
-    commands:
-      - echo ""
-      - echo "======================================"
-      - echo "Test Results Summary"
-      - echo "======================================"
-      - echo "Role: ${ROLE}"
-      - echo "Platform: ${PLATFORM}"
-      - echo "Lint: PASSED (debian12 only)"
-      - echo "Syntax Check: PASSED (debian12 only)"
-      - echo "Molecule Tests: PASSED (${ROLE})"
-      - echo ""
-      - echo "Test completed for:"
-      - echo "  Role: ${ROLE}"
-      - echo "  Platform: ${PLATFORM}"
-      - echo "  Status: SUCCESS"
-      - echo ""
-      - echo "Matrix: 5 roles x 3 platforms = 15 test jobs"
-      - echo "Current: ${ROLE} on ${PLATFORM}"
-    when:
-      status:
-        - success
-        - failure
