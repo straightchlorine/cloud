@@ -15,22 +15,30 @@ steps:
 
   - name: install-collections
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
-      - mkdir -p collections
-      - ansible-galaxy collection install -r requirements.yml -p collections || true
+      - mkdir -p /root/.ansible/collections/ansible_collections
+      - ansible-galaxy collection install -r requirements.yml -p /root/.ansible/collections || true
 
   - name: pre-deployment-validation
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check --diff
 
   - name: vault-validation
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - ansible-playbook validate-infrastructure.yml -e validation_type=vault --check || true
 
   - name: backup-validation
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - ansible-playbook validate-infrastructure.yml -e validation_type=backup --check || true
 

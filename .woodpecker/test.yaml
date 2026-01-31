@@ -38,9 +38,11 @@ steps:
   # Install Ansible collections - only run once
   - name: install-collections
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
-      - mkdir -p collections
-      - ansible-galaxy collection install -r requirements.yml -p collections || true
+      - mkdir -p /root/.ansible/collections/ansible_collections
+      - ansible-galaxy collection install -r requirements.yml -p /root/.ansible/collections || true
     when:
       matrix:
         PLATFORM: debian12
@@ -48,6 +50,8 @@ steps:
   # Linting - only run once
   - name: lint
     image: cytopia/ansible-lint:latest
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - ansible-lint roles/ playbooks/
     when:
@@ -57,6 +61,8 @@ steps:
   # Syntax check - only run once
   - name: syntax-check
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - >-
         find . -name "*.yml"
@@ -82,6 +88,8 @@ steps:
   # Infrastructure validation dry-run - only run once
   - name: validate-infrastructure
     image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
     commands:
       - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check
     when:
