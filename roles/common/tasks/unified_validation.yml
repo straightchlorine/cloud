@@ -42,7 +42,7 @@
   when:
     - validation_type in ['full', 'backup']
     - backup_directories is defined
-  loop: "{{{ common_backup_directories }}}"
+  loop: "{{ common_backup_directories }}"
   tags: [validation, backup_validation]
 
 - name: Fail if critical backup directories are missing

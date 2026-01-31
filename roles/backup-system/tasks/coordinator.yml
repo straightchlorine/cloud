@@ -6,7 +6,7 @@
   user:
     name: "{{ backup_user }}"
     ansible.builtin.shell: /bin/bash
-    home: "{{{ common_backup_base_path }}}"
+    home: "{{ common_backup_base_path }}"
     common_create_home: true
     groups: ["sudo"]
     append: true
@@ -23,17 +23,17 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{{ common_backup_base_path }}}/scripts"
-    - "{{{ common_backup_base_path }}}/logs"
-    - "{{{ common_backup_base_path }}}/keys"
-    - "{{{ common_backup_base_path }}}/.ssh"
-    - "{{{ common_backup_base_path }}}/.ssh/nodes"
-    - "{{{ common_backup_base_path }}}/cache"
-    - "{{{ common_backup_base_path }}}/staging"
-    - "{{{ common_backup_base_path }}}/.config"
-    - "{{{ common_backup_base_path }}}/restore-staging"
-    - "{{{ common_backup_base_path }}}/metrics"
-    - "{{{ common_backup_base_path }}}/coordination"
+    - "{{ common_backup_base_path }}/scripts"
+    - "{{ common_backup_base_path }}/logs"
+    - "{{ common_backup_base_path }}/keys"
+    - "{{ common_backup_base_path }}/.ssh"
+    - "{{ common_backup_base_path }}/.ssh/nodes"
+    - "{{ common_backup_base_path }}/cache"
+    - "{{ common_backup_base_path }}/staging"
+    - "{{ common_backup_base_path }}/.config"
+    - "{{ common_backup_base_path }}/restore-staging"
+    - "{{ common_backup_base_path }}/metrics"
+    - "{{ common_backup_base_path }}/coordination"
 
 - name: Install enterprise backup prerequisites
   ansible.builtin.package:
@@ -80,12 +80,12 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{{ common_backup_base_path }}}/.config"
-    - "{{{ common_backup_base_path }}}/.config/rclone"
+    - "{{ common_backup_base_path }}/.config"
+    - "{{ common_backup_base_path }}/.config/rclone"
 
 - name: Generate SSH keys for each target
   ansible.builtin.openssh_keypair:
-    path: "{{{ common_backup_base_path }}}/.ssh/nodes/{{ item.service_name }}"
+    path: "{{ common_backup_base_path }}/.ssh/nodes/{{ item.service_name }}"
     type: ed25519
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
@@ -96,7 +96,7 @@
 
 - name: Read SSH public keys from coordinator
   ansible.builtin.slurp:
-    src: "{{{ common_backup_base_path }}}/.ssh/nodes/{{ item.service_name }}.pub"
+    src: "{{ common_backup_base_path }}/.ssh/nodes/{{ item.service_name }}.pub"
   loop: "{{ backup_targets }}"
   register: ssh_public_keys
 
@@ -114,7 +114,7 @@
 - name: Verify SSH connectivity to targets
   ansible.builtin.shell: |
     set -o pipefail
-    ssh -i "{{{ common_backup_base_path }}}/.ssh/nodes/{{ item.service_name }}" \
+    ssh -i "{{ common_backup_base_path }}/.ssh/nodes/{{ item.service_name }}" \
         -F /dev/null \
         -o ConnectTimeout=10 \
         -o BatchMode=yes \
@@ -130,7 +130,7 @@
 - name: Create rclone configuration file
   ansible.builtin.template:
     src: rclone-config.conf.j2
-    dest: "{{{ common_backup_base_path }}}/.config/rclone/rclone.conf"
+    dest: "{{ common_backup_base_path }}/.config/rclone/rclone.conf"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -138,7 +138,7 @@
 - name: Create coordinator backup scripts for each target
   ansible.builtin.template:
     src: coordinator-backup.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ item.service_name }}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -149,7 +149,7 @@
 - name: Create coordinator restore scripts for each target
   ansible.builtin.template:
     src: coordinator-restore.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/enterprise-restore-{{ item.service_name }}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/enterprise-restore-{{ item.service_name }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -169,7 +169,7 @@
 - name: Create ansible-vault encrypted password files for each target
   ansible.builtin.copy:
     content: "{{ item.restic_password | default(generated_restic_passwords[item.service_name]) }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password.vault"
+    dest: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-password.vault"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -179,7 +179,7 @@
 - name: Create plaintext password files for restic
   ansible.builtin.copy:
     content: "{{ item.restic_password }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
+    dest: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -227,8 +227,8 @@
 - name: Initialize restic repositories
   ansible.builtin.shell: |
     export RESTIC_REPOSITORY="{{ item.restic_repository }}"
-    export RESTIC_PASSWORD_FILE="{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
-    export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache/{{ item.service_name }}"
+    export RESTIC_PASSWORD_FILE="{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
+    export RESTIC_CACHE_DIR="{{ common_backup_base_path }}/cache/{{ item.service_name }}"
 
     if ! restic snapshots &>/dev/null; then
       restic init
@@ -245,7 +245,7 @@
 - name: Create coordinator management script
   ansible.builtin.template:
     src: coordinator-manager.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-manager.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-manager.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -253,7 +253,7 @@
 - name: Create key rotation script
   ansible.builtin.template:
     src: key-rotation.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-key-rotation.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-key-rotation.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0755'
@@ -268,12 +268,12 @@
       [Service]
       Type=oneshot
       User={{ backup_user }}
-      ExecStart={{{ common_backup_base_path }}}/scripts/backup-key-rotation.sh
+      ExecStart={{ common_backup_base_path }}/scripts/backup-key-rotation.sh
       StandardOutput=journal
       StandardError=journal
       PrivateTmp=true
       ProtectSystem=strict
-      ReadWritePaths={{{ common_backup_base_path }}}
+      ReadWritePaths={{ common_backup_base_path }}
       NoNewPrivileges=true
 
       [Install]

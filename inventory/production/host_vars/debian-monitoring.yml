@@ -96,8 +96,8 @@ grafana_allow_embedding: "false"
 
 # Backup script configuration
 common_backup_service_name: "monitoring"
-common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
-common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+common_backup_cache_dir: "{{ common_backup_base_path }}/cache"
+common_backup_log_dir: "{{ common_backup_base_path }}/logs"
 retention_policy:
   daily: "7"
   weekly: "4"

@@ -38,8 +38,8 @@ common_systemd_config:
 # Common Enterprise Backup Configuration (eliminates duplication)
 # Used by all service hosts
 common_backup_config:
-  common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
-  common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+  common_backup_cache_dir: "{{ common_backup_base_path }}/cache"
+  common_backup_log_dir: "{{ common_backup_base_path }}/logs"
   retention_policy:
     daily: "7"
     weekly: "4"

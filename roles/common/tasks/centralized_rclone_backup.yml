@@ -43,13 +43,13 @@
     mode: "0750"
   become: true
   loop:
-    - "{{{ common_backup_base_path }}}/.config"
-    - "{{{ common_backup_base_path }}}/.config/rclone"
-    - "{{{ common_backup_base_path }}}/staging"
+    - "{{ common_backup_base_path }}/.config"
+    - "{{ common_backup_base_path }}/.config/rclone"
+    - "{{ common_backup_base_path }}/staging"
 
 - name: Generate SSH keys for each backup target
   ansible.builtin.openssh_keypair:
-    path: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-ssh-key"
+    path: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
     type: ed25519
     owner: backup
     group: backup
@@ -62,7 +62,7 @@
 - name: Create rclone configuration file
   ansible.builtin.template:
     src: rclone.conf.j2
-    dest: "{{{ common_backup_base_path }}}/.config/rclone/rclone.conf"
+    dest: "{{ common_backup_base_path }}/.config/rclone/rclone.conf"
     owner: backup
     group: backup
     mode: "0600"
@@ -71,7 +71,7 @@
 - name: Create centralized backup script for each target
   ansible.builtin.template:
     src: centralized-backup-script.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ item.service_name }}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
     owner: backup
     group: backup
     mode: "0755"
@@ -80,18 +80,18 @@
     common_backup_service_name: "{{ item.service_name }}"
     common_backup_paths: "{{ item.backup_paths }}"
     restic_repository: "{{ item.restic_repository }}"
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
-    common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache/{{ item.service_name }}"
-    common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+    common_backup_password_file: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
+    common_backup_cache_dir: "{{ common_backup_base_path }}/cache/{{ item.service_name }}"
+    common_backup_log_dir: "{{ common_backup_base_path }}/logs"
     rclone_remote: "{{ item.service_name }}"
-    rclone_config: "{{{ common_backup_base_path }}}/.config/rclone/rclone.conf"
+    rclone_config: "{{ common_backup_base_path }}/.config/rclone/rclone.conf"
   become: true
   loop: "{{ centralized_backup_targets }}"
 
 - name: Create centralized restore script for each target
   ansible.builtin.template:
     src: centralized-restore-script.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/restore-{{ item.service_name }}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/restore-{{ item.service_name }}.sh"
     owner: backup
     group: backup
     mode: "0755"
@@ -99,16 +99,16 @@
     backup_target: "{{ item }}"
     common_backup_service_name: "{{ item.service_name }}"
     restic_repository: "{{ item.restic_repository }}"
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
-    common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache/{{ item.service_name }}"
-    common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+    common_backup_password_file: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
+    common_backup_cache_dir: "{{ common_backup_base_path }}/cache/{{ item.service_name }}"
+    common_backup_log_dir: "{{ common_backup_base_path }}/logs"
   become: true
   loop: "{{ centralized_backup_targets }}"
 
 - name: Create restic password files for each target
   ansible.builtin.copy:
     content: "{{ item.restic_password }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
+    dest: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
     owner: backup
     group: backup
     mode: "0600"
@@ -131,10 +131,10 @@
     service_type: "oneshot"
     service_user: "backup"
     service_group: "backup"
-    common_working_directory: "{{{ common_backup_base_path }}}"
-    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{ item.service_name }}.sh"
-    common_standard_output: "append:{{{ common_backup_base_path }}}/logs/systemd-backup-{{ item.service_name }}.log"
-    common_standard_error: "append:{{{ common_backup_base_path }}}/logs/systemd-backup-{{ item.service_name }}.log"
+    common_working_directory: "{{ common_backup_base_path }}"
+    exec_start: "{{ common_backup_base_path }}/scripts/backup-{{ item.service_name }}.sh"
+    common_standard_output: "append:{{ common_backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
+    common_standard_error: "append:{{ common_backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
     common_timeout_start_sec: "{{ item.backup_timeout }}"
     enable_security_hardening: true
     no_new_privileges: false
@@ -191,8 +191,8 @@
 - name: Initialize restic repositories
   ansible.builtin.shell: |
     export RESTIC_REPOSITORY="{{ item.restic_repository }}"
-    export RESTIC_PASSWORD_FILE="{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
-    export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache/{{ item.service_name }}"
+    export RESTIC_PASSWORD_FILE="{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
+    export RESTIC_CACHE_DIR="{{ common_backup_base_path }}/cache/{{ item.service_name }}"
 
     if ! restic snapshots &>/dev/null; then
       restic init
@@ -215,7 +215,7 @@
       {{ lookup('file', backup_base_path + '/keys/' + item.service_name + '-ssh-key.pub') }}
 
       Deploy command:
-      ssh-copy-id -i {{{ common_backup_base_path }}}/keys/
+      ssh-copy-id -i {{ common_backup_base_path }}/keys/
         {{ item.service_name }}-ssh-key.pub root@{{ item.target_host }}
   loop: "{{ centralized_backup_targets }}"
 
@@ -235,13 +235,13 @@
         Paths: {{ target.backup_paths | join(', ') }}
         Backup Service: backup-{{ target.service_name }}.service
         Backup Timer: backup-{{ target.service_name }}.timer
-        Backup Script: {{{ common_backup_base_path }}}/scripts/backup-{{ target.service_name }}.sh
-        Restore Script: {{{ common_backup_base_path }}}/scripts/restore-{{ target.service_name }}.sh
+        Backup Script: {{ common_backup_base_path }}/scripts/backup-{{ target.service_name }}.sh
+        Restore Script: {{ common_backup_base_path }}/scripts/restore-{{ target.service_name }}.sh
         common_Status: {{ 'Enabled' if target.backup_enabled else 'Disabled' }}
 
       {% endfor %}
       Rclone Version: {{ rclone_version_check.stdout }}
-      Backup Base: {{{ common_backup_base_path }}}
+      Backup Base: {{ common_backup_base_path }}
 
       Enhanced Features:
       [OK] Network optimization with bandwidth limiting
@@ -256,5 +256,5 @@
       3. Run manual backup:
          systemctl start backup-{{ centralized_backup_targets[0].service_name }}.service
       4. Test restore:
-         {{{ common_backup_base_path }}}/scripts/
+         {{ common_backup_base_path }}/scripts/
            restore-{{ centralized_backup_targets[0].service_name }}.sh --latest --dry-run

@@ -17,7 +17,7 @@ backup_retention_days: 30
 
 # Standardized backup configuration paths
 common_backup_base_path: "/opt/backup"
-common_backup_password_file: "{{{ common_backup_base_path }}}/restic-password"
+common_backup_password_file: "{{ common_backup_base_path }}/restic-password"
 
 # Common filesystem utilities (used by all roles with storage)
 filesystem_utilities:

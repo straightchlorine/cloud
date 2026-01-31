@@ -6,7 +6,7 @@
   user:
     name: "{{ backup_user }}"
     group: "{{ backup_group }}"
-    home: "{{{ common_backup_base_path }}}"
+    home: "{{ common_backup_base_path }}"
     ansible.builtin.shell: /bin/bash
     system: true
     common_create_home: true
@@ -21,17 +21,17 @@
     mode: '0750'
   become: true
   loop:
-    - "{{{ common_backup_base_path }}}/scripts"
-    - "{{{ common_backup_base_path }}}/repositories"
-    - "{{{ common_backup_base_path }}}/cache"
-    - "{{{ common_backup_base_path }}}/keys"
-    - "{{{ common_backup_base_path }}}/config"
-    - "{{{ common_backup_base_path }}}/logs"
-    - "{{{ common_backup_base_path }}}/metrics"
-    - "{{{ common_backup_base_path }}}/locks"
-    - "{{{ common_backup_base_path }}}/coordination"
-    - "{{{ common_backup_base_path }}}/reports"
-    - "{{{ common_backup_base_path }}}/dashboards"
+    - "{{ common_backup_base_path }}/scripts"
+    - "{{ common_backup_base_path }}/repositories"
+    - "{{ common_backup_base_path }}/cache"
+    - "{{ common_backup_base_path }}/keys"
+    - "{{ common_backup_base_path }}/config"
+    - "{{ common_backup_base_path }}/logs"
+    - "{{ common_backup_base_path }}/metrics"
+    - "{{ common_backup_base_path }}/locks"
+    - "{{ common_backup_base_path }}/coordination"
+    - "{{ common_backup_base_path }}/reports"
+    - "{{ common_backup_base_path }}/dashboards"
 
 - name: Install restic backup tool
   ansible.builtin.get_url:
@@ -55,7 +55,7 @@
 - name: Create restic password file
   ansible.builtin.copy:
     content: "{{ backup_restic_password }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+    dest: "{{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0600'
@@ -65,7 +65,7 @@
 - name: Generate repository initialization script
   ansible.builtin.template:
     src: init-repositories.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/init-repositories.sh"
+    dest: "{{ common_backup_base_path }}/scripts/init-repositories.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -74,7 +74,7 @@
 - name: Generate service backup script
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{ backup_device_role }}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-{{ backup_device_role }}.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -84,9 +84,9 @@
     backup_excludes: "{{ service_backup_configs[device_role].excludes }}"
     pre_backup_commands: "{{ service_backup_configs[device_role].pre_backup_scripts }}"
     post_backup_commands: "{{ service_backup_configs[device_role].post_backup_scripts }}"
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
-    common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
-    common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+    common_backup_password_file: "{{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
+    common_backup_cache_dir: "{{ common_backup_base_path }}/cache"
+    common_backup_log_dir: "{{ common_backup_base_path }}/logs"
     backup_retention_policy:
       daily: "{{ backup_retention_daily }}"
       weekly: "{{ backup_retention_weekly }}"
@@ -97,7 +97,7 @@
 - name: Generate backup coordinator script
   ansible.builtin.template:
     src: backup-coordinator.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-coordinator.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-coordinator.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -106,7 +106,7 @@
 - name: Generate repository health monitor script
   ansible.builtin.template:
     src: repository-health-monitor.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-health-monitor.sh"
+    dest: "{{ common_backup_base_path }}/scripts/repository-health-monitor.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -115,7 +115,7 @@
 - name: Create repository-specific configuration files
   ansible.builtin.template:
     src: repository-config.yml.j2
-    dest: "{{{ common_backup_base_path }}}/config/{{ backup_device_role }}-repository.yml"
+    dest: "{{ common_backup_base_path }}/config/{{ backup_device_role }}-repository.yml"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0640'
@@ -125,7 +125,7 @@
 - name: Generate repository management script
   ansible.builtin.template:
     src: manage-repositories.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/manage-repositories.sh"
+    dest: "{{ common_backup_base_path }}/scripts/manage-repositories.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -134,7 +134,7 @@
 - name: Create repository health monitoring script
   ansible.builtin.template:
     src: repository-health-check.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-health-check.sh"
+    dest: "{{ common_backup_base_path }}/scripts/repository-health-check.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -143,7 +143,7 @@
 - name: Generate repository performance analyzer
   ansible.builtin.template:
     src: repository-performance.py.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-performance.py"
+    dest: "{{ common_backup_base_path }}/scripts/repository-performance.py"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -152,7 +152,7 @@
 - name: Create repository encryption key management
   ansible.builtin.template:
     src: manage-encryption-keys.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/manage-encryption-keys.sh"
+    dest: "{{ common_backup_base_path }}/scripts/manage-encryption-keys.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0700'
@@ -161,7 +161,7 @@
 - name: Generate repository consistency checker
   ansible.builtin.template:
     src: repository-consistency.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-consistency.sh"
+    dest: "{{ common_backup_base_path }}/scripts/repository-consistency.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -170,7 +170,7 @@
 - name: Create repository backup orchestrator
   ansible.builtin.template:
     src: repository-orchestrator.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-orchestrator.sh"
+    dest: "{{ common_backup_base_path }}/scripts/repository-orchestrator.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -179,7 +179,7 @@
 - name: Generate repository migration tools
   ansible.builtin.template:
     src: repository-migration.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/repository-migration.sh"
+    dest: "{{ common_backup_base_path }}/scripts/repository-migration.sh"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -188,7 +188,7 @@
 - name: Create repository deduplication analyzer
   ansible.builtin.template:
     src: analyze-deduplication.py.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/analyze-deduplication.py"
+    dest: "{{ common_backup_base_path }}/scripts/analyze-deduplication.py"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0750'
@@ -232,12 +232,12 @@
 
 - name: Initialize repositories if they don't exist
   ansible.builtin.command: >
-    {{{ common_backup_base_path }}}/scripts/init-repositories.sh
+    {{ common_backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.key }}
     --check-only
   environment:
     RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+    RESTIC_PASSWORD_FILE: "{{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
   register: repository_status
   become_user: backup
   become: true
@@ -247,12 +247,12 @@
 
 - name: Create missing repositories
   ansible.builtin.command: >
-    {{{ common_backup_base_path }}}/scripts/init-repositories.sh
+    {{ common_backup_base_path }}/scripts/init-repositories.sh
     --repository {{ item.item.key }}
     --initialize
   environment:
     RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+    RESTIC_PASSWORD_FILE: "{{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
   become_user: backup
   become: true
   when: item.rc != 0
@@ -279,12 +279,12 @@
 
 - name: Verify repository health
   ansible.builtin.command: >
-    {{{ common_backup_base_path }}}/scripts/repository-health-check.sh
+    {{ common_backup_base_path }}/scripts/repository-health-check.sh
     --repository {{ item.key }}
     --quick-check
   environment:
     RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
-    RESTIC_PASSWORD_FILE: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
+    RESTIC_PASSWORD_FILE: "{{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
   register: repository_health
   become_user: backup
   become: true
@@ -295,7 +295,7 @@
 - name: Create repository monitoring dashboard
   ansible.builtin.template:
     src: repository-dashboard.json.j2
-    dest: "{{{ common_backup_base_path }}}/dashboards/repository-management.json"
+    dest: "{{ common_backup_base_path }}/dashboards/repository-management.json"
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0640'
@@ -321,10 +321,10 @@
       {% endfor %}
 
       [TOOL] Repository Management:
-      - Initialization: {{{ common_backup_base_path }}}/scripts/init-repositories.sh
-      - Management CLI: {{{ common_backup_base_path }}}/scripts/manage-repositories.sh
-      - Health Monitoring: {{{ common_backup_base_path }}}/scripts/repository-health-check.sh
-      - Performance Analysis: {{{ common_backup_base_path }}}/scripts/repository-performance.py
+      - Initialization: {{ common_backup_base_path }}/scripts/init-repositories.sh
+      - Management CLI: {{ common_backup_base_path }}/scripts/manage-repositories.sh
+      - Health Monitoring: {{ common_backup_base_path }}/scripts/repository-health-check.sh
+      - Performance Analysis: {{ common_backup_base_path }}/scripts/repository-performance.py
 
       [POWER] Automation:
       {% for repo in backup_repositories.keys() %}
@@ -335,7 +335,7 @@
       - Maintenance Timer: repository-maintenance.timer (Active)
 
       [SECURE] Security Features:
-      - Encryption Key Management: {{{ common_backup_base_path }}}/scripts/manage-encryption-keys.sh
+      - Encryption Key Management: {{ common_backup_base_path }}/scripts/manage-encryption-keys.sh
       - Repository Consistency Checks: Automated via timers
       - Access Control: Backup user isolation with proper permissions
 

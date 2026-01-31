@@ -23,7 +23,7 @@
 
           coordinator: {{ inventory_hostname }}
           targets: {{ backup_targets | length }} configured
-          base path: {{{ common_backup_base_path }}}
+          base path: {{ common_backup_base_path }}
           monitoring: {{ backup_monitoring }}
 
   tasks:
@@ -39,9 +39,9 @@
 
           {% for target in backup_targets %}
           {{ target.service_name }}:
-          SSH Key: {{{ common_backup_base_path }}}/keys/{{ target.service_name }}-ssh-key.pub
+          SSH Key: {{ common_backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub
           Target: {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
-          Command: ssh-copy-id -i {{{ common_backup_base_path }}}/keys/{{ target.service_name }}-ssh-key.pub \
+          Command: ssh-copy-id -i {{ common_backup_base_path }}/keys/{{ target.service_name }}-ssh-key.pub \
             {{ target.ssh_user | default(backup_user) }}@{{ target.target_host }}
 
           {% endfor %}

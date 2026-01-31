@@ -27,30 +27,30 @@
 # Pi-hole exporter setup
 - name: Create pihole-exporter user
   user:
-    name: "{{{ dns_pihole_exporter_user }}}"
+    name: "{{ dns_pihole_exporter_user }}"
     system: true
     ansible.builtin.shell: /bin/false
-    home: "{{{ dns_pihole_exporter_install_dir }}}"
+    home: "{{ dns_pihole_exporter_install_dir }}"
     common_create_home: false
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Create pihole-exporter installation directory
   ansible.builtin.file:
-    path: "{{{ dns_pihole_exporter_install_dir }}}"
+    path: "{{ dns_pihole_exporter_install_dir }}"
     state: directory
-    owner: "{{{ dns_pihole_exporter_user }}}"
-    group: "{{{ dns_pihole_exporter_user }}}"
+    owner: "{{ dns_pihole_exporter_user }}"
+    group: "{{ dns_pihole_exporter_user }}"
     mode: '0755'
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 
 - name: Download pihole-exporter binary
   ansible.builtin.get_url:
-    url: "{{{ dns_pihole_exporter_binary_url }}}"
-    dest: "{{{ dns_pihole_exporter_install_dir }}}/pihole_exporter"
-    owner: "{{{ dns_pihole_exporter_user }}}"
-    group: "{{{ dns_pihole_exporter_user }}}"
+    url: "{{ dns_pihole_exporter_binary_url }}"
+    dest: "{{ dns_pihole_exporter_install_dir }}/pihole_exporter"
+    owner: "{{ dns_pihole_exporter_user }}"
+    group: "{{ dns_pihole_exporter_user }}"
     mode: '0755'
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
@@ -68,13 +68,13 @@
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
     service_type: "simple"
-    service_user: "{{{ dns_pihole_exporter_user }}}"
-    service_group: "{{{ dns_pihole_exporter_user }}}"
+    service_user: "{{ dns_pihole_exporter_user }}"
+    service_group: "{{ dns_pihole_exporter_user }}"
     exec_start: >-
-      {{{ dns_pihole_exporter_install_dir }}}/pihole_exporter
-      -pihole_hostname {{{ dns_primary_ip }}}
+      {{ dns_pihole_exporter_install_dir }}/pihole_exporter
+      -pihole_hostname {{ dns_primary_ip }}
       -pihole_password {{ pihole_webpassword }}
-      -port {{{ dns_pihole_exporter_port }}}
+      -port {{ dns_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"
     syslog_identifier: "pihole-exporter"
@@ -83,7 +83,7 @@
     common_protect_system: "strict"
     common_protect_home: "yes"
     common_private_tmp: "yes"
-    common_read_write_paths: ["{{{ dns_pihole_exporter_install_dir }}}"]
+    common_read_write_paths: ["{{ dns_pihole_exporter_install_dir }}"]
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
   notify:
@@ -102,7 +102,7 @@
 - name: Configure firewall for pihole-exporter
   community.general.ufw:
     rule: allow
-    port: "{{{ dns_pihole_exporter_port }}}"
+    port: "{{ dns_pihole_exporter_port }}"
     comment: "Pi-hole Prometheus exporter"
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled

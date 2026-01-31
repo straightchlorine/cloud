@@ -48,7 +48,7 @@
 - name: Validate specified interface exists
   ansible.builtin.fail:
     msg: |
-      Network interface {{{ dns_pihole_interface }}} does not exist.
+      Network interface {{ dns_pihole_interface }} does not exist.
       Available: {{ ansible_interfaces | join(', ') }}
   when: dns_pihole_interface not in ansible_interfaces
 

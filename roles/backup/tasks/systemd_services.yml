@@ -17,12 +17,12 @@
     remain_after_exit: "true"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    common_working_directory: "{{{ common_backup_base_path }}}"
+    common_working_directory: "{{ common_backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ backup_restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
-      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
-    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{ backup_device_role }}.sh"
+      - "RESTIC_PASSWORD_FILE={{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
+      - "RESTIC_CACHE_DIR={{ common_backup_base_path }}/cache/{{ backup_device_role }}"
+    exec_start: "{{ common_backup_base_path }}/scripts/backup-{{ backup_device_role }}.sh"
     common_standard_output: "journal"
     common_standard_error: "journal"
     restart_policy: "no"
@@ -33,7 +33,7 @@
     common_protect_system: "strict"
     common_protect_home: "true"
     common_private_tmp: "true"
-    common_read_write_paths: ["{{{ common_backup_base_path }}}"]
+    common_read_write_paths: ["{{ common_backup_base_path }}"]
   become: true
   notify: reload systemd
 
@@ -62,12 +62,12 @@
     remain_after_exit: "false"
     service_user: "{{ backup_user }}"
     service_group: "{{ backup_group }}"
-    common_working_directory: "{{{ common_backup_base_path }}}"
+    common_working_directory: "{{ common_backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ backup_restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
-      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
-    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-coordinator.sh monitor"
+      - "RESTIC_PASSWORD_FILE={{ common_backup_base_path }}/keys/{{ backup_device_role }}-password"
+      - "RESTIC_CACHE_DIR={{ common_backup_base_path }}/cache/{{ backup_device_role }}"
+    exec_start: "{{ common_backup_base_path }}/scripts/backup-coordinator.sh monitor"
     common_standard_output: "journal"
     common_standard_error: "journal"
     restart_policy: "on-failure"

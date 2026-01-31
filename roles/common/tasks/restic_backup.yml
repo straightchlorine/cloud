@@ -19,7 +19,7 @@
     name: Backup
     system: true
     shell: /bin/bash
-    home: "{{{ common_backup_base_path }}}"
+    home: "{{ common_backup_base_path }}"
     common_create_home: true
     groups: "{{ backup_additional_groups | default([]) }}"
     append: true
@@ -81,15 +81,15 @@
     mode: '0750'
   become: true
   loop:
-    - "{{{ common_backup_base_path }}}/scripts"
-    - "{{{ common_backup_base_path }}}/logs"
-    - "{{{ common_backup_base_path }}}/cache"
-    - "{{{ common_backup_base_path }}}/keys"
+    - "{{ common_backup_base_path }}/scripts"
+    - "{{ common_backup_base_path }}/logs"
+    - "{{ common_backup_base_path }}/cache"
+    - "{{ common_backup_base_path }}/keys"
 
 - name: Create service-specific restic password file
   ansible.builtin.copy:
     content: "{{ restic_password }}"
-    dest: "{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-password"
+    dest: "{{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-password"
     owner: backup
     group: backup
     mode: '0600'
@@ -98,7 +98,7 @@
 
 - name: Create SSH directory for backup user
   ansible.builtin.file:
-    path: "{{{ common_backup_base_path }}}/.ssh"
+    path: "{{ common_backup_base_path }}/.ssh"
     state: directory
     owner: backup
     group: backup
@@ -107,25 +107,25 @@
 
 - name: Verify SSH key exists at configured location
   ansible.builtin.stat:
-    path: "{{{ common_backup_base_path }}}/.ssh/hetzner"
+    path: "{{ common_backup_base_path }}/.ssh/hetzner"
   register: hetzner_key_stat
   become: true
 
 - name: Fail if SSH key is missing
   ansible.builtin.fail:
     msg: |
-      SSH key not found at {{{ common_backup_base_path }}}/.ssh/hetzner
+      SSH key not found at {{ common_backup_base_path }}/.ssh/hetzner
 
       This role requires a pre-configured SSH private key for Hetzner Storage Box access.
-      Please place your SSH private key at: {{{ common_backup_base_path }}}/.ssh/hetzner
-      Then set correct permissions: chmod 600 {{{ common_backup_base_path }}}/.ssh/hetzner
-      And ownership: chown backup:backup {{{ common_backup_base_path }}}/.ssh/hetzner
+      Please place your SSH private key at: {{ common_backup_base_path }}/.ssh/hetzner
+      Then set correct permissions: chmod 600 {{ common_backup_base_path }}/.ssh/hetzner
+      And ownership: chown backup:backup {{ common_backup_base_path }}/.ssh/hetzner
   when: not hetzner_key_stat.stat.exists
   become: true
 
 - name: Fix SSH key permissions if needed
   ansible.builtin.file:
-    path: "{{{ common_backup_base_path }}}/.ssh/hetzner"
+    path: "{{ common_backup_base_path }}/.ssh/hetzner"
     owner: backup
     group: backup
     mode: '0600'
@@ -134,7 +134,7 @@
 
 - name: Create SSH socket directory
   ansible.builtin.file:
-    path: "{{{ common_backup_base_path }}}/.ssh/sockets"
+    path: "{{ common_backup_base_path }}/.ssh/sockets"
     state: directory
     owner: backup
     group: backup
@@ -144,7 +144,7 @@
 - name: Create SSH config for backup connectivity
   ansible.builtin.template:
     src: ssh_config.j2
-    dest: "{{{ common_backup_base_path }}}/.ssh/config"
+    dest: "{{ common_backup_base_path }}/.ssh/config"
     owner: backup
     group: backup
     mode: '0600'
@@ -153,39 +153,39 @@
 - name: Create service backup script
   ansible.builtin.template:
     src: backup-script.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/backup-{{{ common_backup_service_name }}}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh"
     owner: backup
     group: backup
     mode: '0755'
   vars:
-    common_backup_directories: "{{{ common_backup_paths }}}"
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-password"
-    common_backup_cache_dir: "{{{ common_backup_base_path }}}/cache"
-    common_backup_log_dir: "{{{ common_backup_base_path }}}/logs"
+    common_backup_directories: "{{ common_backup_paths }}"
+    common_backup_password_file: "{{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-password"
+    common_backup_cache_dir: "{{ common_backup_base_path }}/cache"
+    common_backup_log_dir: "{{ common_backup_base_path }}/logs"
   become: true
 
 - name: Create repository initialization script
   ansible.builtin.template:
     src: restic-init.sh.j2
-    dest: "{{{ common_backup_base_path }}}/scripts/init-{{{ common_backup_service_name }}}.sh"
+    dest: "{{ common_backup_base_path }}/scripts/init-{{ common_backup_service_name }}.sh"
     owner: backup
     group: backup
     mode: '0755'
   vars:
-    common_backup_password_file: "{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-password"
-    backup_ssh_key_path: "{{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-ssh-key"
+    common_backup_password_file: "{{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-password"
+    backup_ssh_key_path: "{{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-ssh-key"
   become: true
 
 - name: Check if existing systemd service exists
   ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
+    path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
   become: true
   register: existing_service
 
 - name: Backup existing systemd service if it exists
   ansible.builtin.copy:
-    src: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
-    dest: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service.backup"
+    src: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
+    dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service.backup"
     remote_src: true
   become: true
   when: existing_service.stat.exists
@@ -193,29 +193,29 @@
 - name: Create systemd backup service
   ansible.builtin.template:
     src: systemd-service.j2
-    dest: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
+    dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
     owner: root
     group: root
     mode: '0644'
     backup: true
   vars:
-    service_description: "Restic Backup Service for {{{ common_backup_service_name }}}"
+    service_description: "Restic Backup Service for {{ common_backup_service_name }}"
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
     service_type: "oneshot"
     service_user: "backup"
     service_group: "backup"
-    common_working_directory: "{{{ common_backup_base_path }}}"
+    common_working_directory: "{{ common_backup_base_path }}"
     service_environment:
       - "RESTIC_REPOSITORY={{ restic_repository }}"
-      - "RESTIC_PASSWORD_FILE={{{ common_backup_base_path }}}/keys/{{{ common_backup_service_name }}}-password"
-      - "RESTIC_CACHE_DIR={{{ common_backup_base_path }}}/cache"
-      - "RESTIC_SFTP_COMMAND=ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
-    exec_start: "{{{ common_backup_base_path }}}/scripts/backup-{{{ common_backup_service_name }}}.sh"
+      - "RESTIC_PASSWORD_FILE={{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-password"
+      - "RESTIC_CACHE_DIR={{ common_backup_base_path }}/cache"
+      - "RESTIC_SFTP_COMMAND=ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+    exec_start: "{{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh"
     common_standard_output: |
-      append:{{{ common_backup_base_path }}}/logs/systemd-backup-{{{ common_backup_service_name }}}.log
+      append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_standard_error: |
-      append:{{{ common_backup_base_path }}}/logs/systemd-backup-{{{ common_backup_service_name }}}.log
+      append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_timeout_start_sec: "{{ backup_timeout }}"
     enable_security_hardening: true
     no_new_privileges: false
@@ -234,13 +234,13 @@
 - name: Create systemd backup timer
   ansible.builtin.template:
     src: backup-timer.j2
-    dest: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.timer"
+    dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.timer"
     owner: root
     group: root
     mode: '0644'
   vars:
-    timer_description: "Backup Timer for {{{ common_backup_service_name }}}"
-    timer_service: "backup-{{{ common_backup_service_name }}}.service"
+    timer_description: "Backup Timer for {{ common_backup_service_name }}"
+    timer_service: "backup-{{ common_backup_service_name }}.service"
     timer_schedule: "{{ backup_schedule }}"
     timer_randomized_delay: "{{ backup_randomized_delay }}"
   become: true
@@ -255,10 +255,10 @@
     mode: "g+rx"
     recurse: false
   become: true
-  loop: "{{{ common_backup_paths }}}"
+  loop: "{{ common_backup_paths }}"
 
 - name: Initialize restic repository if it doesn't exist
-  ansible.builtin.command: "{{{ common_backup_base_path }}}/scripts/init-{{{ common_backup_service_name }}}.sh"
+  ansible.builtin.command: "{{ common_backup_base_path }}/scripts/init-{{ common_backup_service_name }}.sh"
   become_user: backup
   become: true
   register: repository_init
@@ -273,7 +273,7 @@
 
 - name: Enable and start backup timer
   ansible.builtin.systemd:
-    name: "backup-{{{ common_backup_service_name }}}.timer"
+    name: "backup-{{ common_backup_service_name }}.timer"
     enabled: true
     state: started
     daemon_reload: true
@@ -282,14 +282,14 @@
 
 - name: Get current systemd service checksum
   ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
+    path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
     checksum_algorithm: sha256
   register: current_service_file
   become: true
 
 - name: Force systemd service restart if configuration changed
   ansible.builtin.systemd:
-    name: "backup-{{{ common_backup_service_name }}}.service"
+    name: "backup-{{ common_backup_service_name }}.service"
     state: stopped
     daemon_reload: true
   become: true
@@ -297,7 +297,7 @@
 
 - name: Verify backup service configuration and restart
   ansible.builtin.systemd:
-    name: "backup-{{{ common_backup_service_name }}}.service"
+    name: "backup-{{ common_backup_service_name }}.service"
     daemon_reload: true
     state: stopped
   become: true
@@ -310,7 +310,7 @@
 - name: Verify critical service configuration
   ansible.builtin.shell: |
     grep -i "NoNewPrivileges=false"
-      "/etc/systemd/system/backup-{{{ common_backup_service_name }}}.service"
+      "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
   become: true
   register: service_config_check
   changed_when: false
@@ -318,23 +318,23 @@
 
 - name: Verify deployed service configuration
   ansible.builtin.command:
-    cmd: "systemctl show backup-{{{ common_backup_service_name }}}.service --property=User,NoNewPrivileges,Environment"
+    cmd: "systemctl show backup-{{ common_backup_service_name }}.service --property=User,NoNewPrivileges,Environment"
   register: deployed_service_config
   become: true
 
 - name: Display backup configuration summary
   ansible.builtin.debug:
     msg: |
-      [OK] Unified Restic Backup Configured for {{{ common_backup_service_name }}}:
+      [OK] Unified Restic Backup Configured for {{ common_backup_service_name }}:
 
       common_Repository: {{ restic_repository }}
       common_Schedule: {{ backup_schedule }}
       Backup Paths: {{ backup_paths | join(', ') }}
-      Service: backup-{{{ common_backup_service_name }}}.service
-      Timer: backup-{{{ common_backup_service_name }}}.timer
-      Script: {{{ common_backup_base_path }}}/scripts/backup-{{{ common_backup_service_name }}}.sh
+      Service: backup-{{ common_backup_service_name }}.service
+      Timer: backup-{{ common_backup_service_name }}.timer
+      Script: {{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh
 
-      Logs: {{{ common_backup_base_path }}}/logs/
+      Logs: {{ common_backup_base_path }}/logs/
       common_Status: {{ 'Enabled' if backup_enabled else 'Disabled' }}
       Restic Version: {{ restic_version_check.stdout }}
 

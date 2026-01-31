@@ -35,7 +35,7 @@
 # Backup service restart handler
 - name: Restart backup service
   ansible.builtin.systemd:
-    name: "backup-{{{ common_backup_service_name }}}.service"
+    name: "backup-{{ common_backup_service_name }}.service"
     state: restarted
     daemon_reload: true
   become: true
@@ -43,7 +43,7 @@
 # Backup timer restart handler
 - name: Restart backup timer
   ansible.builtin.systemd:
-    name: "backup-{{{ common_backup_service_name }}}.timer"
+    name: "backup-{{ common_backup_service_name }}.timer"
     state: restarted
     enabled: true
     daemon_reload: true

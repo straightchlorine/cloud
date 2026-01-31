@@ -47,7 +47,7 @@
 
           Host: {{ inventory_hostname }}
           Targets: {{ coordinator_targets | length }} configured
-          Base Path: {{{ common_backup_base_path }}}
+          Base Path: {{ common_backup_base_path }}
 
           Target Services:
           {% for target in coordinator_targets %}
@@ -66,7 +66,7 @@
           #!/bin/bash
           # Backup Coordinator Verification Script
 
-          BACKUP_BASE="{{{ common_backup_base_path }}}"
+          BACKUP_BASE="{{ common_backup_base_path }}"
           echo "[INFO] Verifying Backup Coordinator..."
 
           # Check coordinator services
@@ -110,7 +110,7 @@
           {% for target in coordinator_targets %}
           echo "{{ target.service_name }}: systemctl start backup-{{ target.service_name }}.service"
           {% endfor %}
-        dest: "{{{ common_backup_base_path }}}/scripts/backup-verify-coordinator.sh"
+        dest: "{{ common_backup_base_path }}/scripts/backup-verify-coordinator.sh"
         owner: "{{ backup_user }}"
         ansible.builtin.group: "{{ backup_group }}"
         mode: '0755'
@@ -122,7 +122,7 @@
 
           [stats] coordinator configuration:
           - host: {{ inventory_hostname }}
-          - base path: {{{ common_backup_base_path }}}
+          - base path: {{ common_backup_base_path }}
           - targets: {{ coordinator_targets | length }} services configured
           - monitoring: {{ backup_monitoring }}
 
@@ -137,13 +137,13 @@
           [KEYS] SSH Key Deployment Required:
           {% for target in coordinator_targets %}
           {{ target.service_name }}:
-            ssh-copy-id -i {{{ common_backup_base_path }}}/.ssh/backup-{{ target.service_name }}.pub
+            ssh-copy-id -i {{ common_backup_base_path }}/.ssh/backup-{{ target.service_name }}.pub
             {{ target.ssh_user }}@{{ target.hostname }}
           {% endfor %}
 
           [DEPLOY] Next Steps:
           1. Deploy SSH keys (see commands above)
-          2. Verify setup: {{{ common_backup_base_path }}}/scripts/backup-verify-coordinator.sh
-          3. Test operations: {{{ common_backup_base_path }}}/scripts/backup-manager.sh --status
+          2. Verify setup: {{ common_backup_base_path }}/scripts/backup-verify-coordinator.sh
+          3. Test operations: {{ common_backup_base_path }}/scripts/backup-manager.sh --status
 
           Coordinator ready for enterprise backup operations!

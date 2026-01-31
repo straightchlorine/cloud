@@ -12,7 +12,7 @@
   ansible.builtin.user:
     name: "{{ backup_user }}"
     group: "{{ backup_group }}"
-    home: "{{{ common_backup_base_path }}}"
+    home: "{{ common_backup_base_path }}"
     shell: /bin/bash
     createhome: true
     system: true
@@ -28,13 +28,13 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{{ common_backup_base_path }}}"
-    - "{{{ common_backup_base_path }}}/scripts"
-    - "{{{ common_backup_base_path }}}/logs"
-    - "{{{ common_backup_base_path }}}/cache"
-    - "{{{ common_backup_base_path }}}/.ssh"
-    - "{{{ common_backup_base_path }}}/.ssh/sockets"
-    - "{{{ common_backup_base_path }}}/.ssh/nodes"
+    - "{{ common_backup_base_path }}"
+    - "{{ common_backup_base_path }}/scripts"
+    - "{{ common_backup_base_path }}/logs"
+    - "{{ common_backup_base_path }}/cache"
+    - "{{ common_backup_base_path }}/.ssh"
+    - "{{ common_backup_base_path }}/.ssh/sockets"
+    - "{{ common_backup_base_path }}/.ssh/nodes"
   become: true
 
 - name: Create coordinator-specific directories
@@ -45,7 +45,7 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{{ common_backup_base_path }}}/mounts"
+    - "{{ common_backup_base_path }}/mounts"
   become: true
   when: backup_role == 'coordinator'
 
@@ -57,8 +57,8 @@
     group: "{{ backup_group }}"
     mode: '0700'
   loop:
-    - "{{{ common_backup_base_path }}}/.ssh"
-    - "{{{ common_backup_base_path }}}/.ssh/sockets"
+    - "{{ common_backup_base_path }}/.ssh"
+    - "{{ common_backup_base_path }}/.ssh/sockets"
   become: true
 
 - name: Install required packages (Debian/Ubuntu)

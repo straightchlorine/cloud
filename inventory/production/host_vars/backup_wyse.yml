@@ -26,7 +26,7 @@ coordinator_targets:
     hostname: pihole
     target_host: pihole
     ssh_user: root
-    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-dns"
+    ssh_key: "{{ common_backup_base_path }}/.ssh/nodes/pi-dns"
     backup_schedule: "*-*-* 01:00:00"
     common_backup_paths:
       - /etc
@@ -63,7 +63,7 @@ coordinator_targets:
     hostname: automation
     target_host: automation
     ssh_user: root
-    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-automation"
+    ssh_key: "{{ common_backup_base_path }}/.ssh/nodes/pi-automation"
     backup_schedule: "*-*-* 02:00:00"
     common_backup_paths:
       - /etc
@@ -101,7 +101,7 @@ coordinator_targets:
     hostname: media
     target_host: media
     ssh_user: root
-    ssh_key: "{{{ common_backup_base_path }}}/.ssh/nodes/pi-music"
+    ssh_key: "{{ common_backup_base_path }}/.ssh/nodes/pi-music"
     backup_schedule: "*-*-* 03:00:00"
     common_backup_paths:
       - /etc

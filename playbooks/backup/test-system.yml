@@ -30,11 +30,11 @@
         path: "{{ item }}"
       register: infrastructure_test
       loop:
-        - "{{{ common_backup_base_path }}}"
-        - "{{{ common_backup_base_path }}}/scripts"
-        - "{{{ common_backup_base_path }}}/logs"
-        - "{{{ common_backup_base_path }}}/keys"
-        - "{{{ common_backup_base_path }}}/metrics"
+        - "{{ common_backup_base_path }}"
+        - "{{ common_backup_base_path }}/scripts"
+        - "{{ common_backup_base_path }}/logs"
+        - "{{ common_backup_base_path }}/keys"
+        - "{{ common_backup_base_path }}/metrics"
 
     - name: Verify infrastructure exists
       ansible.builtin.fail:
@@ -46,7 +46,7 @@
 
     - name: Test backup scripts syntax
       ansible.builtin.shell: |
-        bash -n {{{ common_backup_base_path }}}/scripts/backup-{{ item.service_name }}.sh
+        bash -n {{ common_backup_base_path }}/scripts/backup-{{ item.service_name }}.sh
       become: true
       become_user: "{{ backup_user }}"
       register: script_syntax_test
@@ -56,7 +56,7 @@
 
     - name: Test restore scripts syntax
       ansible.builtin.shell: |
-        bash -n {{{ common_backup_base_path }}}/scripts/enterprise-restore-{{ item.service_name }}.sh
+        bash -n {{ common_backup_base_path }}/scripts/enterprise-restore-{{ item.service_name }}.sh
       become: true
       become_user: "{{ backup_user }}"
       register: restore_syntax_test
@@ -67,7 +67,7 @@
     - name: Test SSH connectivity to targets
       ansible.builtin.shell: |
         set -o pipefail
-        ssh -i {{{ common_backup_base_path }}}/keys/{{ item.service_name }}-ssh-key \
+        ssh -i {{ common_backup_base_path }}/keys/{{ item.service_name }}-ssh-key \
             -o ConnectTimeout=10 \
             -o BatchMode=yes \
             {{ item.ssh_user | default(backup_user) }}@{{ item.target_host }} \
@@ -83,8 +83,8 @@
       ansible.builtin.shell: |
         set -o pipefail
         export RESTIC_REPOSITORY="{{ item.restic_repository }}"
-        export RESTIC_PASSWORD_FILE="{{{ common_backup_base_path }}}/keys/{{ item.service_name }}-password"
-        export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache/{{ item.service_name }}"
+        export RESTIC_PASSWORD_FILE="{{ common_backup_base_path }}/keys/{{ item.service_name }}-password"
+        export RESTIC_CACHE_DIR="{{ common_backup_base_path }}/cache/{{ item.service_name }}"
         restic snapshots --json | jq length 2>/dev/null || echo "0"
       become: true
       become_user: "{{ backup_user }}"
@@ -104,7 +104,7 @@
 
     - name: Test monitoring scripts
       ansible.builtin.command: >
-        {{{ common_backup_base_path }}}/scripts/backup-health-monitor.sh
+        {{ common_backup_base_path }}/scripts/backup-health-monitor.sh
       become: true
       become_user: "{{ backup_user }}"
       register: monitoring_test
@@ -115,7 +115,7 @@
       ansible.builtin.shell: |
         # Override backup script to do dry run
         export DRY_RUN=true
-        {{{ common_backup_base_path }}}/scripts/backup-{{ backup_targets[0].service_name }}.sh
+        {{ common_backup_base_path }}/scripts/backup-{{ backup_targets[0].service_name }}.sh
       become: true
       become_user: "{{ backup_user }}"
       register: backup_dry_run_test
