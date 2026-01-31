@@ -12,7 +12,6 @@ repos:
         entry: bash -c 'cd roles/common && molecule test --scenario-name default'
         language: system
         pass_filenames: false
-        stages: [push]
         verbose: true
 
   # Infrastructure validation dry-run
@@ -22,10 +21,9 @@ repos:
         name: Infrastructure validation (dry-run)
         entry: >-
           bash -c 'ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment
-          --check --diff || true'
+          --check || true'
         language: system
         pass_filenames: false
-        stages: [push]
         verbose: true
 
   # Playbook syntax validation for all playbooks
@@ -36,7 +34,6 @@ repos:
         entry: bash -c 'find playbooks -name "*.yml" -exec ansible-playbook --syntax-check {} \; 2>/dev/null || true'
         language: system
         pass_filenames: false
-        stages: [push]
 
 default_language_version:
   python: python3
