@@ -3,7 +3,7 @@
 # Runs on every push/PR to provide quick feedback
 
 when:
-  - event: [push, pull_request]
+  event: [push, pull_request]
 
 steps:
   - name: checkout

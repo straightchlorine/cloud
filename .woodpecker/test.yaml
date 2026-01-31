@@ -4,15 +4,15 @@
 # Runs on push to branches and pull requests
 
 when:
-  - event:
-      - push
-      - pull_request
-      - manual
-    branch:
-      - main
-      - master
-      - develop
-      - feature/*
+  event:
+    - push
+    - pull_request
+    - manual
+  branch:
+    - main
+    - master
+    - develop
+    - feature/*
 
 # Matrix strategy for multi-OS testing across all roles
 matrix:

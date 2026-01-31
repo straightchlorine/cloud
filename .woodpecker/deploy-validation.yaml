@@ -4,8 +4,8 @@
 # Runs on tag creation and deployment events
 
 when:
-  - event: [tag, deployment, manual]
-    branch: [main, master, production]
+  event: [tag, deployment, manual]
+  branch: [main, master, production]
 
 steps:
   - name: checkout
