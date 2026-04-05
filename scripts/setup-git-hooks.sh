@@ -77,6 +77,21 @@ else
     exit 1
 fi
 
+# Configure repo-local git settings for safety and workflow
+echo ""
+echo "Configuring repo-local git settings..."
+git config --local pull.rebase true
+git config --local push.default current
+git config --local push.autoSetupRemote true
+git config --local merge.conflictstyle zdiff3
+git config --local diff.algorithm histogram
+git config --local rerere.enabled true
+git config --local fetch.prune true
+git config --local core.autocrlf input
+git config --local branch.autoSetupMerge always
+git config --local rebase.autoStash true
+echo "  Repo-local git config applied"
+
 # Display usage information
 echo ""
 echo "==============================================="
@@ -89,7 +104,7 @@ echo "  - Pre-push: Runs automatically on 'git push'"
 echo ""
 echo "Manual execution:"
 echo "  - Run pre-commit checks: pre-commit run --all-files"
-echo "  - Run pre-push checks: pre-commit run --hook-stage push --all-files"
+echo "  - Run pre-push checks: pre-commit run --hook-stage push --all-files -c .pre-push-config.yaml"
 echo ""
 echo "Skip hooks (not recommended):"
 echo "  - Skip pre-commit: git commit --no-verify"

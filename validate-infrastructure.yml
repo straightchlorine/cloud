@@ -99,7 +99,7 @@
       block:
         - name: Run common backup validation
           ansible.builtin.include_role:
-            name: Common
+            name: common
             tasks_from: backup_validation
 
         - name: Run role-specific backup validation
@@ -128,7 +128,7 @@
 
         - name: Run template rendering validation
           ansible.builtin.include_role:
-            name: Common
+            name: common
             tasks_from: template_validation
           when: quick_mode is defined and quick_mode is not defined or not quick_mode
       when: run_vault_validation
@@ -138,7 +138,7 @@
       block:
         - name: Run common service startup validation
           ansible.builtin.include_role:
-            name: Common
+            name: common
             tasks_from: service_startup_validation
 
         - name: Run role-specific service startup validation
@@ -157,17 +157,17 @@
       block:
         - name: Validate domain resolution and SSL prerequisites
           ansible.builtin.include_role:
-            name: Automation
+            name: automation
             tasks_from: ssl_domain_validate
 
         - name: Validate Traefik routing configuration
           ansible.builtin.include_role:
-            name: Automation
+            name: automation
             tasks_from: traefik_routing_validate
 
         - name: Validate DNS01 challenge prerequisites
           ansible.builtin.include_role:
-            name: Automation
+            name: automation
             tasks_from: dns01_prerequisites
       when:
         - run_ssl_domain_validation
@@ -178,7 +178,7 @@
       block:
         - name: Run common port connectivity tests
           ansible.builtin.include_role:
-            name: Common
+            name: common
             tasks_from: port_connectivity_test
 
         - name: Run role-specific post-deployment validation
