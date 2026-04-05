@@ -1,6 +1,6 @@
 ---
-# Woodpecker CI pipeline - Fast linting and validation
-# Runs on every push/PR to provide quick feedback
+# Woodpecker CI — Linting, syntax checks, and validation
+# Runs once per push (no matrix), fast feedback
 
 when:
   event: [push, pull_request]
@@ -10,6 +10,16 @@ steps:
     image: woodpeckerci/plugin-git:2
     settings:
       depth: 1
+
+  - name: install-collections
+    image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
+    commands:
+      - mkdir -p /root/.ansible/collections/ansible_collections
+      - >-
+        ansible-galaxy collection install -r requirements.yml
+        -p /root/.ansible/collections || true
 
   - name: ansible-lint
     image: cytopia/ansible-lint:latest
@@ -24,9 +34,38 @@ steps:
   - name: shellcheck
     image: koalaman/shellcheck-alpine:stable
     commands:
-      - find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} \;
+      - >-
+        find . -name "*.sh" -not -path "./.git/*"
+        -exec shellcheck {} \;
 
-  - name: markdown-lint
-    image: davidanson/markdownlint-cli2:latest
+  - name: syntax-check
+    image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
+      ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
     commands:
-      - markdownlint-cli2 "**/*.md" "#CHANGELOG.md" || true
+      - chmod 755 ${CI_WORKSPACE}
+      - >-
+        ansible-playbook --syntax-check
+        playbooks/site.yml
+        playbooks/music-stack.yml
+        playbooks/automation-stack.yml
+        playbooks/backup/deploy-full-system.yml
+        playbooks/backup/deploy-coordinator.yml
+        playbooks/backup/test-system.yml
+        validate-infrastructure.yml
+        prometheus-exporters.yml
+        deploy-rclone-to-hosts.yml
+        backup-coordinator.yml
+        backup-deploy.yml
+
+  - name: validate-infrastructure
+    image: cytopia/ansible:latest-tools
+    environment:
+      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
+      ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
+    commands:
+      - chmod 755 ${CI_WORKSPACE}
+      - >-
+        ansible-playbook validate-infrastructure.yml
+        -e validation_type=pre_deployment --check

@@ -1,7 +1,9 @@
 ---
-# Woodpecker CI pipeline - Comprehensive testing with Molecule
-# Matrix testing across multiple OS versions
-# Runs on push to branches and pull requests
+# Woodpecker CI — Molecule tests (matrix)
+# Depends on lint passing first — won't run if lint fails
+
+depends_on:
+  - lint
 
 when:
   event:
@@ -14,7 +16,6 @@ when:
     - develop
     - feature/*
 
-# Matrix strategy for multi-OS testing across all roles
 matrix:
   PLATFORM:
     - debian12
@@ -39,53 +40,6 @@ steps:
     settings:
       depth: 1
 
-  # Install Ansible collections - only run once
-  - name: install-collections
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-    commands:
-      - mkdir -p /root/.ansible/collections/ansible_collections
-      - ansible-galaxy collection install -r requirements.yml -p /root/.ansible/collections || true
-    when:
-      matrix:
-        PLATFORM: debian12
-
-  # Linting - only run once
-  - name: lint
-    image: cytopia/ansible-lint:latest
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-    commands:
-      - ansible-lint roles/ playbooks/
-    when:
-      matrix:
-        PLATFORM: debian12
-
-  # Syntax check - only run once
-  - name: syntax-check
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-    commands:
-      - >-
-        ansible-playbook --syntax-check
-        playbooks/site.yml
-        playbooks/music-stack.yml
-        playbooks/automation-stack.yml
-        playbooks/backup/deploy-full-system.yml
-        playbooks/backup/deploy-coordinator.yml
-        playbooks/backup/test-system.yml
-        validate-infrastructure.yml
-        prometheus-exporters.yml
-        deploy-rclone-to-hosts.yml
-        backup-coordinator.yml
-        backup-deploy.yml
-    when:
-      matrix:
-        PLATFORM: debian12
-
-  # Molecule tests with Podman - runs for each matrix platform and role
   - name: molecule-test
     image: quay.io/podman/stable:latest
     pull: true
@@ -110,14 +64,3 @@ steps:
       - molecule test
     environment:
       MOLECULE_PLATFORM: ${PLATFORM}
-
-  # Infrastructure validation dry-run - only run once
-  - name: validate-infrastructure
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-    commands:
-      - ansible-playbook validate-infrastructure.yml -e validation_type=pre_deployment --check
-    when:
-      matrix:
-        PLATFORM: debian12
