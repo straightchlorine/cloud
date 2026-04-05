@@ -10,26 +10,29 @@
       Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
-  register: cloudflare_zones
+  register: automation_cloudflare_zones
   no_log: true
   tags: [dns01_validation]
 
 - name: Find zone ID for domain
   ansible.builtin.set_fact:
-    domain_zone: "{{ cloudflare_zones.json.result | selectattr('name', 'equalto', domain_name) | first | default({}) }}"
+    automation_domain_zone: >-
+      {{ automation_cloudflare_zones.json.result |
+      selectattr('name', 'equalto', domain_name) |
+      first | default({}) }}
   tags: [dns01_validation]
 
 - name: Validate domain zone exists in Cloudflare
   ansible.builtin.fail:
     msg: |
       Domain {{ automation_domain_name }} not found in Cloudflare account.
-      Available zones: {{ cloudflare_zones.json.result | map(attribute='name') | list }}
-  when: domain_zone == {}
+      Available zones: {{ automation_cloudflare_zones.json.result | map(attribute='name') | list }}
+  when: automation_domain_zone == {}
   tags: [dns01_validation]
 
 - name: Test DNS record creation permissions
   ansible.builtin.uri:
-    url: "https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records"
+    url: "https://api.cloudflare.com/client/v4/zones/{{ automation_domain_zone.id }}/dns_records"
     method: POST
     headers:
       Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
@@ -41,34 +44,38 @@
       content: "ansible-validation-test-{{ ansible_date_time.epoch }}"
       ttl: 120
     timeout: 15
-  register: dns_record_test
+  register: automation_dns_record_test
   failed_when: false
   no_log: true
   tags: [dns01_validation]
 
 - name: Clean up test DNS record
   ansible.builtin.uri:
-    url: |
-      https://api.cloudflare.com/client/v4/zones/{{ domain_zone.id }}/dns_records/{{ dns_record_test.json.result.id }}
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{
+      automation_domain_zone.id }}/dns_records/{{
+      automation_dns_record_test.json.result.id }}
     method: DELETE
     headers:
       Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
-  when: dns_record_test.json.success | default(false)
+  when: automation_dns_record_test.json.success | default(false)
   no_log: true
   tags: [dns01_validation]
 
 - name: Validate DNS record creation succeeded
   ansible.builtin.fail:
-    msg: "Failed to create DNS records. API Error: {{ dns_record_test.json.errors | default('Unknown error') }}"
-  when: not dns_record_test.json.success | default(false)
+    msg: >-
+      Failed to create DNS records. API Error:
+      {{ automation_dns_record_test.json.errors | default('Unknown error') }}
+  when: not automation_dns_record_test.json.success | default(false)
   tags: [dns01_validation]
 
 - name: Test DNS propagation speed
   ansible.builtin.command: |
     dig +short TXT _acme-challenge.{{ automation_domain_name }} @1.1.1.1
-  register: propagation_test
+  register: automation_propagation_test
   changed_when: false
   failed_when: false
   tags: [dns01_validation]
@@ -78,15 +85,16 @@
     url: "https://crt.sh/?q={{ automation_domain_name }}&output=json"
     method: GET
     timeout: 10
-  register: certificate_transparency
+  register: automation_certificate_transparency
   failed_when: false
   tags: [dns01_validation]
 
 - name: Count recent certificates for rate limit check
   ansible.builtin.set_fact:
-    recent_certificates: |
-      {{ certificate_transparency.json | default([]) | selectattr('not_after', 'match', '.*') | list | length }}
-  when: certificate_transparency.status == 200
+    automation_recent_certificates: |
+      {{ automation_certificate_transparency.json | default([]) |
+      selectattr('not_after', 'match', '.*') | list | length }}
+  when: automation_certificate_transparency.status == 200
   tags: [dns01_validation]
 
 - name: Test connectivity to Let's Encrypt ACME server
@@ -96,7 +104,7 @@
       else 'https://acme-v02.api.letsencrypt.org/directory' }}
     method: GET
     timeout: 15
-  register: acme_server_test
+  register: automation_acme_server_test
   tags: [dns01_validation]
 
 - name: Validate Traefik DNS challenge configuration
@@ -139,7 +147,7 @@
 - name: Validate certificate storage permissions
   ansible.builtin.stat:
     path: "{{ automation_data_path }}/traefik"
-  register: traefik_data_dir
+  register: automation_traefik_data_dir
   tags: [dns01_validation]
 
 - name: Check disk space for certificate storage
@@ -155,23 +163,26 @@
       [SECURE] DNS01 Challenge Prerequisites Validation:
 
       Cloudflare Configuration:
-      API Authentication: {{ '[OK] Valid' if cloudflare_zones.json.success else '[FAIL] Failed' }}
-      Domain Zone Access: {{ '[OK] Found' if domain_zone != {} else '[FAIL] Missing' }}
-      Zone ID: {{ domain_zone.id | default('Not found') }}
-      Zone Status: {{ domain_zone.status | default('Unknown') }}
+      API Authentication: {{ '[OK] Valid' if automation_cloudflare_zones.json.success else '[FAIL] Failed' }}
+      Domain Zone Access: {{ '[OK] Found' if automation_domain_zone != {} else '[FAIL] Missing' }}
+      Zone ID: {{ automation_domain_zone.id | default('Not found') }}
+      Zone Status: {{ automation_domain_zone.status | default('Unknown') }}
       DNS Record Permissions: {{
-          '[OK] Can create/delete' if dns_record_test.json.success | default(false)
+          '[OK] Can create/delete' if automation_dns_record_test.json.success | default(false)
           else '[FAIL] Insufficient permissions' }}
 
       Let's Encrypt Connectivity:
       ACME Server: {{
-          '[OK] Reachable' if acme_server_test.status == 200 else '[FAIL] Unreachable' }}
+          '[OK] Reachable' if automation_acme_server_test.status == 200 else '[FAIL] Unreachable' }}
       Server Type: {{ 'Staging' if letsencrypt_staging else 'Production' }}
       Rate Limit Status: {{
-          '[OK] Safe' if (recent_certificates | default(0) | int) < 20 else '[WARN]  High certificate count' }}
+          '[OK] Safe' if (automation_recent_certificates | default(0) | int) < 20
+          else '[WARN]  High certificate count' }}
 
       DNS Propagation:
-      Test Query Response: {{ '[OK] DNS working' if propagation_test.rc == 0 else '[WARN]  Check DNS setup' }}
+      Test Query Response: {{
+          '[OK] DNS working' if automation_propagation_test.rc == 0
+          else '[WARN]  Check DNS setup' }}
       Propagation Speed: Fast (Cloudflare)
 
       Container Environment:
@@ -183,8 +194,8 @@
           '[OK] Working' if 'cannot reach' not in container_api_test.stdout else '[FAIL] Network issue' }}
 
       Storage Configuration:
-      Certificate Directory: {{ '[OK] Accessible' if traefik_data_dir.stat.exists else '[FAIL] Missing' }}
-      Directory Permissions: {{ traefik_data_dir.stat.mode | default('Unknown') }}
+      Certificate Directory: {{ '[OK] Accessible' if automation_traefik_data_dir.stat.exists else '[FAIL] Missing' }}
+      Directory Permissions: {{ automation_traefik_data_dir.stat.mode | default('Unknown') }}
       Available Space: {{ (cert_storage_space.stdout | int / 1024) | round(1) }}MB
 
       [DEPLOY] DNS01 challenge prerequisites validated!

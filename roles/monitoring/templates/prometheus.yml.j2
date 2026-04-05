@@ -2,8 +2,8 @@
 # Scrapes metrics from all service machines in the infrastructure
 
 global:
-  scrape_interval: {{ prometheus_scrape_interval }}
-  evaluation_interval: {{ prometheus_evaluation_interval }}
+  scrape_interval: {{ monitoring_prometheus_scrape_interval }}
+  evaluation_interval: {{ monitoring_prometheus_evaluation_interval }}
   external_labels:
     monitor: 'infrastructure-monitor'
     cluster: 'home-lab'

@@ -57,7 +57,7 @@
       become_user: "{{ ansible_user }}"
       tags: [verification]
 
-    - name: Verify automation stack services
+    - name: Verify automation stack services  # noqa: var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: common
         tasks_from: service_verification

@@ -4,12 +4,12 @@
 
 - name: Check if Docker is already installed
   ansible.builtin.command: docker --version
-  register: docker_check
+  register: common_docker_check
   failed_when: false
   changed_when: false
 
 - name: Install Docker if not present
-  when: docker_check.rc != 0
+  when: common_docker_check.rc != 0
   block:
     - name: Remove conflicting Docker packages
       ansible.builtin.apt:
@@ -110,14 +110,14 @@
 
 - name: Verify Docker Compose plugin installation
   ansible.builtin.command: docker compose version
-  register: docker_compose_check
+  register: common_docker_compose_check
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
 
 - name: Test Docker installation with namespace mapping
   ansible.builtin.command: docker run --rm hello-world
-  register: docker_test
+  register: common_docker_test
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false

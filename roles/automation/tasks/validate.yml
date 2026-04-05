@@ -2,14 +2,14 @@
 # Automation stack deployment validation
 # Uses unified validation framework to eliminate redundancy
 
-- name: Run automation stack comprehensive validation
+- name: Run automation stack comprehensive validation  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
   vars:
     validation_context: "automation stack"
     validation_type: "full"
-    role_name: "automation"
+    validation_role: "automation"
     required_variables:
       - domain_name
       - vault_domain_name
@@ -21,7 +21,7 @@
       - automation_gid
       - vault_traefik_basic_auth
       - vault_cloudflare_api_token
-      - services_enabled
+      - automation_services_enabled
       - restic_enabled
       - restic_repository
       - restic_password
@@ -52,8 +52,8 @@
 - name: Validate automation parent directories exist
   ansible.builtin.stat:
     path: "{{ item | dirname }}"
-  register: parent_path_check
-  failed_when: not parent_path_check.stat.exists or not parent_path_check.stat.isdir
+  register: automation_parent_path_check
+  failed_when: not automation_parent_path_check.stat.exists or not automation_parent_path_check.stat.isdir
   loop:
     - "{{ automation_data_path }}"
     - "{{ automation_stack_home }}"
@@ -61,7 +61,7 @@
 - name: Check if automation directories exist
   ansible.builtin.stat:
     path: "{{ item }}"
-  register: dir_check
+  register: automation_dir_check
   loop:
     - "{{ automation_data_path }}"
     - "{{ automation_stack_home }}"
@@ -74,7 +74,7 @@
     group: "{{ automation_user }}"
     mode: "0755"
   when: not item.stat.exists
-  loop: "{{ dir_check.results }}"
+  loop: "{{ automation_dir_check.results }}"
   loop_control:
     label: "{{ item.item }}"
   become: true
@@ -83,7 +83,7 @@
   ansible.builtin.getent:
     database: passwd
     key: "{{ automation_user }}"
-  register: user_check
+  register: automation_user_check
   failed_when: false
 
 - name: Validate UID/GID are numeric
@@ -97,7 +97,7 @@
   ansible.builtin.wait_for:
     port: "{{ item }}"
     timeout: 1
-  register: port_check
+  register: automation_port_check
   failed_when: false
   loop:
     - "{{ automation_traefik_web_port }}"
@@ -108,24 +108,24 @@
   ansible.builtin.fail:
     msg: "Port {{ item.item }} is already in use"
   when: item.elapsed is defined and item.elapsed < 1
-  loop: "{{ port_check.results }}"
+  loop: "{{ automation_port_check.results }}"
   loop_control:
     label: "{{ item.item }}"
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
     name: Docker
-  register: docker_status
+  register: automation_docker_status
 
 - name: Fail if Docker is not active
   ansible.builtin.fail:
     msg: "Docker service is not running. Install and start Docker before deploying automation stack."
-  when: docker_status.status.ActiveState != "active"
+  when: automation_docker_status.status.ActiveState != "active"
 
 - name: Check Docker Compose is available
   ansible.builtin.command: docker compose version
-  register: compose_check
-  failed_when: compose_check.rc != 0
+  register: automation_compose_check
+  failed_when: automation_compose_check.rc != 0
   changed_when: false
 
 - name: Verify internet connectivity for container pulls
@@ -136,15 +136,15 @@
 
 - name: Check available disk space for containers
   ansible.builtin.shell: df {{ automation_data_path | dirname }} | tail -1 | awk '{print $4}'
-  register: disk_space
+  register: automation_disk_space
   changed_when: false
 
 - name: Fail if insufficient disk space
   ansible.builtin.fail:
     msg: >-
-      Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Insufficient disk space. Available: {{ (automation_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
       Required: 5GB minimum
-  when: (disk_space.stdout | int) < 5242880
+  when: (automation_disk_space.stdout | int) < 5242880
 
 - name: Validate domain name format
   ansible.builtin.fail:
@@ -153,11 +153,11 @@
 
 - name: Test DNS resolution for domain
   ansible.builtin.command: nslookup {{ automation_domain_name }}
-  register: domain_dns_check
+  register: automation_domain_dns_check
   failed_when: false
   changed_when: false
 
 - name: Warn if domain DNS not configured
   ansible.builtin.debug:
     msg: "WARNING: Domain {{ automation_domain_name }} does not resolve. SSL certificates may fail."
-  when: domain_dns_check.rc != 0
+  when: automation_domain_dns_check.rc != 0

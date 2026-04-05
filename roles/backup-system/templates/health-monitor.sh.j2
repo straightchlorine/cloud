@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{{ common_backup_base_path }}}"
+BACKUP_BASE="{{ backup_base_path }}"
 BACKUP_USER="{{ backup_user }}"
 HEALTH_LOG="$BACKUP_BASE/logs/health-monitor-$(date +%Y%m%d).log"
 ALERT_THRESHOLD_HOURS="{{ backup_alert_threshold_hours | default('25') }}"
@@ -187,7 +187,7 @@ check_ssh_connectivity() {
     if ! timeout 15 ssh -i "$ssh_key" \
                       -o ConnectTimeout=10 \
                       -o BatchMode=yes \
-                      -o StrictHostKeyChecking=no \
+                      -o StrictHostKeyChecking=accept-new \
                       "$ssh_user@$target_host" \
                       "echo 'SSH OK'" >/dev/null 2>&1; then
         alert "CRITICAL" "{{ target.service_name }}" "SSH connectivity failed to $target_host"

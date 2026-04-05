@@ -76,7 +76,7 @@ check_prerequisites() {
 test_connectivity() {
     log "Testing repository connectivity..."
 
-    if ssh -i {{ backup_ssh_config.key_path }} -p {{ backup_ssh_config.port }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} "echo 'Connection test successful'" >/dev/null 2>&1; then
+    if ssh -i {{ backup_ssh_config.key_path }} -p {{ backup_ssh_config.port }} -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} "echo 'Connection test successful'" >/dev/null 2>&1; then
         log "Repository connectivity test passed"
     else
         error_exit "Cannot connect to backup repository"

@@ -68,20 +68,22 @@
     url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     method: GET
     timeout: 10
-  register: pihole_exporter_health
+  register: prom_exp_pihole_exporter_health
   retries: 3
   delay: 5
-  until: pihole_exporter_health.status == 200
+  until: prom_exp_pihole_exporter_health.status == 200
 
 - name: Test Pi-hole connectivity from exporter
   ansible.builtin.uri:
-    url: "http://{{ prometheus_exporters_pihole_exporter_pihole_hostname }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/api.php"
+    url: >-
+      http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
+      }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/api.php
     method: GET
     timeout: 5
-  register: pihole_api_test
+  register: prom_exp_pihole_api_test
   failed_when: false
 
 - name: Warn if Pi-hole API not accessible
   ansible.builtin.debug:
     msg: "WARNING: Pi-hole API not accessible. Pi-hole Exporter may not collect all metrics."
-  when: pihole_api_test.status != 200
+  when: prom_exp_pihole_api_test.status != 200

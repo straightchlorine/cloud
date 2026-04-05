@@ -28,7 +28,7 @@ Before={{ before }}
 [Service]
 Type={{ service_type }}
 {% if service_type == 'oneshot' %}
-RemainAfterExit={{ remain_after_exit }}
+RemainAfterExit={{ common_remain_after_exit }}
 {% endif %}
 {% if service_user is defined %}
 User={{ service_user }}
@@ -79,8 +79,8 @@ SyslogIdentifier={{ syslog_identifier }}
 {% endif %}
 
 # Restart configuration
-Restart={{ restart_policy }}
-RestartSec={{ restart_sec }}
+Restart={{ common_restart_policy }}
+RestartSec={{ common_restart_sec }}
 {% if timeout_start_sec is defined %}
 TimeoutStartSec={{{ common_timeout_start_sec }}}
 {% endif %}
@@ -92,9 +92,9 @@ KillMode={{ kill_mode }}
 {% endif %}
 
 # Security hardening (configurable)
-{% if enable_security_hardening %}
+{% if common_enable_security_hardening %}
 # Process security
-NoNewPrivileges={{ no_new_privileges }}
+NoNewPrivileges={{ common_no_new_privileges }}
 {% if protect_system is defined %}
 ProtectSystem={{{ common_protect_system }}}
 {% endif %}

@@ -16,7 +16,7 @@
     name: common
     tasks_from: packages
   vars:
-    role_specific_packages: "{{ dns_pihole_packages }}"
+    role_specific_packages: "{{ dns_pihole_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
 - name: Clone Pi-hole repository for secure installation
@@ -27,19 +27,19 @@
     depth: 1
     force: true
   become: true
-  register: pihole_clone
+  register: dns_pihole_clone
 
 - name: Verify Pi-hole installer exists in repository
   ansible.builtin.stat:
     path: /tmp/pi-hole-repo/automated install/basic-install.sh
-  register: pihole_installer
-  failed_when: not pihole_installer.stat.exists or pihole_installer.stat.size < 1000
+  register: dns_pihole_installer
+  failed_when: not dns_pihole_installer.stat.exists or dns_pihole_installer.stat.size < 1000
 
 - name: Verify Pi-hole repository commit
   ansible.builtin.shell: |
     cd /tmp/pi-hole-repo
     git rev-parse --verify HEAD
-  register: pihole_commit_hash
+  register: dns_pihole_commit_hash
   become: true
   changed_when: false
 
@@ -48,10 +48,10 @@
     msg: |
       Pi-hole repository cloned successfully
       Version: {{ dns_pihole_version }}
-      Commit: {{ pihole_commit_hash.stdout }}
+      Commit: {{ dns_pihole_commit_hash.stdout }}
       Install script location: /tmp/pi-hole-repo/automated install/basic-install.sh
-      Script size: {{ pihole_installer.stat.size }} bytes
-      Last modified: {{ pihole_installer.stat.mtime }}
+      Script size: {{ dns_pihole_installer.stat.size }} bytes
+      Last modified: {{ dns_pihole_installer.stat.mtime }}
 
       Security enhancements implemented:
       [OK] Using official GitHub repository (not direct script download)
@@ -103,7 +103,7 @@
 
 - name: Configure automatic updates
   ansible.builtin.include_tasks: auto_updates.yml
-  when: auto_updates_enabled
+  when: dns_auto_updates_enabled
 
 - name: Configure firewall
   ansible.builtin.include_role:

@@ -19,11 +19,11 @@
       rescue:
         - name: Capture expected validation failure
           ansible.builtin.set_fact:
-            validation_failed: true
-            validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
+            monitoring_validation_failed: true
+            monitoring_validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
 
         - name: Display validation failure message
           ansible.builtin.debug:
             msg: |
               [OK] Validation correctly failed (expected behavior)
-              Error: {{ validation_error }}
+              Error: {{ monitoring_validation_error }}

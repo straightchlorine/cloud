@@ -6,5 +6,5 @@
 Defaults:backup !requiretty
 Defaults:backup env_keep += "RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR RESTIC_SFTP_COMMAND"
 
-# Backup user can run restic as root
-backup ALL=(root) NOPASSWD: ALL
+# Backup user can run restic and rclone as root
+backup ALL=(root) NOPASSWD: /usr/bin/restic *, /usr/bin/rclone *

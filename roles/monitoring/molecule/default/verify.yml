@@ -15,14 +15,14 @@
       ansible.builtin.getent:
         database: passwd
         key: "{{ monitoring_user }}"
-      register: monitoring_user_check
+      register: monitoring_user_result
 
     - name: Assert monitoring user exists with correct UID/GID
       ansible.builtin.assert:
         that:
-          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'] is defined
-          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'][1] | int == 3000
-          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'][2] | int == 3000
+          - monitoring_user_result.ansible_facts.getent_passwd['monitoring'] is defined
+          - monitoring_user_result.ansible_facts.getent_passwd['monitoring'][1] | int == 3000
+          - monitoring_user_result.ansible_facts.getent_passwd['monitoring'][2] | int == 3000
         fail_msg: |
           Monitoring user check failed
           Expected UID: 3000, GID: 3000
@@ -32,7 +32,7 @@
     - name: Verify monitoring base directories exist
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: base_dir_stat
+      register: monitoring_base_dir_stat
       loop:
         - "{{ monitoring_config_path }}"
         - "{{ monitoring_data_path }}"
@@ -46,7 +46,7 @@
           - item.stat.isdir
         fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
         success_msg: "[OK] Directory verified: {{ item.item }}"
-      loop: "{{ base_dir_stat.results }}"
+      loop: "{{ monitoring_base_dir_stat.results }}"
       loop_control:
         label: "{{ item.item }}"
 
@@ -54,7 +54,7 @@
     - name: Verify config subdirectories exist
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: config_dir_stat
+      register: monitoring_config_dir_stat
       loop:
         - "{{ monitoring_config_path }}/grafana"
         - "{{ monitoring_config_path }}/prometheus"
@@ -68,7 +68,7 @@
           - item.stat.isdir
         fail_msg: "Config subdirectory {{ item.item }} does not exist or is not a directory"
         success_msg: "[OK] Config subdirectory verified: {{ item.item }}"
-      loop: "{{ config_dir_stat.results }}"
+      loop: "{{ monitoring_config_dir_stat.results }}"
       loop_control:
         label: "{{ item.item }}"
 
@@ -76,7 +76,7 @@
     - name: Verify configuration files exist
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: config_file_stat
+      register: monitoring_config_file_stat
       loop:
         - "{{ monitoring_config_path }}/prometheus/prometheus.yml"
         - "{{ monitoring_config_path }}/grafana/grafana.ini"
@@ -89,7 +89,7 @@
           - item.stat.exists
         fail_msg: "Configuration file {{ item.item }} does not exist"
         success_msg: "[OK] Configuration file exists: {{ item.item }}"
-      loop: "{{ config_file_stat.results }}"
+      loop: "{{ monitoring_config_file_stat.results }}"
       loop_control:
         label: "{{ item.item }}"
 
@@ -97,7 +97,7 @@
     - name: Verify config file permissions
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: config_perms_stat
+      register: monitoring_config_perms_stat
       loop:
         - "{{ monitoring_config_path }}/prometheus/prometheus.yml"
         - "{{ monitoring_config_path }}/grafana/grafana.ini"
@@ -111,7 +111,7 @@
           Expected mode: 0644
           Actual mode: {{ item.stat.mode }}
         success_msg: "[OK] Permissions verified (0644): {{ item.item }}"
-      loop: "{{ config_perms_stat.results }}"
+      loop: "{{ monitoring_config_perms_stat.results }}"
       loop_control:
         label: "{{ item.item }}"
 

@@ -30,8 +30,10 @@
       - Node Exporter: Port {{ prometheus_exporters_node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
       {% if pihole_exporter_enabled %}
-      - Pi-hole Exporter: Port {{ prometheus_exporters_pihole_exporter_port }} ({{ prometheus_exporters_firewall_source }})
+      - Pi-hole Exporter: Port {{ prometheus_exporters_pihole_exporter_port }}
+        ({{ prometheus_exporters_firewall_source }})
       {% endif %}
       {% if docker_exporter_enabled %}
-      - Docker Metrics: Port {{ prometheus_exporters_docker_exporter_port }} ({{ prometheus_exporters_firewall_source }})
+      - Docker Metrics: Port {{ prometheus_exporters_docker_exporter_port }}
+        ({{ prometheus_exporters_firewall_source }})
       {% endif %}

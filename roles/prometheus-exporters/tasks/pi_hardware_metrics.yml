@@ -65,13 +65,13 @@
 - name: Verify Pi hardware metrics file creation
   ansible.builtin.stat:
     path: "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
-  register: pi_metrics_file
+  register: prom_exp_pi_metrics_file
 
 - name: Display Pi hardware metrics sample
   ansible.builtin.shell: head -n 5 "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
-  register: pi_metrics_sample
+  register: prom_exp_pi_metrics_sample
   changed_when: false
-  when: pi_metrics_file.stat.exists
+  when: prom_exp_pi_metrics_file.stat.exists
 
 - name: Pi hardware metrics setup completed
   ansible.builtin.debug:
@@ -81,8 +81,8 @@
       - Collection interval: {{ prometheus_exporters_pi_hardware_metrics_interval }} seconds
       - Textfile output: {{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom
       - Service: pi-hardware-metrics.timer
-      {% if pi_metrics_sample.stdout is defined %}
+      {% if prom_exp_pi_metrics_sample.stdout is defined %}
 
       Sample metrics:
-      {{ pi_metrics_sample.stdout }}
+      {{ prom_exp_pi_metrics_sample.stdout }}
       {% endif %}

@@ -2,6 +2,7 @@
 # Node Exporter setup tasks
 
 - name: Install Node Exporter via binary (recommended)
+  when: node_exporter_install_method == "binary"
   block:
     - name: Check current Node Exporter version
       ansible.builtin.shell: |
@@ -28,14 +29,14 @@
             grep "node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
                   prometheus_arch_map[ansible_architecture] }}.tar.gz" \
               /tmp/node_exporter_checksums.txt | cut -d' ' -f1
-          register: expected_checksum
+          register: prom_exp_expected_checksum
           changed_when: false
 
         - name: Download Node Exporter archive
           ansible.builtin.get_url:
             url: "{{ prometheus_exporters_node_exporter_binary_url }}"
             dest: "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
-            checksum: "sha256:{{ expected_checksum.stdout }}"
+            checksum: "sha256:{{ prom_exp_expected_checksum.stdout }}"
             timeout: 60
 
         - name: Extract Node Exporter archive
@@ -63,13 +64,10 @@
             state: absent
           loop:
             - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
-            - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}"
+            - >-
+              /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version
+              }}.linux-{{ prometheus_arch_map[ansible_architecture] }}
             - "/tmp/node_exporter_checksums.txt"
-
-        - node_exporter_install_method == "binary"
-        - current_node_exporter_version.stdout != node_exporter_version
-
-  when: node_exporter_install_method == "binary"
 
 - name: Install Node Exporter via package manager (fallback)
   ansible.builtin.apt:
@@ -100,7 +98,7 @@
       --collector.{{ collector }}
       {% endfor %}
       --collector.textfile.directory={{ prometheus_exporters_node_exporter_textfile_dir }}
-      --web.listen-address=0.0.0.0:{{ prometheus_exporters_node_exporter_port }}
+      --web.listen-address={{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}
       --web.telemetry-path=/metrics
       --log.level=info
       --log.format=logfmt
@@ -143,7 +141,7 @@
     url: "http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: 10
-  register: node_exporter_health
+  register: prom_exp_node_exporter_health
   retries: 3
   delay: 5
-  until: node_exporter_health.status == 200
+  until: prom_exp_node_exporter_health.status == 200

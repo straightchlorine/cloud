@@ -77,7 +77,7 @@
       when: manage_script_stat.stat.exists
       tags: [shortcuts]
 
-    - name: Verify music stack services
+    - name: Verify music stack services  # noqa: var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: common
         tasks_from: service_verification

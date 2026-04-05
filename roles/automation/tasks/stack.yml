@@ -1,5 +1,5 @@
 ---
-- name: Create standardized Docker Compose file
+- name: Create standardized Docker Compose file  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: build_docker_compose
@@ -89,8 +89,8 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ automation_traefik_dashboard_port }}/api/rawdata"
     method: GET
-  register: traefik_health
-  until: traefik_health.status == 200
+  register: automation_traefik_health
+  until: automation_traefik_health.status == 200
   retries: 30
   delay: 2
   when: start_stack
@@ -99,8 +99,8 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:8181/health"
     method: GET
-  register: influxdb_health
-  until: influxdb_health.status == 200
+  register: automation_influxdb_health
+  until: automation_influxdb_health.status == 200
   retries: 30
   delay: 2
   when: start_stack
@@ -110,8 +110,8 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:80/alive"
     method: GET
-  register: vaultwarden_health
-  until: vaultwarden_health.status == 200
+  register: automation_vaultwarden_health
+  until: automation_vaultwarden_health.status == 200
   retries: 30
   delay: 2
   when: start_stack
@@ -121,8 +121,8 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:9000/api/status"
     method: GET
-  register: portainer_health
-  until: portainer_health.status == 200
+  register: automation_portainer_health
+  until: automation_portainer_health.status == 200
   retries: 30
   delay: 2
   when: start_stack

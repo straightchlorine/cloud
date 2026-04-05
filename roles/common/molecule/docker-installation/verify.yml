@@ -9,70 +9,70 @@
   tasks:
     - name: Check Docker is installed
       ansible.builtin.command: docker --version
-      register: docker_version
+      register: common_docker_version
       changed_when: false
 
     - name: Display Docker version
       ansible.builtin.debug:
-        msg: "Docker version: {{ docker_version.stdout }}"
+        msg: "Docker version: {{ common_docker_version.stdout }}"
 
     - name: Verify Docker daemon is running
       ansible.builtin.systemd:
         name: Docker
-      register: docker_service
+      register: common_docker_service
 
     - name: Assert Docker service is active
       ansible.builtin.assert:
         that:
-          - docker_service.status.ActiveState == "active"
-        fail_msg: "Docker service is not active: {{ docker_service.status.ActiveState }}"
+          - common_docker_service.status.ActiveState == "active"
+        fail_msg: "Docker service is not active: {{ common_docker_service.status.ActiveState }}"
 
     - name: Check Docker daemon.json exists
       ansible.builtin.stat:
         path: /etc/docker/daemon.json
-      register: daemon_json
+      register: common_daemon_json
 
     - name: Assert daemon.json exists
       ansible.builtin.assert:
         that:
-          - daemon_json.stat.exists
+          - common_daemon_json.stat.exists
         fail_msg: "/etc/docker/daemon.json does not exist"
 
     - name: Read daemon.json configuration
       ansible.builtin.slurp:
         path: /etc/docker/daemon.json
-      register: daemon_config
+      register: common_daemon_config
 
     - name: Parse Docker daemon configuration
       ansible.builtin.set_fact:
-        docker_config: "{{ daemon_config.content | b64decode | from_json }}"
+        common_docker_config: "{{ common_daemon_config.content | b64decode | from_json }}"
 
     - name: Verify user namespace mapping is configured
       ansible.builtin.assert:
         that:
-          - docker_config.get('userns-remap') == 'default'
-        fail_msg: "Docker user namespace mapping not configured. Current config: {{ docker_config }}"
+          - common_docker_config.get('userns-remap') == 'default'
+        fail_msg: "Docker user namespace mapping not configured. Current config: {{ common_docker_config }}"
 
     - name: Verify Docker Compose plugin availability
       ansible.builtin.command: docker compose version
-      register: compose_version
+      register: common_compose_version
       changed_when: false
 
     - name: Display Docker Compose version
       ansible.builtin.debug:
-        msg: "Docker Compose version: {{ compose_version.stdout }}"
+        msg: "Docker Compose version: {{ common_compose_version.stdout }}"
 
     - name: Verify hello-world container runs
       ansible.builtin.command: docker run --rm hello-world
-      register: hello_output
+      register: common_hello_output
       changed_when: false
 
     - name: Display verification summary
       ansible.builtin.debug:
         msg: |
           [OK] Docker Installation Verified:
-          - Docker: {{ docker_version.stdout }}
-          - Compose: {{ compose_version.stdout }}
-          - Service: Active ({{ docker_service.status.ActiveState }})
+          - Docker: {{ common_docker_version.stdout }}
+          - Compose: {{ common_compose_version.stdout }}
+          - Service: Active ({{ common_docker_service.status.ActiveState }})
           - User Namespace: Enabled (userns-remap=default)
           - Hello-world test: PASSED

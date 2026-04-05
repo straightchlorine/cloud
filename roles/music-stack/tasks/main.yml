@@ -17,7 +17,7 @@
     tasks_from: network_facts
   tags: [network, facts]
 
-- name: Include common package management
+- name: Include common package management # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: packages
@@ -58,7 +58,7 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Create Docker stack systemd service
+- name: Create Docker stack systemd service # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_stack_service

@@ -8,8 +8,8 @@ service:
 
 repository:
   url: "{{ backup_restic_repository }}"
-  password_file: "{{{ common_backup_base_path }}}/keys/{{ backup_device_role }}-password"
-  cache_dir: "{{{ common_backup_base_path }}}/cache/{{ backup_device_role }}"
+  password_file: "{{ backup_base_path }}/keys/{{ backup_device_role }}-password"
+  cache_dir: "{{ backup_base_path }}/cache/{{ backup_device_role }}"
 
 backup:
   directories:
@@ -33,10 +33,10 @@ backup:
   schedule:
     frequency: "{{ backup_frequency }}"
     time: "{{ backup_time }}"
-    timezone: "{{ timezone }}"
+    timezone: "{{ backup_timezone }}"
 
 monitoring:
-  health_check_frequency: "{{ health_check_frequency }}"
+  health_check_frequency: "{{ backup_health_check_frequency }}"
   metrics_enabled: {{ backup_metrics_enabled }}
   webhook_url: "{{ backup_webhook_url if backup_webhook_url is defined else '' }}"
 
@@ -46,16 +46,16 @@ security:
   compression: "{{ backup_compression }}"
 
 operational:
-  max_backup_time: "{{ max_backup_time }}"  # seconds
-  max_parallel_files: {{ max_parallel_files }}
-  bandwidth_limit: "{{ bandwidth_limit }}"  # KB/s, 0 = unlimited
+  max_backup_time: "{{ backup_max_backup_time }}"  # seconds
+  max_parallel_files: {{ backup_max_parallel_files }}
+  bandwidth_limit: "{{ backup_bandwidth_limit }}"  # KB/s, 0 = unlimited
 
 network:
-  connect_timeout: {{ connect_timeout }}  # seconds
-  retry_attempts: {{ retry_attempts }}
-  retry_delay: {{ retry_delay }}  # seconds
+  connect_timeout: {{ backup_connect_timeout }}  # seconds
+  retry_attempts: {{ backup_retry_attempts }}
+  retry_delay: {{ backup_retry_delay }}  # seconds
 
 validation:
   pre_backup_checks: true
-  post_backup_verification: {{ post_backup_verification }}
-  restore_test_frequency: "{{ restore_test_frequency }}"
+  post_backup_verification: {{ backup_post_backup_verification }}
+  restore_test_frequency: "{{ backup_restore_test_frequency }}"

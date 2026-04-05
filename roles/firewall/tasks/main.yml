@@ -5,7 +5,7 @@
   ansible.builtin.include_tasks: validate.yml
   tags: [validation]
 
-- name: Install UFW using common package management
+- name: Install UFW using common package management # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: packages

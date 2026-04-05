@@ -28,7 +28,7 @@
           - automation_gid: NOT SET (required)
           - vault_traefik_basic_auth: NOT SET (required)
           - vault_cloudflare_api_token: NOT SET (required)
-          - services_enabled: NOT SET (required)
+          - automation_services_enabled: NOT SET (required)
           - restic_enabled: NOT SET (required)
 
           Result: Role validation correctly failed in converge step

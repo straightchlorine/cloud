@@ -1,13 +1,30 @@
 ---
 # Docker metrics via Node Exporter (no separate exporter needed)
 
-- name: Enable Docker metrics in Docker daemon
+- name: Check if daemon.json exists
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: prom_exp_daemon_json_stat
+  become: true
+  when: docker_exporter_enabled
+
+- name: Read existing daemon.json
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: prom_exp_daemon_json_content
+  become: true
+  when:
+    - docker_exporter_enabled
+    - prom_exp_daemon_json_stat.stat.exists
+
+- name: Merge Docker metrics config into daemon.json
   ansible.builtin.copy:
-    content: |
-      {
-        "metrics-addr": "127.0.0.1:9323",
-        "experimental": true
-      }
+    content: >-
+      {{ (prom_exp_daemon_json_content.content | b64decode | from_json
+      if prom_exp_daemon_json_stat.stat.exists
+      else {})
+      | combine({"metrics-addr": "127.0.0.1:9323",
+      "experimental": true}) | to_nice_json }}
     dest: /etc/docker/daemon.json
     owner: root
     group: root
@@ -77,7 +94,7 @@
     url: "http://localhost:9323/metrics"
     method: GET
     timeout: 5
-  register: docker_metrics_test
+  register: prom_exp_docker_metrics_test
   failed_when: false
   when: docker_exporter_enabled
 
@@ -86,6 +103,6 @@
     msg: |
       [OK] Docker Metrics Setup:
       - Docker daemon metrics: {{ 'Enabled' if docker_exporter_enabled else 'Disabled' }}
-      - Metrics endpoint: {{ 'Accessible' if docker_metrics_test.status == 200 else 'Not accessible' }}
+      - Metrics endpoint: {{ 'Accessible' if prom_exp_docker_metrics_test.status == 200 else 'Not accessible' }}
       - Collection script: {{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh
   when: docker_exporter_enabled

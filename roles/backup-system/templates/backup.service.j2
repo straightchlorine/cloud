@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User={{ backup_user }}
 Group={{ backup_group }}
-ExecStart={{{ common_backup_base_path }}}/scripts/backup-{{ backup_target.service_name }}.sh
+ExecStart={{ backup_base_path }}/scripts/backup-{{ backup_target.service_name }}.sh
 TimeoutStartSec={{ backup_target.backup_timeout | default('7200') }}
 StandardOutput=journal
 StandardError=journal
@@ -23,7 +23,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths={{{ common_backup_base_path }}}
+ReadWritePaths={{ backup_base_path }}
 
 [Install]
 WantedBy=multi-user.target

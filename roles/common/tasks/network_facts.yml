@@ -8,20 +8,20 @@
       - network
       - hardware
 
-- name: Set primary network interface fact
+- name: Set primary network interface fact # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     primary_interface: "{{ ansible_default_ipv4.interface }}"
 
-- name: Set primary IP address fact
+- name: Set primary IP address fact # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     primary_ip: "{{ ansible_default_ipv4.address }}"
 
-- name: Set network CIDR fact
+- name: Set network CIDR fact # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     primary_network_cidr: |
       {{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask | ansible.utils.ipaddr('prefix') }}
 
-- name: Set host IP with CIDR notation
+- name: Set host IP with CIDR notation # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     host_ip_cidr: "{{ primary_ip }}/{{ ansible_default_ipv4.netmask | ansible.utils.ipaddr('prefix') }}"
 

@@ -2,6 +2,7 @@
 # Additional monitoring services for DNS server
 
 - name: Install Netdata for system monitoring
+  when: dns_additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
   block:
     - name: Download Netdata installer with GPG verification
       ansible.builtin.get_url:
@@ -22,7 +23,6 @@
         path: /tmp/netdata-kickstart.sh
         state: absent
       become: true
-  when: dns_additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
 
 # Pi-hole exporter setup
 - name: Create pihole-exporter user
@@ -33,7 +33,7 @@
     home: "{{ dns_pihole_exporter_install_dir }}"
     createhome: false
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
 
 - name: Create pihole-exporter installation directory
   ansible.builtin.file:
@@ -43,7 +43,7 @@
     group: "{{ dns_pihole_exporter_user }}"
     mode: '0755'
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
 
 - name: Download pihole-exporter binary
   ansible.builtin.get_url:
@@ -53,7 +53,7 @@
     group: "{{ dns_pihole_exporter_user }}"
     mode: '0755'
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
   notify: restart pihole-exporter
 
 - name: Create pihole-exporter systemd service
@@ -63,7 +63,7 @@
     owner: root
     group: root
     mode: '0644'
-  vars:
+  vars:  # noqa: var-naming[no-role-prefix]
     service_description: "Pi-hole Prometheus Exporter"
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
@@ -85,7 +85,7 @@
     common_private_tmp: "yes"
     common_read_write_paths: ["{{ dns_pihole_exporter_install_dir }}"]
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
   notify:
     - reload systemd
     - restart pihole-exporter
@@ -97,7 +97,7 @@
     state: started
     daemon_reload: true
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
 
 - name: Configure firewall for pihole-exporter
   community.general.ufw:
@@ -105,4 +105,4 @@
     port: "{{ dns_pihole_exporter_port }}"
     comment: "Pi-hole Prometheus exporter"
   become: true
-  when: pihole_exporter_enabled is defined and pihole_exporter_enabled
+  when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled

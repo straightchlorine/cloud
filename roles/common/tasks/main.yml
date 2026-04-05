@@ -8,12 +8,12 @@
   ansible.builtin.copy:
     content: |
       [sshd]
-      enabled = {{ fail2ban_enabled | ternary('true', 'false') }}
+      enabled = {{ common_fail2ban_enabled | ternary('true', 'false') }}
       port = ssh
       filter = sshd
       backend = systemd
-      maxretry = {{ fail2ban_ssh_maxretry }}
-      bantime = {{ fail2ban_ssh_bantime }}
+      maxretry = {{ common_fail2ban_ssh_maxretry }}
+      bantime = {{ common_fail2ban_ssh_bantime }}
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
@@ -28,12 +28,12 @@
     enabled: true
   become: true
   when:
-    - fail2ban_enabled
+    - common_fail2ban_enabled
     - not ansible_check_mode
 
 - name: Set timezone
   community.general.timezone:
-    name: "{{ timezone }}"
+    name: "{{ common_timezone }}"
   become: true
 
 - name: Configure log rotation

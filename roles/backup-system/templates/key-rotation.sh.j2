@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_BASE="{{{ common_backup_base_path }}}"
+BACKUP_BASE="{{ backup_base_path }}"
 BACKUP_USER="{{ backup_user }}"
 BACKUP_GROUP="{{ backup_group }}"
 KEYS_DIR="$BACKUP_BASE/keys"
@@ -114,7 +114,7 @@ deploy_new_ssh_key() {
         if ssh -i "$old_key" \
                -o ConnectTimeout=15 \
                -o BatchMode=yes \
-               -o StrictHostKeyChecking=no \
+               -o StrictHostKeyChecking=accept-new \
                "$ssh_user@$target_host" \
                "mkdir -p ~/.ssh && chmod 700 ~/.ssh" 2>/dev/null; then
 
@@ -122,7 +122,7 @@ deploy_new_ssh_key() {
             cat "$new_key.pub" | ssh -i "$old_key" \
                                     -o ConnectTimeout=15 \
                                     -o BatchMode=yes \
-                                    -o StrictHostKeyChecking=no \
+                                    -o StrictHostKeyChecking=accept-new \
                                     "$ssh_user@$target_host" \
                                     "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
@@ -153,7 +153,7 @@ test_new_ssh_key() {
     if ssh -i "$new_key" \
            -o ConnectTimeout=10 \
            -o BatchMode=yes \
-           -o StrictHostKeyChecking=no \
+           -o StrictHostKeyChecking=accept-new \
            "$ssh_user@$target_host" \
            "echo 'New SSH key test successful'" >/dev/null 2>&1; then
         log "New SSH key test successful for $service_name"
@@ -201,7 +201,7 @@ remove_old_ssh_key() {
             ssh -i "$current_key" \
                 -o ConnectTimeout=10 \
                 -o BatchMode=yes \
-                -o StrictHostKeyChecking=no \
+                -o StrictHostKeyChecking=accept-new \
                 "$ssh_user@$target_host" \
                 "sed -i '/$old_key_content/d' ~/.ssh/authorized_keys" 2>/dev/null
 

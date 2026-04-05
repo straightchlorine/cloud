@@ -5,7 +5,7 @@
 - name: Validate Docker Compose file exists
   ansible.builtin.stat:
     path: "{{ item }}/docker-compose.yml"
-  register: compose_file_check
+  register: common_compose_file_check
   loop:
     - "{{ automation_stack_home | default('/nonexistent') }}"
     - "{{ music_stack_home | default('/nonexistent') }}"
@@ -15,20 +15,20 @@
 - name: Check Docker service availability
   ansible.builtin.systemd:
     name: Docker
-  register: docker_service_status
+  register: common_docker_service_status
   tags: [service_startup_validation]
 
 - name: Validate Docker service is running
   ansible.builtin.fail:
     msg: "Docker service is not active. Service startup validation requires Docker to be running."
-  when: docker_service_status.status.ActiveState != "active"
+  when: common_docker_service_status.status.ActiveState != "active"
   tags: [service_startup_validation]
 
 - name: Check if Docker networks exist or can be created
   ansible.builtin.shell: >-
     docker network ls --format '{{ "{{" }}.Name{{ "}}" }}' |
     grep -E '^(traefik-network|music-stack)$' || echo "missing"
-  register: network_check
+  register: common_network_check
   changed_when: false
   tags: [service_startup_validation]
 
@@ -39,7 +39,7 @@
       ansible.builtin.shell: >-
         docker network create traefik-network --driver bridge ||
         docker network inspect traefik-network >/dev/null
-      register: traefik_network_test
+      register: common_traefik_network_test
       changed_when: false
       when: "'automation' in group_names"
 
@@ -47,7 +47,7 @@
       ansible.builtin.shell: >-
         docker network create music-stack --driver bridge ||
         docker network inspect music-stack >/dev/null
-      register: music_network_test
+      register: common_music_network_test
       changed_when: false
       when: "'music' in group_names"
 
@@ -94,7 +94,7 @@
     else
       echo "file_missing"
     fi
-  register: resource_limits_check
+  register: common_resource_limits_check
   changed_when: false
   loop:
     - {stack: "{{ automation_stack_home | default('/nonexistent') }}", name: "automation"}
@@ -110,7 +110,7 @@
   ansible.builtin.debug:
     msg: |
       [OK] Common service startup requirements validated:
-      - Docker service: {{ 'active' if docker_service_status.status.ActiveState == 'active' else 'inactive' }}
+      - Docker service: {{ 'active' if common_docker_service_status.status.ActiveState == 'active' else 'inactive' }}
       - Network connectivity: Available for Docker network creation
       - Compose file structure: Validated where applicable
 

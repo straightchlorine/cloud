@@ -4,16 +4,16 @@
 # Pi-hole Installation Security
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
 dns_pihole_version: "v5.18.3"  # Pin to verified release version
-pihole_verify_commit: true
+dns_pihole_verify_commit: true
 
 # Pi-hole Configuration
 # pihole_webpassword: MUST be set in vault or host_vars - no default
 dns_pihole_interface: "{{ primary_interface }}"
-pihole_dns_servers:
+dns_pihole_dns_servers:
   - 9.9.9.9
   - 149.112.112.112
-pihole_domain: local
-pihole_ipv6: false
+dns_pihole_domain: local
+dns_pihole_ipv6: false
 
 # Package Configuration
 dns_pihole_packages:
@@ -31,10 +31,11 @@ dns_auto_update_day: "Monday"
 dns_additional_services: []
 
 # Pi-hole Exporter Configuration
-pihole_exporter_enabled: false
+dns_pihole_exporter_enabled: false
 dns_pihole_exporter_user: "pihole-exporter"
 dns_pihole_exporter_install_dir: "/opt/pihole-exporter"
 dns_pihole_exporter_port: 9617
-pihole_exporter_version: "0.3.0"
-dns_pihole_exporter_binary_url: |
-  https://github.com/eko/pihole-exporter/releases/download/v{{ pihole_exporter_version }}/pihole_exporter-linux-arm64
+dns_pihole_exporter_version: "0.3.0"
+dns_pihole_exporter_binary_url: >-
+  https://github.com/eko/pihole-exporter/releases/download/
+  v{{ dns_pihole_exporter_version }}/pihole_exporter-linux-arm64

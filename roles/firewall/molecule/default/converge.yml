@@ -2,7 +2,7 @@
 - name: Converge - Firewall Default Configuration
   hosts: all
   vars:
-    timezone: UTC
+    common_timezone: UTC
     firewall_enabled: true
     firewall_reset: true
     firewall_policy_incoming: deny
@@ -28,7 +28,7 @@
 
     - name: Verify UFW installation
       ansible.builtin.command: which ufw
-      register: ufw_path
+      register: firewall_ufw_path
       changed_when: false
 
     - name: Display firewall configuration status
@@ -36,7 +36,7 @@
         msg: |
           Firewall configuration:
           - Role: firewall
-          - UFW installed at: {{ ufw_path.stdout }}
+          - UFW installed at: {{ firewall_ufw_path.stdout }}
           - Policy incoming: {{ firewall_policy_incoming }}
           - Policy outgoing: {{ firewall_policy_outgoing }}
           - Firewall enabled: {{ firewall_enabled }}

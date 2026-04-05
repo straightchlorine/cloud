@@ -1,7 +1,7 @@
 ---
 # SSD mounting and storage setup - using common storage logic
 
-- name: Include common storage setup
+- name: Include common storage setup # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: storage

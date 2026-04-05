@@ -7,8 +7,8 @@
     - name: Assert that expected failure was caught
       ansible.builtin.assert:
         that:
-          - fail_fast_test_passed is defined
-          - fail_fast_test_passed | bool
+          - common_fail_fast_test_passed is defined
+          - common_fail_fast_test_passed | bool
         fail_msg: "Fail-fast validation test did not complete as expected"
 
     - name: Display success message

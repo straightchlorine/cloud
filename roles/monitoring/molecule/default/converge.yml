@@ -24,7 +24,7 @@
     vault_grafana_admin_password: "test-password-123"
 
     # SSL disabled for testing
-    enable_ssl: false
+    monitoring_enable_ssl: false
 
     # Disable container startup
     start_stack: false

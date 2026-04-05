@@ -222,7 +222,7 @@ push_back_to_target() {
         -avz
         --progress
         --stats
-        -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+        -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
     )
 
     if [[ "$NETWORK_OPTIMIZATION" == "true" && "$BANDWIDTH_LIMIT" != "0" ]]; then

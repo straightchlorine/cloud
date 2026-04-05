@@ -11,7 +11,7 @@ backup_user: "backup"
 backup_group: "backup"
 
 # Repository configuration
-common_backup_base_path: "/opt/enterprise-backup"
+backup_base_path: "/opt/enterprise-backup"
 backup_repositories:
   critical:
     description: "Critical system and database backups"
@@ -48,7 +48,7 @@ backup_orchestration:
   retry_delay_minutes: 15
 
 # Backup performance optimization
-performance_optimization:
+backup_performance_optimization:
   cache_enabled: true
   cache_size_mb: 2048
   compression_level: "auto" # Options: none, fast, max, auto
@@ -124,18 +124,18 @@ backup_retention_monthly: "6"
 backup_retention_yearly: "1"
 backup_frequency: "daily"
 backup_time: "02:00"
-timezone: "UTC"
-health_check_frequency: "daily"
+backup_timezone: "UTC"
+backup_health_check_frequency: "daily"
 backup_metrics_enabled: "true"
 backup_compression: "auto"
-max_backup_time: "3600"
-max_parallel_files: "4"
-bandwidth_limit: "0"
-connect_timeout: "30"
-retry_attempts: "3"
-retry_delay: "60"
-post_backup_verification: "true"
-restore_test_frequency: "weekly"
+backup_max_backup_time: "3600"
+backup_max_parallel_files: "4"
+backup_bandwidth_limit: "0"
+backup_connect_timeout: "30"
+backup_retry_attempts: "3"
+backup_retry_delay: "60"
+backup_post_backup_verification: "true"
+backup_restore_test_frequency: "weekly"
 
 # Systemd service management
 backup_timer_enabled: true
@@ -144,4 +144,4 @@ backup_coordinator_enabled: true
 # Backup scheduling
 backup_schedule: "*-*-* 02:00:00"
 backup_randomized_delay: "300s"
-max_concurrent_backups: "2"
+backup_max_concurrent_backups: "2"

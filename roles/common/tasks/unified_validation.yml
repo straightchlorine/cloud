@@ -5,9 +5,11 @@
 
 - name: Validate required validation parameters
   ansible.builtin.fail:
-    msg: "validation_context, validation_type, and role_name must be explicitly set when calling unified_validation"
+    msg: >-
+      validation_context, validation_type, and validation_role
+      must be explicitly set when calling unified_validation
   when:
-    - validation_context is not defined or validation_type is not defined or role_name is not defined
+    - validation_context is not defined or validation_type is not defined or validation_role is not defined
   tags: [validation]
 
 # Variable validation
@@ -38,7 +40,7 @@
 - name: Validate backup directories exist and are accessible
   ansible.builtin.stat:
     path: "{{ item }}"
-  register: backup_path_check
+  register: common_backup_path_check
   when:
     - validation_type in ['full', 'backup']
     - backup_directories is defined
@@ -50,11 +52,11 @@
     msg: "Critical backup directory '{{ item.item }}' does not exist or is not accessible"
   when:
     - validation_type in ['full', 'backup']
-    - backup_path_check.results is defined
+    - common_backup_path_check.results is defined
     - not item.stat.exists
     - critical_backup_paths is defined
     - item.item in critical_backup_paths
-  loop: "{{ backup_path_check.results }}"
+  loop: "{{ common_backup_path_check.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [validation, backup_validation]
@@ -63,7 +65,7 @@
 - name: Check Docker Compose file exists
   ansible.builtin.stat:
     path: "{{ stack_home }}/docker-compose.yml"
-  register: compose_file_check
+  register: common_common_compose_file_check
   when:
     - validation_type in ['full', 'service_startup']
     - stack_home is defined
@@ -74,8 +76,8 @@
     msg: "Docker Compose file not found at {{ stack_home }}/docker-compose.yml"
   when:
     - validation_type in ['full', 'service_startup']
-    - compose_file_check is defined
-    - not compose_file_check.stat.exists
+    - common_compose_file_check is defined
+    - not common_compose_file_check.stat.exists
   tags: [validation, service_startup_validation]
 
 - name: Check for required services in Docker Compose
@@ -92,8 +94,8 @@
   changed_when: false
   when:
     - validation_type in ['full', 'service_startup']
-    - compose_file_check is defined
-    - compose_file_check.stat.exists
+    - common_compose_file_check is defined
+    - common_compose_file_check.stat.exists
     - required_services is defined
   tags: [validation, service_startup_validation]
 
@@ -113,7 +115,7 @@
   ansible.builtin.debug:
     msg: |
       [OK] {{ validation_context | title }} validation completed successfully
-      Role: {{ role_name }}
+      Role: {{ validation_role }}
       Type: {{ validation_type }}
       {% if required_variables is defined %}
       Variables validated: {{ required_variables | length }}

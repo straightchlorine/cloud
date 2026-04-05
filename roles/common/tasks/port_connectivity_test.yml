@@ -12,9 +12,9 @@
   ansible.builtin.wait_for:
     port: "{{ item.port }}"
     timeout: 30
-  loop: "{{ firewall_ports }}"
+  loop: "{{ common_firewall_ports }}"
   when:
-    - firewall_ports is defined
+    - common_firewall_ports is defined
     - item.port != 22  # Skip SSH as it's tested separately
   loop_control:
     label: "{{ item.comment }} ({{ item.port }})"
@@ -23,12 +23,12 @@
 - name: Test internal connectivity between services
   ansible.builtin.command: |
     nc -z {{ primary_ip }} {{ item.port }}
-  loop: "{{ firewall_ports }}"
+  loop: "{{ common_firewall_ports }}"
   when:
-    - firewall_ports is defined
+    - common_firewall_ports is defined
     - item.port != 22
   failed_when: false
-  register: port_tests
+  register: common_port_tests
   changed_when: false
   loop_control:
     label: "{{ item.comment }} ({{ item.port }})"
@@ -37,15 +37,15 @@
 - name: Display port connectivity results
   ansible.builtin.debug:
     msg: |
-      🔗 Port Connectivity Test Results:
+      Port Connectivity Test Results:
 
       SSH (22): [OK] Accessible
-      {% for result in port_tests.results | default([]) %}
+      {% for result in common_port_tests.results | default([]) %}
       {% if result.item is defined %}
       {{ result.item.comment }} ({{ result.item.port }}): {{ '[OK] Accessible' if result.rc == 0 else '[FAIL] Failed' }}
       {% endif %}
       {% endfor %}
 
       Network connectivity validation complete!
-  when: port_tests.results is defined
+  when: common_port_tests.results is defined
   tags: [post_validation, connectivity]

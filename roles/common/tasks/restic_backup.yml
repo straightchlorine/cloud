@@ -21,14 +21,14 @@
     shell: /bin/bash
     home: "{{ common_backup_base_path }}"
     createhome: true
-    groups: "{{ backup_additional_groups }}"
+    groups: "{{ common_backup_additional_groups }}"
     append: true
   become: true
-  when: backup_additional_groups is defined and backup_additional_groups | length > 0
+  when: common_backup_additional_groups is defined and common_backup_additional_groups | length > 0
   # Suppress errors if user already exists or groups not available on this system
   failed_when:
-    - backup_user_group_result.rc not in [0, 1]
-  register: backup_user_group_result
+    - common_backup_user_group_result.rc not in [0, 1]
+  register: common_backup_user_group_result
 
 - name: Configure sudoers for backup user
   ansible.builtin.template:
@@ -42,7 +42,7 @@
 
 - name: Check if restic is already installed
   ansible.builtin.command: which restic
-  register: restic_check
+  register: common_restic_check
   changed_when: false
   failed_when: false
 
@@ -54,7 +54,7 @@
   become: true
   when:
     - ansible_os_family == "Archlinux"
-    - restic_check.rc != 0
+    - common_restic_check.rc != 0
 
 - name: Install restic on Debian/Ubuntu
   ansible.builtin.apt:
@@ -65,11 +65,11 @@
   become: true
   when:
     - ansible_os_family == "Debian"
-    - restic_check.rc != 0
+    - common_restic_check.rc != 0
 
 - name: Verify restic installation
   ansible.builtin.command: restic version
-  register: restic_version_check
+  register: common_restic_version_check
   changed_when: false
 
 - name: Create backup directories
@@ -108,7 +108,7 @@
 - name: Verify SSH key exists at configured location
   ansible.builtin.stat:
     path: "{{ common_backup_base_path }}/.ssh/hetzner"
-  register: hetzner_key_stat
+  register: common_hetzner_key_stat
   become: true
 
 - name: Fail if SSH key is missing
@@ -120,7 +120,7 @@
       Please place your SSH private key at: {{ common_backup_base_path }}/.ssh/hetzner
       Then set correct permissions: chmod 600 {{ common_backup_base_path }}/.ssh/hetzner
       And ownership: chown backup:backup {{ common_backup_base_path }}/.ssh/hetzner
-  when: not hetzner_key_stat.stat.exists
+  when: not common_hetzner_key_stat.stat.exists
   become: true
 
 - name: Fix SSH key permissions if needed
@@ -130,7 +130,7 @@
     group: backup
     mode: '0600'
   become: true
-  when: hetzner_key_stat.stat.exists
+  when: common_hetzner_key_stat.stat.exists
 
 - name: Create SSH socket directory
   ansible.builtin.file:
@@ -180,7 +180,7 @@
   ansible.builtin.stat:
     path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
   become: true
-  register: existing_service
+  register: common_existing_service
 
 - name: Backup existing systemd service if it exists
   ansible.builtin.copy:
@@ -188,7 +188,7 @@
     dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service.backup"
     remote_src: true
   become: true
-  when: existing_service.stat.exists
+  when: common_existing_service.stat.exists
 
 - name: Create systemd backup service
   ansible.builtin.template:
@@ -217,15 +217,15 @@
     common_standard_error: |
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_timeout_start_sec: "{{ backup_timeout }}"
-    enable_security_hardening: true
-    no_new_privileges: false
+    common_enable_security_hardening: true
+    common_no_new_privileges: false
     common_protect_system: "strict"
     common_protect_home: "read-only"
     common_private_tmp: "yes"
     common_read_write_paths: "{{ [backup_base_path] + backup_paths }}"
     memory_limit: "{{ restic_memory_limit | default(omit) }}"
-    nice_level: "{{ backup_nice_level }}"
-    io_scheduling_class: "{{ backup_io_class }}"
+    nice_level: "{{ common_backup_nice_level }}"
+    io_scheduling_class: "{{ common_backup_io_class }}"
   become: true
   notify:
     - reload systemd
@@ -261,11 +261,11 @@
   ansible.builtin.command: "{{ common_backup_base_path }}/scripts/init-{{ common_backup_service_name }}.sh"
   become_user: backup
   become: true
-  register: repository_init
-  changed_when: "'initialized' in repository_init.stdout"
+  register: common_repository_init
+  changed_when: "'initialized' in common_repository_init.stdout"
   failed_when: >-
-    repository_init.rc != 0 and 'already exists' not in repository_init.stderr and
-    'already exists' not in repository_init.stdout
+    common_repository_init.rc != 0 and 'already exists' not in common_repository_init.stderr and
+    'already exists' not in common_repository_init.stdout
   when: backup_skip_init is not defined or not backup_skip_init
 
 - name: Force handler execution
@@ -284,7 +284,7 @@
   ansible.builtin.stat:
     path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
     checksum_algorithm: sha256
-  register: current_service_file
+  register: common_current_service_file
   become: true
 
 - name: Force systemd service restart if configuration changed
@@ -293,7 +293,7 @@
     state: stopped
     daemon_reload: true
   become: true
-  when: current_service_file.stat.exists
+  when: common_current_service_file.stat.exists
 
 - name: Verify backup service configuration and restart
   ansible.builtin.systemd:
@@ -301,25 +301,25 @@
     daemon_reload: true
     state: stopped
   become: true
-  register: backup_service_status
+  register: common_backup_service_status
 
 - name: Display backup service file checksum for verification
   ansible.builtin.debug:
-    msg: "Service file checksum: {{ current_service_file.stat.checksum }}"
+    msg: "Service file checksum: {{ common_current_service_file.stat.checksum }}"
 
 - name: Verify critical service configuration
   ansible.builtin.shell: |
     grep -i "NoNewPrivileges=false"
       "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
   become: true
-  register: service_config_check
+  register: common_service_config_check
   changed_when: false
-  failed_when: service_config_check.rc != 0
+  failed_when: common_service_config_check.rc != 0
 
 - name: Verify deployed service configuration
   ansible.builtin.command:
     cmd: "systemctl show backup-{{ common_backup_service_name }}.service --property=User,NoNewPrivileges,Environment"
-  register: deployed_service_config
+  register: common_deployed_service_config
   become: true
 
 - name: Display backup configuration summary
@@ -336,7 +336,7 @@
 
       Logs: {{ common_backup_base_path }}/logs/
       common_Status: {{ 'Enabled' if backup_enabled else 'Disabled' }}
-      Restic Version: {{ restic_version_check.stdout }}
+      Restic Version: {{ common_restic_version_check.stdout }}
 
       Deployed Service Config:
-      {{ deployed_service_config.stdout_lines | join('\n      ') }}
+      {{ common_deployed_service_config.stdout_lines | join('\n      ') }}

@@ -19,7 +19,7 @@
   loop:
     - "1.1.1.1" # Cloudflare
     - "9.9.9.9" # Quad9
-  register: domain_resolution
+  register: automation_domain_resolution
   changed_when: false
   failed_when: false
   tags: [ssl_validation]
@@ -28,7 +28,7 @@
   ansible.builtin.fail:
     msg: "Domain {{ automation_domain_name }} failed to resolve from {{ item.item }}"
   when: item.rc != 0
-  loop: "{{ domain_resolution.results }}"
+  loop: "{{ automation_domain_resolution.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [ssl_validation]
@@ -43,7 +43,7 @@
     - "{{ automation_subdomain_dozzle }}"
     - "{{ automation_subdomain_portainer }}"
     - "{{ automation_subdomain_vaultwarden }}"
-  register: subdomain_resolution
+  register: automation_subdomain_resolution
   changed_when: false
   failed_when: false
   tags: [ssl_validation]
@@ -56,26 +56,28 @@
       Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 10
-  register: cloudflare_api_test
+  register: automation_cloudflare_api_test
   no_log: true
   tags: [ssl_validation]
 
 - name: Validate Cloudflare API response
   ansible.builtin.fail:
-    msg: "Cloudflare API authentication failed: {{ cloudflare_api_test.json.errors | default('Unknown error') }}"
-  when: not cloudflare_api_test.json.success | default(false)
+    msg: >-
+      Cloudflare API authentication failed:
+      {{ automation_cloudflare_api_test.json.errors | default('Unknown error') }}
+  when: not automation_cloudflare_api_test.json.success | default(false)
   tags: [ssl_validation]
 
 - name: Check if acme.json exists and validate permissions
   ansible.builtin.stat:
     path: "{{ automation_data_path }}/traefik/acme.json"
-  register: acme_file
+  register: automation_acme_file
   tags: [ssl_validation]
 
 - name: Validate acme.json file security
   ansible.builtin.fail:
-    msg: "acme.json has insecure permissions ({{ acme_file.stat.mode }}). Should be 0600."
-  when: acme_file.stat.exists and acme_file.stat.mode != "0600"
+    msg: "acme.json has insecure permissions ({{ automation_acme_file.stat.mode }}). Should be 0600."
+  when: automation_acme_file.stat.exists and automation_acme_file.stat.mode != "0600"
   tags: [ssl_validation]
 
 - name: Check acme.json for existing certificates
@@ -95,7 +97,7 @@
 - name: Validate Traefik configuration files exist
   ansible.builtin.stat:
     path: "{{ item }}"
-  register: traefik_configs
+  register: automation_traefik_configs
   loop:
     - "{{ automation_data_path }}/traefik/traefik.yml"
     - "{{ automation_data_path }}/traefik/dynamic.yml"
@@ -105,7 +107,7 @@
   ansible.builtin.fail:
     msg: "Missing Traefik configuration: {{ item.item }}"
   when: not item.stat.exists
-  loop: "{{ traefik_configs.results }}"
+  loop: "{{ automation_traefik_configs.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [ssl_validation]
@@ -116,7 +118,7 @@
   loop:
     - "9.9.9.9"
     - "149.112.112.112"
-  register: traefik_resolver_test
+  register: automation_traefik_resolver_test
   changed_when: false
   failed_when: false
   tags: [ssl_validation]
@@ -124,7 +126,7 @@
 - name: Check DNS propagation delay (important for DNS01)
   ansible.builtin.command: |
     dig +short TXT _acme-challenge.{{ automation_domain_name }} @1.1.1.1
-  register: acme_challenge_test
+  register: automation_acme_challenge_test
   changed_when: false
   failed_when: false
   tags: [ssl_validation]
@@ -156,27 +158,27 @@
       Primary Domain ({{ automation_domain_name }}): [OK] Resolves from all resolvers
       {% for subdomain in ['traefik', 'influxdb', 'vault', 'portainer', 'dozzle'] %}
       {{ subdomain }}.{{ automation_domain_name }}: {{
-          '[OK] Resolves' if subdomain_resolution.results[loop.index0].rc == 0 else '[FAIL] Failed' }}
+          '[OK] Resolves' if automation_subdomain_resolution.results[loop.index0].rc == 0 else '[FAIL] Failed' }}
       {% endfor %}
 
       DNS01 Prerequisites:
       Cloudflare API: {{
-          '[OK] Connected' if cloudflare_api_test.json.success else '[FAIL] Failed' }}
-      Cloudflare User: {{ cloudflare_api_test.json.result.email | default('Unknown') }}
+          '[OK] Connected' if automation_cloudflare_api_test.json.success else '[FAIL] Failed' }}
+      Cloudflare User: {{ automation_cloudflare_api_test.json.result.email | default('Unknown') }}
       DNS Resolvers: {{
-          '[OK] Working' if traefik_resolver_test.results | selectattr('rc', 'equalto', 0) |
+          '[OK] Working' if automation_traefik_resolver_test.results | selectattr('rc', 'equalto', 0) |
           list | length == 2 else '[FAIL] Issues detected' }}
 
       Certificate Management:
-      acme.json: {{ '[OK] Exists' if acme_file.stat.exists else '[FAIL] Missing' }}
+      acme.json: {{ '[OK] Exists' if automation_acme_file.stat.exists else '[FAIL] Missing' }}
       File Permissions: {{
-          '[OK] Secure (0600)' if acme_file.stat.mode == '0600' else '[WARN]  Check permissions' }}
+          '[OK] Secure (0600)' if automation_acme_file.stat.mode == '0600' else '[WARN]  Check permissions' }}
       Existing Certificates: {{
           existing_certificates.stdout if existing_certificates.stdout != 'empty-file' else 'None yet' }}
 
       Traefik Configuration:
-      Static Config: {{ '[OK] Present' if traefik_configs.results[0].stat.exists else '[FAIL] Missing' }}
-      Dynamic Config: {{ '[OK] Present' if traefik_configs.results[1].stat.exists else '[FAIL] Missing' }}
+      Static Config: {{ '[OK] Present' if automation_traefik_configs.results[0].stat.exists else '[FAIL] Missing' }}
+      Dynamic Config: {{ '[OK] Present' if automation_traefik_configs.results[1].stat.exists else '[FAIL] Missing' }}
       Let's Encrypt Email: {{ vault_letsencrypt_email }}
       Staging Mode: {{ letsencrypt_staging | default(false) }}
 

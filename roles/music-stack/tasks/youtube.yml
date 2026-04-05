@@ -31,7 +31,9 @@
     name: "Daily YouTube playlist sync"
     hour: "2"
     minute: "30"
-    job: "{{ music_stack_music_stack_home }}/scripts/youtube-cron.sh >> {{ music_stack_music_library_path }}/logs/youtube-cron.log 2>&1"
+    job: >-
+      {{ music_stack_music_stack_home }}/scripts/youtube-cron.sh
+      >> {{ music_stack_music_library_path }}/logs/youtube-cron.log 2>&1
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled
   tags: [youtube, cron]
@@ -42,7 +44,9 @@
     hour: "4"
     minute: "15"
     weekday: "0"
-    job: "{{ music_stack_music_stack_home }}/scripts/beets-rescan.sh >> {{ music_stack_music_library_path }}/logs/beets-rescan.log 2>&1"
+    job: >-
+      {{ music_stack_music_stack_home }}/scripts/beets-rescan.sh
+      >> {{ music_stack_music_library_path }}/logs/beets-rescan.log 2>&1
     user: "{{ ansible_user }}"
   when: youtube_sync_enabled
   tags: [youtube, cron, beets]

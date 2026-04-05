@@ -56,7 +56,7 @@
 - name: Verify directory permissions
   ansible.builtin.stat:
     path: "{{ item }}"
-  register: dir_stats
+  register: monitoring_dir_stats
   loop:
     - "/var/lib/prometheus"
     - "/var/lib/grafana"

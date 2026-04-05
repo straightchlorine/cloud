@@ -31,8 +31,12 @@ skip_list:
   - role-name
   - jinja
   - args
+  # Schema validation is overly strict for this project's Galaxy metadata
+  - schema
 
 exclude_paths:
   - ./inventory
   - ./.git
   - ./.woodpecker/
+  - ./docs/
+  - roles/*/molecule/

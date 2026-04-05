@@ -17,21 +17,17 @@
     product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}
   no_log: true
 
-- name: Install rclone
-  ansible.builtin.shell: |
-    set -o pipefail
-    if ! command -v rclone &> /dev/null; then
-      curl https://rclone.org/install.sh | bash
-    else
-      echo "rclone already installed"
-    fi
-  register: rclone_install
-  changed_when: "'rclone already installed' not in rclone_install.stdout"
+- name: Install rclone via package manager
+  ansible.builtin.apt:
+    name: rclone
+    state: present
+    update_cache: true
   become: true
+  when: ansible_os_family == "Debian"
 
 - name: Verify rclone installation
   ansible.builtin.command: rclone version
-  register: rclone_version_check
+  register: common_rclone_version_check
   changed_when: false
 
 - name: Create rclone configuration directory
@@ -48,7 +44,7 @@
     - "{{ common_backup_base_path }}/staging"
 
 - name: Generate SSH keys for each backup target
-  ansible.builtin.openssh_keypair:
+  community.crypto.openssh_keypair:
     path: "{{ common_backup_base_path }}/keys/{{ item.service_name }}-ssh-key"
     type: ed25519
     owner: backup
@@ -57,7 +53,7 @@
     comment: "backup-{{ item.service_name }}@{{ ansible_hostname }}"
   become: true
   loop: "{{ centralized_backup_targets }}"
-  register: ssh_keys_generated
+  register: common_ssh_keys_generated
 
 - name: Create rclone configuration file
   ansible.builtin.template:
@@ -136,8 +132,8 @@
     common_standard_output: "append:{{ common_backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
     common_standard_error: "append:{{ common_backup_base_path }}/logs/systemd-backup-{{ item.service_name }}.log"
     common_timeout_start_sec: "{{ item.backup_timeout }}"
-    enable_security_hardening: true
-    no_new_privileges: false
+    common_enable_security_hardening: true
+    common_no_new_privileges: false
     common_protect_system: "strict"
     common_protect_home: "read-only"
     common_private_tmp: "yes"
@@ -148,8 +144,8 @@
     tasks_max: "{{ item.tasks_max | default(omit) }}"
     nice_level: "19"
     io_scheduling_class: "idle"
-    restart_policy: "no"
-    restart_sec: "5"
+    common_restart_policy: "no"
+    common_restart_sec: "5"
     common_wanted_by: "multi-user.target"
   become: true
   notify:
@@ -202,8 +198,8 @@
     fi
   become_user: backup
   become: true
-  register: repository_init
-  changed_when: "'Repository initialized' in repository_init.stdout"
+  register: common_repository_init
+  changed_when: "'Repository initialized' in common_repository_init.stdout"
   loop: "{{ centralized_backup_targets }}"
 
 - name: Display SSH public keys for deployment
@@ -240,7 +236,7 @@
         common_Status: {{ 'Enabled' if target.backup_enabled else 'Disabled' }}
 
       {% endfor %}
-      Rclone Version: {{ rclone_version_check.stdout }}
+      Rclone Version: {{ common_rclone_version_check.stdout }}
       Backup Base: {{ common_backup_base_path }}
 
       Enhanced Features:

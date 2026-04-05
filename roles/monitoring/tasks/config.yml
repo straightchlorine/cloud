@@ -22,7 +22,7 @@
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: /etc/prometheus/prometheus.yml
-    mode: '0644'
+    mode: '0640'
     backup: true
   become: true
   notify: restart prometheus
@@ -58,7 +58,7 @@
   ansible.builtin.template:
     src: alertmanager.yml.j2
     dest: /etc/alertmanager/alertmanager.yml
-    mode: '0644'
+    mode: '0640'
     backup: true
   become: true
   notify: restart alertmanager
@@ -99,15 +99,15 @@
 
 - name: Validate Prometheus configuration
   ansible.builtin.command: promtool check config /etc/prometheus/prometheus.yml
-  register: prometheus_config_check
-  failed_when: prometheus_config_check.rc != 0
+  register: monitoring_prometheus_config_check
+  failed_when: monitoring_prometheus_config_check.rc != 0
   changed_when: false
   become: true
 
 - name: Validate Prometheus alerting rules
   ansible.builtin.command: promtool check rules /etc/prometheus/rules/alert-rules.yml
-  register: prometheus_rules_check
-  failed_when: prometheus_rules_check.rc != 0
+  register: monitoring_prometheus_rules_check
+  failed_when: monitoring_prometheus_rules_check.rc != 0
   changed_when: false
   become: true
 
@@ -116,8 +116,8 @@
     msg: |
       [OK] Configuration Validation Results:
 
-      Prometheus Config: {{ 'Valid' if prometheus_config_check.rc == 0 else 'Invalid' }}
-      Prometheus Rules: {{ 'Valid' if prometheus_rules_check.rc == 0 else 'Invalid' }}
+      Prometheus Config: {{ 'Valid' if monitoring_prometheus_config_check.rc == 0 else 'Invalid' }}
+      Prometheus Rules: {{ 'Valid' if monitoring_prometheus_rules_check.rc == 0 else 'Invalid' }}
 
       Configuration files deployed:
       [STATS] /etc/prometheus/prometheus.yml

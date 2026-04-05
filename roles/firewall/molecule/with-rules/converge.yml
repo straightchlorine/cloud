@@ -2,7 +2,7 @@
 - name: Converge - Firewall with Custom Rules
   hosts: all
   vars:
-    timezone: UTC
+    common_timezone: UTC
     firewall_enabled: true
     firewall_reset: true
     firewall_policy_incoming: deny
@@ -47,7 +47,7 @@
 
     - name: Verify UFW installation
       ansible.builtin.command: which ufw
-      register: ufw_path
+      register: firewall_ufw_path
       changed_when: false
 
     - name: Display firewall with-rules configuration
@@ -55,7 +55,7 @@
         msg: |
           Firewall configuration (with rules):
           - Role: firewall
-          - UFW installed at: {{ ufw_path.stdout }}
+          - UFW installed at: {{ firewall_ufw_path.stdout }}
           - Firewall enabled: {{ firewall_enabled }}
           - Common ports configured: {{ common_firewall_ports | length }}
           - Host-specific ports: {{ firewall_ports | length }}

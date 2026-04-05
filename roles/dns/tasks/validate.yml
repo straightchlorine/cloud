@@ -6,10 +6,10 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
-  vars:
+  vars:  # noqa: var-naming[no-role-prefix]
     validation_context: "DNS services"
     validation_type: "full"
-    role_name: "dns"
+    validation_role: "dns"
     required_variables:
       - vault_pihole_webpassword
       - vault_pihole_admin_password
@@ -43,7 +43,7 @@
 - name: Check network interface exists
   ansible.builtin.setup:
     filter: ansible_interfaces
-  register: interface_facts
+  register: dns_interface_facts
 
 - name: Validate specified interface exists
   ansible.builtin.fail:
@@ -71,7 +71,7 @@
 
 - name: Test upstream DNS servers
   ansible.builtin.command: nslookup google.com {{ item }}
-  register: upstream_test
+  register: dns_upstream_test
   failed_when: false
   changed_when: false
   loop: "{{ dns_upstream_servers }}"
@@ -80,6 +80,6 @@
   ansible.builtin.debug:
     msg: "WARNING: Upstream DNS server {{ item.item }} may not be reachable"
   when: item.rc != 0
-  loop: "{{ upstream_test.results }}"
+  loop: "{{ dns_upstream_test.results }}"
   loop_control:
     label: "{{ item.item }}"

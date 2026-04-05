@@ -1,14 +1,14 @@
 ---
 # Prometheus exporters validation using unified framework
 
-- name: Run prometheus exporters comprehensive validation
+- name: Run prometheus exporters comprehensive validation # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
   vars:
     validation_context: "prometheus exporters"
     validation_type: "full"
-    role_name: "prometheus-exporters"
+    validation_role: "prometheus-exporters"
     required_variables:
       - prometheus_exporters_enabled
       - prometheus_exporters_base_dir
@@ -36,25 +36,33 @@
   ansible.builtin.wait_for:
     port: "{{ item.port }}"
     timeout: 1
-  register: port_check
+  register: prom_exp_port_check
   failed_when: false
   when: item.enabled
   loop:
-    - { name: "Node Exporter", port: "{{ prometheus_exporters_node_exporter_port }}", enabled: "{{ prometheus_exporters_node_exporter_enabled }}" }
-    - { name: "Pi-hole Exporter", port: "{{ prometheus_exporters_pihole_exporter_port }}", enabled: "{{ prometheus_exporters_pihole_exporter_enabled }}" }
-    - { name: "Docker Exporter", port: "{{ prometheus_exporters_docker_exporter_port }}", enabled: "{{ prometheus_exporters_docker_exporter_enabled }}" }
+    - name: "Node Exporter"
+      port: "{{ prometheus_exporters_node_exporter_port }}"
+      enabled: "{{ prometheus_exporters_node_exporter_enabled }}"
+    - name: "Pi-hole Exporter"
+      port: "{{ prometheus_exporters_pihole_exporter_port }}"
+      enabled: "{{ prometheus_exporters_pihole_exporter_enabled }}"
+    - name: "Docker Exporter"
+      port: "{{ prometheus_exporters_docker_exporter_port }}"
+      enabled: "{{ prometheus_exporters_docker_exporter_enabled }}"
   loop_control:
     label: "{{ item.name }}"
   tags: [validation]
 
 - name: Warn about port conflicts
   ansible.builtin.debug:
-    msg: "WARNING: {{ item.item.name }} port {{ item.item.port }} appears to be in use. This may cause conflicts."
+    msg: >-
+      WARNING: {{ item.item.name }} port {{ item.item.port }}
+      appears to be in use. This may cause conflicts.
   when:
     - item.item.enabled
     - item.elapsed is defined
     - item.elapsed < 1
-  loop: "{{ port_check.results }}"
+  loop: "{{ prom_exp_port_check.results }}"
   loop_control:
     label: "{{ item.item.name }}"
   tags: [validation]
@@ -68,27 +76,32 @@
     - name: Check if Pi-hole is installed
       ansible.builtin.stat:
         path: /usr/local/bin/pihole
-      register: pihole_binary_check
+      register: prom_exp_pihole_binary_check
 
     - name: Warn if Pi-hole not found
       ansible.builtin.debug:
-        msg: "WARNING: Pi-hole Exporter enabled but Pi-hole binary not found at /usr/local/bin/pihole"
-      when: not pihole_binary_check.stat.exists
+        msg: >-
+          WARNING: Pi-hole Exporter enabled but Pi-hole binary
+          not found at /usr/local/bin/pihole
+      when: not prom_exp_pihole_binary_check.stat.exists
 
     - name: Check Pi-hole web interface
       ansible.builtin.uri:
-        url: "http://{{ prometheus_exporters_pihole_exporter_pihole_hostname }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/"
+        url: >-
+          http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
+          }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
         method: HEAD
         timeout: 5
-      register: pihole_web_check
+      register: prom_exp_pihole_web_check
       failed_when: false
 
     - name: Warn if Pi-hole web interface unreachable
       ansible.builtin.debug:
         msg: >-
           WARNING: Pi-hole web interface not accessible at
-          http://{{ prometheus_exporters_pihole_exporter_pihole_hostname }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
-      when: pihole_web_check.status != 200
+          http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
+          }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
+      when: prom_exp_pihole_web_check.status != 200
 
 - name: Validate Docker Exporter dependencies
   when:
@@ -99,12 +112,12 @@
     - name: Check Docker service status
       ansible.builtin.systemd:
         name: Docker
-      register: docker_service_status
+      register: prom_exp_docker_service_status
 
     - name: Fail if Docker required but not available
       ansible.builtin.fail:
         msg: "Docker Exporter enabled but Docker service is not active"
-      when: docker_service_status.status.ActiveState != "active"
+      when: prom_exp_docker_service_status.status.ActiveState != "active"
 
 - name: Validate filesystem permissions
   ansible.builtin.file:
@@ -113,7 +126,7 @@
     mode: "0755"
   become: true
   check_mode: true
-  register: dir_permission_check
+  register: prom_exp_dir_permission_check
   failed_when: false
   loop:
     - "{{ prometheus_exporters_base_dir }}"
@@ -125,7 +138,7 @@
   ansible.builtin.fail:
     msg: "Cannot create directory {{ item.item }}. Check parent directory permissions."
   when: item is failed
-  loop: "{{ dir_permission_check.results }}"
+  loop: "{{ prom_exp_dir_permission_check.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [validation]

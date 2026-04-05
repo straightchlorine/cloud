@@ -3,7 +3,7 @@
 firewall_enabled: true
 firewall_policy_incoming: deny
 firewall_policy_outgoing: allow
-firewall_policy_routed: allow
+firewall_policy_routed: deny
 
 # Default ports to allow (SSH is always included)
 firewall_allowed_ports: []
@@ -12,4 +12,4 @@ firewall_allowed_ports: []
 firewall_rules: []
 
 # Logging configuration
-firewall_logging: "off"
+firewall_logging: "low"

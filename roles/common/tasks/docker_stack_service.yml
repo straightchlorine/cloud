@@ -16,7 +16,7 @@
     service_after: ["docker.service", "network-online.target"]
     common_service_wants: ["network.target"]
     service_type: "oneshot"
-    remain_after_exit: "true"
+    common_remain_after_exit: "true"
     common_working_directory: "{{ stack_home_directory }}"
     service_user: "{{ stack_user }}"
     service_group: "{{ stack_user }}"
@@ -30,11 +30,11 @@
     # Common security hardening
     common_standard_output: "journal"
     common_standard_error: "journal"
-    restart_policy: "on-failure"
-    restart_sec: "5"
+    common_restart_policy: "on-failure"
+    common_restart_sec: "5"
     common_wanted_by: "multi-user.target"
-    enable_security_hardening: true
-    no_new_privileges: "true"
+    common_enable_security_hardening: true
+    common_no_new_privileges: "true"
   become: true
   notify: "restart {{ stack_service_name }}"
 

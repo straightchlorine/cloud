@@ -13,7 +13,7 @@ provisioner:
   inventory:
     group_vars:
       all:
-        timezone: UTC
+        common_timezone: UTC
 verifier:
   name: Ansible
 scenario:

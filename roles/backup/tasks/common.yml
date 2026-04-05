@@ -12,7 +12,7 @@
   ansible.builtin.user:
     name: "{{ backup_user }}"
     group: "{{ backup_group }}"
-    home: "{{ common_backup_base_path }}"
+    home: "{{ backup_base_path }}"
     shell: /bin/bash
     createhome: true
     system: true
@@ -26,13 +26,13 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{ common_backup_base_path }}"
-    - "{{ common_backup_base_path }}/scripts"
-    - "{{ common_backup_base_path }}/logs"
-    - "{{ common_backup_base_path }}/cache"
-    - "{{ common_backup_base_path }}/.ssh"
-    - "{{ common_backup_base_path }}/.ssh/sockets"
-    - "{{ common_backup_base_path }}/.ssh/nodes"
+    - "{{ backup_base_path }}"
+    - "{{ backup_base_path }}/scripts"
+    - "{{ backup_base_path }}/logs"
+    - "{{ backup_base_path }}/cache"
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/sockets"
+    - "{{ backup_base_path }}/.ssh/nodes"
   become: true
 
 - name: Create coordinator-specific directories
@@ -43,7 +43,7 @@
     group: "{{ backup_group }}"
     mode: '0750'
   loop:
-    - "{{ common_backup_base_path }}/mounts"
+    - "{{ backup_base_path }}/mounts"
   become: true
   when: backup_role == 'coordinator'
 
@@ -55,8 +55,8 @@
     group: "{{ backup_group }}"
     mode: '0700'
   loop:
-    - "{{ common_backup_base_path }}/.ssh"
-    - "{{ common_backup_base_path }}/.ssh/sockets"
+    - "{{ backup_base_path }}/.ssh"
+    - "{{ backup_base_path }}/.ssh/sockets"
   become: true
 
 - name: Install required packages (Debian/Ubuntu)
@@ -84,12 +84,15 @@
 
 - name: Check if restic is already installed
   ansible.builtin.command: restic version
-  register: restic_check
+  register: backup_restic_check
   failed_when: false
   changed_when: false
 
 - name: Install restic
-  when: restic_check.rc != 0 or (restic_check.stdout is defined and restic_version not in restic_check.stdout)
+  when: >-
+    backup_restic_check.rc != 0 or
+    (backup_restic_check.stdout is defined and
+    restic_version not in backup_restic_check.stdout)
   block:
     - name: Download restic binary
       ansible.builtin.get_url:
@@ -121,10 +124,10 @@
 
 - name: Verify restic installation
   ansible.builtin.command: restic version
-  register: restic_verify
+  register: backup_restic_verify
   changed_when: false
-  failed_when: restic_verify.rc != 0
+  failed_when: backup_restic_verify.rc != 0
 
 - name: Display restic version
   ansible.builtin.debug:
-    msg: "Restic installed: {{ restic_verify.stdout }}"
+    msg: "Restic installed: {{ backup_restic_verify.stdout }}"

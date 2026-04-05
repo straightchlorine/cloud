@@ -6,15 +6,15 @@
   ansible.builtin.tempfile:
     state: directory
     suffix: _template_test
-  register: template_test_dir
+  register: common_template_test_dir
   tags: [template_validation]
 
 - name: Test critical template rendering (automation role)
   ansible.builtin.template:
     src: "{{ item.src }}"
-    dest: "{{ template_test_dir.path }}/{{ item.name }}"
+    dest: "{{ common_template_test_dir.path }}/{{ item.name }}"
     backup: false
-  register: template_test_result
+  register: common_template_test_result
   failed_when: false
   loop:
     - { src: "roles/automation/templates/traefik-static.yml.j2", name: "traefik-static.yml" }
@@ -26,9 +26,9 @@
 - name: Test critical template rendering (DNS role)
   ansible.builtin.template:
     src: "{{ item.src }}"
-    dest: "{{ template_test_dir.path }}/{{ item.name }}"
+    dest: "{{ common_template_test_dir.path }}/{{ item.name }}"
     backup: false
-  register: dns_template_test_result
+  register: common_dns_template_test_result
   failed_when: false
   loop:
     - { src: "roles/dns/templates/setupVars.conf.j2", name: "setupVars.conf" }
@@ -39,9 +39,9 @@
 - name: Test critical template rendering (music role)
   ansible.builtin.template:
     src: "{{ item.src }}"
-    dest: "{{ template_test_dir.path }}/{{ item.name }}"
+    dest: "{{ common_template_test_dir.path }}/{{ item.name }}"
     backup: false
-  register: music_template_test_result
+  register: common_music_template_test_result
   failed_when: false
   loop:
     - { src: "roles/music-stack/templates/docker-compose.yml.j2", name: "music-docker-compose.yml" }
@@ -61,9 +61,9 @@
     - item.failed is defined
     - item.failed
   loop: >-
-    {{ (template_test_result.results | default([])) +
-    (dns_template_test_result.results | default([])) +
-    (music_template_test_result.results | default([])) }}
+    {{ (common_template_test_result.results | default([])) +
+    (common_dns_template_test_result.results | default([])) +
+    (common_music_template_test_result.results | default([])) }}
   loop_control:
     label: "{{ item.item.name | default('unknown') }}"
   tags: [template_validation]
@@ -73,7 +73,7 @@
     python3 -c "
     import yaml
     try:
-        with open('{{ template_test_dir.path }}/{{ item.item.name }}', 'r') as f:
+        with open('{{ common_template_test_dir.path }}/{{ item.item.name }}', 'r') as f:
             yaml.safe_load(f)
         print('Valid YAML')
     except yaml.YAMLError as e:
@@ -83,10 +83,10 @@
         print(f'Error: {e}')
         exit(1)
     "
-  register: yaml_validation
+  register: common_yaml_validation
   changed_when: false
-  failed_when: yaml_validation.rc != 0
-  loop: "{{ template_test_result.results | default([]) }}"
+  failed_when: common_yaml_validation.rc != 0
+  loop: "{{ common_template_test_result.results | default([]) }}"
   when:
     - item.item.name.endswith('.yml')
     - not item.failed | default(false)
@@ -94,12 +94,12 @@
 
 - name: Validate Docker Compose syntax (if applicable)
   ansible.builtin.shell: |
-    cd "{{ template_test_dir.path }}"
+    cd "{{ common_template_test_dir.path }}"
     docker compose -f "{{ item.item.name }}" config --quiet
-  register: compose_validation
+  register: common_compose_validation
   changed_when: false
   failed_when: false
-  loop: "{{ template_test_result.results | default([]) }}"
+  loop: "{{ common_template_test_result.results | default([]) }}"
   when:
     - item.item.name == "docker-compose.yml"
     - not item.failed | default(false)
@@ -115,14 +115,14 @@
   when:
     - item.rc is defined
     - item.rc != 0
-  loop: "{{ compose_validation.results | default([]) }}"
+  loop: "{{ common_compose_validation.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name | default('unknown') }}"
   tags: [template_validation]
 
 - name: Clean up template test directory
   ansible.builtin.file:
-    path: "{{ template_test_dir.path }}"
+    path: "{{ common_template_test_dir.path }}"
     state: absent
   tags: [template_validation]
 
@@ -131,23 +131,23 @@
     msg: |
       [OK] Template Rendering Validation Results:
 
-      {% if template_test_result.results is defined %}
+      {% if common_template_test_result.results is defined %}
       Automation Templates:
-      {% for result in template_test_result.results %}
+      {% for result in common_template_test_result.results %}
       {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}
 
-      {% if dns_template_test_result.results is defined %}
+      {% if common_dns_template_test_result.results is defined %}
       DNS Templates:
-      {% for result in dns_template_test_result.results %}
+      {% for result in common_dns_template_test_result.results %}
       {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}
 
-      {% if music_template_test_result.results is defined %}
+      {% if common_music_template_test_result.results is defined %}
       Music Templates:
-      {% for result in music_template_test_result.results %}
+      {% for result in common_music_template_test_result.results %}
       {{ result.item.name }}: {{ '[OK] Rendered successfully' if not result.failed else '[FAIL] Failed to render' }}
       {% endfor %}
       {% endif %}

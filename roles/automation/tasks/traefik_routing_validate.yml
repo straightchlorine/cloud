@@ -6,7 +6,7 @@
   ansible.builtin.shell: |
     cd "{{ automation_stack_home }}"
     docker compose ps traefik --format json
-  register: traefik_status
+  register: automation_traefik_status
   become: true
   become_user: "{{ automation_user }}"
   changed_when: false
@@ -14,13 +14,13 @@
 
 - name: Parse Traefik container status
   ansible.builtin.set_fact:
-    traefik_container: "{{ traefik_status.stdout | from_json }}"
+    automation_traefik_container: "{{ automation_traefik_status.stdout | from_json }}"
   tags: [routing_validation]
 
 - name: Ensure Traefik container is running
   ansible.builtin.fail:
-    msg: "Traefik container is not running (State: {{ traefik_container.State }})"
-  when: traefik_container.State != "running"
+    msg: "Traefik container is not running (State: {{ automation_traefik_container.State }})"
+  when: automation_traefik_container.State != "running"
   tags: [routing_validation]
 
 - name: Test Traefik API accessibility
@@ -28,7 +28,7 @@
     url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/version"
     method: GET
     timeout: 10
-  register: traefik_api
+  register: automation_traefik_api
   tags: [routing_validation]
 
 - name: Get Traefik router configuration
@@ -36,7 +36,7 @@
     url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/routers"
     method: GET
     timeout: 10
-  register: traefik_routers
+  register: automation_traefik_routers
   tags: [routing_validation]
 
 - name: Get Traefik service configuration
@@ -44,17 +44,19 @@
     url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/services"
     method: GET
     timeout: 10
-  register: traefik_services
+  register: automation_traefik_services
   tags: [routing_validation]
 
 - name: Extract configured routers
   ansible.builtin.set_fact:
-    configured_routers: "{{ traefik_routers.json | selectattr('name', 'match', '.*@file$') | list }}"
+    automation_configured_routers: >-
+      {{ automation_traefik_routers.json |
+      selectattr('name', 'match', '.*@file$') | list }}
   tags: [routing_validation]
 
 - name: Validate expected routes are configured
   ansible.builtin.set_fact:
-    expected_routes:
+    automation_expected_routes:
       - name: "dashboard"
         host: "{{ automation_subdomain_traefik }}.{{ automation_domain_name }}"
       - name: "dozzle"
@@ -71,22 +73,22 @@
 
 - name: Check if all expected routes are present
   ansible.builtin.set_fact:
-    missing_routes: []
-    present_routes: []
+    automation_missing_routes: []
+    automation_present_routes: []
   tags: [routing_validation]
 
 - name: Identify missing and present routes
   ansible.builtin.set_fact:
-    missing_routes: "{{ missing_routes + [item.name] }}"
-    present_routes: "{{ present_routes + [item.name] }}"
-  when: configured_routers | selectattr('rule', 'search', item.host) | list | length == 0
-  loop: "{{ expected_routes }}"
+    automation_missing_routes: "{{ automation_missing_routes + [item.name] }}"
+    automation_present_routes: "{{ automation_present_routes + [item.name] }}"
+  when: automation_configured_routers | selectattr('rule', 'search', item.host) | list | length == 0
+  loop: "{{ automation_expected_routes }}"
   tags: [routing_validation]
 
 - name: Validate SSL certificate resolver configuration
   ansible.builtin.set_fact:
-    ssl_routers: >-
-      {{ configured_routers | selectattr('tls', 'defined') |
+    automation_ssl_routers: >-
+      {{ automation_configured_routers | selectattr('tls', 'defined') |
       selectattr('tls.certResolver', 'equalto', 'letsencrypt') | list }}
   tags: [routing_validation]
 
@@ -99,7 +101,7 @@
     - {service: "traefik-dashboard", port: "{{ automation_traefik_dashboard_port }}"}
     - {service: "traefik-web", port: "{{ automation_traefik_web_port }}"}
     - {service: "traefik-websecure", port: "{{ automation_traefik_websecure_port }}"}
-  register: port_connectivity
+  register: automation_port_connectivity
   tags: [routing_validation]
 
 - name: Check Traefik logs for SSL certificate errors
@@ -118,13 +120,13 @@
     url: "http://localhost:{{ automation_traefik_dashboard_port }}/api/http/middlewares"
     method: GET
     timeout: 10
-  register: traefik_middlewares
+  register: automation_traefik_middlewares
   tags: [routing_validation]
 
 - name: Check for required middlewares
   ansible.builtin.set_fact:
-    required_middlewares: ["dashboard-auth", "rate-limit", "body-limit"]
-    present_middlewares: "{{ traefik_middlewares.json | map(attribute='name') | list }}"
+    automation_required_middlewares: ["dashboard-auth", "rate-limit", "body-limit"]
+    automation_present_middlewares: "{{ automation_traefik_middlewares.json | map(attribute='name') | list }}"
   tags: [routing_validation]
 
 - name: Test HTTPS redirect functionality
@@ -133,7 +135,7 @@
     method: GET
     follow_redirects: none
     timeout: 10
-  register: https_redirect_test
+  register: automation_https_redirect_test
   failed_when: false
   tags: [routing_validation]
 
@@ -144,39 +146,40 @@
 
       Container Status:
       Traefik Container: {{
-          '[OK] Running' if traefik_container.State == 'running' else '[FAIL] ' + traefik_container.State }}
-      Traefik Version: {{ traefik_api.json.version | default('Unknown') }}
+          '[OK] Running' if automation_traefik_container.State == 'running'
+          else '[FAIL] ' + automation_traefik_container.State }}
+      Traefik Version: {{ automation_traefik_api.json.version | default('Unknown') }}
 
       API Endpoints:
-      Dashboard API: {{ '[OK] Accessible' if traefik_api.status == 200 else '[FAIL] Failed' }}
-      Routers API: {{ '[OK] Accessible' if traefik_routers.status == 200 else '[FAIL] Failed' }}
-      Services API: {{ '[OK] Accessible' if traefik_services.status == 200 else '[FAIL] Failed' }}
+      Dashboard API: {{ '[OK] Accessible' if automation_traefik_api.status == 200 else '[FAIL] Failed' }}
+      Routers API: {{ '[OK] Accessible' if automation_traefik_routers.status == 200 else '[FAIL] Failed' }}
+      Services API: {{ '[OK] Accessible' if automation_traefik_services.status == 200 else '[FAIL] Failed' }}
 
       Route Configuration:
-      Total Routes: {{ configured_routers | length }}
-      SSL-Enabled Routes: {{ ssl_routers | length }}
-      {% for route in expected_routes %}
+      Total Routes: {{ automation_configured_routers | length }}
+      SSL-Enabled Routes: {{ automation_ssl_routers | length }}
+      {% for route in automation_expected_routes %}
       {{ route.name }} ({{ route.host }}): {{ '[OK] Configured'
-        if configured_routers | selectattr('rule', 'search', route.host) | list | length > 0
+        if automation_configured_routers | selectattr('rule', 'search', route.host) | list | length > 0
         else '[FAIL] Missing' }}
       {% endfor %}
 
       Port Connectivity:
-      {% for result in port_connectivity.results %}
+      {% for result in automation_port_connectivity.results %}
       {{ result.item.service }}: {{
           '[OK] Listening' if result.elapsed is defined and result.elapsed < 10 else '[FAIL] Failed' }}
       {% endfor %}
 
       HTTPS Configuration:
       HTTP→HTTPS Redirect: {{
-          '[OK] Working' if https_redirect_test.status == 301 or https_redirect_test.status == 302
+          '[OK] Working' if automation_https_redirect_test.status == 301 or automation_https_redirect_test.status == 302
           else '[WARN]  Check configuration' }}
       Certificate Resolver: {{
-          '[OK] letsencrypt configured' if ssl_routers | length > 0 else '[FAIL] No SSL routes found' }}
+          '[OK] letsencrypt configured' if automation_ssl_routers | length > 0 else '[FAIL] No SSL routes found' }}
 
       Security Middlewares:
-      {% for middleware in required_middlewares %}
-      {{ middleware }}: {{ '[OK] Present' if middleware in present_middlewares else '[FAIL] Missing' }}
+      {% for middleware in automation_required_middlewares %}
+      {{ middleware }}: {{ '[OK] Present' if middleware in automation_present_middlewares else '[FAIL] Missing' }}
       {% endfor %}
 
       Recent SSL Activity:

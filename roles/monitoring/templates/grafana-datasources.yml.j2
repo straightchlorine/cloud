@@ -11,7 +11,7 @@ datasources:
     url: http://localhost:{{ monitoring_prometheus_port }}
     isDefault: true
     jsonData:
-      timeInterval: "{{ prometheus_scrape_interval }}"
+      timeInterval: "{{ monitoring_prometheus_scrape_interval }}"
       queryTimeout: "60s"
       httpMethod: "POST"
     editable: false

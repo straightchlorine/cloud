@@ -23,7 +23,7 @@ monitoring_stack_home: "/opt/monitoring"
 # Package sources
 monitoring_grafana_apt_key_url: "https://apt.grafana.com/gpg.key"
 monitoring_grafana_apt_repo: "deb https://apt.grafana.com stable main"
-prometheus_version: "latest" # Will use Debian package version
+monitoring_prometheus_version: "latest" # Will use Debian package version
 
 # Service configuration
 monitoring_grafana_port: 3000
@@ -33,24 +33,24 @@ monitoring_uptime_kuma_port: 3001
 monitoring_alertmanager_port: 9093
 
 # Grafana configuration
-grafana_admin_password: "{{ vault_grafana_admin_password }}"
-grafana_database_type: "sqlite3"
-grafana_allow_embedding: false
+monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+monitoring_grafana_database_type: "sqlite3"
+monitoring_grafana_allow_embedding: false
 
 # Prometheus configuration
-prometheus_retention_time: "30d"
-prometheus_retention_size: "10GB"
-prometheus_scrape_interval: "15s"
-prometheus_evaluation_interval: "15s"
+monitoring_prometheus_retention_time: "30d"
+monitoring_prometheus_retention_size: "10GB"
+monitoring_prometheus_scrape_interval: "15s"
+monitoring_prometheus_evaluation_interval: "15s"
 
 # Loki configuration
-loki_retention_period: "30d"
-loki_max_chunk_age: "2h"
-loki_chunk_idle_period: "30m"
-loki_max_transfer_retries: 3
+monitoring_loki_retention_period: "30d"
+monitoring_loki_max_chunk_age: "2h"
+monitoring_loki_chunk_idle_period: "30m"
+monitoring_loki_max_transfer_retries: 3
 
 # Uptime Kuma configuration
-uptime_kuma_data_retention: "365d"
+monitoring_uptime_kuma_data_retention: "365d"
 
 # Alertmanager configuration - ALL MUST be explicitly set in vault
 # vault_smtp_server: must be set in vault - no default
@@ -59,12 +59,12 @@ uptime_kuma_data_retention: "365d"
 # These will be validated during deployment
 
 # SSL/TLS configuration
-enable_ssl: true
-ssl_cert_path: "/etc/ssl/certs"
-ssl_key_path: "/etc/ssl/private"
+monitoring_enable_ssl: true
+monitoring_ssl_cert_path: "/etc/ssl/certs"
+monitoring_ssl_key_path: "/etc/ssl/private"
 
 # Native service configuration
-services_enabled:
+monitoring_services_enabled:
   grafana: true
   prometheus: true
   loki: true
@@ -72,16 +72,16 @@ services_enabled:
   alertmanager: true
 
 # Service users (will be created by packages)
-grafana_user: "grafana"
-prometheus_user: "prometheus"
-loki_user: "loki"
+monitoring_grafana_user: "grafana"
+monitoring_prometheus_user: "prometheus"
+monitoring_loki_user: "loki"
 
 # Service discovery targets (to be populated from inventory)
-prometheus_targets: []
-loki_targets: []
+monitoring_prometheus_targets: []
+monitoring_loki_targets: []
 # Backup configuration
 # backup_enabled: determined by restic_enabled variable validation
-common_backup_paths:
+monitoring_backup_paths:
   - "{{ monitoring_data_path }}"
   - "{{ monitoring_stack_home }}/config"
 

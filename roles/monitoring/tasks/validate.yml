@@ -2,14 +2,14 @@
 # Monitoring stack deployment validation
 # Ensures all requirements are met before monitoring stack deployment begins
 
-- name: Run monitoring stack comprehensive validation
+- name: Run monitoring stack comprehensive validation # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
   vars:
     validation_context: "monitoring stack"
     validation_type: "full"
-    role_name: "monitoring"
+    validation_role: "monitoring"
     required_variables:
       - monitoring_data_path
       - monitoring_config_path
@@ -36,7 +36,7 @@
   ansible.builtin.wait_for:
     port: "{{ item }}"
     timeout: 1
-  register: port_check
+  register: monitoring_port_check
   failed_when: false
   loop:
     - "{{ monitoring_grafana_port }}"
@@ -49,18 +49,18 @@
   ansible.builtin.fail:
     msg: "Port {{ item.item }} is already in use"
   when: item.elapsed is defined and item.elapsed < 1
-  loop: "{{ port_check.results }}"
+  loop: "{{ monitoring_port_check.results }}"
   loop_control:
     label: "{{ item.item }}"
 
 - name: Check available disk space for monitoring data
   ansible.builtin.shell: df {{ monitoring_data_path | dirname }} | tail -1 | awk '{print $4}'
-  register: disk_space
+  register: monitoring_disk_space
   changed_when: false
 
 - name: Fail if insufficient disk space
   ansible.builtin.fail:
     msg: >-
-      Insufficient disk space. Available: {{ (disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Insufficient disk space. Available: {{ (monitoring_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
       Required: 10GB minimum for monitoring data retention
-  when: (disk_space.stdout | int) < 10485760
+  when: (monitoring_disk_space.stdout | int) < 10485760

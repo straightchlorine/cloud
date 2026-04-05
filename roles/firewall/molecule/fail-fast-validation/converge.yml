@@ -2,7 +2,7 @@
 - name: Converge - Firewall Fail-Fast Validation
   hosts: all
   vars:
-    timezone: UTC
+    common_timezone: UTC
     # Intentionally omit required variables:
     # - firewall_enabled
     # - firewall_policy_incoming
@@ -20,15 +20,15 @@
 
         - name: Set result to success
           ansible.builtin.set_fact:
-            validation_failed: false
+            firewall_validation_failed: false
       rescue:
         - name: Capture failure if it occurs
           ansible.builtin.set_fact:
-            validation_failed: true
-            validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
+            firewall_validation_failed: true
+            firewall_validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
 
         - name: Display failure message
           ansible.builtin.debug:
             msg: |
               [OK] Firewall validation failed
-              Error: {{ validation_error }}
+              Error: {{ firewall_validation_error }}

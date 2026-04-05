@@ -158,15 +158,15 @@
 
     - name: Check Hetzner SSH key file exists
       ansible.builtin.stat:
-        path: "{{ common_backup_base_path }}/.ssh/hetzner"
-      register: coordinator_hetzner_key
+        path: "{{ backup_base_path }}/.ssh/hetzner"
+      register: backup_coordinator_hetzner_key
 
     - name: Warn if Hetzner key missing for coordinator
       ansible.builtin.debug:
         msg: |
-          WARNING: Hetzner SSH key not found at {{ common_backup_base_path }}/.ssh/hetzner
+          WARNING: Hetzner SSH key not found at {{ backup_base_path }}/.ssh/hetzner
           Manual key placement is required for backup functionality.
-      when: not coordinator_hetzner_key.stat.exists
+      when: not backup_coordinator_hetzner_key.stat.exists
 
 - name: Validate backup_excludes format (if defined)
   when: backup_excludes is defined
@@ -179,24 +179,24 @@
 
 - name: Check available disk space for backup operations
   ansible.builtin.shell: df {{ backup_base_path | dirname }} | tail -1 | awk '{print $4}'
-  register: available_space
+  register: backup_available_space
   changed_when: false
 
 - name: Warn if low disk space
   ansible.builtin.debug:
-    msg: "WARNING: Low disk space. Available: {{ (available_space.stdout | int / 1024 / 1024) | round(2) }}GB"
-  when: (available_space.stdout | int) < 2097152
+    msg: "WARNING: Low disk space. Available: {{ (backup_available_space.stdout | int / 1024 / 1024) | round(2) }}GB"
+  when: (backup_available_space.stdout | int) < 2097152
 
 - name: Validate systemd is available
   ansible.builtin.command: systemctl --version
   changed_when: false
   failed_when: false
-  register: systemd_check
+  register: backup_systemd_check
 
 - name: Fail if systemd is not available
   ansible.builtin.fail:
     msg: "systemd is required for backup service management"
-  when: systemd_check.rc != 0
+  when: backup_systemd_check.rc != 0
 
 - name: Display validation summary
   ansible.builtin.debug:
@@ -204,7 +204,7 @@
       - "[backup configuration validation summary]"
       - "mode: {{ backup_role }}"
       - "user: {{ backup_user }}"
-      - "base path: {{ common_backup_base_path }}"
+      - "base path: {{ backup_base_path }}"
       - "restic version: {{ backup_restic_version }}"
       - "{% if backup_role == 'standalone' %}backup paths: {{ backup_paths | length }}{% endif %}"
       - "{% if backup_role == 'coordinator' %}coordinator targets: {{ coordinator_targets | length }}{% endif %}"

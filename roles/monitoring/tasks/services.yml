@@ -2,7 +2,7 @@
 # Service management for monitoring stack
 # Manages systemd services for Prometheus, Grafana, Loki, Uptime Kuma
 
-- name: Create Loki systemd service
+- name: Create Loki systemd service # noqa: var-naming[no-role-prefix]
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/loki.service
@@ -34,7 +34,7 @@
     - reload systemd
     - restart loki
 
-- name: Create Uptime Kuma systemd service
+- name: Create Uptime Kuma systemd service # noqa: var-naming[no-role-prefix]
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
     dest: /etc/systemd/system/uptime-kuma.service
@@ -74,7 +74,7 @@
     - grafana-server
     - loki
     - uptime-kuma
-  register: service_start
+  register: monitoring_service_start
 
 - name: Wait for services to start
   ansible.builtin.wait_for:
@@ -94,7 +94,7 @@
 - name: Check service status
   ansible.builtin.systemd:
     name: "{{ item }}"
-  register: service_status
+  register: monitoring_service_status
   loop:
     - prometheus
     - prometheus-alertmanager
@@ -106,7 +106,7 @@
   ansible.builtin.fail:
     msg: "Service {{ item.item }} is not active: {{ item.status.ActiveState }}"
   when: item.status.ActiveState != "active"
-  loop: "{{ service_status.results }}"
+  loop: "{{ monitoring_service_status.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -124,7 +124,7 @@
     - { service: "uptime-kuma", port: "{{ monitoring_uptime_kuma_port }}" }
   loop_control:
     label: "{{ item.service }}"
-  register: endpoint_checks
+  register: monitoring_endpoint_checks
   retries: 3
   delay: 5
 
@@ -133,7 +133,7 @@
     msg: |
       [OK] Monitoring Services Status:
 
-      {% for check in endpoint_checks.results %}
+      {% for check in monitoring_endpoint_checks.results %}
       {{ check.item.service | title }}: {{
           '[OK] Running' if check.status == 200 else '[FAIL] Failed' }} ({{ check.item.port }})
       {% endfor %}

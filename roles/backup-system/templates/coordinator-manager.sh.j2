@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-BACKUP_BASE="{{{ common_backup_base_path }}}"
+BACKUP_BASE="{{ backup_base_path }}"
 
 usage() {
     echo "Backup Coordinator Manager"

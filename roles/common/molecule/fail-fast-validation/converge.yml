@@ -7,7 +7,7 @@
   tasks:
     - name: Test that variable_validation fails without required variables
       block:
-        - name: Include variable_validation without required variables
+        - name: Include variable_validation without required variables # noqa: var-naming[no-role-prefix]
           ansible.builtin.include_role:
             name: common
             tasks_from: variable_validation
@@ -20,7 +20,7 @@
       rescue:
         - name: Set fact to indicate expected failure occurred
           ansible.builtin.set_fact:
-            fail_fast_test_passed: true
+            common_fail_fast_test_passed: true
 
         - name: Display expected failure message
           ansible.builtin.debug:

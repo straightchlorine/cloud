@@ -5,7 +5,7 @@
 - name: Check if Promtail is already installed
   ansible.builtin.stat:
     path: /usr/local/bin/promtail
-  register: promtail_binary
+  register: common_promtail_binary
 
 - name: Create promtail user
   ansible.builtin.user:
@@ -17,7 +17,7 @@
   become: true
 
 - name: Download and install Promtail binary
-  when: not promtail_binary.stat.exists
+  when: not common_promtail_binary.stat.exists
   block:
     - name: Download Promtail
       ansible.builtin.get_url:
@@ -86,8 +86,8 @@
     service_user: "promtail"
     service_group: "promtail"
     exec_start: "/usr/local/bin/promtail -config.file=/etc/promtail/promtail.yml"
-    restart_policy: "always"
-    restart_sec: "5"
+    common_restart_policy: "always"
+    common_restart_sec: "5"
     syslog_identifier: "promtail"
     kill_mode: "mixed"
     kill_signal: "SIGINT"
@@ -134,8 +134,8 @@
     url: http://127.0.0.1:9080/metrics
     method: GET
     timeout: 10
-  register: promtail_metrics
-  failed_when: promtail_metrics.status != 200
+  register: common_promtail_metrics
+  failed_when: common_promtail_metrics.status != 200
 
 - name: Display Promtail deployment status
   ansible.builtin.debug:
@@ -143,11 +143,11 @@
       [OK] Promtail Agent Deployment Complete for {{ inventory_hostname }}
 
       Configuration:
-      📁 Config: /etc/promtail/promtail.yml
+      Config: /etc/promtail/promtail.yml
       [STATS] Metrics: http://127.0.0.1:9080/metrics
       [NOTE] Logs: /var/log/promtail.log
       [TARGET] Target: {{ loki_server }}:{{ loki_port }}
 
-      common_Status: {{ '[OK] Running' if promtail_metrics.status == 200 else '[FAIL] Failed' }}
+      common_Status: {{ '[OK] Running' if common_promtail_metrics.status == 200 else '[FAIL] Failed' }}
 
       Next: Logs are now being shipped to Loki for centralized aggregation!

@@ -15,7 +15,7 @@
     tasks_from: network_facts
   tags: [network, facts]
 
-- name: Include common package management
+- name: Include common package management  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: packages
@@ -56,14 +56,14 @@
 
 - name: Include Traefik setup
   ansible.builtin.include_tasks: traefik.yml
-  when: services_enabled.traefik
+  when: automation_services_enabled.traefik
   tags: [traefik, reverse-proxy]
 
 - name: Include stack deployment
   ansible.builtin.include_tasks: stack.yml
   tags: [stack, deploy]
 
-- name: Configure unified restic backup
+- name: Configure unified restic backup  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: restic_backup
@@ -78,9 +78,11 @@
       - "tmp/*"
       - "cache/*"
     pre_backup_commands:
-      - "docker compose -f {{ automation_stack_home }}/docker-compose.yml pause"
+      - >-
+        docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
     post_backup_commands:
-      - "docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause"
+      - >-
+        docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
     backup_ssh_config:
       host: "{{ backup_ssh_host }}"
       port: "{{ backup_ssh_port }}"
@@ -94,7 +96,7 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Create Docker stack systemd service
+- name: Create Docker stack systemd service  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_stack_service

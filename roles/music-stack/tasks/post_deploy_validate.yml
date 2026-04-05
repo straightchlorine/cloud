@@ -12,7 +12,7 @@
   ansible.builtin.shell: |
     cd "{{ music_stack_music_stack_home }}"
     docker compose ps --format json
-  register: music_container_status
+  register: music_stack_container_status
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
@@ -20,14 +20,14 @@
 
 - name: Parse music container status
   ansible.builtin.set_fact:
-    music_containers: "{{ music_container_status.stdout_lines | map('from_json') | list }}"
+    music_stack_containers: "{{ music_stack_container_status.stdout_lines | map('from_json') | list }}"
   tags: [post_validation]
 
 - name: Verify music containers are running
   ansible.builtin.fail:
     msg: "Container {{ item.Service }} is not running (State: {{ item.State }})"
   when: item.State != "running"
-  loop: "{{ music_containers }}"
+  loop: "{{ music_stack_containers }}"
   loop_control:
     label: "{{ item.Service }}"
   tags: [post_validation]
@@ -43,13 +43,13 @@
     url: "http://{{ primary_ip }}:{{ music_stack_navidrome_port }}"
     method: GET
     timeout: 15
-  register: navidrome_web
+  register: music_stack_navidrome_web
   tags: [post_validation]
 
 - name: Check music library directory access
   ansible.builtin.stat:
     path: "{{ music_stack_music_library_path }}/music"
-  register: music_dir
+  register: music_stack_music_dir
   tags: [post_validation]
 
 - name: Verify music library permissions
@@ -63,11 +63,13 @@
   tags: [post_validation]
 
 - name: Test YouTube sync script if enabled
+  when: youtube_sync_enabled
+  tags: [post_validation]
   block:
     - name: Check yt-dlp is installed and working
       ansible.builtin.command: |
         python3 -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)"
-      register: ytdlp_test
+      register: music_stack_ytdlp_test
       changed_when: false
       become: true
       become_user: "{{ ansible_user }}"
@@ -75,24 +77,21 @@
     - name: Verify YouTube sync script exists
       ansible.builtin.stat:
         path: "{{ music_stack_music_library_path }}/scripts/youtube-sync.py"
-      register: youtube_script
+      register: music_stack_youtube_script
 
     - name: Test YouTube sync script syntax
       ansible.builtin.command: |
         python3 -m py_compile "{{ music_stack_music_library_path }}/scripts/youtube-sync.py"
-      when: youtube_script.stat.exists
+      when: music_stack_youtube_script.stat.exists
       changed_when: false
       become: true
       become_user: "{{ ansible_user }}"
-
-  when: youtube_sync_enabled
-  tags: [post_validation]
 
 - name: Check container health status
   ansible.builtin.shell: |
     cd "{{ music_stack_music_stack_home }}"
     docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
-  register: music_health_status
+  register: music_stack_health_status
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
@@ -104,19 +103,19 @@
       [OK] Music Stack Post-Deployment Validation Results:
 
       Container Status:
-      {{ music_health_status.stdout }}
+      {{ music_stack_health_status.stdout }}
 
       Service Health:
-      Navidrome Web Interface: {{ 'Accessible' if navidrome_web.status == 200 else 'Failed' }}
+      Navidrome Web Interface: {{ 'Accessible' if music_stack_navidrome_web.status == 200 else 'Failed' }}
       Navidrome Port ({{ music_stack_navidrome_port }}): Listening
-      Music Library: {{ 'Accessible' if music_dir.stat.exists else 'Missing' }}
-      Library Permissions: {{ 'Correct' if music_dir.stat.mode == '0755' else 'Check Required' }}
+      Music Library: {{ 'Accessible' if music_stack_music_dir.stat.exists else 'Missing' }}
+      Library Permissions: {{ 'Correct' if music_stack_music_dir.stat.mode == '0755' else 'Check Required' }}
 
       {% if youtube_sync_enabled %}
       YouTube Sync:
-      yt-dlp Installation: {{ 'Working' if ytdlp_test.rc == 0 else 'Failed' }}
-      Sync Script: {{ 'Present' if youtube_script.stat.exists else 'Missing' }}
-      Script Syntax: {{ 'Valid' if youtube_script.stat.exists else 'Not tested' }}
+      yt-dlp Installation: {{ 'Working' if music_stack_ytdlp_test.rc == 0 else 'Failed' }}
+      Sync Script: {{ 'Present' if music_stack_youtube_script.stat.exists else 'Missing' }}
+      Script Syntax: {{ 'Valid' if music_stack_youtube_script.stat.exists else 'Not tested' }}
       {% else %}
       YouTube Sync: Disabled
       {% endif %}

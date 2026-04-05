@@ -2,16 +2,16 @@
 # Default values for common role
 
 # System Configuration
-timezone: UTC
+common_timezone: UTC
 
 # Security Configuration
 common_fail2ban_enabled: true
-fail2ban_ssh_maxretry: 3
-fail2ban_ssh_bantime: 600
+common_fail2ban_ssh_maxretry: 3
+common_fail2ban_ssh_bantime: 600
 
 # Log Management
-log_rotation_days: 30
-log_compression: true
+common_log_rotation_days: 30
+common_log_compression: true
 
 # Common System Packages (can be overridden in group_vars)
 common_packages:
@@ -31,36 +31,36 @@ common_packages:
   - lsb-release
 
 # Common Storage Configuration
-filesystem_utilities:
+common_filesystem_utilities:
   - e2fsprogs
   - parted
   - dosfstools
 
 # SSD configuration defaults
-ssd_filesystem: "ext4"
-ssd_mount_options: "defaults,noatime,errors=remount-ro"
-ssd_format: false
+common_ssd_filesystem: "ext4"
+common_ssd_mount_options: "defaults,noatime,errors=remount-ro"
+common_ssd_format: false
 
 # Stack management
-start_stack: true
+common_start_stack: true
 
 # Systemd service defaults
-remain_after_exit: "false"
+common_remain_after_exit: "false"
 common_standard_output: "journal"
 common_standard_error: "journal"
-restart_policy: "no"
-restart_sec: "5"
+common_restart_policy: "no"
+common_restart_sec: "5"
 common_wanted_by: "multi-user.target"
-enable_security_hardening: true
-no_new_privileges: "true"
+common_enable_security_hardening: true
+common_no_new_privileges: "true"
 
 # Backup integration defaults
-backup_additional_groups: []
-backup_nice_level: 19
-backup_io_class: "idle"
+common_backup_additional_groups: []
+common_backup_nice_level: 19
+common_backup_io_class: "idle"
 
 # Port connectivity testing
-firewall_ports: []
+common_firewall_ports: []
 
 # Docker service defaults
-service_restart: "always"
+common_service_restart: "always"

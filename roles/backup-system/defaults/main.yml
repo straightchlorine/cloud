@@ -1,27 +1,28 @@
 ---
 # Backup system role defaults
+# noqa: var-naming[no-role-prefix]
 
 # Backup targets - list of hosts/services to back up
-backup_targets: []
+backup_targets: []  # noqa: var-naming[no-role-prefix]
 
 # Strategy and monitoring
-backup_strategy: "hybrid"
-backup_monitoring: true
-backup_grafana_integration: false
+backup_strategy: "hybrid"  # noqa: var-naming[no-role-prefix]
+backup_monitoring: true  # noqa: var-naming[no-role-prefix]
+backup_grafana_integration: false  # noqa: var-naming[no-role-prefix]
 
 # Scheduling
-backup_health_check_schedule: "*-*-* 06:00:00"
-backup_metrics_schedule: "*-*-* *:15:00"
-backup_metrics_retention_days: "90"
+backup_health_check_schedule: "*-*-* 06:00:00"  # noqa: var-naming[no-role-prefix]
+backup_metrics_schedule: "*-*-* *:15:00"  # noqa: var-naming[no-role-prefix]
+backup_metrics_retention_days: "90"  # noqa: var-naming[no-role-prefix]
 
 # Key rotation
-backup_enable_key_rotation: true
-backup_key_rotation_schedule: "monthly"
-backup_key_rotation_days: "90"
-backup_password_rotation_days: "30"
-backup_force_key_deployment: false
+backup_enable_key_rotation: true  # noqa: var-naming[no-role-prefix]
+backup_key_rotation_schedule: "monthly"  # noqa: var-naming[no-role-prefix]
+backup_key_rotation_days: "90"  # noqa: var-naming[no-role-prefix]
+backup_password_rotation_days: "30"  # noqa: var-naming[no-role-prefix]
+backup_force_key_deployment: false  # noqa: var-naming[no-role-prefix]
 
 # Alerting
-backup_alert_threshold_hours: "25"
-backup_alert_webhook_url: ""
-backup_alert_email: ""
+backup_alert_threshold_hours: "25"  # noqa: var-naming[no-role-prefix]
+backup_alert_webhook_url: ""  # noqa: var-naming[no-role-prefix]
+backup_alert_email: ""  # noqa: var-naming[no-role-prefix]

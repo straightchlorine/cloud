@@ -21,7 +21,7 @@ Host hetzner-storage
     HostName {{ vault_backup_storage_host }}
     User {{ vault_backup_storage_user }}
     Port {{ vault_backup_storage_port }}
-    IdentityFile {{{ common_backup_base_path }}}/.ssh/hetzner
+    IdentityFile {{ backup_base_path }}/.ssh/hetzner
     BatchMode yes
     PasswordAuthentication no
 

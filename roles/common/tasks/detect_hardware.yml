@@ -19,7 +19,7 @@
     fi
   args:
     executable: /bin/bash
-  register: hardware_detection_raw
+  register: common_hardware_detection_raw
   changed_when: false
 
 - name: Gather system resources
@@ -32,7 +32,7 @@
       - ansible_processor_cores
       - ansible_processor_vcpus
 
-- name: Parse hardware information
+- name: Parse hardware information # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_platform: >-
       {%- if device_type is defined -%}
@@ -47,26 +47,27 @@
         {%- else -%}
           {{ device_type }}
         {%- endif -%}
-      {%- elif 'Raspberry Pi 4' in hardware_detection_raw.stdout -%}
+      {%- elif 'Raspberry Pi 4' in common_hardware_detection_raw.stdout -%}
         rpi4
-      {%- elif 'Raspberry Pi 3' in hardware_detection_raw.stdout -%}
+      {%- elif 'Raspberry Pi 3' in common_hardware_detection_raw.stdout -%}
         rpi3
-      {%- elif 'Raspberry Pi 2' in hardware_detection_raw.stdout -%}
+      {%- elif 'Raspberry Pi 2' in common_hardware_detection_raw.stdout -%}
         rpi2
-      {%- elif hardware_detection_raw.stdout.startswith('VM-') or hardware_detection_raw.stdout.startswith('PC-') -%}
+      {%- elif common_hardware_detection_raw.stdout.startswith('VM-')
+        or common_hardware_detection_raw.stdout.startswith('PC-') -%}
         pc
       {%- else -%}
         unknown
       {%- endif -%}
 
     hardware_details:
-      raw_detection: "{{ hardware_detection_raw.stdout }}"
+      raw_detection: "{{ common_hardware_detection_raw.stdout }}"
       memory_mb: "{{ ansible_memtotal_mb }}"
       cpu_cores: "{{ ansible_processor_cores }}"
       cpu_count: "{{ ansible_processor_count }}"
       vcpus: "{{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}"
 
-- name: Set hardware-specific resource limits for Pi 4
+- name: Set hardware-specific resource limits for Pi 4 # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_limits:
       traefik:
@@ -96,7 +97,7 @@
         cpus_reservation: "0.5"
   when: hardware_platform == "rpi4"
 
-- name: Set hardware-specific resource limits for Pi 3
+- name: Set hardware-specific resource limits for Pi 3 # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_limits:
       traefik:
@@ -126,7 +127,7 @@
         cpus_reservation: "0.5"
   when: hardware_platform == "rpi3"
 
-- name: Set optimized resource limits for PCs
+- name: Set optimized resource limits for PCs # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_limits:
       traefik:
@@ -171,7 +172,7 @@
         cpus_reservation: "1.0"
   when: hardware_platform == "pc"
 
-- name: Set conservative resource limits for unknown hardware
+- name: Set conservative resource limits for unknown hardware # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_limits:
       traefik:

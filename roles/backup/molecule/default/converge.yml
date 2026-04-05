@@ -2,7 +2,7 @@
 - name: Converge - Default (Core Role Logic)
   hosts: all
   vars:
-    timezone: UTC
+    backup_timezone: UTC
 
     # Backup role mode
     backup_role: "standalone"
@@ -13,7 +13,6 @@
 
     # Path configuration
     backup_base_path: "/opt/test-backup"
-    common_backup_base_path: "/opt/test-backup"
 
     # Restic version
     restic_version: "0.16.4"
@@ -52,7 +51,7 @@
         mode: '0755'
       become: true
       loop:
-        - "{{ common_backup_base_path | dirname }}"
+        - "{{ backup_base_path | dirname }}"
 
     - name: Gather facts (replaces network facts for testing)
       ansible.builtin.setup:
@@ -77,7 +76,7 @@
       ansible.builtin.user:
         name: "{{ backup_user }}"
         group: "{{ backup_group }}"
-        home: "{{ common_backup_base_path }}"
+        home: "{{ backup_base_path }}"
         shell: /bin/bash
         createhome: true
         system: true
@@ -91,21 +90,21 @@
         group: "{{ backup_group }}"
         mode: '0750'
       loop:
-        - "{{ common_backup_base_path }}"
-        - "{{ common_backup_base_path }}/scripts"
-        - "{{ common_backup_base_path }}/logs"
-        - "{{ common_backup_base_path }}/cache"
-        - "{{ common_backup_base_path }}/repositories"
-        - "{{ common_backup_base_path }}/keys"
-        - "{{ common_backup_base_path }}/config"
-        - "{{ common_backup_base_path }}/metrics"
-        - "{{ common_backup_base_path }}/locks"
-        - "{{ common_backup_base_path }}/coordination"
-        - "{{ common_backup_base_path }}/reports"
-        - "{{ common_backup_base_path }}/dashboards"
-        - "{{ common_backup_base_path }}/.ssh"
-        - "{{ common_backup_base_path }}/.ssh/sockets"
-        - "{{ common_backup_base_path }}/.ssh/nodes"
+        - "{{ backup_base_path }}"
+        - "{{ backup_base_path }}/scripts"
+        - "{{ backup_base_path }}/logs"
+        - "{{ backup_base_path }}/cache"
+        - "{{ backup_base_path }}/repositories"
+        - "{{ backup_base_path }}/keys"
+        - "{{ backup_base_path }}/config"
+        - "{{ backup_base_path }}/metrics"
+        - "{{ backup_base_path }}/locks"
+        - "{{ backup_base_path }}/coordination"
+        - "{{ backup_base_path }}/reports"
+        - "{{ backup_base_path }}/dashboards"
+        - "{{ backup_base_path }}/.ssh"
+        - "{{ backup_base_path }}/.ssh/sockets"
+        - "{{ backup_base_path }}/.ssh/nodes"
       become: true
 
     - name: Set SSH directory permissions
@@ -116,8 +115,8 @@
         group: "{{ backup_group }}"
         mode: '0700'
       loop:
-        - "{{ common_backup_base_path }}/.ssh"
-        - "{{ common_backup_base_path }}/.ssh/sockets"
+        - "{{ backup_base_path }}/.ssh"
+        - "{{ backup_base_path }}/.ssh/sockets"
       become: true
 
     - name: Create test backup script placeholder
@@ -126,7 +125,7 @@
           #!/bin/bash
           # Backup script placeholder for molecule testing
           echo "Backup script for {{ backup_service_name }}"
-        dest: "{{ common_backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
+        dest: "{{ backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
         owner: "{{ backup_user }}"
         group: "{{ backup_group }}"
         mode: '0750'
@@ -135,7 +134,7 @@
     - name: Create test password file placeholder
       ansible.builtin.copy:
         content: "{{ restic_password }}"
-        dest: "{{ common_backup_base_path }}/keys/{{ backup_service_name }}-password"
+        dest: "{{ backup_base_path }}/keys/{{ backup_service_name }}-password"
         owner: "{{ backup_user }}"
         group: "{{ backup_group }}"
         mode: '0600'

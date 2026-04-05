@@ -1,17 +1,20 @@
 ---
 # Music stack deployment
 
-- name: Create standardized Docker Compose file
+- name: Create standardized Docker Compose file # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: build_docker_compose
   vars:
-    compose_file_path: "{{ music_stack_music_stack_home }}/docker-compose.yml"
+    compose_file_path: >-
+      {{ music_stack_music_stack_home }}/docker-compose.yml
     compose_file_owner: "{{ ansible_user }}"
     compose_file_group: "{{ ansible_user }}"
     stack_name: "music-stack"
-    compose_services: "{{ music_stack_music_stack_compose_services }}"
-    compose_networks: "{{ music_stack_music_stack_compose_networks }}"
+    compose_services: >-
+      {{ music_stack_music_stack_compose_services }}
+    compose_networks: >-
+      {{ music_stack_music_stack_compose_networks }}
   notify: restart music stack
 
 - name: Create Beets config directory
@@ -90,28 +93,28 @@
 - name: Check if JWT secret file exists
   ansible.builtin.stat:
     path: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
-  register: jwt_secret_file
+  register: music_stack_jwt_secret_file
 
 - name: Generate JWT secret for Navidrome if not exists
   ansible.builtin.command: openssl rand -hex 32
-  register: jwt_secret_generated
-  when: not jwt_secret_file.stat.exists
+  register: music_stack_jwt_secret_generated
+  when: not music_stack_jwt_secret_file.stat.exists
   no_log: true
 
 - name: Store JWT secret persistently
   ansible.builtin.copy:
-    content: "{{ jwt_secret_generated.stdout }}"
+    content: "{{ music_stack_jwt_secret_generated.stdout }}"
     dest: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
-  when: not jwt_secret_file.stat.exists
+  when: not music_stack_jwt_secret_file.stat.exists
   no_log: true
 
 - name: Read existing JWT secret
   ansible.builtin.slurp:
     src: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
-  register: jwt_secret_content
+  register: music_stack_jwt_secret_content
   no_log: true
 
 - name: Create .env file for Docker Compose
@@ -122,10 +125,10 @@
     group: "{{ ansible_user }}"
     mode: "0600"
   vars:
-    navidrome_jwt_secret: "{{ jwt_secret_content.content | b64decode | trim }}"
+    navidrome_jwt_secret: "{{ music_stack_jwt_secret_content.content | b64decode | trim }}"
   notify: restart music stack
 
-- name: Install yt-dlp dependencies using common package management
+- name: Install yt-dlp dependencies using common package management # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: packages
@@ -135,7 +138,7 @@
 
 - name: Detect system architecture for yt-dlp
   ansible.builtin.set_fact:
-    ytdlp_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'arm64' }}"
+    music_stack_ytdlp_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'arm64' }}"
   tags: [youtube, ytdlp]
 
 - name: Download yt-dlp GPG public key
@@ -178,7 +181,9 @@
 
 - name: Download yt-dlp binary
   ansible.builtin.get_url:
-    url: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ music_stack_ytdlp_version }}/yt-dlp_linux_{{ ytdlp_arch }}"
+    url: >-
+      https://github.com/yt-dlp/yt-dlp/releases/download/{{
+      music_stack_ytdlp_version }}/yt-dlp_linux_{{ music_stack_ytdlp_arch }}
     dest: /tmp/yt-dlp_binary
     mode: "0755"
   become: true
@@ -189,7 +194,7 @@
   ansible.builtin.shell: |
     set -o pipefail
     cd /tmp
-    grep "yt-dlp_linux_{{ ytdlp_arch }}$" SHA2-256SUMS | sha256sum -c -
+    grep "yt-dlp_linux_{{ music_stack_ytdlp_arch }}$" SHA2-256SUMS | sha256sum -c -
   changed_when: false
   tags: [youtube, ytdlp, security]
 
@@ -203,7 +208,7 @@
     remote_src: true
     backup: true
   become: true
-  register: ytdlp_download
+  register: music_stack_ytdlp_download
   tags: [youtube, ytdlp]
 
 - name: Cleanup temporary files
@@ -230,7 +235,7 @@
 
 - name: Verify yt-dlp installation
   ansible.builtin.command: /usr/local/bin/yt-dlp --version
-  register: ytdlp_version_check
+  register: music_stack_ytdlp_version_check
   changed_when: false
   become: true
   tags: [youtube, ytdlp]
@@ -259,7 +264,7 @@
     dest: "{{ music_stack_music_stack_home }}/config/youtube.env"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
-    mode: "0644"
+    mode: "0600"
   tags: [youtube, config]
 
 - name: Create YouTube cron wrapper script
@@ -301,8 +306,8 @@
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ music_stack_navidrome_port }}/app"
     method: GET
-  register: navidrome_health
-  until: navidrome_health.status == 200
+  register: music_stack_navidrome_health
+  until: music_stack_navidrome_health.status == 200
   retries: 30
   delay: 2
   when: start_stack

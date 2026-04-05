@@ -7,13 +7,13 @@ set -euo pipefail
 
 # Configuration
 export RESTIC_REPOSITORY="{{ backup_restic_repository }}"
-export RESTIC_PASSWORD="{{ backup_restic_password }}"
-export RESTIC_CACHE_DIR="{{{ common_backup_base_path }}}/cache"
-export RESTIC_SFTP_COMMAND="ssh -F {{{ common_backup_base_path }}}/.ssh/config hetzner-storage -s sftp"
+export RESTIC_PASSWORD_FILE="{{ backup_base_path }}/keys/{{ inventory_hostname }}-password"
+export RESTIC_CACHE_DIR="{{ backup_base_path }}/cache"
+export RESTIC_SFTP_COMMAND="ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Service configuration
 SERVICE_NAME="{{ inventory_hostname }}"
-LOG_FILE="{{{ common_backup_base_path }}}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="{{ backup_base_path }}/logs/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 
 # Backup paths
 BACKUP_PATHS=(
@@ -94,9 +94,9 @@ check_prerequisites() {
     local restic_ver=$(restic version | head -1 | awk '{print $2}')
     log "Using restic version: $restic_ver"
 
-    # Check password is set
-    if [[ -z "$RESTIC_PASSWORD" ]]; then
-        error_exit "RESTIC_PASSWORD is not set"
+    # Check password file exists
+    if [[ ! -f "$RESTIC_PASSWORD_FILE" ]]; then
+        error_exit "RESTIC_PASSWORD_FILE not found: $RESTIC_PASSWORD_FILE"
     fi
 
     # Check cache directory exists

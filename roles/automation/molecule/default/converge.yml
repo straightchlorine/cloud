@@ -24,7 +24,7 @@
     vault_watchtower_api_token: "test-watchtower-token"
 
     # Services
-    services_enabled:
+    automation_services_enabled:
       traefik: true
       vaultwarden: true
 

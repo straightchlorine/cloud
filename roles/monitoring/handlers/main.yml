@@ -6,43 +6,47 @@
 
 - name: Restart prometheus
   ansible.builtin.systemd:
-    name: Prometheus
+    name: prometheus
     state: restarted
   become: true
 
 - name: Restart alertmanager
   ansible.builtin.systemd:
-    name: Prometheus-alertmanager
+    name: prometheus-alertmanager
     state: restarted
   become: true
 
 - name: Restart grafana
   ansible.builtin.systemd:
-    name: Grafana-server
+    name: grafana-server
     state: restarted
   become: true
 
 - name: Restart loki
   ansible.builtin.systemd:
-    name: Loki
+    name: loki
     state: restarted
   become: true
 
 - name: Restart uptime-kuma
   ansible.builtin.systemd:
-    name: Uptime-kuma
+    name: uptime-kuma
     state: restarted
   become: true
 
 - name: Restart promtail
   ansible.builtin.systemd:
-    name: Promtail
+    name: promtail
     state: restarted
   become: true
 
 - name: Restart monitoring stack
-  ansible.builtin.command: docker compose restart
-  args:
-    chdir: "{{ monitoring_stack_home }}"
-  become_user: "{{ monitoring_user }}"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
   become: true
+  loop:
+    - prometheus
+    - grafana-server
+    - loki
+    - prometheus-alertmanager

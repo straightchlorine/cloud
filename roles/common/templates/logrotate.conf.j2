@@ -1,7 +1,7 @@
 /var/log/*.log {
     daily
-    rotate {{ log_rotation_days }}
-    {% if log_compression %}
+    rotate {{ common_log_rotation_days }}
+    {% if common_log_compression %}
     compress
     delaycompress
     {% endif %}

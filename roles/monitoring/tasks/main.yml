@@ -21,7 +21,7 @@
     name: common
     tasks_from: packages
   vars:
-    role_specific_packages: "{{ monitoring_packages }}"
+    role_specific_packages: "{{ monitoring_packages }}" # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
 - name: Include directory setup
@@ -52,7 +52,7 @@
       📁 Stack Home: {{ monitoring_stack_home }}
       [SAVE] Data Path: {{ monitoring_data_path }}
       👤 User: {{ monitoring_user }} ({{ monitoring_uid }}:{{ monitoring_gid }})
-      🔒 SSL: {{ 'Enabled' if enable_ssl else 'Disabled' }}
+      🔒 SSL: {{ 'Enabled' if monitoring_enable_ssl else 'Disabled' }}
 
       Next Steps:
       1. Configure Prometheus targets in inventory

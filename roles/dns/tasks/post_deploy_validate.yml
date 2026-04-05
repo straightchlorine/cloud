@@ -12,8 +12,8 @@
 - name: Test Pi-hole DNS resolution
   ansible.builtin.command: |
     nslookup google.com {{ dns_primary_ip }}
-  register: dns_test
-  failed_when: dns_test.rc != 0
+  register: dns_resolution_test
+  failed_when: dns_resolution_test.rc != 0
   changed_when: false
   tags: [post_validation]
 
@@ -22,7 +22,7 @@
     url: "http://{{ dns_primary_ip }}/admin/"
     method: GET
     timeout: 10
-  register: pihole_web
+  register: dns_pihole_web
   tags: [post_validation]
 
 - name: Test Pi-hole API response
@@ -30,13 +30,13 @@
     url: "http://{{ dns_primary_ip }}/admin/api.php?summary"
     method: GET
     timeout: 10
-  register: pihole_api
+  register: dns_pihole_api
   tags: [post_validation]
 
 - name: Verify Pi-hole is blocking ads
   ansible.builtin.command: |
     nslookup doubleclick.net {{ dns_primary_ip }}
-  register: ad_block_test
+  register: dns_ad_block_test
   failed_when: false
   changed_when: false
   tags: [post_validation]
@@ -44,8 +44,8 @@
 - name: Check NTP service if enabled
   ansible.builtin.systemd:
     name: Chrony
-  register: ntp_status
-  when: ntp_server_enabled | default(false)
+  register: dns_ntp_status
+  when: dns_ntp_server_enabled | default(false)
   tags: [post_validation]
 
 - name: Verify monitoring services if enabled
@@ -61,12 +61,12 @@
     msg: |
       [OK] Pi-hole Post-Deployment Validation Results:
 
-      Pi-hole Service: {{ 'Running' if pihole_web.status == 200 else 'Failed' }}
-      DNS Resolution: {{ 'Working' if dns_test.rc == 0 else 'Failed' }}
-      Web Interface: {{ 'Accessible' if pihole_web.status == 200 else 'Failed' }}
-      API Response: {{ 'Working' if pihole_api.status == 200 else 'Failed' }}
-      Ad Blocking: {{ 'Active' if ad_block_test.rc != 0 else 'Check Required' }}
-      NTP Service: {{ ntp_status.status.ActiveState if ntp_server_enabled | default(false) else 'Disabled' }}
+      Pi-hole Service: {{ 'Running' if dns_pihole_web.status == 200 else 'Failed' }}
+      DNS Resolution: {{ 'Working' if dns_resolution_test.rc == 0 else 'Failed' }}
+      Web Interface: {{ 'Accessible' if dns_pihole_web.status == 200 else 'Failed' }}
+      API Response: {{ 'Working' if dns_pihole_api.status == 200 else 'Failed' }}
+      Ad Blocking: {{ 'Active' if dns_ad_block_test.rc != 0 else 'Check Required' }}
+      NTP Service: {{ dns_ntp_status.status.ActiveState if dns_ntp_server_enabled | default(false) else 'Disabled' }}
 
       Pi-hole deployment validated successfully!
   tags: [post_validation]

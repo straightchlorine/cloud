@@ -16,7 +16,7 @@
     - name: Check if backup user home directory path is accessible
       ansible.builtin.stat:
         path: /opt/backup
-      register: backup_home_check
+      register: common_backup_home_check
 
     - name: Validate backup user home directory exists or parent is writable
       ansible.builtin.file:
@@ -25,15 +25,15 @@
         mode: "0755"
       become: true
       check_mode: true
-      register: backup_home_creation_check
+      register: common_backup_home_creation_check
       failed_when: false
 
     - name: Fail if backup user home directory cannot be created
       ansible.builtin.fail:
         msg: "Cannot create backup user home directory /opt/backup. Parent directory may not be writable or accessible."
       when:
-        - not backup_home_check.stat.exists
-        - backup_home_creation_check is failed
+        - not common_backup_home_check.stat.exists
+        - common_backup_home_creation_check is failed
 
 - name: Validate backup user configuration directories can be created
   ansible.builtin.file:
@@ -42,7 +42,7 @@
     mode: "0755"
   become: true
   check_mode: true
-  register: backup_dir_checks
+  register: common_backup_dir_checks
   failed_when: false
   loop:
     - /opt/backup/.ssh
@@ -55,7 +55,7 @@
   ansible.builtin.fail:
     msg: "Cannot create backup directory {{ item.item }}. Check permissions and disk space."
   when: item is failed
-  loop: "{{ backup_dir_checks.results }}"
+  loop: "{{ common_backup_dir_checks.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [backup_validation]
@@ -63,7 +63,7 @@
 - name: Check system configuration backup directories
   ansible.builtin.stat:
     path: "{{ item }}"
-  register: system_backup_dirs
+  register: common_system_backup_dirs
   loop:
     - /etc/docker
     - "/home/{{ ansible_user }}/.docker"
@@ -75,14 +75,14 @@
   when:
     - item.stat.exists
     - not item.stat.readable
-  loop: "{{ system_backup_dirs.results }}"
+  loop: "{{ common_system_backup_dirs.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags: [backup_validation]
 
 - name: Check available disk space for backup operations
   ansible.builtin.shell: df /opt | tail -1 | awk '{print $4}'
-  register: backup_disk_space
+  register: common_backup_disk_space
   changed_when: false
   tags: [backup_validation]
 
@@ -90,9 +90,9 @@
   ansible.builtin.fail:
     msg: >-
       Insufficient disk space for backup operations.
-      Available: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Available: {{ (common_backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
       Required: 1GB minimum for backup metadata and temporary files.
-  when: (backup_disk_space.stdout | int) < 1048576 # 1GB in KB
+  when: (common_backup_disk_space.stdout | int) < 1048576 # 1GB in KB
   tags: [backup_validation]
 
 # Enhanced writability validation for Item #23
@@ -103,22 +103,22 @@
         path: /opt/backup
         prefix: backup_write_test_
         suffix: .tmp
-      register: backup_write_test
+      register: common_backup_write_test
       become: true
       tags: [backup_validation]
 
     - name: Verify test file was created successfully
       ansible.builtin.stat:
-        path: "{{ backup_write_test.path }}"
-      register: test_file_check
+        path: "{{ common_backup_write_test.path }}"
+      register: common_test_file_check
       tags: [backup_validation]
 
     - name: Remove test file after successful write test
       ansible.builtin.file:
-        path: "{{ backup_write_test.path }}"
+        path: "{{ common_backup_write_test.path }}"
         state: absent
       become: true
-      when: test_file_check.stat.exists
+      when: common_test_file_check.stat.exists
       tags: [backup_validation]
 
   rescue:
@@ -143,13 +143,13 @@
         path: /opt/backup/logs
         prefix: log_write_test_
         suffix: .log
-      register: log_write_test
+      register: common_log_write_test
       become: true
       tags: [backup_validation]
 
     - name: Remove test log file after successful write test
       ansible.builtin.file:
-        path: "{{ log_write_test.path }}"
+        path: "{{ common_log_write_test.path }}"
         state: absent
       become: true
       tags: [backup_validation]
@@ -164,11 +164,11 @@
   ansible.builtin.debug:
     msg: |
       [OK] Common backup directories validated:
-      - Backup user home: /opt/backup ({{ 'exists' if backup_home_check.stat.exists else 'will be created' }})
+      - Backup user home: /opt/backup ({{ 'exists' if common_backup_home_check.stat.exists else 'will be created' }})
       - System Docker config: {{
-          system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list |
+          common_system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list |
           join(', ') or 'none found' }}
-      - Available space: {{ (backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB
+      - Available space: {{ (common_backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB
       - Writability test: [OK] PASSED - Directories are writable
       - Log directory: [OK] VERIFIED - Logging will work correctly
   tags: [backup_validation]

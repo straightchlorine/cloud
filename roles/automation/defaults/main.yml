@@ -19,7 +19,7 @@ automation_explorer_sub: "{{ automation_subdomain_explorer }}"
 # SSL configuration
 automation_letsencrypt_staging: false
 
-services_enabled:
+automation_services_enabled:
   traefik: true
 
 # SSD configuration (common variables inherited from common role)
@@ -81,7 +81,7 @@ automation_compose_services:
       - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
 
   dozzle:
-    image: "amir20/dozzle:latest"
+    image: "amir20/dozzle:v8"
     container_name: "dozzle"
     restart: "always"
     deploy:
@@ -107,7 +107,7 @@ automation_compose_services:
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
 
   portainer:
-    image: "portainer/portainer-ce:latest"
+    image: "portainer/portainer-ce:2.21"
     container_name: "portainer"
     restart: "always"
     deploy:
@@ -144,7 +144,7 @@ automation_compose_services:
           memory: "{{ hardware_limits.influxdb3.memory_reservation }}"
           cpus: "{{ hardware_limits.influxdb3.cpus_reservation }}"
     ports:
-      - "8181:8181"
+      - "127.0.0.1:8181:8181"
     ansible.builtin.command:
       - "influxdb3"
       - "serve"
@@ -178,7 +178,7 @@ automation_compose_services:
           memory: "128M"
           cpus: "0.25"
     ports:
-      - "8888:80"
+      - "127.0.0.1:8888:80"
     environment:
       - "SESSION_SECRET_KEY={{ vault_influxdb3_session_secret_key }}"
     volumes:
@@ -194,7 +194,7 @@ automation_compose_services:
       - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
 
   vaultwarden:
-    image: "vaultwarden/server:latest"
+    image: "vaultwarden/server:1.32"
     container_name: "vaultwarden"
     restart: "always"
     deploy:
@@ -209,6 +209,10 @@ automation_compose_services:
       - "{{ automation_data_path }}/vaultwarden:/data"
     environment:
       - "DOMAIN=https://{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
+      - "SIGNUPS_ALLOWED=false"
+      - "INVITATIONS_ALLOWED=false"
+      - "SHOW_PASSWORD_HINT=false"
+      - "ADMIN_TOKEN={{ vault_vaultwarden_admin_token }}"
     networks:
       - "traefik-network"
     labels:
@@ -216,10 +220,11 @@ automation_compose_services:
       - "traefik.http.routers.vaultwarden.rule=Host(`{{ automation_subdomain_vaultwarden }}.{{ automation_domain }}`)"
       - "traefik.http.routers.vaultwarden.entrypoints=websecure"
       - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vaultwarden.middlewares=rate-limit,body-limit,default-headers"
       - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
 
   watchtower:
-    image: "containrrr/watchtower:latest"
+    image: "containrrr/watchtower:1.7"
     container_name: "watchtower"
     restart: "always"
     deploy:

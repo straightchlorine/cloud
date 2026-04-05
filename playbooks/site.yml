@@ -13,6 +13,8 @@
       when: run_validation
 
     - name: Run role-specific validation
+      when: run_validation
+      tags: [role_validation]
       block:
         - name: DNS validation for Pi-hole hosts
           ansible.builtin.include_role:
@@ -37,8 +39,6 @@
             name: monitoring
             tasks_from: validate
           when: "'monitoring' in group_names"
-      when: run_validation
-      tags: [role_validation]
 
 - name: Configure all hosts with common setup
   hosts: all

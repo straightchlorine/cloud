@@ -21,9 +21,11 @@ prometheus_exporters_node_exporter_port: 9100
 node_exporter_install_method: "binary" # 'binary' or 'package'
 prometheus_exporters_node_exporter_binary_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{ prometheus_exporters_node_exporter_version }}/
-  node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz
+  node_exporter-{{ prometheus_exporters_node_exporter_version
+  }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz
 prometheus_exporters_node_exporter_checksum_url: >-
-  https://github.com/prometheus/node_exporter/releases/download/v{{ prometheus_exporters_node_exporter_version }}/sha256sums.txt
+  https://github.com/prometheus/node_exporter/releases/download/
+  v{{ prometheus_exporters_node_exporter_version }}/sha256sums.txt
 
 # Node Exporter advanced configuration
 node_exporter_enabled_collectors:

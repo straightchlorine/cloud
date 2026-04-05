@@ -10,7 +10,7 @@
     follow_redirects: "{{ item.follow_redirects | default('none') }}"
     status_code: "{{ item.valid_codes | default([200]) }}"
   loop: "{{ services_to_verify }}"
-  register: service_check
+  register: common_service_check
   failed_when: false
   tags: [verification]
 
@@ -19,7 +19,7 @@
     msg: >-
       {{ item.item.name }}: {{ 'UP' if item.status in (item.item.valid_codes | default([200])) else 'DOWN' }}
       ({{ item.status | default('No response') }})
-  loop: "{{ service_check.results }}"
+  loop: "{{ common_service_check.results }}"
   loop_control:
     label: "{{ item.item.name }}"
   tags: [verification]
