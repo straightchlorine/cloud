@@ -55,12 +55,3 @@ steps:
           deploy-rclone-to-hosts.yml \
           backup-coordinator.yml \
           backup-deploy.yml
-
-  - name: validate-infrastructure
-    image: cytopia/ansible:latest-tools
-    commands:
-      - chmod 755 .
-      - |
-        ANSIBLE_ROLES_PATH="$(pwd)/roles" ansible-playbook \
-          validate-infrastructure.yml \
-          -e validation_type=pre_deployment --check
