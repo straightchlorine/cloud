@@ -1,6 +1,10 @@
 ---
 # Firewall configuration tasks
 
+- name: Run firewall deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
 - name: Install UFW using common package management
   ansible.builtin.include_role:
     name: common

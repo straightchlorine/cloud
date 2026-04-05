@@ -1,0 +1,128 @@
+---
+- name: Verify prometheus-exporters role
+  hosts: all
+  vars:
+    prometheus_exporters_user: "prometheus"
+    prometheus_exporters_group: "prometheus"
+    prometheus_exporters_base_dir: "/opt/prometheus-exporters"
+    prometheus_exporters_config_dir: "/etc/prometheus/exporters"
+    prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
+  tasks:
+    # User and group verification
+    - name: Check if prometheus user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ prometheus_exporters_user }}"
+      register: prometheus_user_check
+
+    - name: Assert prometheus user exists and is a system user
+      ansible.builtin.assert:
+        that:
+          - prometheus_user_check.ansible_facts.getent_passwd['prometheus'] is defined
+        fail_msg: "Prometheus user does not exist"
+        success_msg: "[OK] Prometheus user exists"
+
+    - name: Check if prometheus group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ prometheus_exporters_group }}"
+      register: prometheus_group_check
+
+    - name: Assert prometheus group exists
+      ansible.builtin.assert:
+        that:
+          - prometheus_group_check.ansible_facts.getent_group['prometheus'] is defined
+        fail_msg: "Prometheus group does not exist"
+        success_msg: "[OK] Prometheus group exists"
+
+    # Directory verification
+    - name: Verify prometheus-exporters directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: dir_stat
+      loop:
+        - "{{ prometheus_exporters_base_dir }}"
+        - "{{ prometheus_exporters_base_dir }}/bin"
+        - "{{ prometheus_exporters_base_dir }}/scripts"
+        - "{{ prometheus_exporters_base_dir }}/logs"
+        - "{{ prometheus_exporters_config_dir }}"
+        - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
+
+    - name: Assert all directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Directory verified: {{ item.item }}"
+      loop: "{{ dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Ownership verification
+    - name: Verify directory ownership
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: ownership_stat
+      loop:
+        - "{{ prometheus_exporters_base_dir }}"
+        - "{{ prometheus_exporters_config_dir }}"
+        - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
+
+    - name: Assert directories are owned by prometheus user
+      ansible.builtin.assert:
+        that:
+          - item.stat.pw_name == prometheus_exporters_user
+          - item.stat.gr_name == prometheus_exporters_group
+          - item.stat.mode == '0755'
+        fail_msg: |
+          Directory {{ item.item }} ownership/permissions incorrect
+          Owner: {{ item.stat.pw_name }} (expected {{ prometheus_exporters_user }})
+          Group: {{ item.stat.gr_name }} (expected {{ prometheus_exporters_group }})
+          Mode: {{ item.stat.mode }} (expected 0755)
+        success_msg: "[OK] Ownership correct: {{ item.item }}"
+      loop: "{{ ownership_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Configuration file verification
+    - name: Verify node exporter config exists
+      ansible.builtin.stat:
+        path: "{{ prometheus_exporters_config_dir }}/node_exporter.conf"
+      register: node_exporter_config_stat
+
+    - name: Assert node exporter config exists
+      ansible.builtin.assert:
+        that:
+          - node_exporter_config_stat.stat.exists
+          - node_exporter_config_stat.stat.mode == '0644'
+        fail_msg: "Node exporter config does not exist or has wrong permissions"
+        success_msg: "[OK] Node exporter config file exists with correct permissions"
+
+    # Display verification summary
+    - name: Display prometheus-exporters role verification results
+      ansible.builtin.debug:
+        msg: |
+          [OK] Prometheus Exporters Role Verification Complete
+
+          User Configuration Verified:
+          - User: prometheus - EXISTS
+          - Group: prometheus - EXISTS
+
+          Directory Structure Verified:
+          - Base dir: {{ prometheus_exporters_base_dir }} - EXISTS
+          - Bin dir: {{ prometheus_exporters_base_dir }}/bin - EXISTS
+          - Scripts dir: {{ prometheus_exporters_base_dir }}/scripts - EXISTS
+          - Logs dir: {{ prometheus_exporters_base_dir }}/logs - EXISTS
+          - Config dir: {{ prometheus_exporters_config_dir }} - EXISTS
+          - Textfiles dir: {{ prometheus_exporters_node_exporter_textfile_dir }} - EXISTS
+
+          Ownership Verified:
+          - All directories owned by prometheus:prometheus
+          - All directories have mode 0755
+
+          Configuration Files Verified:
+          - node_exporter.conf - EXISTS
+
+          Note: Binary downloads and service startup skipped in container test
+          This validates core role logic without network dependencies

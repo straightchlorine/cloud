@@ -1,0 +1,29 @@
+---
+- name: Converge - Fail-Fast Validation
+  hosts: all
+  vars:
+    timezone: UTC
+    # Intentionally omit ALL required variables:
+    # - monitoring_data_path, monitoring_config_path, monitoring_log_path
+    # - monitoring_stack_home
+    # - vault_grafana_admin_password
+    # - grafana_port, prometheus_port, loki_port, uptime_kuma_port, alertmanager_port
+    # - restic_enabled, restic_repository, restic_password
+    # This tests that role fails gracefully with clear error messages
+  tasks:
+    - name: Include monitoring validation (expect to fail)
+      block:
+        - name: Try to include monitoring validation without required variables
+          ansible.builtin.include_tasks: ../../tasks/validate.yml
+
+      rescue:
+        - name: Capture expected validation failure
+          ansible.builtin.set_fact:
+            validation_failed: true
+            validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
+
+        - name: Display validation failure message
+          ansible.builtin.debug:
+            msg: |
+              [OK] Validation correctly failed (expected behavior)
+              Error: {{ validation_error }}

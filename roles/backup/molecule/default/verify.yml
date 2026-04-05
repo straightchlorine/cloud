@@ -1,0 +1,228 @@
+---
+- name: Verify backup role
+  hosts: all
+  vars:
+    backup_user: "backup"
+    backup_group: "backup"
+    backup_service_name: "test-service"
+    common_backup_base_path: "/opt/test-backup"
+  tasks:
+    # User verification
+    - name: Check if backup user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ backup_user }}"
+      register: backup_user_check
+
+    - name: Assert backup user exists
+      ansible.builtin.assert:
+        that:
+          - backup_user_check.ansible_facts.getent_passwd['backup'] is defined
+        fail_msg: "Backup user does not exist"
+        success_msg: "[OK] Backup user exists"
+
+    - name: Check if backup group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ backup_group }}"
+      register: backup_group_check
+
+    - name: Assert backup group exists
+      ansible.builtin.assert:
+        that:
+          - backup_group_check.ansible_facts.getent_group['backup'] is defined
+        fail_msg: "Backup group does not exist"
+        success_msg: "[OK] Backup group exists"
+
+    # Directory verification
+    - name: Verify backup directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: dir_stat
+      loop:
+        - "{{ common_backup_base_path }}"
+        - "{{ common_backup_base_path }}/scripts"
+        - "{{ common_backup_base_path }}/logs"
+        - "{{ common_backup_base_path }}/cache"
+        - "{{ common_backup_base_path }}/repositories"
+        - "{{ common_backup_base_path }}/keys"
+        - "{{ common_backup_base_path }}/config"
+        - "{{ common_backup_base_path }}/metrics"
+        - "{{ common_backup_base_path }}/locks"
+        - "{{ common_backup_base_path }}/coordination"
+        - "{{ common_backup_base_path }}/reports"
+        - "{{ common_backup_base_path }}/dashboards"
+        - "{{ common_backup_base_path }}/.ssh"
+        - "{{ common_backup_base_path }}/.ssh/sockets"
+        - "{{ common_backup_base_path }}/.ssh/nodes"
+
+    - name: Assert all directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Directory verified: {{ item.item }}"
+      loop: "{{ dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Directory permissions verification
+    - name: Verify standard directories have mode 0750
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: standard_dir_stat
+      loop:
+        - "{{ common_backup_base_path }}"
+        - "{{ common_backup_base_path }}/scripts"
+        - "{{ common_backup_base_path }}/logs"
+        - "{{ common_backup_base_path }}/cache"
+        - "{{ common_backup_base_path }}/repositories"
+        - "{{ common_backup_base_path }}/keys"
+        - "{{ common_backup_base_path }}/config"
+
+    - name: Assert standard directories have correct permissions
+      ansible.builtin.assert:
+        that:
+          - item.stat.mode == '0750'
+        fail_msg: |
+          Directory {{ item.item }} has incorrect permissions
+          Expected: 0750
+          Actual: {{ item.stat.mode }}
+        success_msg: "[OK] Directory {{ item.item }} has correct permissions (0750)"
+      loop: "{{ standard_dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # SSH directory permissions verification
+    - name: Verify SSH directory has mode 0700
+      ansible.builtin.stat:
+        path: "{{ common_backup_base_path }}/.ssh"
+      register: ssh_dir_stat
+
+    - name: Assert SSH directory has mode 0700
+      ansible.builtin.assert:
+        that:
+          - ssh_dir_stat.stat.exists
+          - ssh_dir_stat.stat.isdir
+          - ssh_dir_stat.stat.mode == '0700'
+        fail_msg: |
+          SSH directory verification failed
+          Expected mode: 0700
+          Actual mode: {{ ssh_dir_stat.stat.mode }}
+        success_msg: "[OK] SSH directory has secure permissions (0700)"
+
+    - name: Verify SSH sockets directory has mode 0700
+      ansible.builtin.stat:
+        path: "{{ common_backup_base_path }}/.ssh/sockets"
+      register: ssh_sockets_stat
+
+    - name: Assert SSH sockets directory has mode 0700
+      ansible.builtin.assert:
+        that:
+          - ssh_sockets_stat.stat.exists
+          - ssh_sockets_stat.stat.isdir
+          - ssh_sockets_stat.stat.mode == '0700'
+        fail_msg: |
+          SSH sockets directory verification failed
+          Expected mode: 0700
+          Actual mode: {{ ssh_sockets_stat.stat.mode }}
+        success_msg: "[OK] SSH sockets directory has secure permissions (0700)"
+
+    # Password file permissions verification
+    - name: Verify password file has mode 0600
+      ansible.builtin.stat:
+        path: "{{ common_backup_base_path }}/keys/{{ backup_service_name }}-password"
+      register: password_file_stat
+
+    - name: Assert password file has secure permissions
+      ansible.builtin.assert:
+        that:
+          - password_file_stat.stat.exists
+          - password_file_stat.stat.mode == '0600'
+        fail_msg: |
+          Password file verification failed
+          Expected mode: 0600
+          Actual mode: {{ password_file_stat.stat.mode }}
+        success_msg: "[OK] Password file has secure permissions (0600)"
+
+    # Backup script verification
+    - name: Verify backup script exists and is executable
+      ansible.builtin.stat:
+        path: "{{ common_backup_base_path }}/scripts/backup-{{ backup_service_name }}.sh"
+      register: backup_script_stat
+
+    - name: Assert backup script is executable
+      ansible.builtin.assert:
+        that:
+          - backup_script_stat.stat.exists
+          - backup_script_stat.stat.executable
+          - backup_script_stat.stat.mode == '0750'
+        fail_msg: |
+          Backup script verification failed
+          Exists: {{ backup_script_stat.stat.exists }}
+          Executable: {{ backup_script_stat.stat.executable }}
+          Mode: {{ backup_script_stat.stat.mode }}
+        success_msg: "[OK] Backup script is executable with correct permissions (0750)"
+
+    # Ownership verification
+    - name: Verify directory ownership
+      ansible.builtin.stat:
+        path: "{{ common_backup_base_path }}"
+      register: base_ownership
+
+    - name: Get backup user UID
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ backup_user }}"
+      register: backup_uid_check
+
+    - name: Assert base directory is owned by backup user
+      ansible.builtin.assert:
+        that:
+          - base_ownership.stat.pw_name == backup_user
+          - base_ownership.stat.gr_name == backup_group
+        fail_msg: |
+          Ownership verification failed
+          Expected owner: {{ backup_user }}:{{ backup_group }}
+          Actual owner: {{ base_ownership.stat.pw_name }}:{{ base_ownership.stat.gr_name }}
+        success_msg: "[OK] Base directory owned by {{ backup_user }}:{{ backup_group }}"
+
+    # Display verification summary
+    - name: Display backup role verification results
+      ansible.builtin.debug:
+        msg: |
+          [OK] Backup Role Verification Complete
+
+          User Configuration Verified:
+          - User: {{ backup_user }} - EXISTS
+          - Group: {{ backup_group }} - EXISTS
+
+          Directory Structure Verified:
+          - Base path: {{ common_backup_base_path }} - EXISTS (0750)
+          - Scripts: {{ common_backup_base_path }}/scripts - EXISTS (0750)
+          - Logs: {{ common_backup_base_path }}/logs - EXISTS (0750)
+          - Cache: {{ common_backup_base_path }}/cache - EXISTS (0750)
+          - Repositories: {{ common_backup_base_path }}/repositories - EXISTS (0750)
+          - Keys: {{ common_backup_base_path }}/keys - EXISTS (0750)
+          - Config: {{ common_backup_base_path }}/config - EXISTS (0750)
+          - Metrics: {{ common_backup_base_path }}/metrics - EXISTS
+          - Locks: {{ common_backup_base_path }}/locks - EXISTS
+          - Coordination: {{ common_backup_base_path }}/coordination - EXISTS
+          - Reports: {{ common_backup_base_path }}/reports - EXISTS
+          - Dashboards: {{ common_backup_base_path }}/dashboards - EXISTS
+
+          SSH Directory Verified:
+          - .ssh: {{ common_backup_base_path }}/.ssh - EXISTS (0700)
+          - .ssh/sockets: {{ common_backup_base_path }}/.ssh/sockets - EXISTS (0700)
+          - .ssh/nodes: {{ common_backup_base_path }}/.ssh/nodes - EXISTS
+
+          File Permissions Verified:
+          - Password file: 0600 - SECURE
+          - Backup script: 0750 - EXECUTABLE
+
+          Ownership Verified:
+          - Base directory: {{ backup_user }}:{{ backup_group }} - CORRECT
+
+          Note: Restic download, systemd services, and actual backup operations
+          skipped in container test environment

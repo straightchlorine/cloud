@@ -1,0 +1,158 @@
+---
+- name: Verify music-stack role
+  hosts: all
+  vars:
+    music_stack_music_stack_home: "/home/pi/music-stack"
+    music_stack_music_library_path: "/mnt/music"
+    music_stack_music_library_directories:
+      - music
+      - downloads
+      - processing
+    test_user: "pi"
+    test_uid: 1000
+    test_gid: 1000
+  tasks:
+    # User verification
+    - name: Check if test user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ test_user }}"
+      register: music_user_check
+
+    - name: Assert test user exists with correct UID/GID
+      ansible.builtin.assert:
+        that:
+          - music_user_check.ansible_facts.getent_passwd['pi'] is defined
+          - music_user_check.ansible_facts.getent_passwd['pi'][1] | int == 1000
+          - music_user_check.ansible_facts.getent_passwd['pi'][2] | int == 1000
+        fail_msg: |
+          Music stack user check failed
+          Expected UID: 1000, GID: 1000
+        success_msg: "[OK] Music stack user exists with correct UID/GID (1000:1000)"
+
+    # Stack home directory verification
+    - name: Verify music stack home directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: home_dir_stat
+      loop:
+        - "{{ music_stack_music_stack_home }}"
+        - "{{ music_stack_music_stack_home }}/config"
+        - "{{ music_stack_music_stack_home }}/config/beets"
+        - "{{ music_stack_music_stack_home }}/config/navidrome"
+        - "{{ music_stack_music_stack_home }}/config/cache"
+        - "{{ music_stack_music_stack_home }}/scripts"
+        - "{{ music_stack_music_stack_home }}/logs"
+        - "{{ music_stack_music_stack_home }}/archive"
+
+    - name: Assert all stack home directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Directory verified: {{ item.item }}"
+      loop: "{{ home_dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Music library directory verification
+    - name: Verify music library directories exist
+      ansible.builtin.stat:
+        path: "{{ music_stack_music_library_path }}/{{ item }}"
+      register: library_dir_stat
+      loop: "{{ music_stack_music_library_directories }}"
+
+    - name: Assert all music library directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Music library directory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Music library directory verified: {{ item.item }}"
+      loop: "{{ library_dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Ownership verification
+    - name: Verify stack home ownership
+      ansible.builtin.stat:
+        path: "{{ music_stack_music_stack_home }}"
+      register: stack_home_ownership
+
+    - name: Assert stack home has correct ownership
+      ansible.builtin.assert:
+        that:
+          - stack_home_ownership.stat.uid == test_uid
+          - stack_home_ownership.stat.gid == test_gid
+        fail_msg: |
+          Ownership check failed for {{ music_stack_music_stack_home }}
+          Expected UID: {{ test_uid }}, GID: {{ test_gid }}
+          Actual UID: {{ stack_home_ownership.stat.uid }}, GID: {{ stack_home_ownership.stat.gid }}
+        success_msg: "[OK] Stack home ownership correct ({{ test_uid }}:{{ test_gid }})"
+
+    # Docker Compose file verification
+    - name: Verify docker-compose.yml exists
+      ansible.builtin.stat:
+        path: "{{ music_stack_music_stack_home }}/docker-compose.yml"
+      register: compose_file_stat
+
+    - name: Assert docker-compose.yml exists
+      ansible.builtin.assert:
+        that:
+          - compose_file_stat.stat.exists
+        fail_msg: "docker-compose.yml does not exist"
+        success_msg: "[OK] docker-compose.yml exists"
+
+    # Scripts verification
+    - name: Verify youtube-sync.sh is executable
+      ansible.builtin.stat:
+        path: "{{ music_stack_music_stack_home }}/scripts/youtube-sync.sh"
+      register: sync_script_stat
+
+    - name: Assert youtube-sync.sh is executable
+      ansible.builtin.assert:
+        that:
+          - sync_script_stat.stat.exists
+          - sync_script_stat.stat.executable
+        fail_msg: |
+          youtube-sync.sh verification failed
+          Exists: {{ sync_script_stat.stat.exists }}
+          Executable: {{ sync_script_stat.stat.executable | default('N/A') }}
+        success_msg: "[OK] youtube-sync.sh is executable"
+
+    # Display verification summary
+    - name: Display music-stack role verification results
+      ansible.builtin.debug:
+        msg: |
+          [OK] Music-Stack Role Verification Complete
+
+          User Configuration Verified:
+          - User: pi - EXISTS
+          - UID: 1000 - CORRECT
+          - GID: 1000 - CORRECT
+
+          Stack Home Directory Structure Verified:
+          - Stack home: {{ music_stack_music_stack_home }} - EXISTS
+          - Config: {{ music_stack_music_stack_home }}/config - EXISTS
+          - Beets config: {{ music_stack_music_stack_home }}/config/beets - EXISTS
+          - Navidrome config: {{ music_stack_music_stack_home }}/config/navidrome - EXISTS
+          - Cache config: {{ music_stack_music_stack_home }}/config/cache - EXISTS
+          - Scripts: {{ music_stack_music_stack_home }}/scripts - EXISTS
+          - Logs: {{ music_stack_music_stack_home }}/logs - EXISTS
+          - Archive: {{ music_stack_music_stack_home }}/archive - EXISTS
+
+          Music Library Directories Verified:
+          - {{ music_stack_music_library_path }}/music - EXISTS
+          - {{ music_stack_music_library_path }}/downloads - EXISTS
+          - {{ music_stack_music_library_path }}/processing - EXISTS
+
+          Ownership Verified:
+          - Stack home owned by {{ test_uid }}:{{ test_gid }} - CORRECT
+
+          Files Verified:
+          - docker-compose.yml - EXISTS
+          - youtube-sync.sh - EXECUTABLE
+
+          Note: Docker container startup skipped in container test
+          This validates core role logic without Docker-in-Docker complexity

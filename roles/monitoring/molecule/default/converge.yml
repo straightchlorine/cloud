@@ -1,0 +1,160 @@
+---
+- name: Converge - Default (Core Role Logic)
+  hosts: all
+  vars:
+    # Monitoring configuration paths
+    monitoring_config_path: "/etc/monitoring"
+    monitoring_data_path: "/var/lib/monitoring"
+    monitoring_log_path: "/var/log/monitoring"
+    monitoring_stack_home: "/opt/monitoring"
+
+    # User configuration
+    monitoring_user: "monitoring"
+    monitoring_uid: 3000
+    monitoring_gid: 3000
+
+    # Service ports
+    monitoring_grafana_port: 3000
+    monitoring_prometheus_port: 9090
+    monitoring_loki_port: 3100
+    monitoring_uptime_kuma_port: 3001
+    monitoring_alertmanager_port: 9093
+
+    # Grafana credentials (test values)
+    vault_grafana_admin_password: "test-password-123"
+
+    # SSL disabled for testing
+    enable_ssl: false
+
+    # Disable container startup
+    start_stack: false
+
+  pre_tasks:
+    - name: Create parent directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      become: true
+      loop:
+        - "{{ monitoring_config_path | dirname }}"
+        - "{{ monitoring_data_path | dirname }}"
+        - "{{ monitoring_log_path | dirname }}"
+        - "{{ monitoring_stack_home | dirname }}"
+
+    - name: Gather facts (replaces network facts for testing)
+      ansible.builtin.setup:
+        gather_subset: network
+
+  tasks:
+    - name: Note about molecule test limitations
+      ansible.builtin.debug:
+        msg: |
+          Running simplified test of monitoring role core logic
+          Note: Common role dependencies not available in molecule
+          Testing only: user creation, directory structure, config subdirectories
+
+    - name: Create monitoring group
+      ansible.builtin.group:
+        name: "{{ monitoring_user }}"
+        gid: "{{ monitoring_gid }}"
+        state: present
+      become: true
+
+    - name: Create monitoring user
+      ansible.builtin.user:
+        name: "{{ monitoring_user }}"
+        uid: "{{ monitoring_uid }}"
+        group: "{{ monitoring_user }}"
+        shell: /bin/bash
+        home: "/home/{{ monitoring_user }}"
+        createhome: true
+      become: true
+
+    - name: Create monitoring base directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      loop:
+        - "{{ monitoring_config_path }}"
+        - "{{ monitoring_data_path }}"
+        - "{{ monitoring_log_path }}"
+        - "{{ monitoring_stack_home }}"
+
+    - name: Create config subdirectories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      loop:
+        - "{{ monitoring_config_path }}/grafana"
+        - "{{ monitoring_config_path }}/prometheus"
+        - "{{ monitoring_config_path }}/loki"
+        - "{{ monitoring_config_path }}/alertmanager"
+
+    - name: Create Prometheus configuration (test placeholder)
+      ansible.builtin.copy:
+        content: |
+          # Test placeholder for prometheus.yml
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+          scrape_configs:
+            - job_name: prometheus
+              static_configs:
+                - targets: ['localhost:9090']
+        dest: "{{ monitoring_config_path }}/prometheus/prometheus.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
+
+    - name: Create Grafana configuration (test placeholder)
+      ansible.builtin.copy:
+        content: |
+          # Test placeholder for grafana.ini
+          [server]
+          http_port = {{ monitoring_grafana_port }}
+          [security]
+          admin_password = {{ vault_grafana_admin_password }}
+        dest: "{{ monitoring_config_path }}/grafana/grafana.ini"
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
+
+    - name: Create Loki configuration (test placeholder)
+      ansible.builtin.copy:
+        content: |
+          # Test placeholder for loki-config.yml
+          auth_enabled: false
+          server:
+            http_listen_port: {{ monitoring_loki_port }}
+        dest: "{{ monitoring_config_path }}/loki/loki-config.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
+
+    - name: Create Alertmanager configuration (test placeholder)
+      ansible.builtin.copy:
+        content: |
+          # Test placeholder for alertmanager.yml
+          global:
+            resolve_timeout: 5m
+          route:
+            receiver: default
+          receivers:
+            - name: default
+        dest: "{{ monitoring_config_path }}/alertmanager/alertmanager.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      become: true

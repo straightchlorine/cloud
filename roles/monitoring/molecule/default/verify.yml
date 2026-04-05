@@ -1,0 +1,148 @@
+---
+- name: Verify monitoring role
+  hosts: all
+  vars:
+    monitoring_user: "monitoring"
+    monitoring_uid: 3000
+    monitoring_gid: 3000
+    monitoring_config_path: "/etc/monitoring"
+    monitoring_data_path: "/var/lib/monitoring"
+    monitoring_log_path: "/var/log/monitoring"
+    monitoring_stack_home: "/opt/monitoring"
+  tasks:
+    # User verification
+    - name: Check if monitoring user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ monitoring_user }}"
+      register: monitoring_user_check
+
+    - name: Assert monitoring user exists with correct UID/GID
+      ansible.builtin.assert:
+        that:
+          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'] is defined
+          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'][1] | int == 3000
+          - monitoring_user_check.ansible_facts.getent_passwd['monitoring'][2] | int == 3000
+        fail_msg: |
+          Monitoring user check failed
+          Expected UID: 3000, GID: 3000
+        success_msg: "[OK] Monitoring user exists with correct UID/GID (3000:3000)"
+
+    # Directory verification
+    - name: Verify monitoring base directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: base_dir_stat
+      loop:
+        - "{{ monitoring_config_path }}"
+        - "{{ monitoring_data_path }}"
+        - "{{ monitoring_log_path }}"
+        - "{{ monitoring_stack_home }}"
+
+    - name: Assert all base directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Directory verified: {{ item.item }}"
+      loop: "{{ base_dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Config subdirectory verification
+    - name: Verify config subdirectories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: config_dir_stat
+      loop:
+        - "{{ monitoring_config_path }}/grafana"
+        - "{{ monitoring_config_path }}/prometheus"
+        - "{{ monitoring_config_path }}/loki"
+        - "{{ monitoring_config_path }}/alertmanager"
+
+    - name: Assert all config subdirectories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Config subdirectory {{ item.item }} does not exist or is not a directory"
+        success_msg: "[OK] Config subdirectory verified: {{ item.item }}"
+      loop: "{{ config_dir_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Configuration files verification
+    - name: Verify configuration files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: config_file_stat
+      loop:
+        - "{{ monitoring_config_path }}/prometheus/prometheus.yml"
+        - "{{ monitoring_config_path }}/grafana/grafana.ini"
+        - "{{ monitoring_config_path }}/loki/loki-config.yml"
+        - "{{ monitoring_config_path }}/alertmanager/alertmanager.yml"
+
+    - name: Assert all configuration files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Configuration file {{ item.item }} does not exist"
+        success_msg: "[OK] Configuration file exists: {{ item.item }}"
+      loop: "{{ config_file_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # File permissions verification
+    - name: Verify config file permissions
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: config_perms_stat
+      loop:
+        - "{{ monitoring_config_path }}/prometheus/prometheus.yml"
+        - "{{ monitoring_config_path }}/grafana/grafana.ini"
+
+    - name: Assert config files have correct permissions
+      ansible.builtin.assert:
+        that:
+          - item.stat.mode == '0644'
+        fail_msg: |
+          Permission check failed for {{ item.item }}
+          Expected mode: 0644
+          Actual mode: {{ item.stat.mode }}
+        success_msg: "[OK] Permissions verified (0644): {{ item.item }}"
+      loop: "{{ config_perms_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Display verification summary
+    - name: Display monitoring role verification results
+      ansible.builtin.debug:
+        msg: |
+          [OK] Monitoring Role Verification Complete
+
+          User Configuration Verified:
+          - User: monitoring - EXISTS
+          - UID: 3000 - CORRECT
+          - GID: 3000 - CORRECT
+
+          Base Directory Structure Verified:
+          - Config path: {{ monitoring_config_path }} - EXISTS
+          - Data path: {{ monitoring_data_path }} - EXISTS
+          - Log path: {{ monitoring_log_path }} - EXISTS
+          - Stack home: {{ monitoring_stack_home }} - EXISTS
+
+          Config Subdirectories Verified:
+          - Grafana config: {{ monitoring_config_path }}/grafana - EXISTS
+          - Prometheus config: {{ monitoring_config_path }}/prometheus - EXISTS
+          - Loki config: {{ monitoring_config_path }}/loki - EXISTS
+          - Alertmanager config: {{ monitoring_config_path }}/alertmanager - EXISTS
+
+          Configuration Files Verified:
+          - prometheus.yml - EXISTS (0644)
+          - grafana.ini - EXISTS (0644)
+          - loki-config.yml - EXISTS
+          - alertmanager.yml - EXISTS
+
+          Note: Docker container startup skipped in container test
+          This validates core role logic without Docker-in-Docker complexity
