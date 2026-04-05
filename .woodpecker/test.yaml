@@ -52,6 +52,7 @@ steps:
         driver = "vfs"
         CONF
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
+      - ansible-galaxy collection install -r requirements.yml
       - |
         case "${PLATFORM}" in
           debian12) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian12-ansible:latest" ;;
