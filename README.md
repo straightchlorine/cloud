@@ -1,207 +1,86 @@
 # Infrastructure Automation
 
-Ansible-based infrastructure deployment for Raspberry Pi homelab with
-enterprise-grade features.
+[![Build Status](https://ci.codextechnologies.org/api/badges/2/status.svg)](https://ci.codextechnologies.org/repos/2)
+
+Ansible-based homelab deployment with fail-fast validation, automated backups,
+and full observability.
 
 **Repository:** [Codeberg](https://codeberg.org/piotrkrzysztof/cloud) (primary) ·
 [GitHub](https://github.com/straightchlorine/cloud) (mirror)
 
-## Architecture and network topology
+## Architecture
 
 ```mermaid
 graph TB
     subgraph VLAN["Services VLAN - (192.168.20.0/24)"]
         direction LR
-        dns["<b>pi-dns</b><br/>192.168.20.10<br/>━━━━━━━━━━━━<br/>Pi-hole DNS"]
-        music["<b>pi-music</b><br/>192.168.20.15<br/>━━━━━━━━━━━━<br/>Navidrome<br/>yt-dlp cron<br/>Beets"]
-        automation["<b>pi-automation</b><br/>192.168.20.20<br/>━━━━━━━━━━━━<br/>Traefik<br/>InfluxDB<br/>Vaultwarden<br/>Portainer<br/>Dozzle<br/>Firefly III"]
-        monitoring["<b>debian-monitoring</b><br/>192.168.20.5<br/>━━━━━━━━━━━━<br/>Grafana<br/>Prometheus<br/>Loki<br/>Alertmanager"]
+        dns["<b>pi-dns</b><br/>Pi-hole · NTP"]
+        music["<b>pi-music</b><br/>Navidrome · yt-dlp · Beets"]
+        automation["<b>pi-automation</b><br/>Traefik · Vaultwarden<br/>InfluxDB · Portainer"]
+        monitoring["<b>debian-monitoring</b><br/>Grafana · Prometheus<br/>Loki · Alertmanager"]
     end
-    backup["Backup Server<br/>(Restic)"]
+    backup["Backup Coordinator<br/>(Restic → Hetzner)"]
     cloudflare["Cloudflare<br/>(DNS + SSL)"]
 
     VLAN -->|Backups| backup
     VLAN -->|DNS/Certs| cloudflare
-    backup --> |SFTP| Hetzner
-    dns -.->|Monitoring| monitoring
-    music -.->|Monitoring| monitoring
-    automation -.->|Monitoring| monitoring
+    dns -.->|Metrics| monitoring
+    music -.->|Metrics| monitoring
+    automation -.->|Metrics| monitoring
 ```
 
-### Hosts
-
-- **[pi-dns](roles/dns/README.md)** (192.168.20.10): Pi-hole DNS + NTP
-- **[pi-music](roles/music-stack/README.md)** (192.168.20.15): Navidrome music streaming
-- **[pi-automation](roles/automation/README.md)** (192.168.20.20): Traefik + key
-  services
-- **[debian-monitoring](roles/monitoring/README.md)** (192.168.20.5): Grafana +
-  Prometheus + Loki
-
-### Network
-
-- **VLAN**: 192.168.20.0/24 (Services)
-- **Inventory**: `inventory/production/hosts.yml`
-
-## Quick Deploy
-
-### Prerequisites
+## Quick Start
 
 ```bash
-# SSH key must exist
-ls ~/.ssh/ansible_controller_key
-
-# Vault file must be configured
-ansible-vault edit group_vars/vault.yml
+just setup          # Create venv, install deps, collections, hooks
+just deploy         # Full infrastructure (with confirmation)
+just lint           # Ansible-lint + yamllint
+just test           # Molecule tests (all roles)
+just validate full  # End-to-end infrastructure validation
 ```
 
-### Full Infrastructure
+### Deploy Individual Services
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --ask-vault-pass
+just deploy-service playbooks/music-stack.yml
+just deploy-service playbooks/automation-stack.yml
 ```
 
-### Individual Services
+Or directly:
 
 ```bash
-# DNS only
 ansible-playbook -i inventory/production/hosts.yml \
   playbooks/site.yml --limit dns --ask-vault-pass
-
-# Music stack only
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/music-stack.yml --ask-vault-pass
-
-# Automation stack only
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/automation-stack.yml --ask-vault-pass
-
-# Backup only
-ansible-playbook -i inventory/production/hosts.yml \
-  deploy-backup.yml --ask-vault-pass
 ```
 
-## Advanced Topics
-
-- **[Backup System](docs/backup-system.md)** - Multi-repository strategy, restore
-  testing, compliance
-- **[Monitoring Stack](docs/monitoring-stack.md)** - Infrastructure architecture,
-  advanced configuration, optimization
-- **[Testing](docs/testing.md)** - Testing requirements and current setup
-
-## Validation
-
-Comprehensive pre and post-deployment validation:
-
-```bash
-# Pre-deployment validation
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/site.yml --tags validation --ask-vault-pass
-
-# Infrastructure health check
-ansible-playbook -i inventory/production/hosts.yml \
-  validate-infrastructure.yml --ask-vault-pass
-
-# Quick mode (for monitoring)
-ansible-playbook -i inventory/production/hosts.yml \
-  validate-infrastructure.yml -e quick_mode=true --ask-vault-pass
-```
-
-## Service Roles
-
-- **[DNS Server](roles/dns/README.md)** - Pi-hole DNS
-- **[Music Stack](roles/music-stack/README.md)** - Navidrome + yt-dlp cron +
-  Beets
-- **[Automation Stack](roles/automation/README.md)** - Traefik + InfluxDB +
-  Vaultwarden + Portainer
-- **[Monitoring Stack](roles/monitoring/README.md)** - Monitoring with Grafana +
-  Prometheus + Loki + Alertmanager
-- **[Backup System](roles/backup/README.md)** - Restic with multi-tier
-  repositories and restore testing
-
-## Configuration
-
-All sensitive variables must be set in
-`inventory/production/group_vars/all/vault.yml` (not in repo).
-
-See [vault.yml.example](inventory/production/group_vars/vault.yml.example) for
-complete variable reference with:
-
-- **Required variables** - Deployment will fail if missing
-- **Optional variables** - Only needed for specific features
-- **Validation hints** - Requirements and generation commands
-
-### Host Variables
-
-- **DNS**: `host_vars/pi-dns.yml`
-- **Music**: `host_vars/pi-music.yml`
-- **Automation**: `host_vars/pi-automation.yml`
-- **Monitoring**: `host_vars/debian-monitoring.yml`
-
-## Development
-
-### Role Structure
+## Roles
 
 ```
 roles/
-├── common/            # Shared functionality
-├── dns/               # Pi-hole DNS server
-├── music-stack/       # Navidrome music server
-├── automation/        # Traefik automation services
-├── monitoring/        # Grafana/Prometheus/Loki
-├── backup/            # Multi-repository backup
-└── firewall/          # UFW configuration
+├── common/              # Docker, packages, network facts, backup, promtail
+├── dns/                 # Pi-hole DNS + Chrony NTP
+├── music-stack/         # Navidrome + yt-dlp + Beets
+├── automation/          # Traefik + Vaultwarden + InfluxDB + Portainer
+├── monitoring/          # Grafana + Prometheus + Loki + Alertmanager
+├── backup/              # Restic multi-tier backup (standalone + coordinator)
+├── backup-system/       # Enterprise backup coordinator
+├── firewall/            # UFW configuration
+└── prometheus-exporters/ # Node, Docker, Pi-hole, Pi hardware exporters
 ```
 
-### Adding New Services
+## Configuration
 
-1. Create role-specific variables in `host_vars/`
-1. Add service to appropriate Docker compose configuration
-1. Update firewall ports in host variables
-1. Add backup paths to `backup_directories`
-1. Update validation requirements in role's `validate.yml`
+All secrets live in `inventory/production/group_vars/all/vault.yml`
+(ansible-vault encrypted, not in repo). See
+[vault.yml.example](inventory/production/group_vars/vault.yml.example) for
+required variables.
 
-### Debugging
+Host-specific config: `inventory/production/host_vars/{hostname}.yml`
 
-```bash
-# Dry run
-ansible-playbook --check --diff
+## Docs
 
-# Verbose output
-ansible-playbook -vvv
-
-# Specific tags
-ansible-playbook --tags validation,docker
-
-# Skip validation
-ansible-playbook --skip-tags validation
-```
-
-## Backup & Recovery
-
-Backup architecture for now actively supports Debian and Arch Linux distributions,
-with Gentoo being in plans.
-
-### Differences between distributions
-
-There seems to be some discrepancy in the way `restic` works with `SFTP`
-protocol:
-
-- For **Arch Linux**, just having `RESTIC_SFTP_COMMAND` environment variable
-  defined is enough to run `restic` commands, such as `restic init` or `restic
-  snapshots`.
-
-- For **Debian 13 (trixie)** this variable doesn't seem to be used/parsed from
-  the environment. As such, using option parameter is required: **`restic -o
-  sftp.command=$RESTIC_SFTP_COMMAND [command]`**
-
-### Manual Operations
-
-```bash
-# List snapshots
-sudo -u backup restic snapshots --password-file /opt/backup/keys/dns-password \
-  --repository [repo]
-
-# Restore
-sudo -u backup restic restore latest --target /tmp/restore \
-  --password-file /opt/backup/keys/[service]-password --repository [repo]
-```
+- [Backup System](docs/backup-system.md) — Multi-repository strategy, restore
+  procedures
+- [Monitoring Stack](docs/monitoring-stack.md) — Dashboards, alerting,
+  retention
+- [Testing](docs/testing.md) — Molecule tests, CI matrix
