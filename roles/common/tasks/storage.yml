@@ -23,7 +23,7 @@
     fstype: "{{ ssd_filesystem }}"
     dev: "{{ ssd_device }}"
   become: true
-  when: ssd_format | default(false)
+  when: ssd_format
 
 - name: Create mount point directory
   ansible.builtin.file:

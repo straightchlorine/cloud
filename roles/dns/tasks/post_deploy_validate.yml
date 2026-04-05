@@ -52,8 +52,8 @@
   ansible.builtin.wait_for:
     port: "{{ item.port }}"
     timeout: 30
-  loop: "{{ additional_services | default([]) }}"
-  when: additional_services is defined
+  loop: "{{ dns_additional_services }}"
+  when: dns_additional_services | length > 0
   tags: [post_validation]
 
 - name: Display DNS validation results

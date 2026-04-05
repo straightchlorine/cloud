@@ -22,7 +22,7 @@
         path: /tmp/netdata-kickstart.sh
         state: absent
       become: true
-  when: additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
+  when: dns_additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
 
 # Pi-hole exporter setup
 - name: Create pihole-exporter user

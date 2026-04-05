@@ -53,3 +53,14 @@ restart_sec: "5"
 common_wanted_by: "multi-user.target"
 enable_security_hardening: true
 no_new_privileges: "true"
+
+# Backup integration defaults
+backup_additional_groups: []
+backup_nice_level: 19
+backup_io_class: "idle"
+
+# Port connectivity testing
+firewall_ports: []
+
+# Docker service defaults
+service_restart: "always"

@@ -6,9 +6,9 @@ Description=Enterprise Backup Timer for {{ backup_device_role }}
 Requires=backup-{{ backup_device_role }}.service
 
 [Timer]
-OnCalendar={{ backup_schedule | default('*-*-* 02:00:00') }}
+OnCalendar={{ backup_schedule }}
 Persistent=true
-RandomizedDelaySec={{ backup_randomized_delay | default('300s') }}
+RandomizedDelaySec={{ backup_randomized_delay }}
 
 [Install]
 WantedBy=timers.target

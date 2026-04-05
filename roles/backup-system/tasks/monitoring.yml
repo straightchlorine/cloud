@@ -58,7 +58,7 @@
       Requires=backup-health-monitor.service
 
       [Timer]
-      OnCalendar={{ backup_health_check_schedule | default('*-*-* 06:00:00') }}
+      OnCalendar={{ backup_health_check_schedule }}
       Persistent=true
 
       [Install]
@@ -97,7 +97,7 @@
       Requires=backup-metrics.service
 
       [Timer]
-      OnCalendar={{ backup_metrics_schedule | default('*-*-* *:15:00') }}
+      OnCalendar={{ backup_metrics_schedule }}
       Persistent=true
 
       [Install]
@@ -124,4 +124,4 @@
     owner: "{{ backup_user }}"
     group: "{{ backup_group }}"
     mode: '0644'
-  when: backup_grafana_integration | default(false)
+  when: backup_grafana_integration

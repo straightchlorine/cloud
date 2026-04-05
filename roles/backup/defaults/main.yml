@@ -140,3 +140,8 @@ restore_test_frequency: "weekly"
 # Systemd service management
 backup_timer_enabled: true
 backup_coordinator_enabled: true
+
+# Backup scheduling
+backup_schedule: "*-*-* 02:00:00"
+backup_randomized_delay: "300s"
+max_concurrent_backups: "2"

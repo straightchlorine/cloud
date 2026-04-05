@@ -21,7 +21,7 @@
     shell: /bin/bash
     home: "{{ common_backup_base_path }}"
     createhome: true
-    groups: "{{ backup_additional_groups | default([]) }}"
+    groups: "{{ backup_additional_groups }}"
     append: true
   become: true
   when: backup_additional_groups is defined and backup_additional_groups | length > 0
@@ -224,8 +224,8 @@
     common_private_tmp: "yes"
     common_read_write_paths: "{{ [backup_base_path] + backup_paths }}"
     memory_limit: "{{ restic_memory_limit | default(omit) }}"
-    nice_level: "{{ backup_nice_level | default(19) }}"
-    io_scheduling_class: "{{ backup_io_class | default('idle') }}"
+    nice_level: "{{ backup_nice_level }}"
+    io_scheduling_class: "{{ backup_io_class }}"
   become: true
   notify:
     - reload systemd

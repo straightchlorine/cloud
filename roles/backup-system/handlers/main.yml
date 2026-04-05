@@ -15,7 +15,7 @@
     name: "backup-{{ item.service_name }}.service"
     state: restarted
     daemon_reload: true
-  loop: "{{ backup_targets | default([]) }}"
+  loop: "{{ backup_targets }}"
 
 - name: Restart enterprise backup timers
   ansible.builtin.systemd:
@@ -23,7 +23,7 @@
     state: restarted
     enabled: true
     daemon_reload: true
-  loop: "{{ backup_targets | default([]) }}"
+  loop: "{{ backup_targets }}"
 
 - name: Restart enterprise backup monitoring
   ansible.builtin.systemd:

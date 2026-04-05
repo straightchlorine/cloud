@@ -12,7 +12,7 @@
   ansible.builtin.wait_for:
     port: "{{ item.port }}"
     timeout: 30
-  loop: "{{ firewall_ports | default([]) }}"
+  loop: "{{ firewall_ports }}"
   when:
     - firewall_ports is defined
     - item.port != 22  # Skip SSH as it's tested separately
@@ -23,7 +23,7 @@
 - name: Test internal connectivity between services
   ansible.builtin.command: |
     nc -z {{ primary_ip }} {{ item.port }}
-  loop: "{{ firewall_ports | default([]) }}"
+  loop: "{{ firewall_ports }}"
   when:
     - firewall_ports is defined
     - item.port != 22

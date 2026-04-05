@@ -115,7 +115,7 @@
 
 - name: Install additional monitoring services
   ansible.builtin.include_tasks: monitoring.yml
-  when: additional_services is defined and additional_services | length > 0
+  when: dns_additional_services | length > 0
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml

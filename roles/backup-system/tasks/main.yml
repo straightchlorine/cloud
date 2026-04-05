@@ -24,7 +24,7 @@
 
 - name: Setup monitoring and health checks
   ansible.builtin.import_tasks: monitoring.yml
-  when: backup_monitoring | default(true)
+  when: backup_monitoring
   tags: [monitoring, backup]
 
 - name: Display deployment summary
@@ -34,12 +34,12 @@
 
       role: {{ backup_role }}
       node: {{ inventory_hostname }}
-      repository strategy: {{ backup_strategy | default('hybrid') }}
-      monitoring: {{ backup_monitoring | default(true) }}
+      repository strategy: {{ backup_strategy }}
+      monitoring: {{ backup_monitoring }}
 
       {% if backup_role == "coordinator" %}
       Coordinator Services:
-      {% for target in backup_targets | default([]) %}
+      {% for target in backup_targets %}
       - {{ target.service_name }}: {{ target.target_host }}
       {% endfor %}
       {% endif %}

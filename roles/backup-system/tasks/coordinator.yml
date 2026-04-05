@@ -109,7 +109,7 @@
     exclusive: false
   delegate_to: "{{ item.item.service_name }}"
   loop: "{{ ssh_public_keys.results }}"
-  when: ssh_keys_generated is changed or backup_force_key_deployment | default(false)
+  when: ssh_keys_generated is changed or backup_force_key_deployment
 
 - name: Verify SSH connectivity to targets
   ansible.builtin.shell: |
@@ -293,7 +293,7 @@
       Requires=backup-key-rotation.service
 
       [Timer]
-      OnCalendar={{ backup_key_rotation_schedule | default('monthly') }}
+      OnCalendar={{ backup_key_rotation_schedule }}
       RandomizedDelaySec=3600
       Persistent=true
 
@@ -312,4 +312,4 @@
     enabled: true
     state: started
     daemon_reload: true
-  when: backup_enable_key_rotation | default(true)
+  when: backup_enable_key_rotation

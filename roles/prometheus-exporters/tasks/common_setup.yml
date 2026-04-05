@@ -2,13 +2,13 @@
 # Common setup for Prometheus exporters
 
 - name: Create prometheus user and group
-  group:
+  ansible.builtin.group:
     name: "{{ prometheus_exporters_group }}"
     system: true
   become: true
 
 - name: Create prometheus user
-  user:
+  ansible.builtin.user:
     name: "{{ prometheus_exporters_user }}"
     group: "{{ prometheus_exporters_group }}"
     system: true

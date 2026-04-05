@@ -5,7 +5,7 @@
   {{ service_name }}:
     image: {{ service_image }}
     container_name: {{ service_name }}
-    restart: {{ service_restart | default('always') }}
+    restart: {{ service_restart }}
 {% if service_ports is defined %}
     ports:
 {% for port in service_ports %}

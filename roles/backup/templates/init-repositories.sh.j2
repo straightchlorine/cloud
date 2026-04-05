@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_BASE="{{{ common_backup_base_path }}}"
-BACKUP_USER="{{ backup_user | default('backup') }}"
+BACKUP_USER="{{ backup_user }}"
 LOG_FILE="${BACKUP_BASE}/logs/repository-init-$(date +%Y%m%d-%H%M%S).log"
 
 # Restic environment configuration
