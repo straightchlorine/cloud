@@ -48,5 +48,12 @@ steps:
     commands:
       - dnf install -y python3 python3-pip git containers-common
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
-      - cd roles/common
-      - molecule test --all || true
+      - |
+        for role in common backup-system firewall dns automation backup monitoring music-stack prometheus-exporters; do
+          echo "========================================="
+          echo "Testing role: $role"
+          echo "========================================="
+          cd roles/$role
+          molecule test --all || true
+          cd ../..
+        done

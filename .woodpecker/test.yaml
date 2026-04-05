@@ -28,6 +28,10 @@ matrix:
     - firewall
     - dns
     - automation
+    - backup
+    - monitoring
+    - music-stack
+    - prometheus-exporters
 
 steps:
   - name: checkout
@@ -95,4 +99,3 @@ steps:
     when:
       matrix:
         PLATFORM: debian12
-
