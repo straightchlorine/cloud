@@ -88,7 +88,7 @@
       port: "{{ backup_ssh_port }}"
       user: "{{ backup_ssh_user }}"
       remote_path: "/backups"
-  when: restic_enabled | default(false)
+  when: restic_enabled
   tags: [backup]
 
 - name: Configure firewall

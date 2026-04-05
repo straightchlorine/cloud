@@ -31,6 +31,8 @@ dns_auto_update_day: "Monday"
 dns_additional_services: []
 
 # Pi-hole Exporter Configuration
+dns_ntp_server_enabled: false
+
 dns_pihole_exporter_enabled: false
 dns_pihole_exporter_user: "pihole-exporter"
 dns_pihole_exporter_install_dir: "/opt/pihole-exporter"

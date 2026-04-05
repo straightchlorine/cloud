@@ -83,7 +83,21 @@ steps:
     pull: true
     commands:
       - dnf install -y python3 python3-pip git containers-common
+      - mkdir -p /etc/containers
+      - |
+        cat > /etc/containers/storage.conf << 'CONF'
+        [storage]
+        driver = "vfs"
+        CONF
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
+      - |
+        case "${PLATFORM}" in
+          debian12) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian12-ansible:latest" ;;
+          debian13) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest" ;;
+          alpine)   export MOLECULE_IMAGE="docker.io/geerlingguy/docker-alpine3-ansible:latest" ;;
+          arch)     export MOLECULE_IMAGE="docker.io/geerlingguy/docker-archlinux-ansible:latest" ;;
+          gentoo)   export MOLECULE_IMAGE="docker.io/geerlingguy/docker-gentoo-ansible:latest" ;;
+        esac
       - cd roles/${ROLE}
       - molecule test
     environment:

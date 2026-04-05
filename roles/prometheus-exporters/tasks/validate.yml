@@ -103,6 +103,16 @@
           }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
       when: prom_exp_pihole_web_check.status != 200
 
+- name: Validate pihole exporter hostname is explicitly set
+  ansible.builtin.fail:
+    msg: >-
+      prometheus_exporters_pihole_exporter_pihole_hostname must be
+      defined in host_vars when pihole_exporter is enabled
+  when:
+    - pihole_exporter_enabled
+    - prometheus_exporters_pihole_exporter_pihole_hostname is not defined
+  tags: [validation]
+
 - name: Validate Docker Exporter dependencies
   when:
     - docker_exporter_enabled

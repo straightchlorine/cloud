@@ -46,7 +46,7 @@
   loop:
     - { src: "roles/music-stack/templates/docker-compose.yml.j2", name: "music-docker-compose.yml" }
     - { src: "roles/music-stack/templates/youtube.env.j2", name: "youtube.env" }
-  when: "'music' in group_names and youtube_sync_enabled | default(false)"
+  when: "'music' in group_names and youtube_sync_enabled"
   tags: [template_validation]
 
 - name: Check for template rendering failures

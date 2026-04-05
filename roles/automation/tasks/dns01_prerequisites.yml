@@ -14,20 +14,23 @@
   no_log: true
   tags: [dns01_validation]
 
+- name: Check domain zone exists in Cloudflare
+  ansible.builtin.fail:
+    msg: |
+      Domain {{ domain_name }} not found in Cloudflare account.
+      Available zones: {{ automation_cloudflare_zones.json.result | map(attribute='name') | list }}
+  when: >-
+    automation_cloudflare_zones.json.result |
+    selectattr('name', 'equalto', domain_name) |
+    list | length == 0
+  tags: [dns01_validation]
+
 - name: Find zone ID for domain
   ansible.builtin.set_fact:
     automation_domain_zone: >-
       {{ automation_cloudflare_zones.json.result |
       selectattr('name', 'equalto', domain_name) |
-      first | default({}) }}
-  tags: [dns01_validation]
-
-- name: Validate domain zone exists in Cloudflare
-  ansible.builtin.fail:
-    msg: |
-      Domain {{ automation_domain_name }} not found in Cloudflare account.
-      Available zones: {{ automation_cloudflare_zones.json.result | map(attribute='name') | list }}
-  when: automation_domain_zone == {}
+      first }}
   tags: [dns01_validation]
 
 - name: Test DNS record creation permissions

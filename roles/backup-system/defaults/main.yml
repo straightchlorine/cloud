@@ -22,6 +22,9 @@ backup_key_rotation_days: "90"  # noqa: var-naming[no-role-prefix]
 backup_password_rotation_days: "30"  # noqa: var-naming[no-role-prefix]
 backup_force_key_deployment: false  # noqa: var-naming[no-role-prefix]
 
+# Target defaults
+backup_target_backup_enabled: true  # noqa: var-naming[no-role-prefix]
+
 # Alerting
 backup_alert_threshold_hours: "25"  # noqa: var-naming[no-role-prefix]
 backup_alert_webhook_url: ""  # noqa: var-naming[no-role-prefix]

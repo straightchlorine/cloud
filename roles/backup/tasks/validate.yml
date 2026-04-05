@@ -100,10 +100,21 @@
         fail_msg: "coordinator_targets must be defined with at least one target"
         success_msg: "Coordinator has {{ coordinator_targets | length }} target(s)"
 
-    - name: Validate each coordinator target configuration
+    - name: Validate service_name is defined for each coordinator target
       ansible.builtin.assert:
         that:
           - item.service_name is defined
+        fail_msg: >-
+          All coordinator targets must have a 'service_name'
+          field defined (failed at index {{ ansible_loop.index0 }})
+      loop: "{{ backup_coordinator_targets }}"
+      loop_control:
+        extended: true
+        label: "target {{ ansible_loop.index0 }}"
+
+    - name: Validate each coordinator target configuration
+      ansible.builtin.assert:
+        that:
           - item.hostname is defined
           - item.ssh_user is defined
           - item.ssh_key is defined
@@ -120,14 +131,14 @@
           - item.memory_limit is defined
           - item.restic_optimization is defined
         fail_msg: |
-          Invalid coordinator target configuration for {{ item.service_name | default('unknown') }}.
-          Required fields: service_name, hostname, ssh_user, ssh_key, backup_paths,
+          Invalid coordinator target configuration for {{ item.service_name }}.
+          Required fields: hostname, ssh_user, ssh_key, backup_paths,
           restic_repository, restic_password, retention_policy (daily/weekly/monthly/yearly),
           priority, memory_limit, restic_optimization
         success_msg: "Target {{ item.service_name }} configuration validated"
       loop: "{{ backup_coordinator_targets }}"
       loop_control:
-        label: "{{ item.service_name | default('unknown') }}"
+        label: "{{ item.service_name }}"
 
     - name: Validate coordinator target restic_optimization
       ansible.builtin.assert:

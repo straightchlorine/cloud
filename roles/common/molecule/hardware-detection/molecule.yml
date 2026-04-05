@@ -3,9 +3,9 @@ driver:
   name: Docker
 platforms:
   - name: Debian12-hardware
-    image: docker.io/geerlingguy/docker-debian12-ansible:latest
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
-    ansible.builtin.command: /lib/systemd/systemd
+    ansible.builtin.command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:

@@ -23,7 +23,7 @@
       {{ (prom_exp_daemon_json_content.content | b64decode | from_json
       if prom_exp_daemon_json_stat.stat.exists
       else {})
-      | combine({"metrics-addr": "127.0.0.1:9323",
+      | combine({"metrics-addr": "127.0.0.1:{{ prometheus_exporters_docker_exporter_port }}",
       "experimental": true}) | to_nice_json }}
     dest: /etc/docker/daemon.json
     owner: root
@@ -32,6 +32,23 @@
     backup: true
   become: true
   notify: restart docker
+  when: docker_exporter_enabled
+
+- name: Verify userns-remap preserved in daemon.json after merge
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: prom_exp_daemon_json_post_merge
+  become: true
+  when: docker_exporter_enabled
+
+- name: Assert userns-remap key still present in daemon.json
+  ansible.builtin.assert:
+    that:
+      - "'userns-remap' in (prom_exp_daemon_json_post_merge.content | b64decode | from_json)"
+    fail_msg: >-
+      CRITICAL: userns-remap key was lost from daemon.json during metrics config merge.
+      Docker container isolation may be compromised. Restore from backup.
+    success_msg: "userns-remap key verified present in daemon.json"
   when: docker_exporter_enabled
 
 - name: Create Docker metrics collection script
@@ -91,7 +108,7 @@
 
 - name: Test Docker metrics endpoint
   ansible.builtin.uri:
-    url: "http://localhost:9323/metrics"
+    url: "http://127.0.0.1:{{ prometheus_exporters_docker_exporter_port }}/metrics"
     method: GET
     timeout: 5
   register: prom_exp_docker_metrics_test

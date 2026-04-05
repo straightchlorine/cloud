@@ -39,7 +39,7 @@
     rule: allow
     port: "123"
     proto: udp
-    src: "192.168.20.0/24"
+    src: "{{ primary_network_cidr }}"
     comment: "Allow NTP (chrony) from VLAN only"
   become: true
 

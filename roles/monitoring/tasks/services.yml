@@ -112,7 +112,7 @@
 
 - name: Test service endpoints
   ansible.builtin.uri:
-    url: "http://{{ primary_ip }}:{{ item.port }}{{ item.health_path | default('') }}"
+    url: "http://{{ primary_ip }}:{{ item.port }}{{ item.health_path }}"
     method: GET
     timeout: 10
     status_code: 200
@@ -121,7 +121,7 @@
     - { service: "alertmanager", port: "{{ monitoring_alertmanager_port }}", health_path: "/-/healthy" }
     - { service: "grafana", port: "{{ monitoring_grafana_port }}", health_path: "/api/health" }
     - { service: "loki", port: "{{ monitoring_loki_port }}", health_path: "/ready" }
-    - { service: "uptime-kuma", port: "{{ monitoring_uptime_kuma_port }}" }
+    - { service: "uptime-kuma", port: "{{ monitoring_uptime_kuma_port }}", health_path: "" }
   loop_control:
     label: "{{ item.service }}"
   register: monitoring_endpoint_checks

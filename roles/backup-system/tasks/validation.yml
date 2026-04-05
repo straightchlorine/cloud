@@ -5,7 +5,7 @@
   ansible.builtin.fail:
     msg: >-
       backup_role must be defined as 'coordinator' or 'standalone'.
-      Current value: '{{ backup_role | default('undefined') }}'
+      Current value: '{{ backup_role if backup_role is defined else 'UNDEFINED' }}'
   when: >
     backup_role is not defined or
     backup_role not in ['coordinator', 'standalone']
@@ -46,7 +46,9 @@
   when: >
     backup_role == "coordinator" and
     item.0[item.1] is not defined
-  loop: "{{ backup_targets | product(['service_name', 'target_host', 'backup_paths', 'restic_repository']) | list }}"
+  loop: >-
+    {{ backup_targets | product(['service_name', 'target_host',
+    'backup_paths', 'restic_repository', 'ssh_user']) | list }}
   no_log: false
 
 - name: Validate standalone configuration

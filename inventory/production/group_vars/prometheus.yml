@@ -21,7 +21,7 @@ prometheus_instance_labels:
 
 # Firewall configuration
 prometheus_exporters_ufw_enabled: true
-prometheus_exporters_firewall_source: "192.168.20.0/24" # Adjust to your Prometheus server network
+prometheus_exporters_firewall_source: "{{ primary_network_cidr }}"
 
 # Health check configuration
 prometheus_exporters_health_check_enabled: true

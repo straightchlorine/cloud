@@ -20,6 +20,7 @@
       - pihole_ipv6_address
       - dns_upstream_servers
       - firewall_ports
+      - dns_ntp_server_enabled
       - restic_enabled
       - restic_repository
       - restic_password

@@ -47,6 +47,12 @@ steps:
     pull: true
     commands:
       - dnf install -y python3 python3-pip git containers-common
+      - mkdir -p /etc/containers
+      - |
+        cat > /etc/containers/storage.conf << 'CONF'
+        [storage]
+        driver = "vfs"
+        CONF
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
       - |
         for role in common backup-system firewall dns automation backup monitoring music-stack prometheus-exporters; do
@@ -54,6 +60,6 @@ steps:
           echo "Testing role: $role"
           echo "========================================="
           cd roles/$role
-          molecule test --all || true
+          molecule test --all
           cd ../..
         done

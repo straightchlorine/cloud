@@ -19,87 +19,124 @@
     role_specific_packages: "{{ dns_pihole_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
-- name: Clone Pi-hole repository for secure installation
-  ansible.builtin.git:
-    repo: "{{ dns_pihole_git_repo }}"
-    dest: /tmp/pi-hole-repo
-    version: "{{ dns_pihole_version }}"
-    depth: 1
-    force: true
-  become: true
-  register: dns_pihole_clone
+- name: Deploy Pi-hole with rollback on failure
+  block:
+    - name: Clone Pi-hole repository for secure installation
+      ansible.builtin.git:
+        repo: "{{ dns_pihole_git_repo }}"
+        dest: /tmp/pi-hole-repo
+        version: "{{ dns_pihole_version }}"
+        depth: 1
+        force: true
+      become: true
+      register: dns_pihole_clone
 
-- name: Verify Pi-hole installer exists in repository
-  ansible.builtin.stat:
-    path: /tmp/pi-hole-repo/automated install/basic-install.sh
-  register: dns_pihole_installer
-  failed_when: not dns_pihole_installer.stat.exists or dns_pihole_installer.stat.size < 1000
+    - name: Verify Pi-hole installer exists in repository
+      ansible.builtin.stat:
+        path: /tmp/pi-hole-repo/automated install/basic-install.sh
+      register: dns_pihole_installer
+      failed_when: not dns_pihole_installer.stat.exists or dns_pihole_installer.stat.size < 1000
 
-- name: Verify Pi-hole repository commit
-  ansible.builtin.shell: |
-    cd /tmp/pi-hole-repo
-    git rev-parse --verify HEAD
-  register: dns_pihole_commit_hash
-  become: true
-  changed_when: false
+    - name: Verify Pi-hole repository commit
+      ansible.builtin.shell: |
+        cd /tmp/pi-hole-repo
+        git rev-parse --verify HEAD
+      register: dns_pihole_commit_hash
+      become: true
+      changed_when: false
 
-- name: Display Pi-hole repository information for verification
-  ansible.builtin.debug:
-    msg: |
-      Pi-hole repository cloned successfully
-      Version: {{ dns_pihole_version }}
-      Commit: {{ dns_pihole_commit_hash.stdout }}
-      Install script location: /tmp/pi-hole-repo/automated install/basic-install.sh
-      Script size: {{ dns_pihole_installer.stat.size }} bytes
-      Last modified: {{ dns_pihole_installer.stat.mtime }}
+    - name: Display Pi-hole repository information for verification
+      ansible.builtin.debug:
+        msg: |
+          Pi-hole repository cloned successfully
+          Version: {{ dns_pihole_version }}
+          Commit: {{ dns_pihole_commit_hash.stdout }}
+          Install script location: /tmp/pi-hole-repo/automated install/basic-install.sh
+          Script size: {{ dns_pihole_installer.stat.size }} bytes
+          Last modified: {{ dns_pihole_installer.stat.mtime }}
 
-      Security enhancements implemented:
-      [OK] Using official GitHub repository (not direct script download)
-      [OK] Pinned to specific version tag for reproducibility
-      [OK] Commit hash verification for integrity
-      [OK] Allows code review before installation
-      [OK] Verifiable source and provenance
+          Security enhancements implemented:
+          [OK] Using official GitHub repository (not direct script download)
+          [OK] Pinned to specific version tag for reproducibility
+          [OK] Commit hash verification for integrity
+          [OK] Allows code review before installation
+          [OK] Verifiable source and provenance
 
-- name: Create Pi-hole configuration directory
-  ansible.builtin.file:
-    path: /etc/pihole
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  become: true
+    - name: Create Pi-hole configuration directory
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      become: true
 
-- name: Create Pi-hole setup vars file
-  ansible.builtin.template:
-    src: setupVars.conf.j2
-    dest: /etc/pihole/setupVars.conf
-    owner: root
-    group: root
-    mode: '0600'
-  become: true
-  notify: restart pihole-FTL
+    - name: Create Pi-hole setup vars file
+      ansible.builtin.template:
+        src: setupVars.conf.j2
+        dest: /etc/pihole/setupVars.conf
+        owner: root
+        group: root
+        mode: '0600'
+      become: true
+      notify: restart pihole-FTL
 
-- name: Install Pi-hole using verified repository
-  ansible.builtin.shell: |
-    cd "/tmp/pi-hole-repo/automated install/"
-    bash basic-install.sh --unattended
-  become: true
-  args:
-    creates: /usr/local/bin/pihole
-  notify: restart pihole-FTL
+    - name: Install Pi-hole using verified repository
+      ansible.builtin.shell: |
+        cd "/tmp/pi-hole-repo/automated install/"
+        bash basic-install.sh --unattended
+      become: true
+      args:
+        creates: /usr/local/bin/pihole
+      notify: restart pihole-FTL
 
-- name: Set Pi-hole web admin password
-  ansible.builtin.shell: |
-    pihole -a -p "{{ vault_pihole_webpassword }}"
-  become: true
-  when: vault_pihole_webpassword is defined
-  no_log: true
+    - name: Set Pi-hole web admin password
+      ansible.builtin.shell: |
+        pihole -a -p "{{ vault_pihole_webpassword }}"
+      become: true
+      when: vault_pihole_webpassword is defined
+      no_log: true
 
-- name: Clean up Pi-hole repository after installation
-  ansible.builtin.file:
-    path: /tmp/pi-hole-repo
-    state: absent
-  become: true
+    - name: Clean up Pi-hole repository after installation
+      ansible.builtin.file:
+        path: /tmp/pi-hole-repo
+        state: absent
+      become: true
+
+  rescue:
+    - name: Pi-hole deployment failed - stopping service
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: stopped
+      become: true
+      ignore_errors: true
+
+    - name: Restore Pi-hole configuration from backup if available
+      ansible.builtin.shell: |
+        if [ -d "/etc/pihole.backup" ]; then
+          rm -rf /etc/pihole
+          mv /etc/pihole.backup /etc/pihole
+        fi
+      become: true
+      ignore_errors: true
+
+    - name: Start Pi-hole service after rollback
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: started
+      become: true
+      ignore_errors: true
+
+    - name: Clean up Pi-hole repository after failed deployment
+      ansible.builtin.file:
+        path: /tmp/pi-hole-repo
+        state: absent
+      become: true
+      ignore_errors: true
+
+    - name: Fail with deployment error
+      ansible.builtin.fail:
+        msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."
 
 - name: Configure automatic updates
   ansible.builtin.include_tasks: auto_updates.yml

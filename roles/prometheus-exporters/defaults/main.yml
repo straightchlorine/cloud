@@ -56,7 +56,7 @@ prometheus_exporters_pihole_exporter_port: 9617
 pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/
   pihole_exporter-linux-{{ prometheus_arch_map[ansible_architecture] }}
-prometheus_exporters_pihole_exporter_pihole_hostname: "localhost"
+# prometheus_exporters_pihole_exporter_pihole_hostname: must be set in host_vars - no default
 prometheus_exporters_pihole_exporter_pihole_port: 80
 
 # Docker Exporter configuration (for container hosts)

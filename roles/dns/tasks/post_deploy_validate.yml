@@ -45,7 +45,7 @@
   ansible.builtin.systemd:
     name: Chrony
   register: dns_ntp_status
-  when: dns_ntp_server_enabled | default(false)
+  when: dns_ntp_server_enabled
   tags: [post_validation]
 
 - name: Verify monitoring services if enabled
@@ -66,7 +66,7 @@
       Web Interface: {{ 'Accessible' if dns_pihole_web.status == 200 else 'Failed' }}
       API Response: {{ 'Working' if dns_pihole_api.status == 200 else 'Failed' }}
       Ad Blocking: {{ 'Active' if dns_ad_block_test.rc != 0 else 'Check Required' }}
-      NTP Service: {{ dns_ntp_status.status.ActiveState if dns_ntp_server_enabled | default(false) else 'Disabled' }}
+      NTP Service: {{ dns_ntp_status.status.ActiveState if dns_ntp_server_enabled else 'Disabled' }}
 
       Pi-hole deployment validated successfully!
   tags: [post_validation]

@@ -6,10 +6,10 @@
   ansible.builtin.stat:
     path: "{{ item }}/docker-compose.yml"
   register: common_compose_file_check
-  loop:
-    - "{{ automation_stack_home | default('/nonexistent') }}"
-    - "{{ music_stack_home | default('/nonexistent') }}"
-  when: item != '/nonexistent'
+  loop: >-
+    {{ ([ automation_stack_home ] if automation_stack_home is defined else []) +
+       ([ music_stack_home ] if music_stack_home is defined else []) }}
+  when: item | length > 0
   tags: [service_startup_validation]
 
 - name: Check Docker service availability
@@ -72,12 +72,10 @@
       echo "missing"
     fi
   changed_when: false
-  loop:
-    - {stack: "{{ automation_stack_home | default('/nonexistent') }}", name: "automation"}
-    - {stack: "{{ music_stack_home | default('/nonexistent') }}", name: "music"}
-  when:
-    - item.stack != '/nonexistent'
-    - item.name in group_names
+  loop: >-
+    {{ ([ {'stack': automation_stack_home, 'name': 'automation'} ] if automation_stack_home is defined else []) +
+       ([ {'stack': music_stack_home, 'name': 'music'} ] if music_stack_home is defined else []) }}
+  when: item.name in group_names
   loop_control:
     label: "{{ item.name }}"
   tags: [service_startup_validation]
@@ -96,12 +94,10 @@
     fi
   register: common_resource_limits_check
   changed_when: false
-  loop:
-    - {stack: "{{ automation_stack_home | default('/nonexistent') }}", name: "automation"}
-    - {stack: "{{ music_stack_home | default('/nonexistent') }}", name: "music"}
-  when:
-    - item.stack != '/nonexistent'
-    - item.name in group_names
+  loop: >-
+    {{ ([ {'stack': automation_stack_home, 'name': 'automation'} ] if automation_stack_home is defined else []) +
+       ([ {'stack': music_stack_home, 'name': 'music'} ] if music_stack_home is defined else []) }}
+  when: item.name in group_names
   loop_control:
     label: "{{ item.name }}"
   tags: [service_startup_validation]

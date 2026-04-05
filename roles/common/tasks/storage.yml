@@ -65,5 +65,5 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
-  loop: "{{ mount_subdirectories | default([]) }}"
-  when: mount_subdirectories is defined
+  loop: "{{ mount_subdirectories }}"
+  when: mount_subdirectories is defined and mount_subdirectories | length > 0

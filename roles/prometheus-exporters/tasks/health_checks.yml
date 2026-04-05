@@ -3,7 +3,7 @@
 
 - name: Check Node Exporter health
   ansible.builtin.uri:
-    url: "http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
+    url: "http://127.0.0.1:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -13,7 +13,7 @@
 
 - name: Check Pi-hole Exporter health
   ansible.builtin.uri:
-    url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
+    url: "http://127.0.0.1:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -23,7 +23,7 @@
 
 - name: Check Docker metrics endpoint
   ansible.builtin.uri:
-    url: "http://localhost:9323/metrics"
+    url: "http://127.0.0.1:{{ prometheus_exporters_docker_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -59,7 +59,7 @@
     set -o pipefail
     metrics_count=0
     {% if node_exporter_enabled %}
-    NODE_URL="http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
+    NODE_URL="http://127.0.0.1:{{ prometheus_exporters_node_exporter_port }}/metrics"
     if curl -s "$NODE_URL" | grep -c '^[a-zA-Z]' >/dev/null 2>&1; then
       node_metrics=$(curl -s "$NODE_URL" \
         | grep -c '^[a-zA-Z]' || echo 0)
@@ -67,7 +67,7 @@
     fi
     {% endif %}
     {% if pihole_exporter_enabled %}
-    PIHOLE_URL="http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
+    PIHOLE_URL="http://127.0.0.1:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     if curl -s "$PIHOLE_URL" | grep -c '^pihole_' >/dev/null 2>&1; then
       pihole_metrics=$(curl -s "$PIHOLE_URL" \
         | grep -c '^pihole_' || echo 0)
@@ -99,7 +99,7 @@
       {% endif %}
 
       {% if docker_exporter_enabled %}
-      Docker Metrics (9323):
+      Docker Metrics ({{ prometheus_exporters_docker_exporter_port }}):
       common_Status: {{ '[OK] Healthy' if prom_exp_docker_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if prom_exp_docker_health_check.status == 200 %}
       Response time: {{ prom_exp_docker_health_check.elapsed }}s

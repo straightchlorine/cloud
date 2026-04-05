@@ -4,8 +4,8 @@ driver:
 
 platforms:
   - name: test
-    image: docker.io/geerlingguy/docker-debian12-ansible:latest
-    command: /lib/systemd/systemd
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
+    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 
