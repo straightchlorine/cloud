@@ -7,12 +7,6 @@
     state: restarted
   become: true
 
-- name: Restart rsyslog
-  ansible.builtin.systemd:
-    name: Rsyslog
-    state: restarted
-  become: true
-
 - name: Restart docker
   ansible.builtin.systemd:
     name: Docker
@@ -25,10 +19,10 @@
     daemon_reload: true
   become: true
 
-# Generic systemd service restart handler - parameterized for any service
-- name: Restart systemd service
+# Promtail log agent restart handler
+- name: Restart promtail
   ansible.builtin.systemd:
-    name: "{{ service_name }}"
+    name: Promtail
     state: restarted
   become: true
 

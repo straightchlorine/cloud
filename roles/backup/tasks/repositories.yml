@@ -33,19 +33,40 @@
     - "{{ backup_base_path }}/reports"
     - "{{ backup_base_path }}/dashboards"
 
+- name: Download restic SHA256SUMS file
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/SHA256SUMS
+    dest: "/tmp/restic_{{ backup_restic_version }}_SHA256SUMS"
+    mode: '0644'
+  become: true
+
+- name: Extract restic checksum for linux_amd64
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    grep "restic_{{ backup_restic_version }}_linux_amd64.bz2"
+    "/tmp/restic_{{ backup_restic_version }}_SHA256SUMS"
+    | awk '{print $1}'
+  args:
+    executable: /bin/bash
+  register: backup_restic_checksum
+  changed_when: false
+  failed_when: backup_restic_checksum.stdout | length == 0
+
 - name: Install restic backup tool
   ansible.builtin.get_url:
     url: >-
       https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{
-      restic_version }}_linux_amd64.bz2
+      backup_restic_version }}_linux_amd64.bz2
     dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
+    checksum: "sha256:{{ backup_restic_checksum.stdout }}"
     mode: '0644'
   become: true
 
 - name: Extract and install restic
   ansible.builtin.shell: |
     cd /tmp
-    bunzip2 restic_{{ backup_restic_version }}_linux_amd64.bz2
+    bunzip2 -f restic_{{ backup_restic_version }}_linux_amd64.bz2
     mv restic_{{ backup_restic_version }}_linux_amd64 /usr/local/bin/restic
     chmod +x /usr/local/bin/restic
   become: true

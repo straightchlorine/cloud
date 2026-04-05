@@ -7,7 +7,7 @@
     url: "https://api.cloudflare.com/client/v4/zones"
     method: GET
     headers:
-      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
   register: automation_cloudflare_zones
@@ -38,7 +38,7 @@
     url: "https://api.cloudflare.com/client/v4/zones/{{ automation_domain_zone.id }}/dns_records"
     method: POST
     headers:
-      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     body_format: json
     body:
@@ -60,7 +60,7 @@
       automation_dns_record_test.json.result.id }}
     method: DELETE
     headers:
-      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 15
   when: automation_dns_record_test.json.success | default(false)
@@ -103,7 +103,7 @@
 - name: Test connectivity to Let's Encrypt ACME server
   ansible.builtin.uri:
     url: >-
-      {{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if letsencrypt_staging
+      {{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if automation_letsencrypt_staging
       else 'https://acme-v02.api.letsencrypt.org/directory' }}
     method: GET
     timeout: 15
@@ -177,7 +177,7 @@
       Let's Encrypt Connectivity:
       ACME Server: {{
           '[OK] Reachable' if automation_acme_server_test.status == 200 else '[FAIL] Unreachable' }}
-      Server Type: {{ 'Staging' if letsencrypt_staging else 'Production' }}
+      Server Type: {{ 'Staging' if automation_letsencrypt_staging else 'Production' }}
       Rate Limit Status: {{
           '[OK] Safe' if (automation_recent_certificates | default(0) | int) < 20
           else '[WARN]  High certificate count' }}
@@ -202,7 +202,7 @@
       Available Space: {{ (cert_storage_space.stdout | int / 1024) | round(1) }}MB
 
       [DEPLOY] DNS01 challenge prerequisites validated!
-      {% if not letsencrypt_staging %}
+      {% if not automation_letsencrypt_staging %}
       [WARN]  Production Mode: Real certificates will be issued
       {% else %}
       🔸 Staging Mode: Test certificates only

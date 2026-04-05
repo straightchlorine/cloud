@@ -76,6 +76,7 @@
     {% endif %}
     echo $metrics_count
   changed_when: false
+  register: total_metrics_count
 
 - name: Generate comprehensive health report
   ansible.builtin.debug:

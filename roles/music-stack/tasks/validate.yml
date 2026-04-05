@@ -11,7 +11,7 @@
     validation_type: "full"
     validation_role: "music-stack"
     required_variables:
-      - music_library_path
+      - music_stack_music_library_path
       - music_stack_home
       - ansible_uid
       - ansible_gid
@@ -19,9 +19,9 @@
       - ssd_filesystem
       - start_stack
       - firewall_ports
-      - ytdlp_dependencies
-      - ytdlp_version
-      - beets_genres
+      - music_stack_ytdlp_dependencies
+      - music_stack_ytdlp_version
+      - music_stack_beets_genres
       - restic_enabled
       - restic_repository
       - restic_password
@@ -29,11 +29,11 @@
       - { var: "vault_youtube_playlist_url", value: "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" }
     common_backup_directories:
       - "{{ music_stack_music_library_path }}"
-      - "{{ music_stack_music_stack_home }}"
+      - "{{ music_stack_home }}"
     critical_backup_paths:
       - "{{ music_stack_music_library_path }}"
-      - "{{ music_stack_music_stack_home }}"
-    stack_home: "{{ music_stack_music_stack_home }}"
+      - "{{ music_stack_home }}"
+    stack_home: "{{ music_stack_home }}"
     required_services:
       - navidrome
       - beets
@@ -47,7 +47,7 @@
   failed_when: not music_stack_parent_path_check.stat.exists or not music_stack_parent_path_check.stat.isdir
   loop:
     - "{{ music_stack_music_library_path }}"
-    - "{{ music_stack_music_stack_home }}"
+    - "{{ music_stack_home }}"
 
 - name: Check if music directories exist
   ansible.builtin.stat:
@@ -55,7 +55,7 @@
   register: music_stack_dir_check
   loop:
     - "{{ music_stack_music_library_path }}"
-    - "{{ music_stack_music_stack_home }}"
+    - "{{ music_stack_home }}"
 
 - name: Create music directories if they don't exist
   ansible.builtin.file:
@@ -82,7 +82,7 @@
   when: ssd_device is defined and not music_stack_ssd_check.stat.exists
 
 - name: Check available disk space for music library
-  ansible.builtin.shell: df {{ music_library_path | dirname }} | tail -1 | awk '{print $4}'
+  ansible.builtin.shell: df {{ music_stack_music_library_path | dirname }} | tail -1 | awk '{print $4}'
   register: music_stack_disk_space
   changed_when: false
 

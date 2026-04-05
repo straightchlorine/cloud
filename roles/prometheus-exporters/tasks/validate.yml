@@ -29,7 +29,7 @@
 - name: Validate exporter architecture support
   ansible.builtin.fail:
     msg: "Architecture {{ ansible_architecture }} is not supported by Prometheus exporters"
-  when: ansible_architecture not in prometheus_arch_map.keys()
+  when: ansible_architecture not in prometheus_exporters_prometheus_arch_map.keys()
   tags: [validation]
 
 - name: Check for port conflicts
@@ -103,6 +103,16 @@
           }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
       when: prom_exp_pihole_web_check.status != 200
 
+- name: Validate firewall source when UFW enabled
+  ansible.builtin.fail:
+    msg: >-
+      prometheus_exporters_firewall_source must be defined
+      when prometheus_exporters_ufw_enabled is true
+  when:
+    - prometheus_exporters_ufw_enabled
+    - prometheus_exporters_firewall_source is not defined
+  tags: [validation]
+
 - name: Validate pihole exporter hostname is explicitly set
   ansible.builtin.fail:
     msg: >-
@@ -157,7 +167,7 @@
   ansible.builtin.debug:
     msg: |
       [OK] Prometheus Exporters Validation Complete:
-      - Architecture: {{ ansible_architecture }} → {{ prometheus_arch_map[ansible_architecture] }}
+      - Architecture: {{ ansible_architecture }} → {{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
       - Enabled exporters: >-
           {{ [('node' if node_exporter_enabled else ''),
           ('pihole' if pihole_exporter_enabled else ''),

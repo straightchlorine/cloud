@@ -249,6 +249,7 @@
     enabled: true
     state: started
     daemon_reload: true
+  # default() references role default variable, not a magic value — acceptable per CLAUDE.md
   when: item.backup_enabled | default(backup_target_backup_enabled)
   loop: "{{ backup_targets }}"
 

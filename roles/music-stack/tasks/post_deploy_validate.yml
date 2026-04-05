@@ -10,7 +10,7 @@
 
 - name: Check Docker containers are running
   ansible.builtin.shell: |
-    cd "{{ music_stack_music_stack_home }}"
+    cd "{{ music_stack_home }}"
     docker compose ps --format json
   register: music_stack_container_status
   become: true
@@ -89,7 +89,7 @@
 
 - name: Check container health status
   ansible.builtin.shell: |
-    cd "{{ music_stack_music_stack_home }}"
+    cd "{{ music_stack_home }}"
     docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
   register: music_stack_health_status
   become: true

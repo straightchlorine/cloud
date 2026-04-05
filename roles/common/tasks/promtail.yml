@@ -21,7 +21,9 @@
   block:
     - name: Download Promtail
       ansible.builtin.get_url:
-        url: "https://github.com/grafana/loki/releases/download/v2.9.0/promtail-linux-{{ arch }}.zip"
+        url: >-
+          https://github.com/grafana/loki/releases/download/{{
+          common_promtail_version }}/promtail-linux-{{ arch }}.zip
         dest: /tmp/promtail.zip
         mode: '0644'
       vars:
@@ -124,14 +126,14 @@
 
 - name: Verify Promtail is running and healthy
   ansible.builtin.wait_for:
-    port: 9080
+    port: "{{ common_promtail_port }}"
     host: 127.0.0.1
     delay: 5
     timeout: 30
 
 - name: Check Promtail metrics endpoint
   ansible.builtin.uri:
-    url: http://127.0.0.1:9080/metrics
+    url: http://127.0.0.1:{{ common_promtail_port }}/metrics
     method: GET
     timeout: 10
   register: common_promtail_metrics
@@ -144,7 +146,7 @@
 
       Configuration:
       Config: /etc/promtail/promtail.yml
-      [STATS] Metrics: http://127.0.0.1:9080/metrics
+      [STATS] Metrics: http://127.0.0.1:{{ common_promtail_port }}/metrics
       [NOTE] Logs: /var/log/promtail.log
       [TARGET] Target: {{ loki_server }}:{{ loki_port }}
 

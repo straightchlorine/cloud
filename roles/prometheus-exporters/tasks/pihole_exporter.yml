@@ -39,7 +39,7 @@
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
       -pihole_hostname {{ prometheus_exporters_pihole_exporter_pihole_hostname }}
-      -pihole_password {{ pihole_exporter_pihole_password }}
+      -pihole_password {{ vault_pihole_webpassword }}
       -port {{ prometheus_exporters_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"

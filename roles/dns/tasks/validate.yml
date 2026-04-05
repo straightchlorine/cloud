@@ -15,9 +15,9 @@
       - vault_pihole_admin_password
       - vault_domain_name
       - vault_letsencrypt_email
-      - pihole_interface
-      - pihole_ipv4_address
-      - pihole_ipv6_address
+      - dns_pihole_interface
+      - dns_pihole_ipv4_address
+      - dns_pihole_ipv6_address
       - dns_upstream_servers
       - firewall_ports
       - dns_ntp_server_enabled
@@ -55,8 +55,8 @@
 
 - name: Validate IPv4 address format
   ansible.builtin.fail:
-    msg: "pihole_ipv4_address must be in CIDR format (e.g., 192.168.1.10/24)"
-  when: not (pihole_ipv4_address | regex_search('^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'))
+    msg: "dns_pihole_ipv4_address must be in CIDR format (e.g., 192.168.1.10/24)"
+  when: not (dns_pihole_ipv4_address | regex_search('^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'))
 
 - name: Check DNS port availability
   ansible.builtin.wait_for:

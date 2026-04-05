@@ -16,11 +16,11 @@
       - monitoring_log_path
       - monitoring_stack_home
       - vault_grafana_admin_password
-      - grafana_port
-      - prometheus_port
-      - loki_port
-      - uptime_kuma_port
-      - alertmanager_port
+      - monitoring_grafana_port
+      - monitoring_prometheus_port
+      - monitoring_loki_port
+      - monitoring_uptime_kuma_port
+      - monitoring_alertmanager_port
       - restic_enabled
       - restic_repository
       - restic_password

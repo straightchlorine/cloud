@@ -56,7 +56,7 @@ Unattended-Upgrade::Remove-Unused-Dependencies "true";
 
 // Automatically reboot *WITHOUT CONFIRMATION* if
 //  the file /var/run/reboot-required is found after the upgrade
-Unattended-Upgrade::Automatic-Reboot "{{ auto_updates_reboot_if_required | default(false) | lower }}";
+Unattended-Upgrade::Automatic-Reboot "{{ dns_auto_updates_reboot_if_required | lower }}";
 
 // Automatically reboot even if there are users currently logged in
 // when Unattended-Upgrade::Automatic-Reboot is set to true

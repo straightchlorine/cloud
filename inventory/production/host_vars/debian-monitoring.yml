@@ -69,7 +69,7 @@ monitoring_backup_directories:
 
 # Enterprise backup configuration
 restic_enabled: true
-restic_repository: "{{ vault_backup_repository_base }}/monitoring"
+restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/monitoring"
 restic_password: "{{ vault_restic_monitoring_password }}"
 common_backup_directories:
   - "{{ monitoring_data_path }}"

@@ -2,6 +2,10 @@
 # Standardized service verification for all playbooks
 # Eliminates post-task duplication across playbooks
 
+# Defaults below are intentional utility-task structural defaults per CLAUDE.md
+# acceptable patterns. Callers pass partial service dicts with only the fields
+# they need to override; the defaults here provide sensible HTTP health-check
+# behavior for the common case (GET, 10s timeout, no redirects, expect 200).
 - name: Verify services are responding
   ansible.builtin.uri:
     url: "{{ item.url }}"

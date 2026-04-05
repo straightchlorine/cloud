@@ -7,7 +7,7 @@
     tasks_from: build_docker_compose
   vars:
     compose_file_path: >-
-      {{ music_stack_music_stack_home }}/docker-compose.yml
+      {{ music_stack_home }}/docker-compose.yml
     compose_file_owner: "{{ ansible_user }}"
     compose_file_group: "{{ ansible_user }}"
     stack_name: "music-stack"
@@ -19,7 +19,7 @@
 
 - name: Create Beets config directory
   ansible.builtin.file:
-    path: "{{ music_stack_music_stack_home }}/config/beets"
+    path: "{{ music_stack_home }}/config/beets"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -28,7 +28,7 @@
 - name: Create Beets configuration
   ansible.builtin.template:
     src: beets-config.yaml.j2
-    dest: "{{ music_stack_music_stack_home }}/config/beets/config.yaml"
+    dest: "{{ music_stack_home }}/config/beets/config.yaml"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0644"
@@ -36,7 +36,7 @@
 - name: Create genres whitelist for Beets
   ansible.builtin.copy:
     content: "{{ beets_genres | join('\n') }}\n"
-    dest: "{{ music_stack_music_stack_home }}/config/beets/genres.txt"
+    dest: "{{ music_stack_home }}/config/beets/genres.txt"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0644"
@@ -49,13 +49,13 @@
     group: "{{ ansible_user }}"
     mode: "0755"
   loop:
-    - "{{ music_stack_music_stack_home }}/archive"
+    - "{{ music_stack_home }}/archive"
     - "{{ music_stack_music_library_path }}/downloads"
     - "{{ music_stack_music_library_path }}/processing"
 
 - name: Pre-create beets database file to avoid interactive prompts
   ansible.builtin.file:
-    path: "{{ music_stack_music_stack_home }}/config/beets/library.db"
+    path: "{{ music_stack_home }}/config/beets/library.db"
     state: touch
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -70,13 +70,13 @@
     group: "{{ ansible_user }}"
     mode: "0755"
   loop:
-    - "{{ music_stack_music_stack_home }}/config/cache"
-    - "{{ music_stack_music_stack_home }}/scripts"
+    - "{{ music_stack_home }}/config/cache"
+    - "{{ music_stack_home }}/scripts"
   tags: [youtube, config]
 
 - name: Create Navidrome config directory
   ansible.builtin.file:
-    path: "{{ music_stack_music_stack_home }}/config/navidrome"
+    path: "{{ music_stack_home }}/config/navidrome"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -84,7 +84,7 @@
 
 - name: Create logs directory
   ansible.builtin.file:
-    path: "{{ music_stack_music_stack_home }}/logs"
+    path: "{{ music_stack_home }}/logs"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -92,7 +92,7 @@
 
 - name: Check if JWT secret file exists
   ansible.builtin.stat:
-    path: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
+    path: "{{ music_stack_home }}/.navidrome_jwt_secret"
   register: music_stack_jwt_secret_file
 
 - name: Generate JWT secret for Navidrome if not exists
@@ -104,7 +104,7 @@
 - name: Store JWT secret persistently
   ansible.builtin.copy:
     content: "{{ music_stack_jwt_secret_generated.stdout }}"
-    dest: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
+    dest: "{{ music_stack_home }}/.navidrome_jwt_secret"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
@@ -113,14 +113,14 @@
 
 - name: Read existing JWT secret
   ansible.builtin.slurp:
-    src: "{{ music_stack_music_stack_home }}/.navidrome_jwt_secret"
+    src: "{{ music_stack_home }}/.navidrome_jwt_secret"
   register: music_stack_jwt_secret_content
   no_log: true
 
 - name: Create .env file for Docker Compose
   ansible.builtin.template:
     src: env.j2
-    dest: "{{ music_stack_music_stack_home }}/.env"
+    dest: "{{ music_stack_home }}/.env"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
@@ -243,7 +243,7 @@
 - name: Create YouTube download configuration
   ansible.builtin.template:
     src: yt-dlp.conf.j2
-    dest: "{{ music_stack_music_stack_home }}/config/yt-dlp.conf"
+    dest: "{{ music_stack_home }}/config/yt-dlp.conf"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0644"
@@ -252,7 +252,7 @@
 - name: Create YouTube playlist download script
   ansible.builtin.template:
     src: youtube-sync.sh.j2
-    dest: "{{ music_stack_music_stack_home }}/scripts/youtube-sync.sh"
+    dest: "{{ music_stack_home }}/scripts/youtube-sync.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
@@ -261,7 +261,7 @@
 - name: Create YouTube environment configuration file
   ansible.builtin.template:
     src: youtube.env.j2
-    dest: "{{ music_stack_music_stack_home }}/config/youtube.env"
+    dest: "{{ music_stack_home }}/config/youtube.env"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
@@ -270,7 +270,7 @@
 - name: Create YouTube cron wrapper script
   ansible.builtin.template:
     src: youtube-cron.sh.j2
-    dest: "{{ music_stack_music_stack_home }}/scripts/youtube-cron.sh"
+    dest: "{{ music_stack_home }}/scripts/youtube-cron.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
@@ -279,7 +279,7 @@
 - name: Create Beets rescan script
   ansible.builtin.template:
     src: beets-rescan.sh.j2
-    dest: "{{ music_stack_music_stack_home }}/scripts/beets-rescan.sh"
+    dest: "{{ music_stack_home }}/scripts/beets-rescan.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
@@ -288,7 +288,7 @@
 - name: Create Beets import test script
   ansible.builtin.template:
     src: test-beets-import.sh.j2
-    dest: "{{ music_stack_music_stack_home }}/scripts/test-beets-import.sh"
+    dest: "{{ music_stack_home }}/scripts/test-beets-import.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
@@ -296,7 +296,7 @@
 
 - name: Start music stack
   community.docker.docker_compose_v2:
-    project_src: "{{ music_stack_music_stack_home }}"
+    project_src: "{{ music_stack_home }}"
     state: present
   become: true
   become_user: "{{ ansible_user }}"

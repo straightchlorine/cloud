@@ -159,7 +159,9 @@ groups:
           service: docker
         annotations:
           summary: "High memory usage in container {{ $labels.name }}"
-          description: "Container {{ $labels.name }} on {{ $labels.instance }} is using more than 90% of its memory limit."
+          description: >-
+            Container {{ $labels.name }} on {{ $labels.instance }}
+            is using more than 90% of its memory limit.
 
   # Music Stack Alerts
   - name: music.services

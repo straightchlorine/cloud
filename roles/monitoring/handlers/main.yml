@@ -33,20 +33,3 @@
     name: uptime-kuma
     state: restarted
   become: true
-
-- name: Restart promtail
-  ansible.builtin.systemd:
-    name: promtail
-    state: restarted
-  become: true
-
-- name: Restart monitoring stack
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: restarted
-  become: true
-  loop:
-    - prometheus
-    - grafana-server
-    - loki
-    - prometheus-alertmanager

@@ -32,7 +32,7 @@
   become: true
   notify:
     - reload systemd
-    - restart loki
+    - Restart loki
 
 - name: Create Uptime Kuma systemd service # noqa: var-naming[no-role-prefix]
   ansible.builtin.template:
@@ -59,7 +59,7 @@
   become: true
   notify:
     - reload systemd
-    - restart uptime-kuma
+    - Restart uptime-kuma
 
 - name: Start and enable all monitoring services
   ansible.builtin.systemd:

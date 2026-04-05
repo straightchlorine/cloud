@@ -88,35 +88,45 @@
       repository: {{ backup_restic_repository }}
       user: {{ backup_user }}
 
-- name: Initialize restic repository
-  ansible.builtin.command: restic init
-  environment:
-    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
-    RESTIC_PASSWORD: "{{ backup_restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
-  become: true
-  become_user: "{{ backup_user }}"
-  register: backup_restic_init
-  failed_when: false
-  changed_when: backup_restic_init.rc == 0
+- name: Initialize and verify restic repository
+  block:
+    - name: Initialize restic repository
+      ansible.builtin.command: restic init
+      environment:
+        RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+        RESTIC_PASSWORD: "{{ backup_restic_password }}"
+        RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+      become: true
+      become_user: "{{ backup_user }}"
+      register: backup_restic_init
+      failed_when: false
+      changed_when: backup_restic_init.rc == 0
 
-- name: Check repository status
-  ansible.builtin.command: restic snapshots --latest 1
-  environment:
-    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
-    RESTIC_PASSWORD: "{{ backup_restic_password }}"
-    RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
-  become: true
-  become_user: "{{ backup_user }}"
-  register: backup_restic_snapshots
-  failed_when: false
-  changed_when: false
+    - name: Check repository status
+      ansible.builtin.command: restic snapshots --latest 1
+      environment:
+        RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+        RESTIC_PASSWORD: "{{ backup_restic_password }}"
+        RESTIC_SFTP_COMMAND: "ssh -F {{ backup_base_path }}/.ssh/config hetzner-storage -s sftp"
+      become: true
+      become_user: "{{ backup_user }}"
+      register: backup_restic_snapshots
+      failed_when: backup_restic_snapshots.rc != 0
+      changed_when: false
 
-- name: Display repository status
-  ansible.builtin.debug:
-    msg: >-
-      Repository status:
-      {{ 'Initialized and accessible' if backup_restic_snapshots.rc == 0 else 'Not accessible or not initialized' }}
+    - name: Display repository status
+      ansible.builtin.debug:
+        msg: "Repository status: Initialized and accessible"
+
+  rescue:
+    - name: Display repository initialization failure
+      ansible.builtin.debug:
+        msg: >-
+          Repository initialization failed for {{ inventory_hostname }}.
+          Repository: {{ backup_restic_repository }}.
+          Please verify SSH connectivity and storage box access.
+      # ignore_errors in rescue: system may be in inconsistent state
+      ignore_errors: true
 
 - name: Deploy standalone backup script
   ansible.builtin.template:

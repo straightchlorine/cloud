@@ -38,7 +38,7 @@
 
 - name: Test Traefik dashboard accessibility
   ansible.builtin.uri:
-    url: "http://localhost:{{ automation_automation_traefik_dashboard_port }}"
+    url: "http://localhost:{{ automation_traefik_dashboard_port }}"
     method: GET
     timeout: 10
   register: automation_traefik_dashboard

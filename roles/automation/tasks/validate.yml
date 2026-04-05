@@ -29,9 +29,10 @@
       - backup_ssh_port
       - backup_ssh_user
       - start_stack
-      - traefik_web_port
-      - traefik_websecure_port
-      - traefik_dashboard_port
+      - automation_traefik_web_port
+      - automation_traefik_websecure_port
+      - automation_traefik_dashboard_port
+      - automation_letsencrypt_staging
     vault_placeholders:
       - { var: "vault_cloudflare_api_token", value: "your-cloudflare-api-token-here" }
       - { var: "vault_restic_automation_password", value: "your-32-character-secure-restic-password" }

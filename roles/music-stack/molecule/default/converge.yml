@@ -3,7 +3,7 @@
   hosts: all
   vars:
     # Music stack paths
-    music_stack_music_stack_home: "/home/pi/music-stack"
+    music_stack_home: "/home/pi/music-stack"
     music_stack_music_library_path: "/mnt/music"
 
     # Service ports
@@ -36,7 +36,7 @@
         mode: '0755'
       become: true
       loop:
-        - "{{ music_stack_music_stack_home | dirname }}"
+        - "{{ music_stack_home | dirname }}"
         - "{{ music_stack_music_library_path | dirname }}"
 
     - name: Create test user group
@@ -70,7 +70,7 @@
 
     - name: Create music stack home directory
       ansible.builtin.file:
-        path: "{{ music_stack_music_stack_home }}"
+        path: "{{ music_stack_home }}"
         state: directory
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
@@ -105,14 +105,14 @@
         mode: "0755"
       become: true
       loop:
-        - "{{ music_stack_music_stack_home }}/config"
-        - "{{ music_stack_music_stack_home }}/config/beets"
-        - "{{ music_stack_music_stack_home }}/config/navidrome"
-        - "{{ music_stack_music_stack_home }}/config/cache"
+        - "{{ music_stack_home }}/config"
+        - "{{ music_stack_home }}/config/beets"
+        - "{{ music_stack_home }}/config/navidrome"
+        - "{{ music_stack_home }}/config/cache"
 
     - name: Create scripts directory
       ansible.builtin.file:
-        path: "{{ music_stack_music_stack_home }}/scripts"
+        path: "{{ music_stack_home }}/scripts"
         state: directory
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
@@ -121,7 +121,7 @@
 
     - name: Create logs directory
       ansible.builtin.file:
-        path: "{{ music_stack_music_stack_home }}/logs"
+        path: "{{ music_stack_home }}/logs"
         state: directory
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
@@ -130,7 +130,7 @@
 
     - name: Create archive directory
       ansible.builtin.file:
-        path: "{{ music_stack_music_stack_home }}/archive"
+        path: "{{ music_stack_home }}/archive"
         state: directory
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
@@ -150,7 +150,7 @@
           networks:
             default:
               name: music-stack
-        dest: "{{ music_stack_music_stack_home }}/docker-compose.yml"
+        dest: "{{ music_stack_home }}/docker-compose.yml"
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
         mode: '0644'
@@ -162,7 +162,7 @@
           #!/bin/bash
           # Music stack management script placeholder
           echo "Music stack management script"
-        dest: "{{ music_stack_music_stack_home }}/scripts/youtube-sync.sh"
+        dest: "{{ music_stack_home }}/scripts/youtube-sync.sh"
         owner: "{{ test_user }}"
         group: "{{ test_user }}"
         mode: "0755"

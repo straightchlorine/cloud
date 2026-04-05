@@ -92,14 +92,35 @@
   when: >-
     backup_restic_check.rc != 0 or
     (backup_restic_check.stdout is defined and
-    restic_version not in backup_restic_check.stdout)
+    backup_restic_version not in backup_restic_check.stdout)
   block:
+    - name: Download restic SHA256SUMS file
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/SHA256SUMS
+        dest: "/tmp/restic_{{ backup_restic_version }}_SHA256SUMS"
+        mode: '0644'
+      become: true
+
+    - name: Extract restic checksum for linux_amd64
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        grep "restic_{{ backup_restic_version }}_linux_amd64.bz2"
+        "/tmp/restic_{{ backup_restic_version }}_SHA256SUMS"
+        | awk '{print $1}'
+      args:
+        executable: /bin/bash
+      register: backup_restic_checksum
+      changed_when: false
+      failed_when: backup_restic_checksum.stdout | length == 0
+
     - name: Download restic binary
       ansible.builtin.get_url:
         url: >-
           https://github.com/restic/restic/releases/download/v{{ backup_restic_version }}/restic_{{
-          restic_version }}_linux_amd64.bz2
+          backup_restic_version }}_linux_amd64.bz2
         dest: "/tmp/restic_{{ backup_restic_version }}_linux_amd64.bz2"
+        checksum: "sha256:{{ backup_restic_checksum.stdout }}"
         mode: '0644'
       become: true
 

@@ -17,8 +17,10 @@
       - backup_user is defined
       - backup_group is defined
       - backup_base_path is defined
-      - restic_version is defined
-    fail_msg: "Missing required common variables. Required: backup_user, backup_group, backup_base_path, restic_version"
+      - backup_restic_version is defined
+    fail_msg: >-
+      Missing required common variables. Required: backup_user,
+      backup_group, backup_base_path, backup_restic_version
     success_msg: "Common backup variables validated"
 
 - name: Validate Hetzner storage configuration
@@ -76,7 +78,7 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       register: backup_path_check
-      loop: "{{ common_backup_paths }}"
+      loop: "{{ backup_paths }}"
       failed_when: false
       changed_when: false
 

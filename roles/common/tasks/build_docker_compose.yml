@@ -48,6 +48,7 @@
       {% if network.external is defined and network.external %}
           external: true
       {% else %}
+          # TODO: Remove default once all callers (automation, music-stack) set explicit driver: key
           driver: {{ network.driver | default('bridge') }}
       {% endif %}
       {% endfor %}
@@ -64,12 +65,14 @@
       {% for volume in compose_volumes %}
         {{ volume.name }}:
       {% if volume.driver_opts is defined %}
+          {# TODO: Remove default once automation role fixes key name (automation_driver -> driver) #}
           driver: {{ volume.driver | default('local') }}
           driver_opts:
       {% for key, value in volume.driver_opts.items() %}
             {{ key }}: {{ value }}
       {% endfor %}
       {% else %}
+          {# TODO: Remove default once all callers set explicit driver: key #}
           driver: {{ volume.driver | default('local') }}
       {% endif %}
       {% endfor %}

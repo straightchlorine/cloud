@@ -27,7 +27,7 @@
           ansible.builtin.shell: |
             set -o pipefail
             grep "node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
-                  prometheus_arch_map[ansible_architecture] }}.tar.gz" \
+                  prometheus_exporters_prometheus_arch_map[ansible_architecture] }}.tar.gz" \
               /tmp/node_exporter_checksums.txt | cut -d' ' -f1
           register: prom_exp_expected_checksum
           changed_when: false
@@ -49,7 +49,7 @@
           ansible.builtin.copy:
             src: >-
               /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
-              prometheus_arch_map[ansible_architecture] }}/node_exporter
+              prometheus_exporters_prometheus_arch_map[ansible_architecture] }}/node_exporter
             dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
             owner: "{{ prometheus_exporters_user }}"
             group: "{{ prometheus_exporters_group }}"
@@ -66,7 +66,7 @@
             - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             - >-
               /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version
-              }}.linux-{{ prometheus_arch_map[ansible_architecture] }}
+              }}.linux-{{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
             - "/tmp/node_exporter_checksums.txt"
 
 - name: Install Node Exporter via package manager (fallback)

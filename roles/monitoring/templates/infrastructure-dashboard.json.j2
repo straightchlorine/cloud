@@ -77,7 +77,7 @@
         "type": "bargauge",
         "targets": [
           {
-            "expr": "(node_filesystem_size_bytes{fstype!=\"tmpfs\"} - node_filesystem_avail_bytes{fstype!=\"tmpfs\"}) / node_filesystem_size_bytes{fstype!=\"tmpfs\"} * 100",
+            "expr": "(1 - node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"}) * 100",
             "legendFormat": "{{ "{{" }} instance {{ "}}" }} - {{ "{{" }} mountpoint {{ "}}" }}",
             "datasource": "Prometheus"
           }

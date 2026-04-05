@@ -33,7 +33,7 @@
 
 - name: Create music stack directory
   ansible.builtin.file:
-    path: "{{ music_stack_music_stack_home }}"
+    path: "{{ music_stack_home }}"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -65,7 +65,7 @@
   vars:
     stack_service_name: "music-stack"
     stack_description: "Music Stack (Navidrome, Beets, YouTube sync)"
-    stack_home_directory: "{{ music_stack_music_stack_home }}"
+    stack_home_directory: "{{ music_stack_home }}"
     stack_user: "{{ ansible_user }}"
     stack_environment_vars:
       - "MUSIC_LIBRARY_PATH={{ music_stack_music_library_path }}"

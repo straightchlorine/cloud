@@ -25,7 +25,7 @@
     mode: '0640'
     backup: true
   become: true
-  notify: restart prometheus
+  notify: Restart prometheus
 
 - name: Generate Prometheus alerting rules
   ansible.builtin.template:
@@ -34,7 +34,7 @@
     mode: '0644'
     backup: true
   become: true
-  notify: restart prometheus
+  notify: Restart prometheus
 
 - name: Generate Loki configuration
   ansible.builtin.template:
@@ -43,7 +43,7 @@
     mode: '0644'
     backup: true
   become: true
-  notify: restart loki
+  notify: Restart loki
 
 - name: Generate Loki alerting rules
   ansible.builtin.template:
@@ -52,7 +52,7 @@
     mode: '0644'
     backup: true
   become: true
-  notify: restart loki
+  notify: Restart loki
 
 - name: Generate Alertmanager configuration
   ansible.builtin.template:
@@ -61,7 +61,7 @@
     mode: '0640'
     backup: true
   become: true
-  notify: restart alertmanager
+  notify: Restart alertmanager
 
 - name: Generate Grafana datasource configuration
   ansible.builtin.template:
@@ -69,7 +69,7 @@
     dest: /etc/grafana/provisioning/datasources/datasources.yml
     mode: '0644'
   become: true
-  notify: restart grafana
+  notify: Restart grafana
 
 - name: Generate Grafana dashboard provisioning
   ansible.builtin.template:
@@ -77,7 +77,7 @@
     dest: /etc/grafana/provisioning/dashboards/dashboards.yml
     mode: '0644'
   become: true
-  notify: restart grafana
+  notify: Restart grafana
 
 - name: Create Grafana dashboard directory
   ansible.builtin.file:

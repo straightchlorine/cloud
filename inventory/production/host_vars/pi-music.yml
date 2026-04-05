@@ -4,7 +4,7 @@
 device_type: rpi3b
 
 music_stack_enabled: true
-music_stack_music_stack_home: "/home/media/compose"
+music_stack_home: "/home/media/compose"
 
 ssd_device: "/dev/sda1"
 # SSD configuration inherited from group_vars/services.yml common_ssd_config
@@ -45,10 +45,10 @@ prometheus_role: "music"
 
 # Enterprise backup configuration
 restic_enabled: true
-restic_repository: "{{ vault_backup_repository_base }}/music"
+restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/music"
 restic_password: "{{ vault_restic_music_password }}"
 common_backup_directories:
-  - "{{ music_stack_music_stack_home }}"
+  - "{{ music_stack_home }}"
   - "{{ music_stack_music_library_path }}"
   - "/var/lib/docker/volumes"
   - "/etc/docker"

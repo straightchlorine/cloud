@@ -53,7 +53,7 @@
     url: "https://api.cloudflare.com/client/v4/user"
     method: GET
     headers:
-      Authorization: "Bearer {{ automation_vault_cloudflare_api_token }}"
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
       Content-Type: "application/json"
     timeout: 10
   register: automation_cloudflare_api_test
@@ -141,8 +141,8 @@
   ansible.builtin.debug:
     msg: |
       [WARN]  Let's Encrypt Configuration:
-      Staging Mode: {{ letsencrypt_staging | default(false) }}
-      {% if letsencrypt_staging | default(false) %}
+      Staging Mode: {{ automation_letsencrypt_staging }}
+      {% if automation_letsencrypt_staging %}
       🔸 Using staging environment - certificates will NOT be trusted by browsers
       {% else %}
       [OK] Using production environment - certificates will be trusted
@@ -180,7 +180,7 @@
       Static Config: {{ '[OK] Present' if automation_traefik_configs.results[0].stat.exists else '[FAIL] Missing' }}
       Dynamic Config: {{ '[OK] Present' if automation_traefik_configs.results[1].stat.exists else '[FAIL] Missing' }}
       Let's Encrypt Email: {{ vault_letsencrypt_email }}
-      Staging Mode: {{ letsencrypt_staging | default(false) }}
+      Staging Mode: {{ automation_letsencrypt_staging }}
 
       🔒 DNS01 SSL setup validated successfully!
       No ports need to be exposed for certificate generation.

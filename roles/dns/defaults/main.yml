@@ -27,6 +27,15 @@ dns_auto_updates_enabled: true
 dns_auto_update_time: "2:00"
 dns_auto_update_day: "Monday"
 
+# Unattended Upgrades
+dns_auto_updates_reboot_if_required: false
+
+# Unbound Configuration
+dns_unbound_interface: "127.0.0.1"
+dns_unbound_port: 5335
+dns_unbound_threads: 1
+dns_unbound_cache_size: "4m"
+
 # Additional Services
 dns_additional_services: []
 

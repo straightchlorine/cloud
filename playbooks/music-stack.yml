@@ -35,8 +35,8 @@
           🎵 Music Stack Deployment Complete!
 
           Services:
-          - Navidrome: http://{{ primary_ip }}:{{ navidrome_port }}
-          - Dozzle (Logs): http://{{ primary_ip }}:{{ dozzle_port }}
+          - Navidrome: http://{{ primary_ip }}:{{ music_stack_navidrome_port }}
+          - Dozzle (Logs): http://{{ primary_ip }}:{{ music_stack_dozzle_port }}
 
           Useful commands on the Pi:
           - Manage stack: music-stack {start|stop|restart|status}
@@ -45,9 +45,9 @@
           - View logs: docker compose -f ~/{{ music_stack_home | basename }}/docker-compose.yml logs -f
 
           Directory structure:
-          - Music library: {{ music_library_path }}/music
-          - Downloads: {{ music_library_path }}/downloads
-          - Processing: {{ music_library_path }}/processing
+          - Music library: {{ music_stack_music_library_path }}/music
+          - Downloads: {{ music_stack_music_library_path }}/downloads
+          - Processing: {{ music_stack_music_library_path }}/processing
           - Config: ~/{{ music_stack_home | basename }}/config/
           - Scripts: ~/{{ music_stack_home | basename }}/scripts/
           - Logs: ~/{{ music_stack_home | basename }}/logs/
@@ -84,6 +84,6 @@
       vars:
         services_to_verify:
           - name: "Navidrome"
-            url: "http://{{ primary_ip }}:{{ navidrome_port }}"
+            url: "http://{{ primary_ip }}:{{ music_stack_navidrome_port }}"
           - name: "Dozzle"
-            url: "http://{{ primary_ip }}:{{ dozzle_port }}"
+            url: "http://{{ primary_ip }}:{{ music_stack_dozzle_port }}"

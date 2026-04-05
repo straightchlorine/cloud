@@ -225,7 +225,7 @@
         Target: {{ target.target_host }}
         common_Repository: {{ target.restic_repository }}
         common_Schedule: {{ target.backup_schedule }}
-        Method: {{ target.backup_method | default('standard') }}
+        Method: {{ target.backup_method if target.backup_method is defined else 'Not set' }}
         Network Optimization: {{ 'Enabled' if target.network_optimization else 'Disabled' }}
         Restore Push-back: {{ 'Enabled' if target.restore_pushback_enabled else 'Disabled' }}
         Paths: {{ target.backup_paths | join(', ') }}

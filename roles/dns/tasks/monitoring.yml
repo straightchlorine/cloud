@@ -4,24 +4,11 @@
 - name: Install Netdata for system monitoring
   when: dns_additional_services | selectattr('name', 'equalto', 'netdata') | list | length > 0
   block:
-    - name: Download Netdata installer with GPG verification
-      ansible.builtin.get_url:
-        url: https://my-netdata.io/kickstart.sh
-        dest: /tmp/netdata-kickstart.sh
-        mode: '0755'
-      become: true
-
-    - name: Install Netdata from verified script
-      ansible.builtin.shell: |
-        /tmp/netdata-kickstart.sh --dont-wait --disable-telemetry
-      args:
-        creates: /usr/sbin/netdata
-      become: true
-
-    - name: Remove Netdata installer script
-      ansible.builtin.file:
-        path: /tmp/netdata-kickstart.sh
-        state: absent
+    - name: Install Netdata via package manager
+      ansible.builtin.apt:
+        name: netdata
+        state: present
+        update_cache: true
       become: true
 
 # Pi-hole exporter setup
@@ -72,8 +59,8 @@
     service_group: "{{ dns_pihole_exporter_user }}"
     exec_start: >-
       {{ dns_pihole_exporter_install_dir }}/pihole_exporter
-      -pihole_hostname {{ dns_primary_ip }}
-      -pihole_password {{ pihole_webpassword }}
+      -pihole_hostname {{ primary_ip }}
+      -pihole_password {{ vault_pihole_webpassword }}
       -port {{ dns_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"

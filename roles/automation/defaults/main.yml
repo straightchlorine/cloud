@@ -71,8 +71,8 @@ automation_compose_services:
       - "./logs:/logs"
     environment:
       - "TRAEFIK_API_DASHBOARD=true"
-      - "TRAEFIK_API_INSECURE=true"
-      - "CF_DNS_API_TOKEN={{ automation_vault_cloudflare_api_token }}"
+      - "TRAEFIK_API_INSECURE=false"
+      - "CF_DNS_API_TOKEN={{ vault_cloudflare_api_token }}"
     ansible.builtin.command:
       - "--configFile=/config/traefik.yml"
     networks:
@@ -262,7 +262,7 @@ automation_compose_networks:
 # Docker Compose volumes configuration
 automation_compose_volumes:
   traefik-data:
-    automation_driver: "local"
+    driver: "local"
     driver_opts:
       o: "bind"
       type: "none"

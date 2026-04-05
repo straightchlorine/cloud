@@ -22,7 +22,7 @@ node_exporter_install_method: "binary" # 'binary' or 'package'
 prometheus_exporters_node_exporter_binary_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{ prometheus_exporters_node_exporter_version }}/
   node_exporter-{{ prometheus_exporters_node_exporter_version
-  }}.linux-{{ prometheus_arch_map[ansible_architecture] }}.tar.gz
+  }}.linux-{{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}.tar.gz
 prometheus_exporters_node_exporter_checksum_url: >-
   https://github.com/prometheus/node_exporter/releases/download/
   v{{ prometheus_exporters_node_exporter_version }}/sha256sums.txt
@@ -55,7 +55,7 @@ pihole_exporter_version: "v1.2.0"
 prometheus_exporters_pihole_exporter_port: 9617
 pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/
-  pihole_exporter-linux-{{ prometheus_arch_map[ansible_architecture] }}
+  pihole_exporter-linux-{{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
 # prometheus_exporters_pihole_exporter_pihole_hostname: must be set in host_vars - no default
 prometheus_exporters_pihole_exporter_pihole_port: 80
 

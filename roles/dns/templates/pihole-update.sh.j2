@@ -27,7 +27,7 @@ apt autoclean >> $LOG_FILE 2>&1
 # Restart services if needed
 if [ -f /var/run/reboot-required ]; then
     echo "[$DATE] Reboot required - scheduling reboot in 5 minutes..." >> $LOG_FILE
-{% if auto_updates_reboot_if_required | default(false) %}
+{% if dns_auto_updates_reboot_if_required %}
     shutdown -r +5 "System will reboot in 5 minutes for updates" >> $LOG_FILE 2>&1
 {% else %}
     echo "[$DATE] Reboot required but auto-reboot is disabled" >> $LOG_FILE

@@ -55,5 +55,9 @@ common_backup_io_class: "idle"
 # Port connectivity testing
 common_firewall_ports: []
 
+# Promtail configuration
+common_promtail_version: "v2.9.0"
+common_promtail_port: 9080
+
 # Docker service defaults
 common_service_restart: "always"
