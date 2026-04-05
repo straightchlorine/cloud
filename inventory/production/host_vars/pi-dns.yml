@@ -8,22 +8,22 @@ dns_interface: "{{ primary_ip }}"
 device_type: rpi3b
 
 # Pi-hole configuration
-pihole_admin_password: "{{ vault_pihole_admin_password }}"
-pihole_webpassword: "{{ vault_pihole_webpassword }}"
-pihole_dns_servers:
+dns_pihole_admin_password: "{{ vault_pihole_admin_password }}"
+dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
+dns_pihole_dns_servers:
   - "{{ hostvars['firewall']['primary_ip'] }}#53"
-pihole_interface: "{{ primary_interface }}"
-pihole_ipv4_address: "{{ host_ip_cidr }}"
-pihole_ipv6_address: ""
-pihole_packages:
+dns_pihole_interface: "{{ primary_interface }}"
+dns_pihole_ipv4_address: "{{ host_ip_cidr }}"
+dns_pihole_ipv6_address: ""
+dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
 
 # Automatic updates configuration
-auto_updates_enabled: true
-auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
-auto_updates_reboot_if_required: true
+dns_auto_updates_enabled: true
+dns_auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
+dns_auto_updates_reboot_if_required: true
 
 # NTP server configuration
 ntp_server_enabled: true
@@ -33,7 +33,7 @@ ntp_allowed_networks:
   - "172.16.0.0/12"
 
 # Firewall configuration for DNS services
-firewall_ports:
+common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
@@ -59,7 +59,7 @@ additional_services:
     port: 9617
 
 # Prometheus exporters configuration
-pihole_exporter_enabled: true
+dns_pihole_exporter_enabled: true
 prometheus_role: "dns"
 
 # Enterprise backup configuration

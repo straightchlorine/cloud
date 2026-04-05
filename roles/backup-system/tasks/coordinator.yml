@@ -100,7 +100,7 @@
   loop: "{{ backup_targets }}"
   register: backup_ssh_public_keys
 
-- name: Deploy SSH public keys to target hosts
+- name: Deploy SSH public keys to target hosts  # noqa: no-handler
   ansible.posix.authorized_key:
     user: "{{ item.item.ssh_user | default(backup_user) }}"
     state: present

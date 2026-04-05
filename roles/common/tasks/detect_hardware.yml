@@ -95,6 +95,16 @@
         cpus: "1.0"
         memory_reservation: "256M"
         cpus_reservation: "0.5"
+      beets:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+      dozzle:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
   when: hardware_platform == "rpi4"
 
 - name: Set hardware-specific resource limits for Pi 3 # noqa: var-naming[no-role-prefix]
@@ -125,6 +135,16 @@
         cpus: "0.75"
         memory_reservation: "128M"
         cpus_reservation: "0.5"
+      beets:
+        memory: "128M"
+        cpus: "0.25"
+        memory_reservation: "64M"
+        cpus_reservation: "0.1"
+      dozzle:
+        memory: "128M"
+        cpus: "0.25"
+        memory_reservation: "64M"
+        cpus_reservation: "0.1"
   when: hardware_platform == "rpi3"
 
 - name: Set optimized resource limits for PCs # noqa: var-naming[no-role-prefix]
@@ -170,6 +190,16 @@
         cpus: "2.0"
         memory_reservation: "512M"
         cpus_reservation: "1.0"
+      beets:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
+      dozzle:
+        memory: "256M"
+        cpus: "0.5"
+        memory_reservation: "128M"
+        cpus_reservation: "0.25"
   when: hardware_platform == "pc"
 
 - name: Set conservative resource limits for unknown hardware # noqa: var-naming[no-role-prefix]
@@ -215,6 +245,16 @@
         cpus: "0.5"
         memory_reservation: "128M"
         cpus_reservation: "0.25"
+      beets:
+        memory: "128M"
+        cpus: "0.25"
+        memory_reservation: "64M"
+        cpus_reservation: "0.1"
+      dozzle:
+        memory: "128M"
+        cpus: "0.25"
+        memory_reservation: "64M"
+        cpus_reservation: "0.1"
   when: hardware_platform == "unknown"
 
 - name: Display detected hardware and resource limits

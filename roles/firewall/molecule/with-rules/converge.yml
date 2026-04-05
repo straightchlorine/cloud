@@ -2,7 +2,7 @@
 - name: Converge - Firewall with Custom Rules
   hosts: all
   vars:
-    common_timezone: UTC
+    timezone: UTC
     firewall_enabled: true
     firewall_reset: true
     firewall_policy_incoming: deny

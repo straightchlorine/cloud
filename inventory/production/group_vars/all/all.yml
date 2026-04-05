@@ -20,7 +20,7 @@ common_backup_base_path: "/opt/backup"
 common_backup_password_file: "{{ common_backup_base_path }}/restic-password"
 
 # Common filesystem utilities (used by all roles with storage)
-filesystem_utilities:
+common_filesystem_utilities:
   - parted
   - e2fsprogs
   - ntfs-3g
@@ -28,7 +28,7 @@ filesystem_utilities:
   - exfatprogs
 
 # Common System Packages
-common_common_packages:
+common_packages:
   - curl
   - wget
   - git
@@ -50,8 +50,8 @@ log_compression: true
 
 # Security Configuration
 common_fail2ban_enabled: true
-fail2ban_ssh_maxretry: 3
-fail2ban_ssh_bantime: 600
+common_fail2ban_ssh_maxretry: 3
+common_fail2ban_ssh_bantime: 600
 
 # Domain configuration (must be set in vault)
 domain_name: "{{ vault_domain_name }}"

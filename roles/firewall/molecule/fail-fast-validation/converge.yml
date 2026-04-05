@@ -2,7 +2,7 @@
 - name: Converge - Firewall Fail-Fast Validation
   hosts: all
   vars:
-    common_timezone: UTC
+    timezone: UTC
     # Intentionally omit required variables:
     # - firewall_enabled
     # - firewall_policy_incoming

@@ -31,7 +31,7 @@ provisioner:
     group_vars:
       all:
         ansible_user: root
-        common_timezone: UTC
+        timezone: UTC
         package_cache_valid_time: 3600
 
 verifier:

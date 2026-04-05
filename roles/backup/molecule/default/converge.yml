@@ -2,7 +2,7 @@
 - name: Converge - Default (Core Role Logic)
   hosts: all
   vars:
-    backup_timezone: UTC
+    timezone: UTC
 
     # Backup role mode
     backup_role: "standalone"

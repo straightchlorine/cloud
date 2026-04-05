@@ -4,7 +4,7 @@
 # Global SSH settings for all connections
 Host *
     ControlMaster auto
-    ControlPath {{{ common_backup_base_path }}}/.ssh/sockets/%r@%h-%p
+    ControlPath {{ common_backup_base_path }}/.ssh/sockets/%r@%h-%p
     ControlPersist 10m
     ServerAliveInterval 60
     ServerAliveCountMax 3
@@ -17,6 +17,6 @@ Host hetzner-storage
     HostName {{ vault_backup_storage_host }}
     User {{ vault_backup_storage_user }}
     Port {{ vault_backup_storage_port }}
-    IdentityFile {{{ common_backup_base_path }}}/.ssh/hetzner
+    IdentityFile {{ common_backup_base_path }}/.ssh/hetzner
     BatchMode yes
     PasswordAuthentication no

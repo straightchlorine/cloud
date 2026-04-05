@@ -2,7 +2,7 @@
 - name: Converge
   hosts: all
   vars:
-    common_timezone: UTC
+    timezone: UTC
     common_fail2ban_enabled: false
     package_cache_valid_time: 3600
     common_packages:
@@ -18,5 +18,5 @@
 
     - name: Set timezone
       community.general.timezone:
-        name: "{{ common_timezone }}"
+        name: "{{ timezone }}"
       become: true

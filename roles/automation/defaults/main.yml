@@ -11,6 +11,12 @@ automation_traefik_dashboard_port: 8080
 
 # Default subdomains
 automation_subdomain_traefik: "traefik"
+automation_subdomain_dozzle: "dozzle"
+automation_subdomain_portainer: "portainer"
+automation_subdomain_influxdb: "influxdb"
+automation_subdomain_vaultwarden: "vault"
+automation_subdomain_explorer: "influxdb-ui"
+automation_domain_name: "{{ domain_name }}"
 
 # Short domain reference for labels (used to shorten line length)
 automation_domain: "{{ automation_domain_name }}"

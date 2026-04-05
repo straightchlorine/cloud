@@ -18,28 +18,28 @@ monitoring_uid: 1001
 monitoring_gid: 1001
 
 # Service ports (required for validation)
-grafana_port: 3000
-prometheus_port: 9090
-loki_port: 3100
-uptime_kuma_port: 3001
-alertmanager_port: 9093
+monitoring_grafana_port: 3000
+monitoring_prometheus_port: 9090
+monitoring_loki_port: 3100
+monitoring_uptime_kuma_port: 3001
+monitoring_alertmanager_port: 9093
 
 # Grafana configuration
-grafana_admin_password: "{{ vault_grafana_admin_password }}"
-grafana_domain: "monitoring.{{ domain_name }}"
+monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+monitoring_grafana_domain: "monitoring.{{ domain_name }}"
 
 # Prometheus configuration
-prometheus_retention: "30d"
-prometheus_storage_path: "/var/lib/prometheus"
+monitoring_prometheus_retention: "30d"
+monitoring_prometheus_storage_path: "/var/lib/prometheus"
 
 # Loki configuration
-loki_retention: "30d"
-loki_storage_path: "/var/lib/loki"
+monitoring_loki_retention: "30d"
+monitoring_loki_storage_path: "/var/lib/loki"
 
 # Alertmanager configuration
-alertmanager_email: "{{ vault_alertmanager_email }}"
-alertmanager_smtp_host: "{{ vault_smtp_host }}"
-alertmanager_smtp_port: "{{ vault_smtp_port }}"
+monitoring_alertmanager_email: "{{ vault_alertmanager_email }}"
+monitoring_alertmanager_smtp_host: "{{ vault_smtp_host }}"
+monitoring_alertmanager_smtp_port: "{{ vault_smtp_port }}"
 
 # Network and security
 firewall_monitoring_ports:
@@ -91,8 +91,8 @@ monitoring_network: "monitoring-network"
 prometheus_role: "monitoring"
 
 # Grafana configuration
-grafana_database_type: "sqlite3"
-grafana_allow_embedding: "false"
+monitoring_grafana_database_type: "sqlite3"
+monitoring_grafana_allow_embedding: "false"
 
 # Backup script configuration
 common_backup_service_name: "monitoring"

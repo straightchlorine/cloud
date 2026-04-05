@@ -33,7 +33,7 @@
 
 - name: Set timezone
   community.general.timezone:
-    name: "{{ common_timezone }}"
+    name: "{{ timezone }}"
   become: true
 
 - name: Configure log rotation

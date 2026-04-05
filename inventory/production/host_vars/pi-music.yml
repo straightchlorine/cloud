@@ -4,17 +4,17 @@
 device_type: rpi3b
 
 music_stack_enabled: true
-music_stack_home: "/home/media/compose"
+music_stack_music_stack_home: "/home/media/compose"
 
 ssd_device: "/dev/sda1"
 # SSD configuration inherited from group_vars/services.yml common_ssd_config
-music_library_path: "/mnt/data"
+music_stack_music_library_path: "/mnt/data"
 
 ansible_uid: 1000
 ansible_gid: 1000
 
 # Stack management
-start_stack: true
+common_start_stack: true
 
 # Required variables for validation
 ytdlp_dependencies:
@@ -27,7 +27,7 @@ beets_genres:
   - Electronic
   - YouTube
 
-firewall_ports:
+common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
   - {port: 9001, comment: "Portainer Agent"}
@@ -48,8 +48,8 @@ restic_enabled: true
 restic_repository: "{{ vault_backup_repository_base }}/music"
 restic_password: "{{ vault_restic_music_password }}"
 common_backup_directories:
-  - "{{ music_stack_home }}"
-  - "{{ music_library_path }}"
+  - "{{ music_stack_music_stack_home }}"
+  - "{{ music_stack_music_library_path }}"
   - "/var/lib/docker/volumes"
   - "/etc/docker"
 backup_exclude_patterns:
@@ -60,7 +60,7 @@ backup_exclude_patterns:
   - "**/*.cache"
 
 # Music stack configuration
-navidrome_port: 4545
+music_stack_navidrome_port: 4545
 
 # Systemd and backup configuration inherited from group_vars/services.yml
 # common_systemd_config and common_backup_config

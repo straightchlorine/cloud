@@ -1,17 +1,10 @@
 ---
 # Default values for common role
 
-# System Configuration
-common_timezone: UTC
-
 # Security Configuration
 common_fail2ban_enabled: true
 common_fail2ban_ssh_maxretry: 3
 common_fail2ban_ssh_bantime: 600
-
-# Log Management
-common_log_rotation_days: 30
-common_log_compression: true
 
 # Common System Packages (can be overridden in group_vars)
 common_packages:

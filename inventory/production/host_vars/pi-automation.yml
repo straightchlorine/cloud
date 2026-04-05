@@ -12,34 +12,34 @@ ssd_device: "/dev/sda1"
 automation_data_path: "/mnt/automation-data"
 
 # Subdomains for automation services
-subdomain_traefik: "traefik"
-subdomain_influxdb: "influxdb"
-subdomain_explorer: "influxdb-ui"
-subdomain_dozzle: "dozzle"
-subdomain_portainer: "portainer"
-subdomain_vaultwarden: "vault"
+automation_subdomain_traefik: "traefik"
+automation_subdomain_influxdb: "influxdb"
+automation_subdomain_explorer: "influxdb-ui"
+automation_subdomain_dozzle: "dozzle"
+automation_subdomain_portainer: "portainer"
+automation_subdomain_vaultwarden: "vault"
 
 # Automation stack configuration
 automation_stack_home: "/home/automation/automation-stack"
 
 # Firewall configuration
-firewall_ports:
+common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 80, comment: "HTTP"}
   - {port: 443, comment: "HTTPS"}
 
 # Service enablement
-services_enabled:
+automation_services_enabled:
   traefik: true
 
 # Stack management
 restic_enabled: true
-start_stack: true
+common_start_stack: true
 
 # Traefik ports
-traefik_web_port: 80
-traefik_websecure_port: 443
-traefik_dashboard_port: 8080
+automation_traefik_web_port: 80
+automation_traefik_websecure_port: 443
+automation_traefik_dashboard_port: 8080
 
 automation_user: automation
 automation_uid: 1000
