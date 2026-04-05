@@ -40,32 +40,27 @@ steps:
 
   - name: syntax-check
     image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-      ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
     commands:
       - chmod 755 .
-      - >-
-        ansible-playbook --syntax-check
-        playbooks/site.yml
-        playbooks/music-stack.yml
-        playbooks/automation-stack.yml
-        playbooks/backup/deploy-full-system.yml
-        playbooks/backup/deploy-coordinator.yml
-        playbooks/backup/test-system.yml
-        validate-infrastructure.yml
-        prometheus-exporters.yml
-        deploy-rclone-to-hosts.yml
-        backup-coordinator.yml
-        backup-deploy.yml
+      - |
+        ANSIBLE_ROLES_PATH="$(pwd)/roles" ansible-playbook --syntax-check \
+          playbooks/site.yml \
+          playbooks/music-stack.yml \
+          playbooks/automation-stack.yml \
+          playbooks/backup/deploy-full-system.yml \
+          playbooks/backup/deploy-coordinator.yml \
+          playbooks/backup/test-system.yml \
+          validate-infrastructure.yml \
+          prometheus-exporters.yml \
+          deploy-rclone-to-hosts.yml \
+          backup-coordinator.yml \
+          backup-deploy.yml
 
   - name: validate-infrastructure
     image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-      ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
     commands:
       - chmod 755 .
-      - >-
-        ansible-playbook validate-infrastructure.yml
-        -e validation_type=pre_deployment --check
+      - |
+        ANSIBLE_ROLES_PATH="$(pwd)/roles" ansible-playbook \
+          validate-infrastructure.yml \
+          -e validation_type=pre_deployment --check
