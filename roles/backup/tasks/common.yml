@@ -17,8 +17,6 @@
     createhome: true
     system: true
   become: true
-  # Ignore errors - user may already exist or group may not be valid on this system
-  ignore_errors: true
 
 - name: Create backup directory structure
   ansible.builtin.file:
@@ -69,7 +67,7 @@
       - fuse
       - sshfs
     state: present
-    common_update_cache: true
+    update_cache: true
   become: true
   when: ansible_os_family == 'Debian'
 

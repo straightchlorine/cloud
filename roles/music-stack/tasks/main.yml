@@ -7,19 +7,19 @@
 
 - name: Detect hardware for resource allocation
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: detect_hardware
   tags: [hardware, validation]
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: network_facts
   tags: [network, facts]
 
 - name: Include common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ music_stack_music_stack_specific_packages }}"
@@ -27,7 +27,7 @@
 
 - name: Include common Docker setup
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: docker
   tags: [docker]
 
@@ -55,12 +55,12 @@
 
 - name: Configure firewall
   ansible.builtin.include_role:
-    name: Firewall
+    name: firewall
   tags: [firewall, security]
 
 - name: Create Docker stack systemd service
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: docker_stack_service
   vars:
     stack_service_name: "music-stack"

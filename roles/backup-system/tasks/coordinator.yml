@@ -3,11 +3,11 @@
 # Deploys centralized backup coordinator (backup-wyse)
 
 - name: Ensure backup coordinator user exists
-  user:
+  ansible.builtin.user:
     name: "{{ backup_user }}"
-    ansible.builtin.shell: /bin/bash
+    shell: /bin/bash
     home: "{{ common_backup_base_path }}"
-    common_create_home: true
+    createhome: true
     groups: ["sudo"]
     append: true
   register: backup_user_result

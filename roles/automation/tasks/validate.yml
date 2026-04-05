@@ -4,7 +4,7 @@
 
 - name: Run automation stack comprehensive validation
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: unified_validation
   vars:
     validation_context: "automation stack"

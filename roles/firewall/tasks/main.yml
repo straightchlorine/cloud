@@ -3,7 +3,7 @@
 
 - name: Install UFW using common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     firewall_role_specific_packages:

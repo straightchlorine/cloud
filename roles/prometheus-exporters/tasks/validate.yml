@@ -3,7 +3,7 @@
 
 - name: Run prometheus exporters comprehensive validation
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: unified_validation
   vars:
     validation_context: "prometheus exporters"

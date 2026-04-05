@@ -3,7 +3,7 @@
 
 - name: Include common storage setup
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: storage
   vars:
     mount_path: "{{ automation_data_path }}"

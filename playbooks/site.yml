@@ -7,7 +7,7 @@
   tasks:
     - name: Run backup validation for all hosts
       ansible.builtin.include_role:
-        name: Common
+        name: common
         tasks_from: backup_validation
       tags: [backup_validation]
       when: run_validation
@@ -16,25 +16,25 @@
       block:
         - name: DNS validation for Pi-hole hosts
           ansible.builtin.include_role:
-            name: Dns
+            name: dns
             tasks_from: validate
           when: "'dns' in group_names"
 
         - name: Automation validation for automation hosts
           ansible.builtin.include_role:
-            name: Automation
+            name: automation
             tasks_from: validate
           when: "'automation' in group_names"
 
         - name: Music stack validation for music hosts
           ansible.builtin.include_role:
-            name: Music-stack
+            name: music-stack
             tasks_from: validate
           when: "'music' in group_names"
 
         - name: Monitoring validation for monitoring hosts
           ansible.builtin.include_role:
-            name: Monitoring
+            name: monitoring
             tasks_from: validate
           when: "'monitoring' in group_names"
       when: run_validation
@@ -47,7 +47,7 @@
   pre_tasks:
     - name: Update package cache
       ansible.builtin.include_role:
-        name: Common
+        name: common
         tasks_from: package_cache_update
 
   roles:

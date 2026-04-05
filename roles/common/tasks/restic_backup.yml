@@ -20,7 +20,7 @@
     system: true
     shell: /bin/bash
     home: "{{ common_backup_base_path }}"
-    common_create_home: true
+    createhome: true
     groups: "{{ backup_additional_groups | default([]) }}"
     append: true
   become: true
@@ -50,7 +50,7 @@
   community.general.pacman:
     name: Restic
     state: present
-    common_update_cache: true
+    update_cache: true
   become: true
   when:
     - ansible_os_family == "Archlinux"
@@ -60,8 +60,8 @@
   ansible.builtin.apt:
     name: Restic
     state: present
-    common_update_cache: true
-    common_cache_valid_time: 3600
+    update_cache: true
+    cache_valid_time: 3600
   become: true
   when:
     - ansible_os_family == "Debian"

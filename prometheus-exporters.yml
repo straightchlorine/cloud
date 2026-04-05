@@ -34,7 +34,7 @@
 
     - name: Deploy Prometheus exporters
       ansible.builtin.include_role:
-        name: Prometheus-exporters
+        name: prometheus-exporters
       tags: [prometheus, exporters, monitoring]
 
     - name: Display deployment summary
@@ -76,7 +76,7 @@
   tasks:
     - name: Run exporters health checks
       ansible.builtin.include_role:
-        name: Prometheus-exporters
+        name: prometheus-exporters
         tasks_from: health_checks
       tags: [health_check, validation]
 

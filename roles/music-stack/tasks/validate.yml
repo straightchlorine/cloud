@@ -4,7 +4,7 @@
 
 - name: Run music stack comprehensive validation
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: unified_validation
   vars:
     validation_context: "music stack"

@@ -11,7 +11,7 @@
 
 - name: Install restic
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: restic_backup
 
 - name: Display standalone deployment status

@@ -29,7 +29,7 @@
           - ca-certificates
           - curl
         state: present
-        common_update_cache: true
+        update_cache: true
       become: true
 
     - name: Create keyrings directory
@@ -59,7 +59,7 @@
 
     - name: Update apt cache
       ansible.builtin.apt:
-        common_update_cache: true
+        update_cache: true
       become: true
 
     - name: Install Docker packages

@@ -13,7 +13,7 @@
     system: true
     shell: /bin/false
     home: /var/lib/promtail
-    common_create_home: true
+    createhome: true
   become: true
 
 - name: Download and install Promtail binary

@@ -75,7 +75,7 @@
   ansible.builtin.apt:
     name: Prometheus-node-exporter
     state: present
-    common_update_cache: true
+    update_cache: true
   become: true
   when: node_exporter_install_method == "package"
 

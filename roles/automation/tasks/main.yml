@@ -5,34 +5,34 @@
 
 - name: Detect hardware for resource allocation
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: detect_hardware
   tags: [hardware, validation]
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: network_facts
   tags: [network, facts]
 
 - name: Include common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ automation_specific_packages }}"
   tags: [packages]
 
 - name: Create automation user
-  user:
+  ansible.builtin.user:
     name: "{{ automation_user }}"
     uid: "{{ automation_uid }}"
     group: "{{ automation_user }}"
     groups: docker
     append: true
-    ansible.builtin.shell: /bin/bash
+    shell: /bin/bash
     home: "/home/{{ automation_user }}"
-    common_create_home: true
+    createhome: true
   become: true
 
 - name: Include storage setup
@@ -41,7 +41,7 @@
 
 - name: Include common Docker setup
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: docker
   tags: [docker]
 
@@ -65,7 +65,7 @@
 
 - name: Configure unified restic backup
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: restic_backup
   vars:
     common_backup_service_name: "automation"
@@ -91,12 +91,12 @@
 
 - name: Configure firewall
   ansible.builtin.include_role:
-    name: Firewall
+    name: firewall
   tags: [firewall, security]
 
 - name: Create Docker stack systemd service
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: docker_stack_service
   vars:
     stack_service_name: "automation-stack"

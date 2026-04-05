@@ -26,12 +26,12 @@
 
 # Pi-hole exporter setup
 - name: Create pihole-exporter user
-  user:
+  ansible.builtin.user:
     name: "{{ dns_pihole_exporter_user }}"
     system: true
-    ansible.builtin.shell: /bin/false
+    shell: /bin/false
     home: "{{ dns_pihole_exporter_install_dir }}"
-    common_create_home: false
+    createhome: false
   become: true
   when: pihole_exporter_enabled is defined and pihole_exporter_enabled
 

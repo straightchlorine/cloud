@@ -3,7 +3,7 @@
 
 - name: Create standardized Docker Compose file
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: build_docker_compose
   vars:
     compose_file_path: "{{ music_stack_music_stack_home }}/docker-compose.yml"
@@ -127,7 +127,7 @@
 
 - name: Install yt-dlp dependencies using common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ music_stack_ytdlp_dependencies }}"

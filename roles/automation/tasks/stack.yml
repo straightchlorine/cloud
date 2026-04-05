@@ -1,7 +1,7 @@
 ---
 - name: Create standardized Docker Compose file
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: build_docker_compose
   vars:
     compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"

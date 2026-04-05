@@ -6,5 +6,5 @@
   tasks:
     - name: Include network_facts task
       ansible.builtin.include_role:
-        name: Common
+        name: common
         tasks_from: network_facts

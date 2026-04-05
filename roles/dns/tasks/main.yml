@@ -7,13 +7,13 @@
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: network_facts
   tags: [network, facts]
 
 - name: Include common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ dns_pihole_packages }}"
@@ -107,7 +107,7 @@
 
 - name: Configure firewall
   ansible.builtin.include_role:
-    name: Firewall
+    name: firewall
   tags: [firewall, security]
 
 - name: Configure chrony NTP server

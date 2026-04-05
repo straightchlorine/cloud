@@ -19,7 +19,7 @@
   pre_tasks:
     - name: Update package cache
       ansible.builtin.include_role:
-        name: Common
+        name: common
         tasks_from: package_cache_update
 
   roles:
@@ -79,7 +79,7 @@
 
     - name: Verify music stack services
       ansible.builtin.include_role:
-        name: Common
+        name: common
         tasks_from: service_verification
       vars:
         services_to_verify:

@@ -4,8 +4,8 @@
 
 - name: Update apt cache
   ansible.builtin.apt:
-    common_update_cache: true
-    common_cache_valid_time: "{{ package_cache_valid_time }}"
+    update_cache: true
+    cache_valid_time: "{{ package_cache_valid_time }}"
   become: true
 
 - name: Install common packages

@@ -29,7 +29,7 @@
   tasks:
     - name: Deploy enterprise backup coordinator
       ansible.builtin.include_role:
-        name: Backup-system
+        name: backup-system
 
   post_tasks:
     - name: Display SSH key deployment instructions

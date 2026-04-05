@@ -8,7 +8,7 @@
 
 - name: Include common requirements
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: network_facts
   tags: [network]
 
@@ -18,7 +18,7 @@
 
 - name: Install monitoring packages using common package management
   ansible.builtin.include_role:
-    name: Common
+    name: common
     tasks_from: packages
   vars:
     role_specific_packages: "{{ monitoring_packages }}"
