@@ -5,17 +5,15 @@
 # Bypass (not recommended): git commit --no-verify
 
 repos:
-  # Ansible syntax check (local hook - fast)
+  # Ansible syntax check (local hook - fast, only checks playbooks)
   - repo: local
     hooks:
       - id: ansible-syntax-check
-        name: Ansible syntax check
+        name: Ansible playbook syntax check
         entry: >
-          bash -c 'find . -name "*.yml" -not -path "./.git/*"
-          -not -path "./inventory/*" -print0 | xargs -0 -n1
-          ansible-playbook --syntax-check 2>/dev/null || true'
+          bash -c 'find playbooks -name "*.yml"
+          -exec ansible-playbook --syntax-check {} +'
         language: system
-        types: [yaml]
         pass_filenames: false
         stages: [pre-commit]
 
@@ -74,7 +72,7 @@ repos:
         name: Check for merge conflicts
       - id: trailing-whitespace
         name: Trim trailing whitespace
-        exclude: '\.j2$|\.yml$'
+        exclude: '\.j2$'
       - id: end-of-file-fixer
         name: Fix end of file
       - id: detect-private-key

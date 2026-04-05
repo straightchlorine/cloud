@@ -2,20 +2,32 @@
 inventory/production/group_vars/all/vault.yml
 inventory/production/host_vars/vault_*.yml
 
-# Ansible logs
+# Ansible runtime
 *.log
 ansible.log
+*.retry
+.vault_pass
+.ansible/
+collections/
+
+# Python artifacts
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.egg-info/
+
+# Molecule temp state
+.molecule/
 
 # Temporary files
 *.tmp
-*.retry
-.vault_pass
 
 # OS files
 .DS_Store
 Thumbs.db
 
-.ansible/
+# Shell history and dotfiles
 .ash_history
 .gitconfig
 .gnupg/

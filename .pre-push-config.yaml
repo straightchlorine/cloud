@@ -4,22 +4,33 @@
 # Manual: pre-commit run --hook-stage push --all-files -c .pre-push-config.yaml
 
 repos:
-  # Molecule tests for common role
-  - repo: local
-    hooks:
-      - id: molecule-test-common
-        name: Molecule test - common role (default)
-        entry: bash -c 'cd roles/common && molecule test --scenario-name default'
-        language: system
-        pass_filenames: false
-        verbose: true
-
   # Playbook syntax validation for all playbooks
   - repo: local
     hooks:
       - id: ansible-playbook-syntax-all
         name: Ansible playbook syntax check (all playbooks)
-        entry: bash -c 'find playbooks -name "*.yml" -exec ansible-playbook --syntax-check {} \; 2>/dev/null || true'
+        entry: >
+          bash -c 'find playbooks -name "*.yml"
+          -exec ansible-playbook --syntax-check {} \; 2>/dev/null'
+        language: system
+        pass_filenames: false
+
+  # Molecule smoke test - common role (the foundation everything depends on)
+  - repo: local
+    hooks:
+      - id: molecule-test-common
+        name: Molecule test - common role (default)
+        entry: bash -c 'cd roles/common && uv run molecule test --scenario-name default'
+        language: system
+        pass_filenames: false
+        verbose: true
+
+  # Ansible-lint (catch regressions before they hit CI)
+  - repo: local
+    hooks:
+      - id: ansible-lint-roles
+        name: Ansible-lint roles and playbooks
+        entry: bash -c 'ansible-lint roles/ playbooks/'
         language: system
         pass_filenames: false
 
