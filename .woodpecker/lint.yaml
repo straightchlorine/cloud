@@ -44,7 +44,7 @@ steps:
       ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
       ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
     commands:
-      - chmod 755 ${CI_WORKSPACE}
+      - chmod 755 .
       - >-
         ansible-playbook --syntax-check
         playbooks/site.yml
@@ -65,7 +65,7 @@ steps:
       ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
       ANSIBLE_ROLES_PATH: ${CI_WORKSPACE}/roles
     commands:
-      - chmod 755 ${CI_WORKSPACE}
+      - chmod 755 .
       - >-
         ansible-playbook validate-infrastructure.yml
         -e validation_type=pre_deployment --check
