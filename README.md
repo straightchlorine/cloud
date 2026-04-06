@@ -2,8 +2,7 @@
 
 [![Build Status](https://ci.codextechnologies.org/api/badges/2/status.svg)](https://ci.codextechnologies.org/repos/2)
 
-Ansible-based homelab deployment with fail-fast validation, automated backups,
-and observability.
+Ansible-based homelab deployment.
 
 **Repository:** [Codeberg](https://codeberg.org/piotrkrzysztof/cloud) (primary) ·
 [GitHub](https://github.com/straightchlorine/cloud) (mirror)
