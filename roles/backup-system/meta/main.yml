@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: backup_system
+  author: Ansible Admin
+  description: Enterprise backup system with coordinator and standalone modes
+  license: MIT
+  min_ansible_version: "2.14"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []

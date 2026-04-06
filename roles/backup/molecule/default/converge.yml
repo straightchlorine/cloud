@@ -84,39 +84,27 @@
 
     - name: Create backup directory structure
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
         owner: "{{ backup_user }}"
         group: "{{ backup_group }}"
-        mode: '0750'
+        mode: "{{ item.mode }}"
       loop:
-        - "{{ backup_base_path }}"
-        - "{{ backup_base_path }}/scripts"
-        - "{{ backup_base_path }}/logs"
-        - "{{ backup_base_path }}/cache"
-        - "{{ backup_base_path }}/repositories"
-        - "{{ backup_base_path }}/keys"
-        - "{{ backup_base_path }}/config"
-        - "{{ backup_base_path }}/metrics"
-        - "{{ backup_base_path }}/locks"
-        - "{{ backup_base_path }}/coordination"
-        - "{{ backup_base_path }}/reports"
-        - "{{ backup_base_path }}/dashboards"
-        - "{{ backup_base_path }}/.ssh"
-        - "{{ backup_base_path }}/.ssh/sockets"
-        - "{{ backup_base_path }}/.ssh/nodes"
-      become: true
-
-    - name: Set SSH directory permissions
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: "{{ backup_user }}"
-        group: "{{ backup_group }}"
-        mode: '0700'
-      loop:
-        - "{{ backup_base_path }}/.ssh"
-        - "{{ backup_base_path }}/.ssh/sockets"
+        - {path: "{{ backup_base_path }}", mode: '0750'}
+        - {path: "{{ backup_base_path }}/scripts", mode: '0750'}
+        - {path: "{{ backup_base_path }}/logs", mode: '0750'}
+        - {path: "{{ backup_base_path }}/cache", mode: '0750'}
+        - {path: "{{ backup_base_path }}/repositories", mode: '0750'}
+        - {path: "{{ backup_base_path }}/keys", mode: '0750'}
+        - {path: "{{ backup_base_path }}/config", mode: '0750'}
+        - {path: "{{ backup_base_path }}/metrics", mode: '0750'}
+        - {path: "{{ backup_base_path }}/locks", mode: '0750'}
+        - {path: "{{ backup_base_path }}/coordination", mode: '0750'}
+        - {path: "{{ backup_base_path }}/reports", mode: '0750'}
+        - {path: "{{ backup_base_path }}/dashboards", mode: '0750'}
+        - {path: "{{ backup_base_path }}/.ssh", mode: '0700'}
+        - {path: "{{ backup_base_path }}/.ssh/sockets", mode: '0700'}
+        - {path: "{{ backup_base_path }}/.ssh/nodes", mode: '0750'}
       become: true
 
     - name: Create test backup script placeholder
