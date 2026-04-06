@@ -4,7 +4,6 @@ driver:
 
 platforms:
   - name: test
-    extra_create_args: "--uts=private"
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
     volumes:

@@ -62,6 +62,6 @@ steps:
           gentoo)   export MOLECULE_IMAGE="docker.io/geerlingguy/docker-gentoo-ansible:latest" ;;
         esac
       - cd roles/${ROLE}
-      - molecule test
+      - unshare --uts molecule test
     environment:
       MOLECULE_PLATFORM: ${PLATFORM}
