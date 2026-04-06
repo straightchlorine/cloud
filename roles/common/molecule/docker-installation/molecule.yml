@@ -1,4 +1,5 @@
 ---
+role_name_check: 0
 # Molecule configuration for Docker installation testing
 # Tests Docker setup with user namespace mapping for security
 

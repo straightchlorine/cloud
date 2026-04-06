@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: music_stack
+  namespace: homelab
   author: Ansible Admin
   description: Music Stack for Raspberry Pi with Navidrome, Beets, YouTube downloading, and automated backups
   company: Local

@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: backup_system
+  namespace: homelab
   author: Ansible Admin
   description: Enterprise backup system with coordinator and standalone modes
   license: MIT

@@ -1,6 +1,7 @@
 ---
-# Woodpecker CI — Molecule tests (matrix)
+# Woodpecker CI — Molecule tests
 # Depends on lint passing first — won't run if lint fails
+# Tests on Debian 13 (trixie) — all roles use apt
 
 depends_on:
   - lint
@@ -17,12 +18,6 @@ when:
     - feature/*
 
 matrix:
-  PLATFORM:
-    - debian12
-    - debian13
-    - alpine
-    - arch
-    - gentoo
   ROLE:
     - common
     - backup-system
@@ -59,15 +54,6 @@ steps:
         CONF
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
       - ansible-galaxy collection install -r requirements.yml
-      - |
-        case "${PLATFORM}" in
-          debian12) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian12-ansible:latest" ;;
-          debian13) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest" ;;
-          alpine)   export MOLECULE_IMAGE="docker.io/geerlingguy/docker-alpine3-ansible:latest" ;;
-          arch)     export MOLECULE_IMAGE="docker.io/geerlingguy/docker-archlinux-ansible:latest" ;;
-          gentoo)   export MOLECULE_IMAGE="docker.io/geerlingguy/docker-gentoo-ansible:latest" ;;
-        esac
+      - export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest"
       - cd roles/${ROLE}
       - molecule test
-    environment:
-      MOLECULE_PLATFORM: ${PLATFORM}

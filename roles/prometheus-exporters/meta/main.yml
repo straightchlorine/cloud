@@ -3,6 +3,7 @@
 
 galaxy_info:
   role_name: prometheus_exporters
+  namespace: homelab
   author: Claude Code Assistant
   description: Comprehensive Prometheus exporters for Raspberry Pi infrastructure
   company: Infrastructure Automation
