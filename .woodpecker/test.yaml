@@ -52,6 +52,11 @@ steps:
         [storage]
         driver = "vfs"
         CONF
+      - |
+        cat > /etc/containers/containers.conf << 'CONF'
+        [containers]
+        utsns = "private"
+        CONF
       - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
       - ansible-galaxy collection install -r requirements.yml
       - |
