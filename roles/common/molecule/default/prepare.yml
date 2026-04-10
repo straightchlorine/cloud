@@ -14,13 +14,8 @@
           - sudo
           - curl
           - gnupg
-          - python3-pip
+          - python3-netaddr
         state: present
-      become: true
-
-    - name: Install netaddr for ipaddr filter
-      ansible.builtin.pip:
-        name: netaddr
       become: true
 
     - name: Ensure systemd is running
