@@ -61,7 +61,7 @@ steps:
         [containers]
         utsns = "private"
         CONF
-      - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman]
+      - pip install ansible-core>=2.15 molecule>=6.0 molecule-plugins[podman] netaddr
       - ansible-galaxy collection install -r requirements.yml
       - export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest"
       - cd roles/${ROLE}
