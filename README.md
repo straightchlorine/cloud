@@ -13,12 +13,12 @@ Ansible-based homelab deployment.
 graph TB
     subgraph VLAN["Services VLAN - (192.168.20.0/24)"]
         direction LR
-        dns["<b>pi-dns</b><br/>Pi-hole · NTP"]
-        music["<b>pi-music</b><br/>Navidrome · yt-dlp · Beets"]
-        automation["<b>pi-automation</b><br/>Traefik · Vaultwarden<br/>InfluxDB · Portainer"]
-        monitoring["<b>debian-monitoring</b><br/>Grafana · Prometheus<br/>Loki · Alertmanager"]
+        dns["<b>pi-dns</b><br/>Pi-hole + NTP"]
+        music["<b>pi-music</b><br/>Navidrome + yt-dlp + Beets"]
+        automation["<b>pi-automation</b><br/>Traefik + Vaultwarden<br/> + Portainer"]
+        monitoring["<b>debian-monitoring</b><br/>Grafana + Prometheus<br/>Loki + Alertmanager"]
     end
-    backup["Backup Coordinator<br/>(Restic → Hetzner)"]
+    backup["Backup Coordinator<br/>(Restic -> Hetzner)"]
     cloudflare["Cloudflare<br/>(DNS + SSL)"]
 
     VLAN -->|Backups| backup
