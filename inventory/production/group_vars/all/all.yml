@@ -39,7 +39,6 @@ common_packages:
   - logrotate
   - rsync
   - unzip
-  - software-properties-common
   - ca-certificates
   - gnupg
   - lsb-release

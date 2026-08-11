@@ -1,11 +1,6 @@
 ---
 # Service-specific variables for service hosts
 
-# DNS Configuration
-dns_upstream_servers:
-  - 1.1.1.1
-  - 8.8.8.8
-
 # System Configuration
 ansible_python_interpreter: /usr/bin/python3
 os_type: debian_bookworm

@@ -16,7 +16,7 @@
       - vault_letsencrypt_email
       - dns_pihole_interface
       - dns_pihole_ipv4_address
-      - dns_upstream_servers
+      - dns_pihole_dns_servers
       - dns_ntp_server_enabled
       - restic_enabled
       - restic_repository
@@ -60,16 +60,16 @@
     msg: "WARNING: Port 53 appears to be in use. Pi-hole installation may conflict with existing DNS service."
   when: dns_port_check.elapsed is defined and dns_port_check.elapsed < 1
 
-- name: Test upstream DNS servers
+- name: Test configured DNS servers
   ansible.builtin.command: nslookup google.com {{ item }}
   register: dns_upstream_test
   failed_when: false
   changed_when: false
-  loop: "{{ dns_upstream_servers }}"
+  loop: "{{ dns_pihole_dns_servers }}"
 
-- name: Warn about unreachable upstream servers
+- name: Warn about unreachable DNS servers
   ansible.builtin.debug:
-    msg: "WARNING: Upstream DNS server {{ item.item }} may not be reachable"
+    msg: "WARNING: Configured DNS server {{ item.item }} may not be reachable"
   when: item.rc != 0
   loop: "{{ dns_upstream_test.results }}"
   loop_control:
