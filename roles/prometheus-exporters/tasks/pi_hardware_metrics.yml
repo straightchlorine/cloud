@@ -32,7 +32,7 @@
     common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart pi-hardware-metrics
 
 - name: Create systemd timer for Pi hardware metrics
@@ -44,7 +44,7 @@
     mode: "0644"
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart pi-hardware-metrics-timer
 
 - name: Enable and start Pi hardware metrics timer

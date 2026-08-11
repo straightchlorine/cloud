@@ -31,7 +31,7 @@
     dest: /usr/local/bin/pihole-update.sh
     owner: root
     group: root
-    mode: '0755'
+    mode: '0700'  # embeds vault_ntfy_api_key
   become: true
 
 - name: Create weekly update cron job
@@ -52,3 +52,30 @@
     group: root
     mode: '0644'
   become: true
+
+- name: Compute reboot-pending notification time (12 hours before auto-reboot)
+  ansible.builtin.set_fact:
+    dns_reboot_notify_total_minutes: >-
+      {{ ((dns_auto_updates_reboot_time.split(':')[0] | int * 60
+      + dns_auto_updates_reboot_time.split(':')[1] | int - 720) % 1440) }}
+  when: dns_auto_updates_reboot_if_required
+
+- name: Create reboot-pending notification script
+  ansible.builtin.template:
+    src: pihole-reboot-notify.sh.j2
+    dest: /usr/local/bin/pihole-reboot-notify.sh
+    owner: root
+    group: root
+    mode: '0700'  # embeds vault_ntfy_api_key
+  become: true
+  when: dns_auto_updates_reboot_if_required
+
+- name: Schedule reboot-pending notification
+  ansible.builtin.cron:
+    name: "Pi-hole reboot pending notification"
+    minute: "{{ dns_reboot_notify_total_minutes | int % 60 }}"
+    hour: "{{ dns_reboot_notify_total_minutes | int // 60 }}"
+    job: "/usr/local/bin/pihole-reboot-notify.sh"
+    user: root
+  become: true
+  when: dns_auto_updates_reboot_if_required

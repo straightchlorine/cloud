@@ -1,6 +1,8 @@
 ---
 # Handlers for prometheus-exporters role
-# Note: reload systemd uses common handler
+# Note: "Reload systemd" is defined in roles/common/handlers/main.yml - only
+# usable here because common's handlers are already loaded into the same
+# play (see playbooks/site.yml's "Configure all hosts" play).
 
 - name: Restart node-exporter
   ansible.builtin.systemd:

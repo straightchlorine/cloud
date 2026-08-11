@@ -57,6 +57,11 @@ common_fail2ban_ssh_bantime: 600
 domain_name: "{{ vault_domain_name }}"
 letsencrypt_email: "{{ vault_letsencrypt_email }}"
 
+# ntfy notifications (self-hosted) - shared across all roles/hosts.
+# API key is a secret: vault_ntfy_api_key (see vault.yml.example).
+ntfy_server_url: "https://ntfy.codextechnologies.org"
+ntfy_topic: "local-infra"
+
 # Validation checks - these variables MUST be defined in host_vars
 required_vars:
   - domain_name

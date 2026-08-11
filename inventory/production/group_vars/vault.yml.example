@@ -27,6 +27,10 @@ vault_influxdb3_session_secret_key: "your-session-secret-key-min-32-chars"
 # Monitoring Stack (debian-monitoring)
 vault_grafana_admin_password: "your-secure-grafana-password"
 
+# ntfy notifications (shared across all roles/hosts)
+# Server/topic are non-secret and live in group_vars/all/all.yml
+vault_ntfy_api_key: "your-ntfy-api-key"
+
 # Backup Configuration
 # Storage connection
 vault_backup_repository_base: "sftp:backup-user@backup-server.com:/backups"

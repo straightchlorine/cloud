@@ -114,7 +114,7 @@
     common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart node-exporter
   when: node_exporter_install_method == "binary"
 

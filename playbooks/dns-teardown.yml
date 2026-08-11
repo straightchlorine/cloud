@@ -33,3 +33,11 @@
       ansible.builtin.include_role:
         name: dns
         tasks_from: teardown
+
+    - name: Tear down the Pi-hole exporter (prometheus-exporters' state, not dns's)
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: pihole_exporter_teardown
+      when:
+        - prometheus_exporters_pihole_exporter_enabled | default(false)
+        - "'dns' in group_names"

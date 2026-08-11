@@ -1,0 +1,39 @@
+---
+# Push a notification to the shared ntfy topic (self-hosted, group_vars/all).
+# Callers set common_ntfy_title/common_ntfy_message before including this;
+# common_ntfy_priority and common_ntfy_tags are optional.
+#
+# Usage:
+#   - name: Notify on failure
+#     ansible.builtin.include_role:
+#       name: common
+#       tasks_from: ntfy_notify
+#     vars:
+#       common_ntfy_title: "Pi-hole deploy failed"
+#       common_ntfy_message: "{{ ansible_failed_result.msg | default('see logs') }}"
+#       common_ntfy_priority: "high"
+#       common_ntfy_tags: "warning"
+
+- name: Validate required ntfy variables
+  ansible.builtin.assert:
+    that:
+      - common_ntfy_title is defined
+      - common_ntfy_message is defined
+    fail_msg: "common_ntfy_title and common_ntfy_message must be set to call ntfy_notify"
+    quiet: true
+
+- name: Send ntfy notification
+  ansible.builtin.uri:
+    url: "{{ ntfy_server_url }}/{{ ntfy_topic }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ vault_ntfy_api_key }}"
+      Title: "{{ common_ntfy_title }}"
+      Priority: "{{ common_ntfy_priority | default(omit) }}"
+      Tags: "{{ common_ntfy_tags | default(omit) }}"
+    body: "{{ common_ntfy_message }}"
+    body_format: raw
+    status_code: 200
+  failed_when: false
+  # Never fail the play over a notification - it's a courtesy, not a
+  # deployment requirement.

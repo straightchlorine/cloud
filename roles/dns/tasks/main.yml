@@ -19,6 +19,9 @@
     role_specific_packages: "{{ dns_pihole_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
+- name: Sync system time before installing Pi-hole
+  ansible.builtin.include_tasks: chrony_sync.yml
+
 - name: Deploy Pi-hole with rollback on failure
   block:
     - name: Check for an existing Pi-hole configuration
@@ -164,6 +167,16 @@
       become: true
       ignore_errors: true
 
+    - name: Notify ntfy of the failed deployment
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ntfy_notify
+      vars:
+        common_ntfy_title: "Pi-hole deploy failed: {{ inventory_hostname }}"
+        common_ntfy_message: "Rollback was attempted. Check ansible-playbook output for the actual error."
+        common_ntfy_priority: "high"
+        common_ntfy_tags: "rotating_light"
+
     - name: Fail with deployment error
       ansible.builtin.fail:
         msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."
@@ -181,7 +194,7 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Configure chrony NTP server
+- name: Configure chrony firewall rule and display status
   ansible.builtin.include_tasks: chrony.yml
 
 - name: Install additional monitoring services

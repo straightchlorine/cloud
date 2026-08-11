@@ -82,7 +82,7 @@
     common_read_write_paths: ["{{ prometheus_exporters_node_exporter_textfile_dir }}"]
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart docker-metrics
 
 - name: Create systemd timer for Docker metrics collection
@@ -94,7 +94,7 @@
     mode: '0644'
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart docker-metrics-timer
 
 - name: Enable and start Docker metrics timer

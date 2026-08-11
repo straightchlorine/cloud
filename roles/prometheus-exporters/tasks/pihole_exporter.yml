@@ -52,7 +52,7 @@
     common_read_write_paths: ["{{ prometheus_exporters_base_dir }}/bin"]
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - restart pihole-exporter
 
 - name: Enable and start Pi-hole Exporter service

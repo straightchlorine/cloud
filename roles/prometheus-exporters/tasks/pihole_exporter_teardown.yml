@@ -1,0 +1,42 @@
+---
+# Reverse pihole_exporter.yml. Only removes the exporter's own artifacts -
+# the shared prometheus user/group stays, since node_exporter and
+# pi_hardware_metrics on this host still run under it.
+
+- name: Stop and disable Pi-hole Exporter service
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    state: stopped
+    enabled: false
+  become: true
+  failed_when: false
+
+- name: Remove Pi-hole Exporter systemd service
+  ansible.builtin.file:
+    path: /etc/systemd/system/pihole-exporter.service
+    state: absent
+  become: true
+
+- name: Reload systemd after removing the unit file
+  # Not a notify: this task file can run from playbooks (dns-teardown.yml)
+  # that never load roles/common's handlers into scope.
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Remove Pi-hole Exporter binary and config
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+    - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+  become: true
+
+- name: Remove firewall rule for Pi-hole Exporter
+  community.general.ufw:
+    rule: allow
+    port: "{{ prometheus_exporters_pihole_exporter_port }}"
+    delete: true
+  become: true
+  failed_when: false

@@ -4,21 +4,38 @@
 # by unattended-upgrades (see 20auto-upgrades.j2/50unattended-upgrades.j2) -
 # running `apt upgrade` here too would just race it for the apt lock.
 
+{% include '_ntfy_notify.sh.j2' %}
+
 LOG_FILE="/var/log/weekly-updates.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
+FAILED=0
 
 echo "[$DATE] Starting Pi-hole update..." >> $LOG_FILE
 
 # Update Pi-hole core
 echo "[$DATE] Updating Pi-hole..." >> $LOG_FILE
-pihole -up >> $LOG_FILE 2>&1
+if ! pihole -up >> $LOG_FILE 2>&1; then
+  FAILED=1
+  echo "[$DATE] pihole -up failed" >> $LOG_FILE
+fi
 
 # Update Pi-hole gravity (blocklists)
 echo "[$DATE] Updating Pi-hole gravity..." >> $LOG_FILE
-pihole -g >> $LOG_FILE 2>&1
+if ! pihole -g >> $LOG_FILE 2>&1; then
+  FAILED=1
+  echo "[$DATE] pihole -g failed" >> $LOG_FILE
+fi
 
 echo "[$DATE] Restarting Pi-hole services..." >> $LOG_FILE
 systemctl restart pihole-FTL >> $LOG_FILE 2>&1
 
 echo "[$DATE] Pi-hole update completed" >> $LOG_FILE
 echo "----------------------------------------" >> $LOG_FILE
+
+if [ "$FAILED" -eq 1 ]; then
+  ntfy_notify "Pi-hole update failed: {{ inventory_hostname }}" \
+    "pihole -up or -g reported errors - see /var/log/weekly-updates.log" high rotating_light
+else
+  ntfy_notify "Pi-hole update OK: {{ inventory_hostname }}" \
+    "Weekly pihole -up/-g completed successfully." default
+fi

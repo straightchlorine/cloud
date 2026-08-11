@@ -4,6 +4,9 @@
 # throughout. Intended for a disposable test Pi, never the production DNS host
 # (playbooks/dns-teardown.yml enforces that guard before including this).
 
+- name: Gather service facts (systemd-timesyncd/systemd-resolved presence varies by image)
+  ansible.builtin.service_facts:
+
 - name: Uninstall Pi-hole
   # ponytail: `yes |` answers the uninstaller's confirm prompt; `removes:` makes
   # it idempotent (skips when pihole is already gone). If a future Pi-hole build
@@ -12,6 +15,25 @@
     cmd: yes | pihole uninstall
   args:
     removes: /usr/local/bin/pihole
+  become: true
+  failed_when: false
+
+- name: Remove the pihole system user
+  # Belt-and-suspenders, same reasoning as the config cleanup below:
+  # `pihole uninstall` does this too, but the `removes:` guard above can skip
+  # it entirely on a retry where the binary is already gone but a prior
+  # partial run never got this far.
+  ansible.builtin.user:
+    name: pihole
+    state: absent
+    remove: true
+  become: true
+  failed_when: false
+
+- name: Remove the pihole system group
+  ansible.builtin.group:
+    name: pihole
+    state: absent
   become: true
   failed_when: false
 
@@ -38,6 +60,7 @@
   loop:
     - "Weekly Pi-hole updates"
     - "Pi-hole Syncthing local backup"
+    - "Pi-hole reboot pending notification"
   become: true
 
 - name: Remove DNS role file artifacts
@@ -47,6 +70,7 @@
   loop:
     - /usr/local/bin/pihole-update.sh
     - /usr/local/bin/pihole-syncthing-backup.sh
+    - /usr/local/bin/pihole-reboot-notify.sh
     - /var/log/pihole-syncthing-backup.log
     - /etc/logrotate.d/weekly-updates
     - /var/log/weekly-updates.log
@@ -82,7 +106,7 @@
     state: started
     enabled: true
   become: true
-  failed_when: false
+  when: "'systemd-timesyncd.service' in ansible_facts.services"
 
 # Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
 # this, so without it the host is left with no working DNS. Debian doesn't ship
@@ -92,9 +116,6 @@
 - name: Restore working DNS resolution
   become: true
   block:
-    - name: Gather service facts to check for systemd-resolved
-      ansible.builtin.service_facts:
-
     - name: Restore systemd-resolved
       when: "'systemd-resolved.service' in ansible_facts.services"
       block:
