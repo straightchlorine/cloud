@@ -82,13 +82,6 @@
           Script size: {{ dns_pihole_installer.stat.size }} bytes
           Last modified: {{ dns_pihole_installer.stat.mtime }}
 
-          Security enhancements implemented:
-          [OK] Using official GitHub repository (not direct script download)
-          [OK] Pinned to specific version tag for reproducibility
-          [OK] Commit hash verification for integrity
-          [OK] Allows code review before installation
-          [OK] Verifiable source and provenance
-
     - name: Create Pi-hole configuration directory
       ansible.builtin.file:
         path: /etc/pihole
