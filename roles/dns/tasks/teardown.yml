@@ -70,26 +70,46 @@
   failed_when: false
 
 # Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
-# this, so without it the host is left with no working DNS.
-- name: Restore systemd-resolved
+# this, so without it the host is left with no working DNS. Debian doesn't ship
+# systemd-resolved enabled by default (unlike Ubuntu), so check it actually
+# exists before trying to use it - otherwise fall back to a plain resolv.conf
+# using the same upstream resolvers the role was configured with.
+- name: Restore working DNS resolution
   become: true
   block:
-    - name: Unmask systemd-resolved
-      ansible.builtin.command: systemctl unmask systemd-resolved
-      changed_when: false
-      failed_when: false
+    - name: Gather service facts to check for systemd-resolved
+      ansible.builtin.service_facts:
 
-    - name: Enable and start systemd-resolved
-      ansible.builtin.systemd:
-        name: systemd-resolved
-        state: started
-        enabled: true
+    - name: Restore systemd-resolved
+      when: "'systemd-resolved.service' in ansible_facts.services"
+      block:
+        - name: Unmask systemd-resolved
+          ansible.builtin.command: systemctl unmask systemd-resolved
+          changed_when: false
+          failed_when: false
 
-    - name: Point /etc/resolv.conf at the systemd-resolved stub
-      ansible.builtin.file:
-        src: /run/systemd/resolve/stub-resolv.conf
+        - name: Enable and start systemd-resolved
+          ansible.builtin.systemd:
+            name: systemd-resolved
+            state: started
+            enabled: true
+
+        - name: Point /etc/resolv.conf at the systemd-resolved stub
+          ansible.builtin.file:
+            src: /run/systemd/resolve/stub-resolv.conf
+            dest: /etc/resolv.conf
+            state: link
+            force: true
+
+    - name: Write a plain resolv.conf when systemd-resolved is not installed
+      when: "'systemd-resolved.service' not in ansible_facts.services"
+      ansible.builtin.copy:
         dest: /etc/resolv.conf
-        state: link
+        content: |
+          {% for dns_server in dns_pihole_dns_servers %}
+          nameserver {{ dns_server }}
+          {% endfor %}
+        mode: "0644"
         force: true
 
     - name: Verify the host resolves DNS after teardown
