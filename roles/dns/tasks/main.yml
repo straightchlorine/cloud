@@ -36,6 +36,18 @@
       become: true
       when: dns_pihole_existing.stat.exists
 
+    - name: Clear existing Pi-hole configuration for a clean reinstall
+      # It's fully preserved in /etc/pihole.backup above (restored by the
+      # rescue block on failure). Leaving old contents in place instead would
+      # make the installer skip installDefaultBlocklists() (it only adds
+      # StevenBlack's list when adlists.list is absent) and reuse a stale
+      # gravity.db, silently leaving blocking non-functional.
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: absent
+      become: true
+      when: dns_pihole_existing.stat.exists
+
     - name: Clone Pi-hole repository for secure installation
       ansible.builtin.git:
         repo: "{{ dns_pihole_git_repo }}"

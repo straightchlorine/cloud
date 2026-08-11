@@ -15,6 +15,21 @@
   become: true
   failed_when: false
 
+- name: Force-remove any leftover Pi-hole config and install directories
+  # Belt-and-suspenders: `pihole uninstall` should already remove these, but
+  # if it exits early/partially (interrupted, changed prompt, etc.) a stale
+  # /etc/pihole silently breaks the next install - the installer only adds
+  # its default blocklist when adlists.list is absent, and reuses whatever
+  # gravity.db/pihole.toml is already there instead of building fresh ones.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/pihole
+    - /etc/.pihole
+    - /opt/pihole
+  become: true
+
 - name: Remove Pi-hole cron jobs
   ansible.builtin.cron:
     name: "{{ item }}"
