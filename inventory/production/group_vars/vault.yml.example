@@ -16,7 +16,6 @@ vault_cloudflare_api_token: "your-cloudflare-api-token"
 
 # Service Authentication
 # DNS Server (pi-dns)
-vault_pihole_admin_password: "your-secure-admin-password"
 vault_pihole_webpassword: "your-secure-web-password"
 
 # Automation Stack (pi-automation)

@@ -12,7 +12,6 @@
     validation_role: "dns"
     required_variables:
       - vault_pihole_webpassword
-      - vault_pihole_admin_password
       - vault_domain_name
       - vault_letsencrypt_email
       - dns_pihole_interface
@@ -24,7 +23,6 @@
       - restic_password
     vault_placeholders:
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
-      - { var: "vault_pihole_admin_password", value: "your-secure-admin-password" }
     common_backup_directories:
       - "/etc/pihole"
       - "/opt/pihole"
@@ -32,12 +30,6 @@
     stack_home: "/opt/pihole"  # For service validation
     required_services: []  # Pi-hole doesn't use Docker Compose
   tags: [validation]
-
-- name: Validate Pi-hole passwords are different
-  ansible.builtin.fail:
-    msg: "vault_pihole_webpassword and vault_pihole_admin_password should be different for security"
-  when: vault_pihole_webpassword == vault_pihole_admin_password
-  no_log: true
 
 - name: Check network interface exists
   ansible.builtin.setup:

@@ -12,7 +12,6 @@ dns_interface: "{{ primary_ip }}"
 device_type: rpi3b # adjust if your spare Pi is a different model
 
 # Pi-hole configuration
-dns_pihole_admin_password: "{{ vault_pihole_admin_password }}"
 dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 # OPNsense unbound instance on this VLAN - no external resolvers.
 dns_pihole_dns_servers:

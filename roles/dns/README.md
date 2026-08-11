@@ -36,7 +36,6 @@ ansible-playbook -i inventory/production/hosts.yml \
 
 ```yaml
 # Pi-hole authentication
-vault_pihole_admin_password: "secure_password"
 vault_pihole_webpassword: "secure_password"
 
 # Backup configuration
@@ -108,7 +107,6 @@ pihole_verify_commit: true
 
 ```yaml
 vault_pihole_webpassword: "secure-admin-password"
-vault_pihole_admin_password: "secure-admin-password"
 ```
 
 ## Installation Process
