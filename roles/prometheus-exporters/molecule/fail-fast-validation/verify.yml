@@ -20,7 +20,7 @@
           Test Scenario: Missing required variables
           - prometheus_exporters_enabled: NOT SET (required)
           - prometheus_exporters_base_dir: NOT SET (required)
-          - node_exporter_enabled: NOT SET (required)
+          - prometheus_exporters_node_exporter_enabled: NOT SET (required)
           - prometheus_environment: NOT SET (required)
           - prometheus_role: NOT SET (required)
           - device_type: NOT SET (required)

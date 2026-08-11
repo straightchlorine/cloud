@@ -56,18 +56,13 @@ prometheus_exporters_pihole_exporter_port: 9617
 pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{ pihole_exporter_version }}/
   pihole_exporter-linux-{{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
-# prometheus_exporters_pihole_exporter_pihole_hostname: must be set in host_vars - no default
-prometheus_exporters_pihole_exporter_pihole_port: 80
+# prometheus_exporters_pihole_exporter_target_host: must be set in host_vars - no default
+prometheus_exporters_pihole_exporter_target_port: 80
 
 # Docker Exporter configuration (for container hosts)
 prometheus_exporters_docker_exporter_enabled: false # Enable only on container hosts
 docker_exporter_version: "v1.3.0"
 prometheus_exporters_docker_exporter_port: 9323
-
-# Blackbox Exporter for connectivity monitoring
-blackbox_exporter_enabled: false
-blackbox_exporter_version: "0.24.0"
-blackbox_exporter_port: 9115
 
 # Service discovery labels - ALL MUST be explicitly set in host_vars
 # prometheus_environment: must be set in host_vars - no default

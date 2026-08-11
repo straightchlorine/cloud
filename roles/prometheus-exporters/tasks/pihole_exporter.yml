@@ -1,5 +1,4 @@
 ---
-# Pi-hole Exporter setup tasks
 
 - name: Download Pi-hole Exporter binary
   ansible.builtin.get_url:
@@ -38,7 +37,7 @@
     service_group: "{{ prometheus_exporters_group }}"
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
-      -pihole_hostname {{ prometheus_exporters_pihole_exporter_pihole_hostname }}
+      -pihole_hostname {{ prometheus_exporters_pihole_exporter_target_host }}
       -pihole_password {{ vault_pihole_webpassword }}
       -port {{ prometheus_exporters_pihole_exporter_port }}
     restart_policy: "on-failure"
@@ -76,8 +75,8 @@
 - name: Test Pi-hole connectivity from exporter
   ansible.builtin.uri:
     url: >-
-      http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
-      }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/api/info/login
+      http://{{ prometheus_exporters_pihole_exporter_target_host
+      }}:{{ prometheus_exporters_pihole_exporter_target_port }}/api/info/login
     method: GET
     timeout: 5
   register: prom_exp_pihole_api_test

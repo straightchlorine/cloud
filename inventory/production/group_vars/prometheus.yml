@@ -6,7 +6,7 @@ prometheus_exporters_enabled: true
 prometheus_environment: "production"
 
 # Node Exporter (enabled on all hosts)
-node_exporter_enabled: true
+prometheus_exporters_node_exporter_enabled: true
 node_exporter_install_method: "binary"
 
 # Pi Hardware Metrics (enabled on ARM hosts)

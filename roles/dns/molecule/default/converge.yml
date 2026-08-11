@@ -8,6 +8,12 @@
       - 9.9.9.9
       - 149.112.112.112
     vault_pihole_webpassword: molecule-test-password
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: "molecule-test"
+    dns_auto_updates_reboot_time: "03:00"
+    dns_ntp_upstream_server: "pool.ntp.org"
+    primary_network_cidr: "192.168.1.0/24"
   tasks:
     # Pi-hole's basic-install.sh cannot run in a container, so we exercise the
     # part that IS container-testable and has historically broken: rendering the
@@ -18,3 +24,35 @@
         src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"
         dest: /tmp/setupVars.rendered
         mode: "0600"
+
+    - name: Render chrony.conf from the role template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/chrony.conf.j2"
+        dest: /tmp/chrony.conf.rendered
+        mode: "0644"
+
+    # Catches the same class of bug as setupVars above, for the ntfy
+    # notification scripts added alongside teardown.yml - a misnamed or
+    # undefined var here silently drops the notification instead of failing.
+    - name: Render the reboot-notify script (which includes _ntfy_notify.sh.j2)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/pihole-reboot-notify.sh.j2"
+        dest: /tmp/pihole-reboot-notify.rendered.sh
+        mode: "0700"
+
+    # roles/common/tasks/ntfy_notify.yml's own fail-fast assert is the only
+    # part of the notification path testable without a real ntfy server.
+    # include_role: name: common doesn't resolve in molecule's sandbox (no
+    # cross-role roles_path here), so include_tasks by explicit relative path
+    # instead - same trick the setupVars/chrony renders above use.
+    - name: Confirm ntfy_notify fails fast when required vars are missing
+      block:
+        - name: Call ntfy_notify with no title/message (expect failure)
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/tasks/ntfy_notify.yml"
+        - name: Fail the test - ntfy_notify should have refused to run
+          ansible.builtin.fail:
+            msg: "ntfy_notify did not fail fast on missing common_ntfy_title/message"
+      rescue:
+        - name: Expected failure caught
+          ansible.builtin.debug:
+            msg: "[OK] ntfy_notify correctly refused to run without required vars"

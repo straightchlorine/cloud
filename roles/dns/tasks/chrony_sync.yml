@@ -41,5 +41,17 @@
   become: true
 
 - name: Wait for chrony to sync
-  ansible.builtin.wait_for:
-    timeout: 30
+  ansible.builtin.command: chronyc waitsync 10 0.5
+  become: true
+  register: dns_chrony_sync_result
+  changed_when: false
+  failed_when: false
+
+- name: Warn if chrony did not sync in time
+  ansible.builtin.debug:
+    msg: >-
+      chronyc waitsync did not confirm sync within the timeout
+      ({{ dns_chrony_sync_result.stdout | default('no output') }}).
+      Proceeding anyway - the Pi-hole install may fail TLS validation if the
+      clock is still wrong.
+  when: dns_chrony_sync_result.rc != 0

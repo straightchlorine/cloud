@@ -9,7 +9,7 @@
     name: Node-exporter
     state: restarted
   become: true
-  when: node_exporter_enabled
+  when: prometheus_exporters_node_exporter_enabled
 
 - name: Restart pihole-exporter
   ansible.builtin.systemd:
@@ -38,7 +38,7 @@
     name: Docker-metrics.service
     state: restarted
   become: true
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Restart docker-metrics-timer
   ansible.builtin.systemd:
@@ -46,6 +46,6 @@
     state: restarted
     enabled: true
   become: true
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 # restart docker uses common handler

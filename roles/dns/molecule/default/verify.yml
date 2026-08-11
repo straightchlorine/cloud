@@ -18,3 +18,35 @@
           - "'PIHOLE_DNS_1=9.9.9.9' in dns_setupvars_content"
         fail_msg: "setupVars.conf did not render correctly:\n{{ dns_setupvars_content }}"
         success_msg: "[OK] Pi-hole setupVars template renders with populated values"
+
+    - name: Verify chrony.conf and the reboot-notify script rendered
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: dns_rendered_files
+      loop:
+        - /tmp/chrony.conf.rendered
+        - /tmp/pihole-reboot-notify.rendered.sh
+
+    - name: Assert chrony.conf and reboot-notify script exist and are non-empty
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.size > 0
+        fail_msg: "{{ item.item }} did not render"
+        success_msg: "[OK] {{ item.item }} rendered"
+      loop: "{{ dns_rendered_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read the rendered reboot-notify script
+      ansible.builtin.slurp:
+        src: /tmp/pihole-reboot-notify.rendered.sh
+      register: dns_reboot_notify_rendered
+
+    - name: Assert the ntfy helper function was included and the API key rendered
+      ansible.builtin.assert:
+        that:
+          - "'ntfy_notify()' in (dns_reboot_notify_rendered.content | b64decode)"
+          - "'molecule-test-ntfy-key' in (dns_reboot_notify_rendered.content | b64decode)"
+        fail_msg: "pihole-reboot-notify.sh.j2 did not correctly include _ntfy_notify.sh.j2"
+        success_msg: "[OK] Reboot-notify script correctly includes the ntfy helper"

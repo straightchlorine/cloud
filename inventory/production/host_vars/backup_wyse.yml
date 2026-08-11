@@ -138,7 +138,7 @@ coordinator_targets:
       compression: auto
 
 # Node exporter configuration
-node_exporter_enabled: true
+prometheus_exporters_node_exporter_enabled: true
 node_exporter_port: 9100
 node_exporter_ufw_enabled: true
 

@@ -40,7 +40,7 @@ docker_log_max_file: "3"
 youtube_sync_enabled: true
 
 # Prometheus exporters configuration
-docker_exporter_enabled: true
+prometheus_exporters_docker_exporter_enabled: true
 prometheus_role: "music"
 
 # Enterprise backup configuration

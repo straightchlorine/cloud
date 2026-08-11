@@ -1,5 +1,4 @@
 ---
-# Pi-specific hardware metrics collection
 
 - name: Create Pi hardware metrics collection script
   ansible.builtin.template:

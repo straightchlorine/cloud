@@ -46,7 +46,7 @@ automation_uid: 1000
 automation_gid: 1000
 
 # Prometheus exporters configuration
-docker_exporter_enabled: true
+prometheus_exporters_docker_exporter_enabled: true
 prometheus_role: "automation"
 
 # Enterprise backup configuration

@@ -1,5 +1,4 @@
 ---
-# DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
@@ -21,6 +20,10 @@
 
 - name: Sync system time before installing Pi-hole
   ansible.builtin.include_tasks: chrony_sync.yml
+
+- name: Set up an optional attached drive if present
+  ansible.builtin.include_tasks: storage.yml
+  tags: [storage]
 
 - name: Deploy Pi-hole with rollback on failure
   block:

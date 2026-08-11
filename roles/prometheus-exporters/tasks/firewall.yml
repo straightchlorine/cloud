@@ -1,5 +1,4 @@
 ---
-# Firewall configuration for Prometheus exporters
 
 - name: Configure firewall rules for exporters
   community.general.ufw:
@@ -26,14 +25,14 @@
   ansible.builtin.debug:
     msg: |
       [OK] Prometheus Exporters Firewall Configuration:
-      {% if node_exporter_enabled %}
+      {% if prometheus_exporters_node_exporter_enabled %}
       - Node Exporter: Port {{ prometheus_exporters_node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
       {% if prometheus_exporters_pihole_exporter_enabled %}
       - Pi-hole Exporter: Port {{ prometheus_exporters_pihole_exporter_port }}
         ({{ prometheus_exporters_firewall_source }})
       {% endif %}
-      {% if docker_exporter_enabled %}
+      {% if prometheus_exporters_docker_exporter_enabled %}
       - Docker Metrics: Port {{ prometheus_exporters_docker_exporter_port }}
         ({{ prometheus_exporters_firewall_source }})
       {% endif %}

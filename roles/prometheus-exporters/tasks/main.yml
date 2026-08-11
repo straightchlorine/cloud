@@ -1,5 +1,4 @@
 ---
-# Main tasks for prometheus-exporters role
 
 - name: Include validation tasks
   ansible.builtin.include_tasks: validate.yml
@@ -13,7 +12,7 @@
   ansible.builtin.include_tasks: node_exporter.yml
   when:
     - prometheus_exporters_enabled
-    - node_exporter_enabled
+    - prometheus_exporters_node_exporter_enabled
 
 - name: Include Pi hardware metrics setup
   ansible.builtin.include_tasks: pi_hardware_metrics.yml
@@ -33,7 +32,7 @@
   ansible.builtin.include_tasks: docker_exporter.yml
   when:
     - prometheus_exporters_enabled
-    - docker_exporter_enabled
+    - prometheus_exporters_docker_exporter_enabled
     - "'automation' in group_names or 'music' in group_names"
 
 - name: Include firewall configuration

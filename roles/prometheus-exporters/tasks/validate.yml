@@ -12,7 +12,7 @@
     required_variables:
       - prometheus_exporters_enabled
       - prometheus_exporters_base_dir
-      - node_exporter_enabled
+      - prometheus_exporters_node_exporter_enabled
       - prometheus_environment
       - prometheus_role
       - device_type
@@ -88,8 +88,8 @@
     - name: Check Pi-hole web interface
       ansible.builtin.uri:
         url: >-
-          http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
-          }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
+          http://{{ prometheus_exporters_pihole_exporter_target_host
+          }}:{{ prometheus_exporters_pihole_exporter_target_port }}/admin/
         method: HEAD
         timeout: 5
       register: prom_exp_pihole_web_check
@@ -99,8 +99,8 @@
       ansible.builtin.debug:
         msg: >-
           WARNING: Pi-hole web interface not accessible at
-          http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
-          }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/
+          http://{{ prometheus_exporters_pihole_exporter_target_host
+          }}:{{ prometheus_exporters_pihole_exporter_target_port }}/admin/
       when: prom_exp_pihole_web_check.status != 200
 
 - name: Validate firewall source when UFW enabled
@@ -116,16 +116,16 @@
 - name: Validate pihole exporter hostname is explicitly set
   ansible.builtin.fail:
     msg: >-
-      prometheus_exporters_pihole_exporter_pihole_hostname must be
+      prometheus_exporters_pihole_exporter_target_host must be
       defined in host_vars when pihole_exporter is enabled
   when:
     - prometheus_exporters_pihole_exporter_enabled
-    - prometheus_exporters_pihole_exporter_pihole_hostname is not defined
+    - prometheus_exporters_pihole_exporter_target_host is not defined
   tags: [validation]
 
 - name: Validate Docker Exporter dependencies
   when:
-    - docker_exporter_enabled
+    - prometheus_exporters_docker_exporter_enabled
     - "'automation' in group_names or 'music' in group_names"
   tags: [validation]
   block:
@@ -169,9 +169,9 @@
       [OK] Prometheus Exporters Validation Complete:
       - Architecture: {{ ansible_architecture }} → {{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
       - Enabled exporters: >-
-          {{ [('node' if node_exporter_enabled else ''),
+          {{ [('node' if prometheus_exporters_node_exporter_enabled else ''),
           ('pihole' if prometheus_exporters_pihole_exporter_enabled else ''),
-          ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
+          ('docker' if prometheus_exporters_docker_exporter_enabled else '')] | select | join(', ') }}
       - Base directory: {{ prometheus_exporters_base_dir }}
       - Port validation: Completed
       - Dependencies: Verified

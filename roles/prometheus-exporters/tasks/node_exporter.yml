@@ -1,5 +1,4 @@
 ---
-# Node Exporter setup tasks
 
 - name: Install Node Exporter via binary (recommended)
   when: node_exporter_install_method == "binary"

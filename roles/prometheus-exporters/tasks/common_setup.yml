@@ -1,5 +1,4 @@
 ---
-# Common setup for Prometheus exporters
 
 - name: Create prometheus user and group
   ansible.builtin.group:

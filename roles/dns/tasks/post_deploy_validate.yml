@@ -1,6 +1,4 @@
 ---
-# Post-deployment validation for DNS services
-# Verifies Pi-hole and related services are working correctly
 
 - name: Wait for Pi-hole service to be ready
   ansible.builtin.wait_for:

@@ -99,6 +99,27 @@
         fail_msg: "Node exporter config does not exist or has wrong permissions"
         success_msg: "[OK] Node exporter config file exists with correct permissions"
 
+    # Teardown verification: the fake Pi-hole Exporter artifacts created in
+    # converge.yml should be gone after pihole_exporter_teardown.yml ran.
+    - name: Check Pi-hole Exporter artifacts removed by teardown
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: prom_exp_teardown_check
+      loop:
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+        - /etc/systemd/system/pihole-exporter.service
+
+    - name: Assert Pi-hole Exporter artifacts no longer exist
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} still exists after pihole_exporter_teardown.yml"
+        success_msg: "[OK] {{ item.item }} removed by teardown"
+      loop: "{{ prom_exp_teardown_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
     # Display verification summary
     - name: Display prometheus-exporters role verification results
       ansible.builtin.debug:

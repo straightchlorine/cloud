@@ -1,5 +1,4 @@
 ---
-# Meta information for prometheus-exporters role
 
 galaxy_info:
   role_name: prometheus_exporters

@@ -156,6 +156,39 @@
       delay: 2
       until: dns_teardown_resolve.rc == 0
 
+# Reverse storage.yml's journald relocation (real role state that would
+# confuse a retest); the drive mount itself is left in place, same reasoning
+# as the firewall rules below - harmless residue, and unmounting it earns us
+# nothing since we never format/wipe it on teardown either.
+- name: Stop systemd-journald before reverting storage relocation
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: stopped
+  become: true
+  failed_when: false
+
+- name: Unmount the journal bind mount if present
+  ansible.posix.mount:
+    path: /var/log/journal
+    state: absent
+  become: true
+  failed_when: false
+
+- name: Restore default journald storage setting
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: '^#?Storage='
+    line: "#Storage=auto"
+  become: true
+  failed_when: false
+
+- name: Start systemd-journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: started
+  become: true
+  failed_when: false
+
 # ponytail: firewall rules the role/firewall added are left in place — harmless
 # residue on a test box, and reversing ufw risks locking out SSH. Run
 # `ufw --force reset` by hand if you want a truly bare firewall.

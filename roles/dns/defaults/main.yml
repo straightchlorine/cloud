@@ -1,5 +1,4 @@
 ---
-# Default values for DNS role (Pi-hole)
 
 # Pi-hole Installation Security
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
@@ -53,3 +52,10 @@ dns_ntp_server_enabled: false
 
 # Pi-hole metrics are exported by the prometheus-exporters role
 # (prometheus_exporters_pihole_exporter_enabled), not by this role.
+
+# Optional attached drive (e.g. a USB SSD) - entirely opt-in. If none is
+# found, storage.yml is a no-op. See roles/dns/tasks/storage.yml.
+dns_optional_drive_mount_path: "/mnt/ssd"
+dns_optional_drive_filesystem: "ext4"
+dns_optional_drive_format: false  # DESTRUCTIVE if true - opt in per host
+dns_optional_drive_journald_enabled: true

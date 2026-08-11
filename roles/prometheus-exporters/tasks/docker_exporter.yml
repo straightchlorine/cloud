@@ -1,12 +1,11 @@
 ---
-# Docker metrics via Node Exporter (no separate exporter needed)
 
 - name: Check if daemon.json exists
   ansible.builtin.stat:
     path: /etc/docker/daemon.json
   register: prom_exp_daemon_json_stat
   become: true
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Read existing daemon.json
   ansible.builtin.slurp:
@@ -14,7 +13,7 @@
   register: prom_exp_daemon_json_content
   become: true
   when:
-    - docker_exporter_enabled
+    - prometheus_exporters_docker_exporter_enabled
     - prom_exp_daemon_json_stat.stat.exists
 
 - name: Merge Docker metrics config into daemon.json
@@ -32,14 +31,14 @@
     backup: true
   become: true
   notify: restart docker
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Verify userns-remap preserved in daemon.json after merge
   ansible.builtin.slurp:
     src: /etc/docker/daemon.json
   register: prom_exp_daemon_json_post_merge
   become: true
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Assert userns-remap key still present in daemon.json
   ansible.builtin.assert:
@@ -49,7 +48,7 @@
       CRITICAL: userns-remap key was lost from daemon.json during metrics config merge.
       Docker container isolation may be compromised. Restore from backup.
     success_msg: "userns-remap key verified present in daemon.json"
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Create Docker metrics collection script
   ansible.builtin.template:
@@ -104,7 +103,7 @@
     state: started
     daemon_reload: true
   become: true
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Test Docker metrics endpoint
   ansible.builtin.uri:
@@ -113,13 +112,13 @@
     timeout: 5
   register: prom_exp_docker_metrics_test
   failed_when: false
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled
 
 - name: Docker metrics setup status
   ansible.builtin.debug:
     msg: |
       [OK] Docker Metrics Setup:
-      - Docker daemon metrics: {{ 'Enabled' if docker_exporter_enabled else 'Disabled' }}
+      - Docker daemon metrics: {{ 'Enabled' if prometheus_exporters_docker_exporter_enabled else 'Disabled' }}
       - Metrics endpoint: {{ 'Accessible' if prom_exp_docker_metrics_test.status == 200 else 'Not accessible' }}
       - Collection script: {{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh
-  when: docker_exporter_enabled
+  when: prometheus_exporters_docker_exporter_enabled

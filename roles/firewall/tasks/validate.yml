@@ -1,5 +1,4 @@
 ---
-# Firewall role validation - fail-fast checks
 
 - name: Validate firewall_enabled is defined
   ansible.builtin.assert:

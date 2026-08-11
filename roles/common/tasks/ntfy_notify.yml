@@ -35,5 +35,7 @@
     body_format: raw
     status_code: 200
   failed_when: false
+  no_log: true
   # Never fail the play over a notification - it's a courtesy, not a
-  # deployment requirement.
+  # deployment requirement. no_log because the Authorization header carries
+  # vault_ntfy_api_key.

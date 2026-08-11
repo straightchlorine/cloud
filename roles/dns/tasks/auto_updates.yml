@@ -1,5 +1,4 @@
 ---
-# Automatic updates configuration for Debian
 
 - name: Install unattended-upgrades package
   ansible.builtin.apt:

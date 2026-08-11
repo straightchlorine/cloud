@@ -1,0 +1,43 @@
+---
+# Non-fatal detection of an unmounted, non-boot drive (e.g. a USB SSD that
+# may or may not be plugged in). Never fails, never mounts, never formats -
+# it only sets facts for the caller to act on:
+#   common_optional_drive_present        - bool
+#   common_optional_drive_device         - "/dev/sda1" or "" if none found
+#   common_optional_drive_has_filesystem - bool (false = needs formatting)
+
+- name: Detect an unmounted, non-boot drive
+  ansible.builtin.shell:
+    cmd: |
+      python3 <<'PYEOF'
+      import json, subprocess
+
+      data = json.loads(subprocess.check_output(
+          ['lsblk', '-J', '-o', 'NAME,TYPE,MOUNTPOINT,FSTYPE']))
+
+      def leaves(devices):
+          # A partitioned disk contributes its partitions; an unpartitioned
+          # disk contributes itself.
+          for dev in devices:
+              if dev.get('children'):
+                  yield from leaves(dev['children'])
+              else:
+                  yield dev
+
+      candidates = [d for d in leaves(data['blockdevices'])
+                    if not d['name'].startswith('mmcblk') and not d.get('mountpoint')]
+      print(json.dumps(candidates[0] if candidates else {}))
+      PYEOF
+  changed_when: false
+  register: common_optional_drive_raw
+
+- name: Parse the detected drive
+  ansible.builtin.set_fact:
+    common_optional_drive: "{{ common_optional_drive_raw.stdout | from_json }}"
+
+- name: Expose optional-drive facts
+  ansible.builtin.set_fact:
+    common_optional_drive_present: "{{ 'name' in common_optional_drive }}"
+    common_optional_drive_device: >-
+      {{ '/dev/' + common_optional_drive.name if 'name' in common_optional_drive else '' }}
+    common_optional_drive_has_filesystem: "{{ (common_optional_drive.fstype | default('')) | length > 0 }}"

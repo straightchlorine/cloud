@@ -60,7 +60,7 @@ additional_services:
 
 # Prometheus exporters configuration
 prometheus_exporters_pihole_exporter_enabled: true
-prometheus_exporters_pihole_exporter_pihole_hostname: "{{ primary_ip }}"
+prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
 # Secondary local backup to Syncthing (Teleporter + pihole-FTL.db snapshot).

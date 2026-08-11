@@ -1,5 +1,4 @@
 ---
-# Firewall configuration tasks
 
 - name: Run firewall deployment validation
   ansible.builtin.include_tasks: validate.yml

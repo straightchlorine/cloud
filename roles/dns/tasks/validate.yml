@@ -1,5 +1,4 @@
 ---
-# DNS services deployment validation
 # Uses unified validation framework to eliminate redundancy
 
 - name: Run DNS services comprehensive validation

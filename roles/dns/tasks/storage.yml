@@ -1,0 +1,99 @@
+---
+# Opportunistically uses an attached-but-unused drive if one is found - never
+# required. See roles/common/tasks/detect_optional_drive.yml for the
+# (non-destructive) detection this depends on.
+#
+# What we do with it, and why: systemd-journald writes constantly, so
+# relocating it off the SD card is the real card-longevity win. We don't
+# touch Pi-hole's own gravity.db/query-log/FTL database paths - those are
+# baked into the installer and fragile to relocate for little extra benefit.
+# The Syncthing backup dir (dns_backup_dir) can be pointed at
+# {{ dns_optional_drive_mount_path }} manually in host_vars if you want it
+# there too - no auto-magic, it's already a plain configurable var.
+
+- name: Detect an optional attached drive
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: detect_optional_drive
+
+- name: No optional drive found - continuing on the SD card only
+  ansible.builtin.debug:
+    msg: "No unmounted secondary drive found."
+  when: not common_optional_drive_present
+
+- name: Use the optional attached drive
+  when: common_optional_drive_present
+  block:
+    - name: Refuse to use an unformatted drive unless explicitly allowed
+      ansible.builtin.fail:
+        msg: >-
+          {{ common_optional_drive_device }} has no filesystem. Format it
+          yourself, or set dns_optional_drive_format: true in host_vars to
+          let this role format it as {{ dns_optional_drive_filesystem }}
+          (DESTRUCTIVE - wipes the drive).
+      when:
+        - not common_optional_drive_has_filesystem
+        - not dns_optional_drive_format
+
+    - name: Format the optional drive (only runs when explicitly allowed above)
+      community.general.filesystem:
+        fstype: "{{ dns_optional_drive_filesystem }}"
+        dev: "{{ common_optional_drive_device }}"
+      become: true
+      when: not common_optional_drive_has_filesystem
+
+    - name: Create the mount point
+      ansible.builtin.file:
+        path: "{{ dns_optional_drive_mount_path }}"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Mount the optional drive
+      ansible.posix.mount:
+        path: "{{ dns_optional_drive_mount_path }}"
+        src: "{{ common_optional_drive_device }}"
+        fstype: "{{ dns_optional_drive_filesystem }}"
+        opts: "defaults,noatime,errors=remount-ro"
+        state: mounted
+      become: true
+
+    - name: Relocate systemd-journald storage onto the drive
+      when: dns_optional_drive_journald_enabled
+      block:
+        - name: Create the journal directory on the drive
+          ansible.builtin.file:
+            path: "{{ dns_optional_drive_mount_path }}/journal"
+            state: directory
+            owner: root
+            group: systemd-journal
+            mode: "2755"
+          become: true
+
+        - name: Stop systemd-journald before relocating storage
+          ansible.builtin.systemd:
+            name: systemd-journald
+            state: stopped
+          become: true
+
+        - name: Bind-mount the drive's journal directory over /var/log/journal
+          ansible.posix.mount:
+            path: /var/log/journal
+            src: "{{ dns_optional_drive_mount_path }}/journal"
+            fstype: none
+            opts: bind
+            state: mounted
+          become: true
+
+        - name: Ensure journald is configured for persistent storage
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/journald.conf
+            regexp: '^#?Storage='
+            line: "Storage=persistent"
+          become: true
+
+        - name: Start systemd-journald
+          ansible.builtin.systemd:
+            name: systemd-journald
+            state: started
+          become: true

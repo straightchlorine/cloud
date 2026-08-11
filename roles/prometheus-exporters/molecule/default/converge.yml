@@ -20,6 +20,7 @@
     # Optional exporters disabled for base test
     prometheus_exporters_pihole_exporter_enabled: false
     prometheus_exporters_docker_exporter_enabled: false
+    prometheus_exporters_pihole_exporter_port: 9617
 
   tasks:
     - name: Note about molecule test limitations
@@ -81,3 +82,37 @@
         mode: '0644'
       become: true
       when: prometheus_exporters_node_exporter_enabled
+
+    # Simulate a prior Pi-hole Exporter install so pihole_exporter_teardown.yml
+    # (below) has real artifacts to remove, instead of a no-op on empty paths.
+    # Tagged molecule-idempotence-notest: create-then-delete is legitimately
+    # non-idempotent as a fixture cycle, so skip it on molecule's 2nd (idempotence) run.
+    - name: Create fake Pi-hole Exporter artifacts to exercise teardown
+      ansible.builtin.copy:
+        content: "fake binary for molecule test\n"
+        dest: "{{ item }}"
+        mode: "0755"
+      become: true
+      loop:
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+      tags: [molecule-idempotence-notest]
+
+    - name: Create fake Pi-hole Exporter systemd unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Pi-hole Exporter (molecule test fixture)
+          [Service]
+          ExecStart=/bin/true
+        dest: /etc/systemd/system/pihole-exporter.service
+        mode: "0644"
+      become: true
+      tags: [molecule-idempotence-notest]
+
+    # include_role: name: prometheus-exporters doesn't resolve here (no
+    # cross-role roles_path in molecule's sandbox), so include_tasks by
+    # explicit relative path instead - same trick the dns role's tests use.
+    - name: Run pihole_exporter_teardown.yml against the fake artifacts
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/pihole_exporter_teardown.yml"
+      tags: [molecule-idempotence-notest]

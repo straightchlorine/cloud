@@ -13,10 +13,6 @@ common_firewall_ports:
   - port: 22
     comment: "SSH access"
 
-# Monitoring Configuration
-prometheus_node_exporter_enabled: true
-prometheus_node_exporter_port: 9100
-
 # Common Systemd Service Configuration (eliminates duplication)
 # Used by all Docker stack services
 common_systemd_config:

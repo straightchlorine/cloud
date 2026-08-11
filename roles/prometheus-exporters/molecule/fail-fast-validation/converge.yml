@@ -4,7 +4,7 @@
   # Intentionally omit ALL required variables:
   # - prometheus_exporters_enabled
   # - prometheus_exporters_base_dir
-  # - node_exporter_enabled
+  # - prometheus_exporters_node_exporter_enabled
   # - prometheus_environment
   # - prometheus_role
   # - device_type
