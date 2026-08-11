@@ -45,7 +45,7 @@
     mode: '0755'
   become: true
   when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
-  notify: restart pihole-exporter
+  notify: Restart pihole-exporter
 
 - name: Create pihole-exporter systemd service
   ansible.builtin.template:
@@ -77,7 +77,7 @@
     common_read_write_paths: ["{{ dns_pihole_exporter_install_dir }}"]
   become: true
   when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
-  notify: restart pihole-exporter
+  notify: Restart pihole-exporter
 
 - name: Enable and start pihole-exporter service
   ansible.builtin.systemd:

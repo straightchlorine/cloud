@@ -20,7 +20,6 @@
     - required_variables is defined
     - vars[item] is not defined or vars[item] == ""
   loop: "{{ required_variables }}"
-  no_log: true
   tags: [validation, variable_validation]
 
 # Vault validation
@@ -33,7 +32,6 @@
     - vars[item.var] is defined
     - (vars[item.var] | string) == item.value
   loop: "{{ vault_placeholders }}"
-  no_log: true
   tags: [validation, vault_validation]
 
 # Backup path validation

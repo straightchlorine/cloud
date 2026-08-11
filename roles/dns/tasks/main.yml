@@ -94,7 +94,7 @@
         group: root
         mode: '0600'
       become: true
-      notify: restart pihole-FTL
+      notify: Restart pihole-FTL
 
     - name: Install Pi-hole using verified repository
       ansible.builtin.shell: |
@@ -103,7 +103,7 @@
       become: true
       args:
         creates: /usr/local/bin/pihole
-      notify: restart pihole-FTL
+      notify: Restart pihole-FTL
 
     - name: Set Pi-hole web admin password
       ansible.builtin.shell: |
