@@ -1,19 +1,19 @@
 ---
-- name: Restart pihole-FTL
+- name: restart pihole-FTL
   ansible.builtin.systemd:
     name: pihole-FTL
     state: restarted
     enabled: true
   become: true
 
-- name: Restart pihole-exporter
+- name: restart pihole-exporter
   ansible.builtin.systemd:
     name: pihole-exporter
     state: restarted
     enabled: true
   become: true
 
-- name: Restart chrony
+- name: restart chrony
   ansible.builtin.systemd:
     name: chrony
     state: restarted

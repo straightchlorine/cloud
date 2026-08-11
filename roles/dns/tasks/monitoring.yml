@@ -32,6 +32,10 @@
   become: true
   when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
 
+# ponytail: no checksum + hardcoded arm64 URL, and this duplicates the pihole
+# exporter that the prometheus-exporters role also installs (double bind on :9617).
+# Upgrade path: drop this block and enable the exporter via the prometheus group,
+# or add checksum: "sha256:{{ dns_pihole_exporter_checksum }}" + arch from ansible_architecture.
 - name: Download pihole-exporter binary
   ansible.builtin.get_url:
     url: "{{ dns_pihole_exporter_binary_url }}"
@@ -73,13 +77,11 @@
     common_read_write_paths: ["{{ dns_pihole_exporter_install_dir }}"]
   become: true
   when: dns_pihole_exporter_enabled is defined and dns_pihole_exporter_enabled
-  notify:
-    - reload systemd
-    - restart pihole-exporter
+  notify: restart pihole-exporter
 
 - name: Enable and start pihole-exporter service
   ansible.builtin.systemd:
-    name: Pihole-exporter
+    name: pihole-exporter
     enabled: true
     state: started
     daemon_reload: true

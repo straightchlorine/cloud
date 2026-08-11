@@ -1,0 +1,41 @@
+---
+# Secondary LOCAL Pi-hole backup dropped into a Syncthing-shared folder
+# (Teleporter config archive + a consistent pihole-FTL.db snapshot). The
+# primary/off-site backup remains the restic coordinator.
+
+- name: Validate local backup configuration
+  ansible.builtin.assert:
+    that:
+      - dns_backup_dir is defined
+      - dns_backup_owner is defined
+    fail_msg: >-
+      dns_backup_dir (the Syncthing-shared folder, ideally on the plugged drive)
+      and dns_backup_owner (the user that runs Syncthing) must be set in host_vars
+      when dns_backup_enabled is true.
+    quiet: true
+
+- name: Ensure the Syncthing backup directory exists
+  ansible.builtin.file:
+    path: "{{ dns_backup_dir }}"
+    state: directory
+    owner: "{{ dns_backup_owner }}"
+    mode: "0750"
+  become: true
+
+- name: Install the Pi-hole Syncthing backup script
+  ansible.builtin.template:
+    src: pihole-syncthing-backup.sh.j2
+    dest: /usr/local/bin/pihole-syncthing-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Schedule the Pi-hole Syncthing backup
+  ansible.builtin.cron:
+    name: "Pi-hole Syncthing local backup"
+    minute: "{{ dns_backup_schedule_minute }}"
+    hour: "{{ dns_backup_schedule_hour }}"
+    job: "/usr/local/bin/pihole-syncthing-backup.sh >> /var/log/pihole-syncthing-backup.log 2>&1"
+    user: root
+  become: true

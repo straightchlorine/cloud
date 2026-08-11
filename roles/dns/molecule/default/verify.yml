@@ -1,41 +1,22 @@
 ---
-- name: Verify DNS role prerequisites
+- name: Verify DNS role
   hosts: all
   tasks:
-    - name: Verify required DNS packages are installed
-      ansible.builtin.package_facts:
-        manager: apt
+    - name: Read the rendered Pi-hole setupVars
+      ansible.builtin.slurp:
+        src: /tmp/setupVars.rendered
+      register: dns_setupvars
 
-    - name: Check Git is installed
+    - name: Decode rendered setupVars
+      ansible.builtin.set_fact:
+        dns_setupvars_content: "{{ dns_setupvars.content | b64decode }}"
+
+    - name: Assert Pi-hole setupVars rendered with populated values
       ansible.builtin.assert:
         that:
-          - ansible_facts.packages['git'] is defined
-        fail_msg: "Git package is not installed"
-        success_msg: "[OK] Git package is installed"
-
-    - name: Check curl is installed
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.packages['curl'] is defined
-        fail_msg: "curl package is not installed"
-        success_msg: "[OK] curl package is installed"
-
-    - name: Check wget is installed
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.packages['wget'] is defined
-        fail_msg: "wget package is not installed"
-        success_msg: "[OK] wget package is installed"
-
-    - name: Display DNS verification results
-      ansible.builtin.debug:
-        msg: |
-          [OK] DNS Role Verification Complete
-
-          DNS Prerequisite Packages:
-          - Git: Installed
-          - curl: Installed
-          - wget: Installed
-
-          Note: Full DNS role verification (Pi-hole specific) skipped in container test
-          (requires network access and external DNS services)
+          - "'IPV4_ADDRESS=192.168.20.10/24' in dns_setupvars_content"
+          - "'PIHOLE_INTERFACE=eth0' in dns_setupvars_content"
+          - "'WEBPASSWORD=molecule-test-password' in dns_setupvars_content"
+          - "'PIHOLE_DNS_1=9.9.9.9' in dns_setupvars_content"
+        fail_msg: "setupVars.conf did not render correctly:\n{{ dns_setupvars_content }}"
+        success_msg: "[OK] Pi-hole setupVars template renders with populated values"

@@ -33,19 +33,21 @@
   register: dns_pihole_api
   tags: [post_validation]
 
-- name: Verify Pi-hole is blocking ads
-  ansible.builtin.command: |
-    nslookup doubleclick.net {{ primary_ip }}
+- name: Verify Pi-hole blocks a known ad domain
+  ansible.builtin.command: dig +short @{{ primary_ip }} doubleclick.net A
   register: dns_ad_block_test
-  failed_when: false
   changed_when: false
+  # Pi-hole answers a blocked domain with 0.0.0.0 or NXDOMAIN (empty output). A
+  # real routable A record means blocking is NOT working -> fail the deploy.
+  failed_when:
+    - dns_ad_block_test.stdout | trim | length > 0
+    - "'0.0.0.0' not in dns_ad_block_test.stdout"
   tags: [post_validation]
 
-- name: Check NTP service if enabled
+- name: Check chrony NTP service state
   ansible.builtin.systemd:
-    name: Chrony
+    name: chrony
   register: dns_ntp_status
-  when: dns_ntp_server_enabled
   tags: [post_validation]
 
 - name: Verify monitoring services if enabled
@@ -65,8 +67,8 @@
       DNS Resolution: {{ 'Working' if dns_resolution_test.rc == 0 else 'Failed' }}
       Web Interface: {{ 'Accessible' if dns_pihole_web.status == 200 else 'Failed' }}
       API Response: {{ 'Working' if dns_pihole_api.status == 200 else 'Failed' }}
-      Ad Blocking: {{ 'Active' if dns_ad_block_test.rc != 0 else 'Check Required' }}
-      NTP Service: {{ dns_ntp_status.status.ActiveState if dns_ntp_server_enabled else 'Disabled' }}
+      Ad Blocking: Active (doubleclick.net -> {{ dns_ad_block_test.stdout | trim | default('NXDOMAIN', true) }})
+      NTP Service: {{ dns_ntp_status.status.ActiveState }}
 
       Pi-hole deployment validated successfully!
   tags: [post_validation]

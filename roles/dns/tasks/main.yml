@@ -21,6 +21,21 @@
 
 - name: Deploy Pi-hole with rollback on failure
   block:
+    - name: Check for an existing Pi-hole configuration
+      ansible.builtin.stat:
+        path: /etc/pihole
+      register: dns_pihole_existing
+      become: true
+
+    - name: Preserve existing Pi-hole configuration for rollback
+      ansible.builtin.copy:
+        src: /etc/pihole/
+        dest: /etc/pihole.backup/
+        remote_src: true
+        mode: preserve
+      become: true
+      when: dns_pihole_existing.stat.exists
+
     - name: Clone Pi-hole repository for secure installation
       ansible.builtin.git:
         repo: "{{ dns_pihole_git_repo }}"
@@ -97,10 +112,13 @@
       when: vault_pihole_webpassword is defined
       no_log: true
 
-    - name: Clean up Pi-hole repository after installation
+    - name: Clean up Pi-hole repository and rollback backup after success
       ansible.builtin.file:
-        path: /tmp/pi-hole-repo
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /tmp/pi-hole-repo
+        - /etc/pihole.backup
       become: true
 
   rescue:
@@ -142,6 +160,10 @@
   ansible.builtin.include_tasks: auto_updates.yml
   when: dns_auto_updates_enabled
 
+- name: Configure secondary local backup for Syncthing
+  ansible.builtin.include_tasks: backup.yml
+  when: dns_backup_enabled
+
 - name: Configure firewall
   ansible.builtin.include_role:
     name: firewall
@@ -156,4 +178,4 @@
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
-  tags: [post_validation, never]
+  tags: [post_validation]

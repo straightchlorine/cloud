@@ -11,7 +11,7 @@ device_type: rpi3b
 dns_pihole_admin_password: "{{ vault_pihole_admin_password }}"
 dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 dns_pihole_dns_servers:
-  - "{{ hostvars['firewall']['primary_ip'] }}#53"
+  - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
 dns_pihole_ipv4_address: "{{ host_ip_cidr }}"
 dns_pihole_ipv6_address: ""
@@ -61,6 +61,12 @@ additional_services:
 # Prometheus exporters configuration
 dns_pihole_exporter_enabled: true
 prometheus_role: "dns"
+
+# Secondary local backup to Syncthing (Teleporter + pihole-FTL.db snapshot).
+# Deploy fails fast until you set the two values below to your real setup.
+dns_backup_enabled: true
+# dns_backup_dir: "/mnt/<drive>/syncthing/pihole"   # the Syncthing-shared folder on the plugged drive
+# dns_backup_owner: "<syncthing-user>"              # the user Syncthing runs as on this Pi
 
 # Enterprise backup configuration
 restic_enabled: true

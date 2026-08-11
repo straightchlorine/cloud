@@ -1,0 +1,35 @@
+---
+# Repeatable teardown of the DNS (Pi-hole) role for iterative testing on a
+# disposable Pi. Refuses to run without an explicit confirmation flag and hard
+# refuses the production DNS host.
+#
+#   ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
+#     --limit <your-test-host> -e dns_teardown_i_understand=true
+- name: Tear down the DNS role for repeatable testing
+  hosts: dns
+  become: true
+  gather_facts: true
+  tasks:
+    - name: SAFETY - require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - dns_teardown_i_understand | default(false) | bool
+        fail_msg: >-
+          Refusing DNS teardown. Re-run with -e dns_teardown_i_understand=true
+          and --limit <your-test-host>.
+        quiet: true
+
+    - name: SAFETY - never tear down the production DNS host
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname != 'pi-dns'
+          - (ansible_host | default('')) != '192.168.20.10'
+        fail_msg: >-
+          Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }})
+          is the PRODUCTION DNS host. Point --limit at your test Pi instead.
+        quiet: true
+
+    - name: Run DNS role teardown
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: teardown

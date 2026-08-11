@@ -36,6 +36,15 @@ dns_unbound_port: 5335
 dns_unbound_threads: 1
 dns_unbound_cache_size: "4m"
 
+# Secondary local backup (Teleporter + FTL DB snapshot) for Syncthing.
+# Primary/off-site backup remains the restic coordinator.
+dns_backup_enabled: false
+dns_backup_retention: 14
+dns_backup_schedule_hour: "3"
+dns_backup_schedule_minute: "30"
+# dns_backup_dir:   MUST be set in host_vars - the Syncthing-shared folder
+# dns_backup_owner: MUST be set in host_vars - the user that runs Syncthing
+
 # Additional Services
 dns_additional_services: []
 

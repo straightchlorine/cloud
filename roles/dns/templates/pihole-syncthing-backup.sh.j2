@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Secondary LOCAL Pi-hole backup for Syncthing: writes a Teleporter config
+# archive + a consistent pihole-FTL.db snapshot into the Syncthing-shared dir.
+# Primary/off-site backup is the restic coordinator. Managed by Ansible
+# (roles/dns) - do not edit by hand.
+set -euo pipefail
+
+DEST="{{ dns_backup_dir }}"
+RETENTION="{{ dns_backup_retention }}"
+OWNER="{{ dns_backup_owner }}"
+FTL_DB="/etc/pihole/pihole-FTL.db"
+
+mkdir -p "$DEST"
+
+# 1. Teleporter config archive (timestamped) - the canonical restore unit.
+cd "$DEST"
+pihole -a -t
+
+# 2. Consistent snapshot of the long-term query DB using SQLite's online backup
+#    API (safe while FTL is writing; a plain cp can capture a torn write).
+if [ -f "$FTL_DB" ]; then
+  pihole-FTL sqlite3 "$FTL_DB" ".backup '${DEST}/pihole-FTL.db'"
+fi
+
+# 3. Retention: keep only the newest $RETENTION teleporter archives. The
+#    pihole-FTL.db is a single overwriting snapshot - use Syncthing file
+#    versioning if you want its history.
+ls -1t "$DEST"/pi-hole-*-teleporter_*.tar.gz 2>/dev/null \
+  | tail -n +"$((RETENTION + 1))" \
+  | xargs -r rm -f || true
+
+# 4. Hand ownership to the Syncthing user so it can read/replicate the files.
+chown -R "$OWNER" "$DEST"

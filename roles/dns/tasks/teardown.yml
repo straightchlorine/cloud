@@ -1,0 +1,105 @@
+---
+# Reverse the DNS role so the host can be re-tested from a near-clean state.
+# Order matters: restore the system resolver LAST so the box keeps working DNS
+# throughout. Intended for a disposable test Pi, never the production DNS host
+# (playbooks/dns-teardown.yml enforces that guard before including this).
+
+- name: Uninstall Pi-hole
+  # ponytail: `yes |` answers the uninstaller's confirm prompt; `removes:` makes
+  # it idempotent (skips when pihole is already gone). If a future Pi-hole build
+  # changes the prompt, switch to the repo's automated install/uninstall.sh.
+  ansible.builtin.shell:
+    cmd: yes | pihole uninstall
+  args:
+    removes: /usr/local/bin/pihole
+  become: true
+  failed_when: false
+
+- name: Remove Pi-hole cron jobs
+  ansible.builtin.cron:
+    name: "{{ item }}"
+    state: absent
+    user: root
+  loop:
+    - "Weekly system and Pi-hole updates"
+    - "Pi-hole Syncthing local backup"
+  become: true
+
+- name: Remove DNS role file artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/pihole-update.sh
+    - /usr/local/bin/pihole-syncthing-backup.sh
+    - /var/log/pihole-syncthing-backup.log
+    - /etc/logrotate.d/weekly-updates
+    - /var/log/weekly-updates.log
+    - /etc/apt/apt.conf.d/20auto-upgrades
+    - /etc/apt/apt.conf.d/50unattended-upgrades
+    - /etc/chrony/chrony.conf
+    - /etc/pihole.backup
+  become: true
+  # Note: the Syncthing-shared backup dir (dns_backup_dir) is left intact - it is
+  # replicated user data, not role state.
+
+- name: Stop and disable chrony
+  ansible.builtin.systemd:
+    name: chrony
+    state: stopped
+    enabled: false
+  become: true
+  failed_when: false
+
+- name: Purge packages the role installed
+  ansible.builtin.apt:
+    name:
+      - chrony
+      - unattended-upgrades
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Re-enable systemd-timesyncd (chrony had replaced it)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    state: started
+    enabled: true
+  become: true
+  failed_when: false
+
+# Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
+# this, so without it the host is left with no working DNS.
+- name: Restore systemd-resolved
+  become: true
+  block:
+    - name: Unmask systemd-resolved
+      ansible.builtin.command: systemctl unmask systemd-resolved
+      changed_when: false
+      failed_when: false
+
+    - name: Enable and start systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: started
+        enabled: true
+
+    - name: Point /etc/resolv.conf at the systemd-resolved stub
+      ansible.builtin.file:
+        src: /run/systemd/resolve/stub-resolv.conf
+        dest: /etc/resolv.conf
+        state: link
+        force: true
+
+    - name: Verify the host resolves DNS after teardown
+      ansible.builtin.command: getent hosts github.com
+      register: dns_teardown_resolve
+      changed_when: false
+      retries: 3
+      delay: 2
+      until: dns_teardown_resolve.rc == 0
+
+# ponytail: firewall rules the role/firewall added are left in place — harmless
+# residue on a test box, and reversing ufw risks locking out SSH. Run
+# `ufw --force reset` by hand if you want a truly bare firewall.

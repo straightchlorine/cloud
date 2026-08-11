@@ -8,6 +8,9 @@ firewall_policy_routed: deny
 # Default ports to allow (SSH is always included)
 firewall_allowed_ports: []
 
+# Host-specific extra ports, on top of common_firewall_ports
+firewall_ports: []
+
 # Additional firewall rules (more complex rules)
 firewall_rules: []
 

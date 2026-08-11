@@ -1,0 +1,55 @@
+---
+# Disposable clone of pi-dns.yml for testing the dns role end-to-end on
+# throwaway hardware. Delete this file and the pi-dns-test entry in
+# hosts.yml once you're done testing.
+
+# DNS server specific configuration - Pi-hole on Debian Bookworm
+dns_service: pihole
+dns_port: 53
+dns_interface: "{{ primary_ip }}"
+
+# Device Configuration
+device_type: rpi3b # adjust if your spare Pi is a different model
+
+# Pi-hole configuration
+dns_pihole_admin_password: "{{ vault_pihole_admin_password }}"
+dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
+# OPNsense unbound instance on this VLAN - no external resolvers.
+dns_pihole_dns_servers:
+  - "192.168.20.1"
+dns_pihole_interface: "{{ primary_interface }}"
+dns_pihole_ipv4_address: "{{ host_ip_cidr }}"
+dns_pihole_ipv6_address: ""
+dns_pihole_packages:
+  - curl
+  - ca-certificates
+  - dnsutils
+
+# Automatic updates configuration
+dns_auto_updates_enabled: true
+dns_auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
+dns_auto_updates_reboot_if_required: true
+
+# Firewall configuration for DNS services
+common_firewall_ports:
+  - {port: 22, comment: "SSH"}
+  - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
+  - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
+  - {port: 80, comment: "Pi-hole Web Interface"}
+  - {port: 123, comment: "NTP server", proto: "udp"}
+  - {port: 9100, comment: "Node Exporter"}
+  - {port: 9617, comment: "Pi-hole Exporter"}
+
+# Prometheus exporters configuration
+dns_pihole_exporter_enabled: true
+prometheus_role: "dns"
+
+# Local Syncthing backup left off (role default) - no point wiring up
+# Syncthing on a box you're about to tear down.
+
+# Off-site restic backup: required by validate.yml but disabled and pointed
+# at a placeholder repo so this disposable box can never write into pi-dns's
+# real Hetzner backup repository.
+restic_enabled: false
+restic_repository: "sftp:hetzner-storage:unused-dns-test-placeholder"
+restic_password: "unused-dns-test-placeholder"

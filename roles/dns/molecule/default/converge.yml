@@ -1,40 +1,23 @@
 ---
-- name: Converge - DNS Role (Pi-hole Prerequisites)
+- name: Converge - DNS role
   hosts: all
   vars:
-    timezone: UTC
-    common_packages:
-      - curl
-      - wget
-      - git
+    # Representative host_vars so the role's Pi-hole config template renders.
+    dns_pihole_interface: eth0
+    dns_pihole_ipv4_address: "192.168.20.10/24"
+    dns_pihole_ipv6_address: ""
+    dns_pihole_dns_servers:
+      - 9.9.9.9
+      - 149.112.112.112
+    vault_pihole_webpassword: molecule-test-password
   tasks:
-    - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 0
-      become: true
-
-    - name: Gather facts (network)
-      ansible.builtin.setup:
-        gather_subset: network
-
-    - name: Install DNS prerequisite packages
-      ansible.builtin.apt:
-        name: "{{ common_packages }}"
-        state: present
-      become: true
-
-    - name: Verify DNS packages installed
-      ansible.builtin.package_facts:
-        manager: apt
-
-    - name: Display DNS role configuration
-      ansible.builtin.debug:
-        msg: |
-          DNS Role Configuration:
-          - Role: dns
-          - Timezone: {{ timezone }}
-          - Packages installed: {{ common_packages | length }}
-
-          Note: Full DNS validation (Pi-hole specific) skipped in container test
-          (requires network access and external DNS services)
+    # Pi-hole's basic-install.sh cannot run in a container, so we exercise the
+    # part that IS container-testable and has historically broken: rendering the
+    # setupVars.conf template. This catches undefined/misnamed template vars
+    # (e.g. the pihole_ipv4_address -> dns_pihole_ipv4_address regression) that
+    # would otherwise silently write a blank IPV4_ADDRESS onto a real Pi.
+    - name: Render Pi-hole setupVars from the role template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"
+        dest: /tmp/setupVars.rendered
+        mode: "0600"

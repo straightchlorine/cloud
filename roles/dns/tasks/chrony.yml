@@ -3,7 +3,7 @@
 
 - name: Stop systemd-timesyncd service
   ansible.builtin.systemd:
-    name: Systemd-timesyncd
+    name: systemd-timesyncd
     state: stopped
     enabled: false
   become: true
@@ -12,7 +12,7 @@
 
 - name: Install chrony package
   ansible.builtin.apt:
-    name: Chrony
+    name: chrony
     state: present
   become: true
 
@@ -29,7 +29,7 @@
 
 - name: Enable and start chrony service
   ansible.builtin.systemd:
-    name: Chrony
+    name: chrony
     state: started
     enabled: true
   become: true

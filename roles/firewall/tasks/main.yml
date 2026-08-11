@@ -10,7 +10,7 @@
     name: common
     tasks_from: packages
   vars:
-    firewall_role_specific_packages:
+    role_specific_packages:  # noqa: var-naming[no-role-prefix]
       - ufw
 
 - name: Reset UFW to defaults
