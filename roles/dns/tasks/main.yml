@@ -1,15 +1,15 @@
 ---
 # DNS server setup tasks for Debian Bookworm on Raspberry Pi 3B
 
-- name: Run Pi-hole deployment validation
-  ansible.builtin.include_tasks: validate.yml
-  tags: [validation]
-
 - name: Gather network facts for dynamic configuration
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
   tags: [network, facts]
+
+- name: Run Pi-hole deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
 
 - name: Include common package management
   ansible.builtin.include_role:
