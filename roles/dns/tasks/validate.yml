@@ -17,9 +17,7 @@
       - vault_letsencrypt_email
       - dns_pihole_interface
       - dns_pihole_ipv4_address
-      - dns_pihole_ipv6_address
       - dns_upstream_servers
-      - firewall_ports
       - dns_ntp_server_enabled
       - restic_enabled
       - restic_repository
