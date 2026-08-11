@@ -41,7 +41,7 @@
   register: common_backup_path_check
   when:
     - validation_type in ['full', 'backup']
-    - backup_directories is defined
+    - common_backup_directories is defined
   loop: "{{ common_backup_directories }}"
   tags: [validation, backup_validation]
 
