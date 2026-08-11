@@ -24,6 +24,9 @@ dns_auto_updates_reboot_if_required: true
 
 # NTP server configuration
 ntp_server_enabled: true
+# OPNsense (192.168.20.1) already runs NTP - use it as the local, low-latency
+# upstream instead of hitting the public pool from every device.
+dns_ntp_upstream_server: "192.168.20.1"
 ntp_allowed_networks:
   - "10.0.0.0/8"
   - "192.168.0.0/16"

@@ -17,6 +17,7 @@
       - dns_pihole_interface
       - dns_pihole_dns_servers
       - dns_ntp_server_enabled
+      - dns_ntp_upstream_server
       - restic_enabled
       - restic_repository
       - restic_password

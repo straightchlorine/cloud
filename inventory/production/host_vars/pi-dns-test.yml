@@ -17,6 +17,9 @@ dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 dns_pihole_dns_servers:
   - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
+# OPNsense (192.168.20.1) already runs NTP - use it as the local, low-latency
+# upstream instead of hitting the public pool from every device.
+dns_ntp_upstream_server: "192.168.20.1"
 dns_pihole_packages:
   - curl
   - ca-certificates

@@ -56,6 +56,20 @@
     status_code: [200, 204]
   tags: [post_validation]
 
+- name: Verify gravity has an active blocklist
+  # A blank gravity.db (e.g. the default-blocklist download failed, or
+  # gravity was never rebuilt) makes Pi-hole resolve everything normally -
+  # check this directly instead of only inferring it from one test domain.
+  ansible.builtin.assert:
+    that:
+      - dns_pihole_api.json.gravity.domains_being_blocked | int > 0
+    fail_msg: >-
+      Gravity has 0 blocked domains (last update:
+      {{ dns_pihole_api.json.gravity.last_update | default('never') }}).
+      Run `pihole -g` on the host and check for download failures.
+    quiet: true
+  tags: [post_validation]
+
 - name: Verify Pi-hole blocks a known ad domain
   ansible.builtin.command: dig +short @{{ primary_ip }} doubleclick.net A
   register: dns_ad_block_test
@@ -90,6 +104,7 @@
       DNS Resolution: {{ 'Working' if dns_resolution_test.rc == 0 else 'Failed' }}
       Web Interface: {{ 'Accessible' if dns_pihole_web.status == 200 else 'Failed' }}
       API Response: {{ 'Working' if dns_pihole_api.status == 200 else 'Failed' }}
+      Gravity: {{ dns_pihole_api.json.gravity.domains_being_blocked }} domains blocked
       Ad Blocking: Active (doubleclick.net -> {{ dns_ad_block_test.stdout | trim | default('NXDOMAIN', true) }})
       NTP Service: {{ dns_ntp_status.status.ActiveState }}
 

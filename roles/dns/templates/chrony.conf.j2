@@ -2,13 +2,15 @@
 # Welcome to the chrony configuration file. See chrony.conf(5) for more
 # information about usable directives.
 
-# Use public NTP servers from pool.ntp.org
+# Local network NTP source (the VLAN router) - lower latency and no external
+# dependency for the common case. Preferred over the public pool below.
+server {{ dns_ntp_upstream_server }} iburst prefer
+
+# Public NTP servers as a fallback if the local source is unreachable.
 pool 2.debian.pool.ntp.org iburst maxsources 4
 pool 0.debian.pool.ntp.org iburst maxsources 1
 pool 1.debian.pool.ntp.org iburst maxsources 1
 pool 3.debian.pool.ntp.org iburst maxsources 2
-
-# Additional time sources for redundancy
 server time.cloudflare.com iburst
 server time.google.com iburst
 
