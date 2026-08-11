@@ -200,10 +200,6 @@
 - name: Configure chrony firewall rule and display status
   ansible.builtin.include_tasks: chrony.yml
 
-- name: Install additional monitoring services
-  ansible.builtin.include_tasks: monitoring.yml
-  when: dns_additional_services | length > 0
-
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
   tags: [post_validation]

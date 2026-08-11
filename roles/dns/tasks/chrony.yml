@@ -9,13 +9,11 @@
     rule: allow
     port: "123"
     proto: udp
-    src: "{{ primary_network_cidr }}"
-    comment: "Allow NTP (chrony) from VLAN only"
+    src: "{{ item }}"
+    comment: "Allow NTP (chrony) from VLAN"
+  loop: "{{ dns_ntp_allowed_networks }}"
   become: true
-
-- name: Wait for chrony to sync
-  ansible.builtin.wait_for:
-    timeout: 30
+  when: dns_ntp_server_enabled
 
 - name: Check chrony sources
   ansible.builtin.command: chronyc sources

@@ -1,14 +1,10 @@
 ---
 # DNS server specific configuration - Pi-hole on Debian Bookworm
-dns_service: pihole
-dns_port: 53
-dns_interface: "{{ primary_ip }}"
 
 # Device Configuration
 device_type: rpi3b
 
 # Pi-hole configuration
-dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 dns_pihole_dns_servers:
   - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
@@ -19,18 +15,16 @@ dns_pihole_packages:
 
 # Automatic updates configuration
 dns_auto_updates_enabled: true
-dns_auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
 dns_auto_updates_reboot_if_required: true
 
-# NTP server configuration
-ntp_server_enabled: true
+# NTP: chrony always syncs the box's own clock. This host also serves NTP to
+# the rest of the VLAN (dns_ntp_server_enabled) - see chrony.conf.j2.
+dns_ntp_server_enabled: true
 # OPNsense (192.168.20.1) already runs NTP - use it as the local, low-latency
 # upstream instead of hitting the public pool from every device.
 dns_ntp_upstream_server: "192.168.20.1"
-ntp_allowed_networks:
-  - "10.0.0.0/8"
-  - "192.168.0.0/16"
-  - "172.16.0.0/12"
+dns_ntp_allowed_networks:
+  - "{{ primary_network_cidr }}"
 
 # Firewall configuration for DNS services
 common_firewall_ports:
@@ -41,22 +35,6 @@ common_firewall_ports:
   - {port: 123, comment: "NTP server", proto: "udp"}
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
-  - {port: 19999, comment: "Netdata"}
-
-# Additional services for Pi 3B
-additional_services:
-  - name: Netdata
-    description: "System monitoring"
-    port: 19999
-  - name: Prometheus-node-exporter
-    description: "Metrics collection"
-    port: 9100
-  - name: Chrony
-    description: "NTP server"
-    port: 123
-  - name: Pihole-exporter
-    description: "Pi-hole metrics exporter"
-    port: 9617
 
 # Prometheus exporters configuration
 prometheus_exporters_pihole_exporter_enabled: true

@@ -31,11 +31,15 @@ rtcsync
 # the system clock.
 #minsources 2
 
-# Allow NTP client access from local network
-allow {{ primary_network_cidr }}
+{% if dns_ntp_server_enabled %}
+# Allow NTP client access from these networks (dns_ntp_server_enabled: true)
+{% for network in dns_ntp_allowed_networks %}
+allow {{ network }}
+{% endfor %}
 
 # Serve time even if not synchronized to a time source.
 local stratum 8
+{% endif %}
 
 # Specify file containing keys for NTP authentication.
 keyfile /etc/chrony/chrony.keys

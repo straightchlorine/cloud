@@ -30,6 +30,13 @@
     required_services: []  # Pi-hole doesn't use Docker Compose
   tags: [validation]
 
+- name: Validate NTP allowed networks are set when serving NTP to the VLAN
+  ansible.builtin.fail:
+    msg: "dns_ntp_allowed_networks must be non-empty when dns_ntp_server_enabled is true"
+  when:
+    - dns_ntp_server_enabled
+    - dns_ntp_allowed_networks | length == 0
+
 - name: Check network interface exists
   ansible.builtin.setup:
     filter: ansible_interfaces

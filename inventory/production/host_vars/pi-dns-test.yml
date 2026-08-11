@@ -3,16 +3,10 @@
 # throwaway hardware. Delete this file and the pi-dns-test entry in
 # hosts.yml once you're done testing.
 
-# DNS server specific configuration - Pi-hole on Debian Bookworm
-dns_service: pihole
-dns_port: 53
-dns_interface: "{{ primary_ip }}"
-
 # Device Configuration
 device_type: rpi3b # adjust if your spare Pi is a different model
 
 # Pi-hole configuration
-dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 # OPNsense unbound instance on this VLAN - no external resolvers.
 dns_pihole_dns_servers:
   - "192.168.20.1"
@@ -27,7 +21,6 @@ dns_pihole_packages:
 
 # Automatic updates configuration
 dns_auto_updates_enabled: true
-dns_auto_updates_schedule: "0 2 * * 1" # Monday 2 AM
 dns_auto_updates_reboot_if_required: true
 
 # Firewall configuration for DNS services
@@ -47,6 +40,9 @@ prometheus_role: "dns"
 
 # Local Syncthing backup left off (role default) - no point wiring up
 # Syncthing on a box you're about to tear down.
+
+# NTP serving to the VLAN left off (role default: dns_ntp_server_enabled
+# false) - a disposable test box shouldn't become something else depends on.
 
 # Off-site restic backup: required by validate.yml but disabled and pointed
 # at a placeholder repo so this disposable box can never write into pi-dns's

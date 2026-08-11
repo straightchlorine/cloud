@@ -85,14 +85,6 @@
   register: dns_ntp_status
   tags: [post_validation]
 
-- name: Verify monitoring services if enabled
-  ansible.builtin.wait_for:
-    port: "{{ item.port }}"
-    timeout: 30
-  loop: "{{ dns_additional_services }}"
-  when: dns_additional_services | length > 0
-  tags: [post_validation]
-
 - name: Display DNS validation results
   ansible.builtin.debug:
     msg: |
