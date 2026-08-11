@@ -19,7 +19,7 @@
     return_content: true
   register: prom_exp_pihole_health_check
   failed_when: false
-  when: pihole_exporter_enabled
+  when: prometheus_exporters_pihole_exporter_enabled
 
 - name: Check Docker metrics endpoint
   ansible.builtin.uri:
@@ -66,7 +66,7 @@
       metrics_count=$((metrics_count + node_metrics))
     fi
     {% endif %}
-    {% if pihole_exporter_enabled %}
+    {% if prometheus_exporters_pihole_exporter_enabled %}
     PIHOLE_URL="http://127.0.0.1:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     if curl -s "$PIHOLE_URL" | grep -c '^pihole_' >/dev/null 2>&1; then
       pihole_metrics=$(curl -s "$PIHOLE_URL" \
@@ -91,7 +91,7 @@
       {% endif %}
       {% endif %}
 
-      {% if pihole_exporter_enabled %}
+      {% if prometheus_exporters_pihole_exporter_enabled %}
       Pi-hole Exporter ({{ prometheus_exporters_pihole_exporter_port }}):
       common_Status: {{ '[OK] Healthy' if prom_exp_pihole_health_check.status == 200 else '[FAIL] Unhealthy' }}
       {% if prom_exp_pihole_health_check.status == 200 %}
@@ -117,7 +117,7 @@
       Total metrics available: {{ total_metrics_count.stdout }}
       Health check timeout: {{ prometheus_exporters_health_check_timeout }}s
 
-      {% if prom_exp_node_health_check.status != 200 or (pihole_exporter_enabled and
+      {% if prom_exp_node_health_check.status != 200 or (prometheus_exporters_pihole_exporter_enabled and
             prom_exp_pihole_health_check.status != 200) or (docker_exporter_enabled and
             prom_exp_docker_health_check.status != 200) %}
       [WARN]  Some exporters are not responding. Check service status and logs.

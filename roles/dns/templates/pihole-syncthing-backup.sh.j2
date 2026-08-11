@@ -3,18 +3,35 @@
 # archive + a consistent pihole-FTL.db snapshot into the Syncthing-shared dir.
 # Primary/off-site backup is the restic coordinator. Managed by Ansible
 # (roles/dns) - do not edit by hand.
+#
+# Pi-hole v6 dropped the `pihole -a -t` Teleporter CLI export; it is now
+# REST-API-only (GET /api/teleporter with a session sid from POST /api/auth).
+# This file embeds the web password, so it is root-only (mode 0700).
 set -euo pipefail
 
 DEST="{{ dns_backup_dir }}"
 RETENTION="{{ dns_backup_retention }}"
 OWNER="{{ dns_backup_owner }}"
 FTL_DB="/etc/pihole/pihole-FTL.db"
+WEBPASSWORD="{{ vault_pihole_webpassword }}"
 
 mkdir -p "$DEST"
 
 # 1. Teleporter config archive (timestamped) - the canonical restore unit.
-cd "$DEST"
-pihole -a -t
+SID=$(jq -n --arg pw "$WEBPASSWORD" '{password:$pw}' \
+  | curl -s -X POST http://127.0.0.1/api/auth --data @- \
+  | jq -r '.session.sid')
+
+if [ -z "$SID" ] || [ "$SID" = "null" ]; then
+  echo "Pi-hole Teleporter backup failed: could not authenticate against the API" >&2
+  exit 1
+fi
+
+curl -s -H "X-FTL-SID: $SID" \
+  -o "$DEST/pi-hole_$(hostname)_teleporter_$(date +%Y-%m-%d_%H-%M-%S).zip" \
+  http://127.0.0.1/api/teleporter
+
+curl -s -X DELETE -H "X-FTL-SID: $SID" http://127.0.0.1/api/auth >/dev/null
 
 # 2. Consistent snapshot of the long-term query DB using SQLite's online backup
 #    API (safe while FTL is writing; a plain cp can capture a torn write).
@@ -25,7 +42,7 @@ fi
 # 3. Retention: keep only the newest $RETENTION teleporter archives. The
 #    pihole-FTL.db is a single overwriting snapshot - use Syncthing file
 #    versioning if you want its history.
-ls -1t "$DEST"/pi-hole-*-teleporter_*.tar.gz 2>/dev/null \
+ls -1t "$DEST"/pi-hole_*_teleporter_*.zip 2>/dev/null \
   | tail -n +"$((RETENTION + 1))" \
   | xargs -r rm -f || true
 

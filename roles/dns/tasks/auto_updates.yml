@@ -36,10 +36,10 @@
 
 - name: Create weekly update cron job
   ansible.builtin.cron:
-    name: "Weekly system and Pi-hole updates"
-    minute: "0"
-    hour: "2"
-    weekday: "1"
+    name: "Weekly Pi-hole updates"
+    minute: "{{ dns_auto_update_time.split(':')[1] }}"
+    hour: "{{ dns_auto_update_time.split(':')[0] }}"
+    weekday: "{{ dns_auto_update_day[:3] | lower }}"
     job: "/usr/local/bin/pihole-update.sh >> /var/log/weekly-updates.log 2>&1"
     user: root
   become: true

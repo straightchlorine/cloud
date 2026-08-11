@@ -69,7 +69,7 @@
 
 - name: Validate Pi-hole Exporter dependencies
   when:
-    - pihole_exporter_enabled
+    - prometheus_exporters_pihole_exporter_enabled
     - "'dns' in group_names"
   tags: [validation]
   block:
@@ -119,7 +119,7 @@
       prometheus_exporters_pihole_exporter_pihole_hostname must be
       defined in host_vars when pihole_exporter is enabled
   when:
-    - pihole_exporter_enabled
+    - prometheus_exporters_pihole_exporter_enabled
     - prometheus_exporters_pihole_exporter_pihole_hostname is not defined
   tags: [validation]
 
@@ -170,7 +170,7 @@
       - Architecture: {{ ansible_architecture }} → {{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
       - Enabled exporters: >-
           {{ [('node' if node_exporter_enabled else ''),
-          ('pihole' if pihole_exporter_enabled else ''),
+          ('pihole' if prometheus_exporters_pihole_exporter_enabled else ''),
           ('docker' if docker_exporter_enabled else '')] | select | join(', ') }}
       - Base directory: {{ prometheus_exporters_base_dir }}
       - Port validation: Completed

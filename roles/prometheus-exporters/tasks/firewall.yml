@@ -29,7 +29,7 @@
       {% if node_exporter_enabled %}
       - Node Exporter: Port {{ prometheus_exporters_node_exporter_port }} ({{ prometheus_exporters_firewall_source }})
       {% endif %}
-      {% if pihole_exporter_enabled %}
+      {% if prometheus_exporters_pihole_exporter_enabled %}
       - Pi-hole Exporter: Port {{ prometheus_exporters_pihole_exporter_port }}
         ({{ prometheus_exporters_firewall_source }})
       {% endif %}

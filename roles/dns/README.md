@@ -87,7 +87,7 @@ The role provides the
 [recommended](https://docs.pi-hole.net/main/basic-install/) way of installation:
 
 ```bash
-git clone --depth 1 --branch v5.18.3 \
+git clone --depth 1 --branch v6.4.3 \
   https://github.com/pi-hole/pi-hole.git
 cd pi-hole/automated\ install/
 bash basic-install.sh --unattended
@@ -98,9 +98,9 @@ bash basic-install.sh --unattended
 #### Security Configuration
 
 ```yaml
-pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-pihole_version: "v6.2"
-pihole_verify_commit: true
+dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
+dns_pihole_version: "v6.4.3"
+dns_pihole_verify_commit: true
 ```
 
 #### Required Variables (must be in vault)

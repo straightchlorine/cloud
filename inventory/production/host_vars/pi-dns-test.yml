@@ -17,8 +17,6 @@ dns_pihole_webpassword: "{{ vault_pihole_webpassword }}"
 dns_pihole_dns_servers:
   - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
-dns_pihole_ipv4_address: "{{ host_ip_cidr }}"
-dns_pihole_ipv6_address: ""
 dns_pihole_packages:
   - curl
   - ca-certificates
@@ -40,7 +38,8 @@ common_firewall_ports:
   - {port: 9617, comment: "Pi-hole Exporter"}
 
 # Prometheus exporters configuration
-dns_pihole_exporter_enabled: true
+prometheus_exporters_pihole_exporter_enabled: true
+prometheus_exporters_pihole_exporter_pihole_hostname: "{{ primary_ip }}"
 prometheus_role: "dns"
 
 # Local Syncthing backup left off (role default) - no point wiring up

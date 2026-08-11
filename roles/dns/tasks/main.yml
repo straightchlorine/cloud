@@ -102,12 +102,17 @@
         bash basic-install.sh --unattended
       become: true
       args:
-        creates: /usr/local/bin/pihole
+        # /usr/local/bin/pihole is installed early (installScripts()), long
+        # before FTL, gravity and the pihole.toml migration finish - using it
+        # as the completion marker would make a retry after a partial failure
+        # skip the installer entirely. gravity.db is written by runGravity(),
+        # one of the last steps, so it only exists once install truly succeeded.
+        creates: /etc/pihole/gravity.db
       notify: Restart pihole-FTL
 
     - name: Set Pi-hole web admin password
       ansible.builtin.shell: |
-        pihole -a -p "{{ vault_pihole_webpassword }}"
+        pihole setpassword "{{ vault_pihole_webpassword }}"
       become: true
       when: vault_pihole_webpassword is defined
       no_log: true
@@ -129,11 +134,13 @@
       become: true
       ignore_errors: true
 
-    - name: Restore Pi-hole configuration from backup if available
+    - name: Restore Pi-hole configuration from backup, or clear a failed fresh install
       ansible.builtin.shell: |
         if [ -d "/etc/pihole.backup" ]; then
           rm -rf /etc/pihole
           mv /etc/pihole.backup /etc/pihole
+        else
+          rm -rf /etc/pihole
         fi
       become: true
       ignore_errors: true

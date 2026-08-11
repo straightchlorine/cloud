@@ -6,13 +6,6 @@
     enabled: true
   become: true
 
-- name: Restart pihole-exporter
-  ansible.builtin.systemd:
-    name: pihole-exporter
-    state: restarted
-    enabled: true
-  become: true
-
 - name: Restart chrony
   ansible.builtin.systemd:
     name: chrony

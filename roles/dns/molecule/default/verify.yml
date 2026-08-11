@@ -14,9 +14,7 @@
     - name: Assert Pi-hole setupVars rendered with populated values
       ansible.builtin.assert:
         that:
-          - "'IPV4_ADDRESS=192.168.20.10/24' in dns_setupvars_content"
           - "'PIHOLE_INTERFACE=eth0' in dns_setupvars_content"
-          - "'WEBPASSWORD=molecule-test-password' in dns_setupvars_content"
           - "'PIHOLE_DNS_1=9.9.9.9' in dns_setupvars_content"
         fail_msg: "setupVars.conf did not render correctly:\n{{ dns_setupvars_content }}"
         success_msg: "[OK] Pi-hole setupVars template renders with populated values"

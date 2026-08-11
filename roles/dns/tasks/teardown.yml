@@ -21,7 +21,7 @@
     state: absent
     user: root
   loop:
-    - "Weekly system and Pi-hole updates"
+    - "Weekly Pi-hole updates"
     - "Pi-hole Syncthing local backup"
   become: true
 

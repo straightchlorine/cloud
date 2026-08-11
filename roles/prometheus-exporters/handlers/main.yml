@@ -14,7 +14,7 @@
     name: Pihole-exporter
     state: restarted
   become: true
-  when: pihole_exporter_enabled
+  when: prometheus_exporters_pihole_exporter_enabled
 
 - name: Restart pi-hardware-metrics
   ansible.builtin.systemd:

@@ -28,7 +28,7 @@
     dest: /usr/local/bin/pihole-syncthing-backup.sh
     owner: root
     group: root
-    mode: "0755"
+    mode: "0700"  # embeds vault_pihole_webpassword
   become: true
 
 - name: Schedule the Pi-hole Syncthing backup

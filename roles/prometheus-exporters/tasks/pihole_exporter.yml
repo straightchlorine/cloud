@@ -77,7 +77,7 @@
   ansible.builtin.uri:
     url: >-
       http://{{ prometheus_exporters_pihole_exporter_pihole_hostname
-      }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/admin/api.php
+      }}:{{ prometheus_exporters_pihole_exporter_pihole_port }}/api/info/login
     method: GET
     timeout: 5
   register: prom_exp_pihole_api_test

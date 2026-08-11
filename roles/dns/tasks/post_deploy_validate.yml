@@ -25,12 +25,35 @@
   register: dns_pihole_web
   tags: [post_validation]
 
+- name: Authenticate against the Pi-hole v6 REST API
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}/api/auth"
+    method: POST
+    body_format: json
+    body:
+      password: "{{ vault_pihole_webpassword }}"
+    status_code: 200
+  register: dns_pihole_auth
+  no_log: true
+  tags: [post_validation]
+
 - name: Test Pi-hole API response
   ansible.builtin.uri:
-    url: "http://{{ primary_ip }}/admin/api.php?summary"
+    url: "http://{{ primary_ip }}/api/stats/summary"
     method: GET
+    headers:
+      X-FTL-SID: "{{ dns_pihole_auth.json.session.sid }}"
     timeout: 10
   register: dns_pihole_api
+  tags: [post_validation]
+
+- name: Log out of the Pi-hole v6 REST API session
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}/api/auth"
+    method: DELETE
+    headers:
+      X-FTL-SID: "{{ dns_pihole_auth.json.session.sid }}"
+    status_code: [200, 204]
   tags: [post_validation]
 
 - name: Verify Pi-hole blocks a known ad domain

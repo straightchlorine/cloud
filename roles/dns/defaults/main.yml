@@ -3,7 +3,7 @@
 
 # Pi-hole Installation Security
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-dns_pihole_version: "v5.18.3"  # Pin to verified release version
+dns_pihole_version: "v6.4.3"  # Pin to verified release version
 dns_pihole_verify_commit: true
 
 # Pi-hole Configuration
@@ -29,6 +29,7 @@ dns_auto_update_day: "Monday"
 
 # Unattended Upgrades
 dns_auto_updates_reboot_if_required: false
+dns_auto_updates_reboot_time: "03:00"
 
 # Unbound Configuration
 dns_unbound_interface: "127.0.0.1"
@@ -48,14 +49,7 @@ dns_backup_schedule_minute: "30"
 # Additional Services
 dns_additional_services: []
 
-# Pi-hole Exporter Configuration
 dns_ntp_server_enabled: false
 
-dns_pihole_exporter_enabled: false
-dns_pihole_exporter_user: "pihole-exporter"
-dns_pihole_exporter_install_dir: "/opt/pihole-exporter"
-dns_pihole_exporter_port: 9617
-dns_pihole_exporter_version: "0.3.0"
-dns_pihole_exporter_binary_url: >-
-  https://github.com/eko/pihole-exporter/releases/download/
-  v{{ dns_pihole_exporter_version }}/pihole_exporter-linux-arm64
+# Pi-hole metrics are exported by the prometheus-exporters role
+# (prometheus_exporters_pihole_exporter_enabled), not by this role.

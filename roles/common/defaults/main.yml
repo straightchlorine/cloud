@@ -13,6 +13,7 @@ common_packages:
   - git
   - htop
   - vim
+  - tmux
   - ufw
   - fail2ban
   - logrotate
