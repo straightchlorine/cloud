@@ -4,7 +4,7 @@
 # refuses the production DNS host.
 #
 #   ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
-#     --limit <your-test-host> -e dns_teardown_i_understand=true
+#     --limit <your-test-host> -e dns_teardown_confirm=true
 - name: Tear down the DNS role for repeatable testing
   hosts: dns
   become: true
@@ -13,9 +13,9 @@
     - name: SAFETY - require explicit confirmation
       ansible.builtin.assert:
         that:
-          - dns_teardown_i_understand | default(false) | bool
+          - dns_teardown_confirm | default(false) | bool
         fail_msg: >-
-          Refusing DNS teardown. Re-run with -e dns_teardown_i_understand=true
+          Refusing DNS teardown. Re-run with -e dns_teardown_confirm=true
           and --limit <your-test-host>.
         quiet: true
 
