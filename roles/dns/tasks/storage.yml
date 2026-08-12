@@ -42,7 +42,7 @@
       # Only reached with dns_optional_drive_format explicitly true. Needed
       # because the "whole disk" case includes stale/multi-partition tables
       # (e.g. a recycled drive) - wipefs guarantees a truly blank device for
-      # parted below, rather than trying to reconcile with leftover
+      # sfdisk below, rather than trying to reconcile with leftover
       # partitions that aren't in use but are still on the disk.
       ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
       become: true
@@ -52,16 +52,40 @@
         - common_optional_drive_is_whole_disk
 
     - name: Create a single partition spanning the whole disk
-      community.general.parted:
-        device: "{{ common_optional_drive_device }}"
-        label: gpt
-        number: 1
-        state: present
-        part_end: "100%"
+      # sfdisk over community.general.parted: no extra package needed
+      # (util-linux is Essential:yes on Debian; parted is not installed by
+      # default). "type=L" = a plain Linux filesystem partition; omitting
+      # size makes it span the rest of the disk.
+      ansible.builtin.command:
+        cmd: "sfdisk {{ common_optional_drive_device }}"
+        stdin: "type=L"
       become: true
+      changed_when: true
       when:
         - not common_optional_drive_has_filesystem
         - common_optional_drive_is_whole_disk
+
+    - name: Wait for the kernel to expose the new partition device
+      # sfdisk creating a partition doesn't guarantee the new /dev/sdaN node
+      # exists immediately - USB-attached drives on a Pi are a known-flaky
+      # case for this. partprobe forces a re-read; the stat loop then waits
+      # for the device file itself before formatting.
+      when:
+        - not common_optional_drive_has_filesystem
+        - common_optional_drive_is_whole_disk
+      block:
+        - name: Force the kernel to re-read the partition table
+          ansible.builtin.command: "partprobe {{ common_optional_drive_device }}"
+          become: true
+          changed_when: false
+
+        - name: Wait for the partition device to appear
+          ansible.builtin.stat:
+            path: "{{ common_optional_drive_device }}1"
+          register: dns_optional_drive_new_partition
+          until: dns_optional_drive_new_partition.stat.exists
+          retries: 10
+          delay: 1
 
     - name: Determine the partition to format and mount
       # '1' only applies once we've just created a fresh partition above

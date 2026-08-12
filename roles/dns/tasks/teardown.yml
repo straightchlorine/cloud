@@ -155,9 +155,7 @@
       until: dns_teardown_resolve.rc == 0
 
 # Reverse storage.yml's journald relocation (real role state that would
-# confuse a retest); the drive mount itself is left in place, same reasoning
-# as the firewall rules below - harmless residue, and unmounting it earns us
-# nothing since we never format/wipe it on teardown either.
+# confuse a retest).
 - name: Stop systemd-journald before reverting storage relocation
   ansible.builtin.systemd:
     name: systemd-journald
@@ -186,6 +184,31 @@
     state: started
   become: true
   failed_when: false
+
+# The optional-drive mount is also unmounted and wiped, unlike the firewall
+# rules below: detect_optional_drive.yml treats anything already mounted as
+# "in use" and skips it entirely, so a left-mounted drive can never be
+# re-exercised by the next test run - it would silently stop testing the
+# detect/wipe/repartition/format path at all.
+- name: Find what's mounted at the optional drive path (if anything)
+  ansible.builtin.set_fact:
+    dns_optional_drive_mounted_source: >-
+      {{ (ansible_mounts | selectattr('mount', 'equalto', dns_optional_drive_mount_path)
+      | list | first).device | default('') }}
+
+- name: Unmount the optional attached drive if mounted
+  ansible.posix.mount:
+    path: "{{ dns_optional_drive_mount_path }}"
+    state: absent
+  become: true
+  failed_when: false
+
+- name: Wipe the drive's filesystem signature so the next run re-tests detection from scratch
+  ansible.builtin.command: "wipefs -a {{ dns_optional_drive_mounted_source }}"
+  become: true
+  changed_when: true
+  failed_when: false
+  when: dns_optional_drive_mounted_source | length > 0
 
 # ponytail: firewall rules the role/firewall added are left in place — harmless
 # residue on a test box, and reversing ufw risks locking out SSH. Run
