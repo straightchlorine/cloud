@@ -1,6 +1,8 @@
 ---
 # Non-fatal detection of an unmounted, non-boot drive (e.g. a USB SSD that
-# may or may not be plugged in). Never fails, never mounts, never formats -
+# may or may not be plugged in). Only considers real disks/partitions -
+# excludes loop/rom/zram/etc devices, which lsblk also reports as unmounted
+# but aren't attachable storage. Never fails, never mounts, never formats -
 # it only sets facts for the caller to act on:
 #   common_optional_drive_present        - bool
 #   common_optional_drive_device         - "/dev/sda1" or "" if none found
@@ -25,7 +27,9 @@
                   yield dev
 
       candidates = [d for d in leaves(data['blockdevices'])
-                    if not d['name'].startswith('mmcblk') and not d.get('mountpoint')]
+                    if d.get('type') in ('disk', 'part')
+                    and not d['name'].startswith('mmcblk')
+                    and not d.get('mountpoint')]
       print(json.dumps(candidates[0] if candidates else {}))
       PYEOF
   changed_when: false
