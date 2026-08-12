@@ -9,10 +9,16 @@
   when: prometheus_exporters_enabled
 
 - name: Include Node Exporter setup
+  # Also tagged with every host-specific play tag in site.yml: node_exporter
+  # runs on every host, but this task lives in the fleet-wide "Configure all
+  # hosts" play, which only carries [monitoring, prometheus, exporters] by
+  # default - without this, `--tags dns` (or automation/music/backup) never
+  # reaches it, so it silently never gets installed on a --tags-scoped run.
   ansible.builtin.include_tasks: node_exporter.yml
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_node_exporter_enabled
+  tags: [dns, automation, music, monitoring, backup]
 
 - name: Include Pi hardware metrics setup
   ansible.builtin.include_tasks: pi_hardware_metrics.yml
@@ -22,11 +28,16 @@
     - ansible_architecture in ['armv7l', 'aarch64']
 
 - name: Include Pi-hole Exporter setup
+  # Also tagged dns: this task lives in the fleet-wide "Configure all hosts"
+  # play (site.yml), which only carries [monitoring, prometheus, exporters]
+  # by default - without this, `ansible-playbook site.yml --tags dns` never
+  # reaches it at all, so the exporter silently never gets installed.
   ansible.builtin.include_tasks: pihole_exporter.yml
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_pihole_exporter_enabled
     - "'dns' in group_names"
+  tags: [dns]
 
 - name: Include Docker Exporter setup
   ansible.builtin.include_tasks: docker_exporter.yml
