@@ -44,4 +44,5 @@
     common_optional_drive_present: "{{ 'name' in common_optional_drive }}"
     common_optional_drive_device: >-
       {{ '/dev/' + common_optional_drive.name if 'name' in common_optional_drive else '' }}
-    common_optional_drive_has_filesystem: "{{ (common_optional_drive.fstype | default('')) | length > 0 }}"
+    common_optional_drive_has_filesystem: >-
+      {{ (common_optional_drive.fstype | default('', true)) | length > 0 }}
