@@ -24,21 +24,60 @@
 - name: Use the optional attached drive
   when: common_optional_drive_present
   block:
-    - name: Refuse to use an unformatted drive unless explicitly allowed
+    - name: Refuse to use an unformatted/unpartitioned drive unless explicitly allowed
       ansible.builtin.fail:
         msg: >-
-          {{ common_optional_drive_device }} has no filesystem. Format it
-          yourself, or set dns_optional_drive_format: true in host_vars to
-          let this role format it as {{ dns_optional_drive_filesystem }}
-          (DESTRUCTIVE - wipes the drive).
+          {{ common_optional_drive_device }} has no usable filesystem{{
+          " (it's a bare disk, or its partition table is empty/stale/multi-partition with nothing in use)"
+          if common_optional_drive_is_whole_disk else '' }}.
+          Format it yourself, or set dns_optional_drive_format: true in
+          host_vars to let this role wipe {{ common_optional_drive_device }}
+          {{ 'entirely (any existing partition table included) ' if common_optional_drive_is_whole_disk else '' }}
+          and format it as {{ dns_optional_drive_filesystem }} (DESTRUCTIVE).
       when:
         - not common_optional_drive_has_filesystem
         - not dns_optional_drive_format
 
+    - name: Wipe any existing partition table before repartitioning
+      # Only reached with dns_optional_drive_format explicitly true. Needed
+      # because the "whole disk" case includes stale/multi-partition tables
+      # (e.g. a recycled drive) - wipefs guarantees a truly blank device for
+      # parted below, rather than trying to reconcile with leftover
+      # partitions that aren't in use but are still on the disk.
+      ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
+      become: true
+      changed_when: true
+      when:
+        - not common_optional_drive_has_filesystem
+        - common_optional_drive_is_whole_disk
+
+    - name: Create a single partition spanning the whole disk
+      community.general.parted:
+        device: "{{ common_optional_drive_device }}"
+        label: gpt
+        number: 1
+        state: present
+        part_end: "100%"
+      become: true
+      when:
+        - not common_optional_drive_has_filesystem
+        - common_optional_drive_is_whole_disk
+
+    - name: Determine the partition to format and mount
+      # '1' only applies once we've just created a fresh partition above
+      # (whole disk, no filesystem yet). A whole disk that already has a
+      # filesystem was formatted directly with no partition table at all -
+      # the target there is the disk device itself, not device+"1".
+      ansible.builtin.set_fact:
+        dns_optional_drive_target: >-
+          {{ (common_optional_drive_device ~ '1')
+          if (common_optional_drive_is_whole_disk and not common_optional_drive_has_filesystem)
+          else common_optional_drive_device }}
+
     - name: Format the optional drive (only runs when explicitly allowed above)
       community.general.filesystem:
         fstype: "{{ dns_optional_drive_filesystem }}"
-        dev: "{{ common_optional_drive_device }}"
+        dev: "{{ dns_optional_drive_target }}"
       become: true
       when: not common_optional_drive_has_filesystem
 
@@ -52,7 +91,7 @@
     - name: Mount the optional drive
       ansible.posix.mount:
         path: "{{ dns_optional_drive_mount_path }}"
-        src: "{{ common_optional_drive_device }}"
+        src: "{{ dns_optional_drive_target }}"
         fstype: "{{ dns_optional_drive_filesystem }}"
         opts: "defaults,noatime,errors=remount-ro"
         state: mounted

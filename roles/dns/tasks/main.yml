@@ -103,6 +103,14 @@
       become: true
       no_log: true
 
+    - name: Rebuild gravity now that FTL and DNS resolution have settled
+      # basic-install.sh's own runGravity() fires immediately after FTL's
+      # first restart, sometimes before DNS resolution has settled - that
+      # can silently produce an empty blocklist even though the installer
+      # reports success. Rerunning it here, once, has reliably fixed it.
+      ansible.builtin.command: pihole -g
+      become: true
+
     - name: Clean up Pi-hole repository and rollback backup after success
       ansible.builtin.file:
         path: "{{ item }}"

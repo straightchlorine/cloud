@@ -1,14 +1,16 @@
 ---
-# Non-fatal detection of an unmounted, non-boot drive (e.g. a USB SSD that
-# may or may not be plugged in). Only considers real disks/partitions -
+# Non-fatal detection of an unused, non-boot drive (e.g. a USB SSD that may
+# or may not be plugged in - and may or may not already have a partition
+# table on it from a previous life). Only considers real disks/partitions -
 # excludes loop/rom/zram/etc devices, which lsblk also reports as unmounted
 # but aren't attachable storage. Never fails, never mounts, never formats -
 # it only sets facts for the caller to act on:
 #   common_optional_drive_present        - bool
-#   common_optional_drive_device         - "/dev/sda1" or "" if none found
+#   common_optional_drive_device         - "/dev/sda" or "/dev/sda1" ("" if none found)
+#   common_optional_drive_is_whole_disk  - bool (device is a bare disk, not a partition)
 #   common_optional_drive_has_filesystem - bool (false = needs formatting)
 
-- name: Detect an unmounted, non-boot drive
+- name: Detect an unused, non-boot drive
   ansible.builtin.shell:
     cmd: |
       python3 <<'PYEOF'
@@ -17,20 +19,37 @@
       data = json.loads(subprocess.check_output(
           ['lsblk', '-J', '-o', 'NAME,TYPE,MOUNTPOINT,FSTYPE']))
 
-      def leaves(devices):
-          # A partitioned disk contributes its partitions; an unpartitioned
-          # disk contributes itself.
-          for dev in devices:
-              if dev.get('children'):
-                  yield from leaves(dev['children'])
-              else:
-                  yield dev
+      def in_use(dev):
+          # A disk counts as in use if it, or any partition on it, is
+          # mounted anywhere - including a stale multi-partition table where
+          # only one partition happens to be mounted.
+          if dev.get('mountpoint'):
+              return True
+          return any(in_use(child) for child in dev.get('children', []))
 
-      candidates = [d for d in leaves(data['blockdevices'])
-                    if d.get('type') in ('disk', 'part')
-                    and not d['name'].startswith('mmcblk')
-                    and not d.get('mountpoint')]
-      print(json.dumps(candidates[0] if candidates else {}))
+      candidate = {}
+      for dev in data['blockdevices']:
+          if dev.get('type') != 'disk' or dev['name'].startswith('mmcblk'):
+              continue
+          if in_use(dev):
+              continue
+
+          children = dev.get('children', [])
+          if len(children) == 1 and children[0].get('fstype'):
+              # Exactly one partition, already formatted - use it as-is.
+              candidate = dict(children[0])
+              candidate['is_whole_disk'] = False
+          else:
+              # No partition table, or a stale/unused one (zero partitions,
+              # multiple partitions, or a single unformatted one) - treat the
+              # whole disk as the candidate. "Formatting" it means wiping
+              # whatever partition table is there and creating one fresh
+              # partition, not reusing a leftover scrap partition.
+              candidate = dict(dev)
+              candidate['is_whole_disk'] = True
+          break
+
+      print(json.dumps(candidate))
       PYEOF
   changed_when: false
   register: common_optional_drive_raw
@@ -44,5 +63,6 @@
     common_optional_drive_present: "{{ 'name' in common_optional_drive }}"
     common_optional_drive_device: >-
       {{ '/dev/' + common_optional_drive.name if 'name' in common_optional_drive else '' }}
+    common_optional_drive_is_whole_disk: "{{ common_optional_drive.is_whole_disk | default(false) }}"
     common_optional_drive_has_filesystem: >-
       {{ (common_optional_drive.fstype | default('', true)) | length > 0 }}
