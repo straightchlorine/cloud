@@ -1,15 +1,34 @@
 ---
+# retries on the two downloads: GitHub release downloads redirect through
+# objects.githubusercontent.com - occasional dropped connections on a Pi's
+# link are transient, not a real failure.
+
+- name: Download Pi-hole Exporter checksum
+  ansible.builtin.get_url:
+    url: "{{ pihole_exporter_checksum_url }}"
+    dest: "/tmp/pihole_exporter_checksum.txt"
+    timeout: 30
+  register: prom_exp_pihole_exporter_checksum_download
+  retries: 3
+  delay: 5
+  until: prom_exp_pihole_exporter_checksum_download is succeeded
+
+- name: Extract expected Pi-hole Exporter checksum
+  ansible.builtin.shell: |
+    set -o pipefail
+    grep "pihole_exporter-linux-{{ prometheus_exporters_pihole_arch_map[ansible_architecture] }}" \
+      /tmp/pihole_exporter_checksum.txt | cut -d' ' -f1
+  register: prom_exp_pihole_expected_checksum
+  changed_when: false
 
 - name: Download Pi-hole Exporter binary
-  # retries: GitHub release downloads redirect through
-  # objects.githubusercontent.com - occasional dropped connections on a Pi's
-  # link are transient, not a real failure.
   ansible.builtin.get_url:
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
     owner: "{{ prometheus_exporters_user }}"
     group: "{{ prometheus_exporters_group }}"
     mode: "0755"
+    checksum: "sha256:{{ prom_exp_pihole_expected_checksum.stdout }}"
     timeout: 60
   become: true
   register: prom_exp_pihole_exporter_download
@@ -17,6 +36,11 @@
   delay: 5
   until: prom_exp_pihole_exporter_download is succeeded
   notify: Restart pihole-exporter
+
+- name: Clean up Pi-hole Exporter checksum file
+  ansible.builtin.file:
+    path: "/tmp/pihole_exporter_checksum.txt"
+    state: absent
 
 - name: Create Pi-hole Exporter configuration file
   ansible.builtin.template:

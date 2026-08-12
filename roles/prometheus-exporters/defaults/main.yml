@@ -16,7 +16,7 @@ prometheus_exporters_prometheus_arch_map:
 
 # Node Exporter configuration
 prometheus_exporters_node_exporter_enabled: true
-prometheus_exporters_node_exporter_version: "1.8.2"
+prometheus_exporters_node_exporter_version: "1.12.1"
 prometheus_exporters_node_exporter_port: 9100
 node_exporter_install_method: "binary" # 'binary' or 'package'
 prometheus_exporters_node_exporter_binary_url: >-
@@ -54,10 +54,25 @@ prometheus_exporters_pi_hardware_metrics_interval: 30 # seconds
 prometheus_exporters_pihole_exporter_enabled: false # Enable only on DNS hosts
 pihole_exporter_version: "v1.2.0"
 prometheus_exporters_pihole_exporter_port: 9617
+
+# eko/pihole-exporter publishes only a single "linux-arm" binary for every ARM
+# architecture plus "linux-amd64" (and a 386 we don't target) - there are NO
+# armv7/arm64 variants. Our generic prometheus_exporters_prometheus_arch_map
+# (armv7l -> armv7, aarch64 -> arm64) would therefore build a URL that 404s,
+# so ARM needs its own map here.
+prometheus_exporters_pihole_arch_map:
+  x86_64: "amd64"
+  armv7l: "arm"
+  aarch64: "arm"
+
 pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{
   pihole_exporter_version }}/pihole_exporter-linux-{{
-  prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
+  prometheus_exporters_pihole_arch_map[ansible_architecture] }}
+pihole_exporter_checksum_url: >-
+  https://github.com/eko/pihole-exporter/releases/download/{{
+  pihole_exporter_version }}/pihole_exporter-linux-{{
+  prometheus_exporters_pihole_arch_map[ansible_architecture] }}.sha256.txt
 # prometheus_exporters_pihole_exporter_target_host: must be set in host_vars - no default
 prometheus_exporters_pihole_exporter_target_port: 80
 
