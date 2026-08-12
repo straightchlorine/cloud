@@ -6,7 +6,8 @@ Pi-hole DNS server service on Raspberry Pi 3B.
 
 - **Pi-hole DNS Server** (:53): Ad-blocking DNS resolver
 - **Network Time Protocol** (:123): NTP server for time synchronization
-- **Monitoring**: Netdata, Node Exporter, Pi-hole Exporter
+- **Monitoring**: Node Exporter and Pi-hole Exporter, deployed by the
+  `prometheus-exporters` role (not by this one)
 
 ## Deployment
 
@@ -38,7 +39,7 @@ ansible-playbook -i inventory/production/hosts.yml \
 # Pi-hole authentication
 vault_pihole_webpassword: "secure_password"
 
-# Backup configuration
+# Backup configuration (read by the restic coordinator, not by this role)
 vault_restic_dns_password: "32_character_secure_password"
 vault_backup_repository_base: "sftp:user@backup-server:/backups"
 ```
@@ -48,35 +49,31 @@ vault_backup_repository_base: "sftp:user@backup-server:/backups"
 ```yaml
 # Device configuration
 device_type: rpi3b
-dns_service: pihole
-dns_interface: "{{ primary_ip }}"
 
 # Pi-hole configuration
-pihole_interface: "{{ primary_interface }}"
-pihole_ipv4_address: "{{ host_ip_cidr }}"
-pihole_dns_servers:
-  - "{{ hostvars['firewall']['primary_ip'] }}#53"
+dns_pihole_interface: "{{ primary_interface }}"
+dns_pihole_dns_servers:
+  - "192.168.20.1"
 
-# Automatic updates
-auto_updates_enabled: true
-auto_updates_schedule: "0 2 * * 1"  # Monday 2 AM
+# Weekly Pi-hole self-update
+dns_auto_updates_enabled: true
+dns_auto_update_time: "2:00"
+dns_auto_update_day: "Monday"
 
 # NTP server
-ntp_server_enabled: true
-ntp_allowed_networks:
-  - "10.0.0.0/8"
-  - "192.168.0.0/16"
-  - "172.16.0.0/12"
+dns_ntp_server_enabled: true
+dns_ntp_upstream_server: "192.168.20.1"
+dns_ntp_allowed_networks:
+  - "192.168.20.0/24"
 
-# Backup configuration
-restic_enabled: true
+# Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
+dns_backup_enabled: true
+dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
+dns_backup_owner: "ansible"
+
+# Off-site backup, run by the restic coordinator (not by this role)
 restic_repository: "{{ vault_backup_repository_base }}/dns"
 restic_password: "{{ vault_restic_dns_password }}"
-backup_directories:
-  - "/etc/pihole"
-  - "/etc/chrony"
-  - "/var/log/pihole"
-  - "/opt/pihole"
 ```
 
 ## Security Enhancements
@@ -100,7 +97,6 @@ bash basic-install.sh --unattended
 ```yaml
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
 dns_pihole_version: "v6.4.3"
-dns_pihole_verify_commit: true
 ```
 
 #### Required Variables (must be in vault)
@@ -111,8 +107,7 @@ vault_pihole_webpassword: "secure-admin-password"
 
 ## Installation Process
 
-1. **Repository Clone**: Downloads official Pi-hole repository at specified version
-1. **Verification**: Validates installer script exists and verifies commit hash
+1. **Repository Clone**: Downloads official Pi-hole repository at the pinned tag
 1. **Installation**: Runs unattended installation from verified source
 1. **Configuration**: Applies Pi-hole settings from templates
 1. **Cleanup**: Removes temporary repository after installation
@@ -147,11 +142,15 @@ host_vars to change upstream servers.
 
 ## Validation
 
-The role includes comprehensive validation that checks:
+Pre-deployment (`validate.yml`) checks that:
 
-- Required variables are defined
-- Network interface availability
-- DNS server reachability
-- Port availability (53, 80)
-- Sufficient disk space
-- Internet connectivity
+- Required variables are defined and contain no vault placeholder values
+- The configured `dns_pihole_interface` exists on the host
+- `dns_ntp_allowed_networks` is non-empty when this host serves NTP
+
+Post-deployment (`post_deploy_validate.yml`) checks that:
+
+- The web interface and the v6 REST API respond
+- DNS resolution works through Pi-hole
+- Gravity has a non-empty blocklist and a known ad domain is blocked
+- chrony is active

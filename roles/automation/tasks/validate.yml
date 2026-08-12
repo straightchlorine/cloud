@@ -42,12 +42,6 @@
       - "{{ automation_data_path }}"
     critical_backup_paths:
       - "{{ automation_stack_home }}"
-    stack_home: "{{ automation_stack_home }}"
-    required_services:
-      - traefik
-      - influxdb3-core
-      - vaultwarden
-      - portainer
   tags: [validation]
 
 - name: Validate automation parent directories exist
@@ -115,7 +109,7 @@
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
-    name: Docker
+    name: docker
   register: automation_docker_status
 
 - name: Fail if Docker is not active

@@ -18,10 +18,13 @@ dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
+  - jq  # pihole-syncthing-backup.sh builds/parses the Pi-hole API JSON with it
 
-# Automatic updates configuration
+# Automatic updates: unattended-upgrades itself is the common role's job, so
+# the reboot window is a common_ setting. dns_auto_updates_enabled only gates
+# the Pi-hole-specific weekly `pihole -up`/`pihole -g` cron.
 dns_auto_updates_enabled: true
-dns_auto_updates_reboot_if_required: true
+common_auto_updates_reboot_if_required: true
 
 # Firewall configuration for DNS services
 common_firewall_ports:
@@ -29,7 +32,9 @@ common_firewall_ports:
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
   - {port: 80, comment: "Pi-hole Web Interface"}
-  - {port: 123, comment: "NTP server", proto: "udp"}
+  # No 123/udp: this box doesn't serve NTP (dns_ntp_server_enabled is left at
+  # its false default), and a blanket allow would shadow the src-restricted
+  # NTP rule the dns role adds when it is enabled - ufw is first-match.
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
 

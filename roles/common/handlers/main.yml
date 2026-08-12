@@ -3,13 +3,13 @@
 
 - name: Restart fail2ban
   ansible.builtin.systemd:
-    name: Fail2ban
+    name: fail2ban
     state: restarted
   become: true
 
 - name: Restart docker
   ansible.builtin.systemd:
-    name: Docker
+    name: docker
     state: restarted
   become: true
 
@@ -17,13 +17,6 @@
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
-  become: true
-
-# Promtail log agent restart handler
-- name: Restart promtail
-  ansible.builtin.systemd:
-    name: Promtail
-    state: restarted
   become: true
 
 # Backup service restart handler

@@ -9,6 +9,11 @@
       - curl
       - wget
       - git
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: "molecule-test"
+    common_auto_updates_reboot_time: "03:00"
+    inventory_hostname: molecule-test-host
   tasks:
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
@@ -20,3 +25,29 @@
       community.general.timezone:
         name: "{{ timezone }}"
       become: true
+
+    # Catches undefined/misnamed template vars that would otherwise silently
+    # drop a notification instead of failing.
+    - name: Render the ntfy notification helper
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/ntfy-notify.sh.j2"
+        dest: /tmp/ntfy-notify.rendered.sh
+        mode: "0700"
+
+    - name: Render the reboot-pending notification script
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/reboot-notify.sh.j2"
+        dest: /tmp/reboot-notify.rendered.sh
+        mode: "0755"
+
+    - name: Confirm ntfy_notify fails fast when required vars are missing
+      block:
+        - name: Call ntfy_notify with no title/message (expect failure)
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/ntfy_notify.yml"
+        - name: Fail the test - ntfy_notify should have refused to run
+          ansible.builtin.fail:
+            msg: "ntfy_notify did not fail fast on missing common_ntfy_title/message"
+      rescue:
+        - name: Expected failure caught
+          ansible.builtin.debug:
+            msg: "[OK] ntfy_notify correctly refused to run without required vars"

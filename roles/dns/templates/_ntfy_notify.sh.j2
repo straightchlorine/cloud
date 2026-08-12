@@ -1,6 +1,0 @@
-ntfy_notify() {
-  # $1 = title, $2 = message, $3 = priority (default: default), $4 = tags (default: none)
-  curl -s -H "Authorization: Bearer {{ vault_ntfy_api_key }}" \
-    -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-}" \
-    -d "$2" "{{ ntfy_server_url }}/{{ ntfy_topic }}" >/dev/null 2>&1 || true
-}

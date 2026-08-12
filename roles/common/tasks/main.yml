@@ -19,11 +19,11 @@
     group: root
     mode: "0644"
   become: true
-  notify: restart fail2ban
+  notify: Restart fail2ban
 
 - name: Start and enable fail2ban
   ansible.builtin.systemd:
-    name: Fail2ban
+    name: fail2ban
     state: started
     enabled: true
   become: true
@@ -45,5 +45,8 @@
     mode: "0644"
   become: true
 
-- name: Configure system update cron job
-  ansible.builtin.include_tasks: system_update_cron.yml
+- name: Install the ntfy notification helper
+  ansible.builtin.include_tasks: ntfy_install.yml
+
+- name: Configure unattended-upgrades
+  ansible.builtin.include_tasks: auto_updates.yml

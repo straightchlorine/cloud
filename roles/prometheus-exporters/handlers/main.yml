@@ -6,28 +6,28 @@
 
 - name: Restart node-exporter
   ansible.builtin.systemd:
-    name: Node-exporter
+    name: node-exporter
     state: restarted
   become: true
   when: prometheus_exporters_node_exporter_enabled
 
 - name: Restart pihole-exporter
   ansible.builtin.systemd:
-    name: Pihole-exporter
+    name: pihole-exporter
     state: restarted
   become: true
   when: prometheus_exporters_pihole_exporter_enabled
 
 - name: Restart pi-hardware-metrics
   ansible.builtin.systemd:
-    name: Pi-hardware-metrics.service
+    name: pi-hardware-metrics.service
     state: restarted
   become: true
   when: pi_hardware_metrics_enabled
 
 - name: Restart pi-hardware-metrics-timer
   ansible.builtin.systemd:
-    name: Pi-hardware-metrics.timer
+    name: pi-hardware-metrics.timer
     state: restarted
     enabled: true
   become: true
@@ -35,14 +35,14 @@
 
 - name: Restart docker-metrics
   ansible.builtin.systemd:
-    name: Docker-metrics.service
+    name: docker-metrics.service
     state: restarted
   become: true
   when: prometheus_exporters_docker_exporter_enabled
 
 - name: Restart docker-metrics-timer
   ansible.builtin.systemd:
-    name: Docker-metrics.timer
+    name: docker-metrics.timer
     state: restarted
     enabled: true
   become: true

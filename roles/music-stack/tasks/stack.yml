@@ -15,7 +15,7 @@
       {{ music_stack_music_stack_compose_services }}
     compose_networks: >-
       {{ music_stack_music_stack_compose_networks }}
-  notify: restart music stack
+  notify: Restart music stack
 
 - name: Create Beets config directory
   ansible.builtin.file:
@@ -126,7 +126,7 @@
     mode: "0600"
   vars:
     navidrome_jwt_secret: "{{ music_stack_jwt_secret_content.content | b64decode | trim }}"
-  notify: restart music stack
+  notify: Restart music stack
 
 - name: Install yt-dlp dependencies using common package management # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:

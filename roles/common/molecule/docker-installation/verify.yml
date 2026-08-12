@@ -18,7 +18,7 @@
 
     - name: Verify Docker daemon is running
       ansible.builtin.systemd:
-        name: Docker
+        name: docker
       register: common_docker_service
 
     - name: Assert Docker service is active

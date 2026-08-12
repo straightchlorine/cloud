@@ -35,7 +35,7 @@
     common_private_tmp: "true"
     common_read_write_paths: ["{{ backup_base_path }}"]
   become: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Create backup timer file
   ansible.builtin.template:
@@ -45,7 +45,7 @@
     group: root
     mode: "0644"
   become: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Create backup coordinator service file
   ansible.builtin.template:
@@ -87,7 +87,7 @@
     memory_max: "512M"
     cpu_quota: "50%"
   become: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:

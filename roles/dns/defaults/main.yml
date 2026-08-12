@@ -17,21 +17,13 @@ dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
+  - jq
 
-# Automatic Updates
+# Automatic Updates (Pi-hole itself; Debian package updates are handled
+# fleet-wide by the common role - common_auto_updates_reboot_if_required etc.)
 dns_auto_updates_enabled: true
 dns_auto_update_time: "2:00"
 dns_auto_update_day: "Monday"
-
-# Unattended Upgrades
-dns_auto_updates_reboot_if_required: false
-dns_auto_updates_reboot_time: "03:00"
-
-# Unbound Configuration
-dns_unbound_interface: "127.0.0.1"
-dns_unbound_port: 5335
-dns_unbound_threads: 1
-dns_unbound_cache_size: "4m"
 
 # Secondary local backup (Teleporter + FTL DB snapshot) for Syncthing.
 # Primary/off-site backup remains the restic coordinator.
@@ -45,7 +37,7 @@ dns_backup_schedule_minute: "30"
 # NTP: chrony always syncs the box's own clock (chrony_sync.yml, required for
 # Pi-hole's TLS blocklist download). dns_ntp_server_enabled only controls
 # whether it ALSO advertises itself as an NTP server for the rest of the
-# VLAN (see chrony.conf.j2's `allow` lines and chrony.yml's firewall rule).
+# VLAN (see chrony.conf.j2's `allow` lines and main.yml's firewall rule).
 dns_ntp_server_enabled: false
 dns_ntp_allowed_networks: []
 

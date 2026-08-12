@@ -2,8 +2,8 @@
 # Get chrony installed and syncing before anything that needs correct system
 # time (the Pi-hole install's gravity build downloads blocklists over HTTPS,
 # which fails TLS validation if the clock is wrong). Runs before the Pi-hole
-# install block; firewall rules for NTP and status display happen later in
-# chrony.yml, once the firewall role has installed ufw.
+# install block; firewall rules for NTP happen later in main.yml, once the
+# firewall role has installed ufw.
 
 - name: Gather service facts to check for systemd-timesyncd
   ansible.builtin.service_facts:

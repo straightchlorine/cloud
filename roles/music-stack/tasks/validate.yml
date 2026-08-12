@@ -33,11 +33,6 @@
     critical_backup_paths:
       - "{{ music_stack_music_library_path }}"
       - "{{ music_stack_home }}"
-    stack_home: "{{ music_stack_home }}"
-    required_services:
-      - navidrome
-      - beets
-      - dozzle
   tags: [validation]
 
 - name: Validate music parent directories exist
@@ -95,7 +90,7 @@
 
 - name: Verify Docker is installed and running
   ansible.builtin.systemd:
-    name: Docker
+    name: docker
   register: music_stack_docker_status
 
 - name: Fail if Docker is not active

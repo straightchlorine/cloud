@@ -9,7 +9,7 @@
     mode: "0755"
     timeout: 60
   become: true
-  notify: restart pihole-exporter
+  notify: Restart pihole-exporter
 
 - name: Create Pi-hole Exporter configuration file
   ansible.builtin.template:
@@ -19,7 +19,7 @@
     group: "{{ prometheus_exporters_group }}"
     mode: "0644"
   become: true
-  notify: restart pihole-exporter
+  notify: Restart pihole-exporter
 
 - name: Create Pi-hole Exporter systemd service
   ansible.builtin.template:
@@ -52,11 +52,11 @@
   become: true
   notify:
     - Reload systemd
-    - restart pihole-exporter
+    - Restart pihole-exporter
 
 - name: Enable and start Pi-hole Exporter service
   ansible.builtin.systemd:
-    name: Pihole-exporter
+    name: pihole-exporter
     enabled: true
     state: started
     daemon_reload: true

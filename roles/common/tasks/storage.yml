@@ -41,15 +41,6 @@
     state: mounted
   become: true
 
-- name: Add SSD to fstab
-  ansible.posix.mount:
-    path: "{{ mount_path }}"
-    src: "{{ ssd_device }}"
-    fstype: "{{ common_ssd_filesystem }}"
-    opts: "{{ common_ssd_mount_options }}"
-    state: present
-  become: true
-
 - name: Set ownership of mount directory
   ansible.builtin.file:
     path: "{{ mount_path }}"

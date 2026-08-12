@@ -1,87 +1,18 @@
 ---
-# Backup directory validation for all roles
-# Ensures backup directories are accessible and writable before deployment
-
-- name: Validate backup-related paths are defined
-  ansible.builtin.fail:
-    msg: "Required backup variable '{{ item }}' is not defined or empty"
-  when: vars[item] is not defined or vars[item] == ""
-  loop:
-    - ansible_user
-  tags: [backup_validation]
-
-- name: Check backup user directory requirements
-  tags: [backup_validation]
-  block:
-    - name: Check if backup user home directory path is accessible
-      ansible.builtin.stat:
-        path: /opt/backup
-      register: common_backup_home_check
-
-    - name: Validate backup user home directory exists or parent is writable
-      ansible.builtin.file:
-        path: /opt/backup
-        state: directory
-        mode: "0755"
-      become: true
-      check_mode: true
-      register: common_backup_home_creation_check
-      failed_when: false
-
-    - name: Fail if backup user home directory cannot be created
-      ansible.builtin.fail:
-        msg: "Cannot create backup user home directory /opt/backup. Parent directory may not be writable or accessible."
-      when:
-        - not common_backup_home_check.stat.exists
-        - common_backup_home_creation_check is failed
-
-- name: Validate backup user configuration directories can be created
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  become: true
-  check_mode: true
-  register: common_backup_dir_checks
-  failed_when: false
-  loop:
-    - /opt/backup/.ssh
-    - /opt/backup/cache
-    - /opt/backup/logs
-    - /opt/backup/scripts
-  tags: [backup_validation]
-
-- name: Fail if critical backup directories cannot be created
-  ansible.builtin.fail:
-    msg: "Cannot create backup directory {{ item.item }}. Check permissions and disk space."
-  when: item is failed
-  loop: "{{ common_backup_dir_checks.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  tags: [backup_validation]
-
-- name: Check system configuration backup directories
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: common_system_backup_dirs
-  loop:
-    - /etc/docker
-    - "/home/{{ ansible_user }}/.docker"
-  tags: [backup_validation]
-
-- name: Validate system Docker directories are readable
-  ansible.builtin.fail:
-    msg: "System Docker directory {{ item.item }} exists but is not readable. Backups will fail."
-  when:
-    - item.stat.exists
-    - not item.stat.readable
-  loop: "{{ common_system_backup_dirs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  tags: [backup_validation]
+# Backup pre-flight check for all roles.
+# Only checks free disk space: it is included for hosts: all in
+# playbooks/site.yml, and hosts that back up via a remote coordinator (e.g.
+# pi-dns) have no local common_backup_base_path directory of their own, so any
+# check that requires the path to already exist or be writable would hard-fail
+# there. Directory creation/writability is exercised for real by
+# restic_backup.yml, which is only included on hosts that actually need it.
 
 - name: Check available disk space for backup operations
-  ansible.builtin.shell: df /opt | tail -1 | awk '{print $4}'
+  ansible.builtin.shell: |
+    set -o pipefail
+    df --output=avail "$(dirname "{{ common_backup_base_path }}")" | tail -1
+  args:
+    executable: /bin/bash
   register: common_backup_disk_space
   changed_when: false
   tags: [backup_validation]
@@ -90,85 +21,7 @@
   ansible.builtin.fail:
     msg: >-
       Insufficient disk space for backup operations.
-      Available: {{ (common_backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
+      Available: {{ (common_backup_disk_space.stdout | trim | int / 1024 / 1024) | round(2) }}GB.
       Required: 1GB minimum for backup metadata and temporary files.
-  when: (common_backup_disk_space.stdout | int) < 1048576 # 1GB in KB
-  tags: [backup_validation]
-
-# Enhanced writability validation for Item #23
-- name: Test backup directory writability with actual file creation
-  block:
-    - name: Create test file in backup directory to verify writability
-      ansible.builtin.tempfile:
-        path: /opt/backup
-        prefix: backup_write_test_
-        suffix: .tmp
-      register: common_backup_write_test
-      become: true
-      tags: [backup_validation]
-
-    - name: Verify test file was created successfully
-      ansible.builtin.stat:
-        path: "{{ common_backup_write_test.path }}"
-      register: common_test_file_check
-      tags: [backup_validation]
-
-    - name: Remove test file after successful write test
-      ansible.builtin.file:
-        path: "{{ common_backup_write_test.path }}"
-        state: absent
-      become: true
-      when: common_test_file_check.stat.exists
-      tags: [backup_validation]
-
-  rescue:
-    - name: Fail with detailed writability error
-      ansible.builtin.fail:
-        msg: |
-          Backup directory writability test FAILED for /opt/backup
-
-          This indicates:
-          - Insufficient permissions for backup operations
-          - Possible filesystem issues or read-only mount
-          - Disk space exhaustion during write operations
-
-          Backup operations will fail without write access to this directory.
-          Please check directory permissions and filesystem status.
-      tags: [backup_validation]
-
-- name: Test backup log directory writability
-  block:
-    - name: Create test log file to verify log directory writability
-      ansible.builtin.tempfile:
-        path: /opt/backup/logs
-        prefix: log_write_test_
-        suffix: .log
-      register: common_log_write_test
-      become: true
-      tags: [backup_validation]
-
-    - name: Remove test log file after successful write test
-      ansible.builtin.file:
-        path: "{{ common_log_write_test.path }}"
-        state: absent
-      become: true
-      tags: [backup_validation]
-
-  rescue:
-    - name: Fail with log directory writability error
-      ansible.builtin.fail:
-        msg: "Backup log directory /opt/backup/logs is not writable. Backup logging will fail."
-      tags: [backup_validation]
-
-- name: Backup directory validation completed
-  ansible.builtin.debug:
-    msg: |
-      [OK] Common backup directories validated:
-      - Backup user home: /opt/backup ({{ 'exists' if common_backup_home_check.stat.exists else 'will be created' }})
-      - System Docker config: {{
-          common_system_backup_dirs.results | selectattr('stat.exists') | map(attribute='item') | list |
-          join(', ') or 'none found' }}
-      - Available space: {{ (common_backup_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB
-      - Writability test: [OK] PASSED - Directories are writable
-      - Log directory: [OK] VERIFIED - Logging will work correctly
+  when: (common_backup_disk_space.stdout | trim | int) < 1048576 # 1GB in KB
   tags: [backup_validation]

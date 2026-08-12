@@ -31,7 +31,7 @@
     memory_max: "512M"
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - Restart loki
 
 - name: Create Uptime Kuma systemd service # noqa: var-naming[no-role-prefix]
@@ -58,7 +58,7 @@
     memory_max: "256M"
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
     - Restart uptime-kuma
 
 - name: Start and enable all monitoring services

@@ -30,7 +30,7 @@
     mode: '0644'
     backup: true
   become: true
-  notify: restart docker
+  notify: Restart docker
   when: prometheus_exporters_docker_exporter_enabled
 
 - name: Verify userns-remap preserved in daemon.json after merge
@@ -82,7 +82,7 @@
   become: true
   notify:
     - Reload systemd
-    - restart docker-metrics
+    - Restart docker-metrics
 
 - name: Create systemd timer for Docker metrics collection
   ansible.builtin.template:
@@ -94,11 +94,11 @@
   become: true
   notify:
     - Reload systemd
-    - restart docker-metrics-timer
+    - Restart docker-metrics-timer
 
 - name: Enable and start Docker metrics timer
   ansible.builtin.systemd:
-    name: Docker-metrics.timer
+    name: docker-metrics.timer
     enabled: true
     state: started
     daemon_reload: true

@@ -23,75 +23,60 @@
     daemon_reload: true
   become: true
 
-- name: Set UFW default policies
-  community.general.ufw:
-    direction: "{{ item.direction }}"
-    policy: "{{ item.policy }}"
-  loop:
-    - {direction: incoming, policy: "{{ firewall_policy_incoming }}"}
-    - {direction: outgoing, policy: "{{ firewall_policy_outgoing }}"}
-    - {direction: routed, policy: "{{ firewall_policy_routed }}"}
+- name: Apply UFW policies and rules
   become: true
+  # ufw lives in /usr/sbin, which is absent from a non-login shell's PATH for some remote users
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  block:
+    - name: Set UFW default policies
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - {direction: incoming, policy: "{{ firewall_policy_incoming }}"}
+        - {direction: outgoing, policy: "{{ firewall_policy_outgoing }}"}
+        - {direction: routed, policy: "{{ firewall_policy_routed }}"}
 
-- name: Configure UFW logging
-  community.general.ufw:
-    logging: "{{ firewall_logging }}"
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    - name: Configure UFW logging
+      community.general.ufw:
+        logging: "{{ firewall_logging }}"
 
-- name: Allow SSH (always required)
-  community.general.ufw:
-    rule: allow
-    port: "22"
-    comment: "SSH access"
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    - name: Allow SSH (always required)
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        comment: "SSH access"
 
-- name: Configure common firewall ports
-  community.general.ufw:
-    rule: allow
-    port: "{{ item.port | string }}"
-    comment: "{{ item.comment if item.comment is defined else 'Service port' }}"
-    proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
-  loop: "{{ common_firewall_ports }}"
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  when: common_firewall_ports is defined and common_firewall_ports | length > 0
+    - name: Configure common firewall ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port | string }}"
+        comment: "{{ item.comment if item.comment is defined else 'Service port' }}"
+        proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
+      loop: "{{ common_firewall_ports }}"
+      when: common_firewall_ports is defined and common_firewall_ports | length > 0
 
-- name: Configure host-specific firewall ports
-  community.general.ufw:
-    rule: allow
-    port: "{{ item | string }}"
-    comment: "{{ item }} service"
-  loop: "{{ firewall_ports }}"
-  when: firewall_ports is defined and firewall_ports | length > 0
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    - name: Configure host-specific firewall ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item | string }}"
+        comment: "{{ item }} service"
+      loop: "{{ firewall_ports }}"
+      when: firewall_ports is defined and firewall_ports | length > 0
 
-- name: Configure advanced firewall rules
-  community.general.ufw:
-    rule: "{{ item.rule if item.rule is defined else 'allow' }}"
-    port: "{{ item.port if item.port is defined else omit }}"
-    proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
-    src: "{{ item.src if item.src is defined else omit }}"
-    dest: "{{ item.dest if item.dest is defined else omit }}"
-    comment: "{{ item.comment if item.comment is defined else 'Custom rule' }}"
-  loop: "{{ firewall_rules }}"
-  when: firewall_rules is defined and firewall_rules | length > 0
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    - name: Configure advanced firewall rules
+      community.general.ufw:
+        rule: "{{ item.rule if item.rule is defined else 'allow' }}"
+        port: "{{ item.port if item.port is defined else omit }}"
+        proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
+        src: "{{ item.src if item.src is defined else omit }}"
+        dest: "{{ item.dest if item.dest is defined else omit }}"
+        comment: "{{ item.comment if item.comment is defined else 'Custom rule' }}"
+      loop: "{{ firewall_rules }}"
+      when: firewall_rules is defined and firewall_rules | length > 0
 
-- name: Enable UFW
-  community.general.ufw:
-    state: enabled
-  become: true
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  when: firewall_enabled
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+      when: firewall_enabled

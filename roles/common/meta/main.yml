@@ -1,13 +1,14 @@
 ---
 # Ansible Galaxy metadata for the common role
 # https://docs.ansible.com/ansible/latest/galaxy/galaxy_role.html
+# Not published to Galaxy; kept minimal (schema requires galaxy_info to carry
+# min_ansible_version - decorative fields like author/company/galaxy_tags are
+# dropped since they serve no purpose for a private role).
 
 galaxy_info:
   namespace: homelab
   role_name: common
-  author: Infrastructure Team
   description: Common tasks for Raspberry Pi homelab infrastructure
-  company: Homelab
   license: MIT
 
   # Ansible version requirement (must be 2.15 or higher)
@@ -24,17 +25,6 @@ galaxy_info:
       versions:
         - jammy # Ubuntu 22.04 LTS
         - noble # Ubuntu 24.04 LTS
-
-  # Galaxy tags for searching
-  galaxy_tags:
-    - homelab
-    - raspberry-pi
-    - docker
-    - infrastructure
-    - network
-    - backup
-    - monitoring
-    - common
 
 # Collections required for this role
 collections:

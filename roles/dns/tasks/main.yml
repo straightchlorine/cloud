@@ -34,11 +34,12 @@
       become: true
 
     - name: Preserve existing Pi-hole configuration for rollback
-      ansible.builtin.copy:
-        src: /etc/pihole/
-        dest: /etc/pihole.backup/
-        remote_src: true
-        mode: preserve
+      # cp -a, not the copy module: pihole-FTL runs as the pihole user, so the
+      # snapshot has to keep ownership, modes and timestamps or the rescue
+      # block restores a directory FTL cannot write.
+      ansible.builtin.command: cp -a /etc/pihole /etc/pihole.backup
+      args:
+        creates: /etc/pihole.backup
       become: true
       when: dns_pihole_existing.stat.exists
 
@@ -62,31 +63,6 @@
         depth: 1
         force: true
       become: true
-      register: dns_pihole_clone
-
-    - name: Verify Pi-hole installer exists in repository
-      ansible.builtin.stat:
-        path: /tmp/pi-hole-repo/automated install/basic-install.sh
-      register: dns_pihole_installer
-      failed_when: not dns_pihole_installer.stat.exists or dns_pihole_installer.stat.size < 1000
-
-    - name: Verify Pi-hole repository commit
-      ansible.builtin.shell: |
-        cd /tmp/pi-hole-repo
-        git rev-parse --verify HEAD
-      register: dns_pihole_commit_hash
-      become: true
-      changed_when: false
-
-    - name: Display Pi-hole repository information for verification
-      ansible.builtin.debug:
-        msg: |
-          Pi-hole repository cloned successfully
-          Version: {{ dns_pihole_version }}
-          Commit: {{ dns_pihole_commit_hash.stdout }}
-          Install script location: /tmp/pi-hole-repo/automated install/basic-install.sh
-          Script size: {{ dns_pihole_installer.stat.size }} bytes
-          Last modified: {{ dns_pihole_installer.stat.mtime }}
 
     - name: Create Pi-hole configuration directory
       ansible.builtin.file:
@@ -125,7 +101,6 @@
       ansible.builtin.shell: |
         pihole setpassword "{{ vault_pihole_webpassword }}"
       become: true
-      when: vault_pihole_webpassword is defined
       no_log: true
 
     - name: Clean up Pi-hole repository and rollback backup after success
@@ -197,8 +172,18 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Configure chrony firewall rule and display status
-  ansible.builtin.include_tasks: chrony.yml
+- name: Configure firewall for NTP
+  # Must run after the firewall role, which installs ufw. Chrony itself is
+  # installed and synced earlier, in chrony_sync.yml.
+  community.general.ufw:
+    rule: allow
+    port: "123"
+    proto: udp
+    src: "{{ item }}"
+    comment: "Allow NTP (chrony) from VLAN"
+  loop: "{{ dns_ntp_allowed_networks }}"
+  become: true
+  when: dns_ntp_server_enabled
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml

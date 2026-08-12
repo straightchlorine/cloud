@@ -222,7 +222,7 @@
     mode: '0644'
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Create repository backup timers
   ansible.builtin.template:
@@ -231,7 +231,7 @@
     mode: '0644'
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Create repository maintenance service
   ansible.builtin.template:
@@ -240,7 +240,7 @@
     mode: '0644'
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Create repository maintenance timer
   ansible.builtin.template:
@@ -249,7 +249,7 @@
     mode: '0644'
   become: true
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Initialize repositories if they don't exist
   ansible.builtin.command: >
@@ -292,7 +292,7 @@
 
 - name: Enable repository maintenance timer
   ansible.builtin.systemd:
-    name: Repository-maintenance.timer
+    name: repository-maintenance.timer
     state: started
     enabled: true
     daemon_reload: true

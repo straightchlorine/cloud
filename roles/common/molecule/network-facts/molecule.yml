@@ -1,22 +1,22 @@
 ---
 role_name_check: 0
 driver:
-  name: Docker
+  name: podman
 platforms:
   - name: Debian12-network
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
-    ansible.builtin.command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
+    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:
-  name: Ansible
+  name: ansible
   inventory:
     group_vars:
       all:
         timezone: UTC
 verifier:
-  name: Ansible
+  name: ansible
 scenario:
-  name: Network-facts
+  name: network-facts
   description: Test network facts detection and CIDR calculation

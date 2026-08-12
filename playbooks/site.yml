@@ -10,10 +10,8 @@
         name: common
         tasks_from: backup_validation
       tags: [backup_validation]
-      when: run_validation
 
     - name: Run role-specific validation
-      when: run_validation
       tags: [role_validation]
       block:
         - name: DNS validation for Pi-hole hosts

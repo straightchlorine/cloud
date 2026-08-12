@@ -2,17 +2,47 @@
 - name: Verify DNS fail-fast validation
   hosts: all
   tasks:
-    - name: Confirm fail-fast-validation test completed
+    - name: Assert case 1 (missing required variable) failed as expected
+      ansible.builtin.assert:
+        that:
+          - dns_case1_missing_variable_failed is defined
+          - dns_case1_missing_variable_failed | bool
+        fail_msg: >-
+          Case 1 did not complete: unified_validation should have failed fast
+          on the missing dns_pihole_interface variable.
+        success_msg: "[OK] unified_validation fails fast on a missing required DNS variable"
+
+    - name: Assert case 2 (placeholder vault secret) failed as expected
+      ansible.builtin.assert:
+        that:
+          - dns_case2_vault_placeholder_failed is defined
+          - dns_case2_vault_placeholder_failed | bool
+        fail_msg: >-
+          Case 2 did not complete: unified_validation should have failed fast
+          on the placeholder vault_pihole_webpassword value.
+        success_msg: "[OK] unified_validation fails fast on a placeholder vault secret"
+
+    - name: Assert case 3 (NTP guard) failed as expected
+      ansible.builtin.assert:
+        that:
+          - dns_case3_ntp_guard_failed is defined
+          - dns_case3_ntp_guard_failed | bool
+        fail_msg: >-
+          Case 3 did not complete: the NTP-allowed-networks guard reproduction
+          should have failed on an empty dns_ntp_allowed_networks. Note this
+          is a reproduction of roles/dns/tasks/validate.yml's guard, not the
+          real file - see the comment in converge.yml for why.
+        success_msg: "[OK] the NTP-allowed-networks guard (reproduced from validate.yml) fails as expected"
+
+    - name: Display fail-fast validation summary
       ansible.builtin.debug:
         msg: |
           [OK] DNS Fail-Fast Validation Test Complete
 
-          Test Scenario: Missing required configuration
-          - vault_pihole_webpassword: NOT SET (required)
+          Case 1 - missing required variable (dns_pihole_interface): FAILED as expected
+          Case 2 - placeholder vault secret (vault_pihole_webpassword): FAILED as expected
+          Case 3 - NTP guard, empty dns_ntp_allowed_networks (reproduction): FAILED as expected
 
-          Result: Validation correctly failed during converge step
-          This confirms the "fail-fast" principle works as designed
-
-          The role fails immediately with clear error when
-          required variables are missing, preventing partial
-          or incorrect deployments.
+          All three exercise the real framework (roles/common/tasks/unified_validation.yml,
+          included by relative path) or a byte-for-byte reproduction of the guard in
+          roles/dns/tasks/validate.yml where the real file cannot be included in this sandbox.

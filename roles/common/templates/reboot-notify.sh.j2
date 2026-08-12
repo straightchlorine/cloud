@@ -1,0 +1,12 @@
+#!/bin/bash
+# Runs 12 hours before unattended-upgrades' Automatic-Reboot-Time
+# ({{ common_auto_updates_reboot_time }}), so a pending reboot is known about
+# the day before rather than right before it happens. Only notifies if a
+# reboot is actually pending - most days this is a no-op. Note:
+# /var/run/reboot-required is set by that day's unattended-upgrades run, so
+# if it runs later than this check, the heads-up lands the following day.
+
+if [ -f /var/run/reboot-required ]; then
+  ntfy-notify.sh "Reboot pending: {{ inventory_hostname }}" \
+    "System will reboot at {{ common_auto_updates_reboot_time }} for pending updates." default
+fi

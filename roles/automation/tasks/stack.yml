@@ -11,7 +11,7 @@
     compose_services: "{{ automation_compose_services }}"
     compose_networks: "{{ automation_compose_networks }}"
     compose_volumes: "{{ automation_compose_volumes }}"
-  notify: restart automation stack
+  notify: Restart automation stack
 
 - name: Create InfluxDB3 data directories
   ansible.builtin.file:
@@ -70,7 +70,7 @@
 
 - name: Create Docker network for Traefik
   community.docker.docker_network:
-    name: Traefik-network
+    name: traefik-network
     automation_driver: bridge
     state: present
     scope: local

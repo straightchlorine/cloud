@@ -21,8 +21,6 @@
       - "{{ prometheus_exporters_base_dir }}"
     critical_backup_paths:
       - "{{ prometheus_exporters_base_dir }}/bin"
-    stack_home: "{{ prometheus_exporters_base_dir }}"
-    required_services: [] # No Docker services
   tags: [validation]
 
 # Role-specific validation tasks that supplement unified validation
@@ -131,7 +129,7 @@
   block:
     - name: Check Docker service status
       ansible.builtin.systemd:
-        name: Docker
+        name: docker
       register: prom_exp_docker_service_status
 
     - name: Fail if Docker required but not available

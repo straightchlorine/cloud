@@ -113,45 +113,6 @@
           when: "item.replace('-', '_') in group_names"
       when: run_backup_validation
 
-    # === VAULT VALIDATION ===
-    - name: Vault variable validation
-      block:
-        - name: Run role-specific vault validation
-          ansible.builtin.include_role:
-            name: "{{ item }}"
-            tasks_from: vault_validation
-          loop:
-            - dns
-            - automation
-            - music-stack
-          when: "item.replace('-', '_') in group_names"
-
-        - name: Run template rendering validation
-          ansible.builtin.include_role:
-            name: common
-            tasks_from: template_validation
-          when: quick_mode is defined and quick_mode is not defined or not quick_mode
-      when: run_vault_validation
-
-    # === SERVICE STARTUP VALIDATION ===
-    - name: Service startup order validation
-      block:
-        - name: Run common service startup validation
-          ansible.builtin.include_role:
-            name: common
-            tasks_from: service_startup_validation
-
-        - name: Run role-specific service startup validation
-          ansible.builtin.include_role:
-            name: "{{ item }}"
-            tasks_from: service_startup_validation
-          loop:
-            - dns
-            - automation
-            - music-stack
-          when: "item.replace('-', '_') in group_names"
-      when: run_service_startup_validation
-
     # === SSL/DOMAIN VALIDATION (automation hosts only) ===
     - name: SSL and domain validation
       block:

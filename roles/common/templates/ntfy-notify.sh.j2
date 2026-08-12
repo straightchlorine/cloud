@@ -1,0 +1,17 @@
+#!/bin/bash
+# Shared ntfy notification helper, installed on every host (ntfy is a
+# fleet-wide service - see group_vars/all/all.yml). Embeds vault_ntfy_api_key,
+# so this file is root-only (mode 0700).
+#
+# Usage: ntfy-notify.sh <title> <message> [priority] [tags]
+#   priority: ntfy priority, default "default"
+#   tags:     ntfy emoji tags, e.g. "rotating_light", default none
+
+TITLE="$1"
+MESSAGE="$2"
+PRIORITY="${3:-default}"
+TAGS="${4:-}"
+
+curl -s -H "Authorization: Bearer {{ vault_ntfy_api_key }}" \
+  -H "Title: $TITLE" -H "Priority: $PRIORITY" -H "Tags: $TAGS" \
+  -d "$MESSAGE" "{{ ntfy_server_url }}/{{ ntfy_topic }}" >/dev/null 2>&1 || true

@@ -5,14 +5,16 @@
   become: true
 
   tasks:
-    - name: Test that variable_validation fails without required variables
+    - name: Test that unified_validation fails without required variables
       block:
-        - name: Include variable_validation without required variables # noqa: var-naming[no-role-prefix]
+        - name: Include unified_validation without required variables # noqa: var-naming[no-role-prefix]
           ansible.builtin.include_role:
             name: common
-            tasks_from: variable_validation
+            tasks_from: unified_validation
           vars:
             validation_context: "fail-fast-test"
+            validation_type: "full"
+            validation_role: "common"
             required_variables:
               - this_variable_does_not_exist
               - neither_does_this_one

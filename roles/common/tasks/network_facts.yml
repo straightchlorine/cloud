@@ -23,12 +23,3 @@
 - name: Set host IP with CIDR notation # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     host_ip_cidr: "{{ primary_ip }}/{{ ansible_default_ipv4.prefix }}"
-
-- name: Display detected network configuration
-  ansible.builtin.debug:
-    msg: |
-      Network Configuration Detected:
-      - Primary Interface: {{ primary_interface }}
-      - Primary IP: {{ primary_ip }}
-      - Network CIDR: {{ primary_network_cidr }}
-      - Host IP/CIDR: {{ host_ip_cidr }}

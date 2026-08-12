@@ -60,8 +60,10 @@
   loop:
     - "Weekly Pi-hole updates"
     - "Pi-hole Syncthing local backup"
-    - "Pi-hole reboot pending notification"
   become: true
+  # Note: unattended-upgrades and its "Reboot pending notification" cron are
+  # common-role state (every host has them, like fail2ban/SSH) - out of
+  # scope for a DNS-role-only teardown.
 
 - name: Remove DNS role file artifacts
   ansible.builtin.file:
@@ -70,12 +72,9 @@
   loop:
     - /usr/local/bin/pihole-update.sh
     - /usr/local/bin/pihole-syncthing-backup.sh
-    - /usr/local/bin/pihole-reboot-notify.sh
     - /var/log/pihole-syncthing-backup.log
     - /etc/logrotate.d/weekly-updates
     - /var/log/weekly-updates.log
-    - /etc/apt/apt.conf.d/20auto-upgrades
-    - /etc/apt/apt.conf.d/50unattended-upgrades
     - /etc/chrony/chrony.conf
     - /etc/pihole.backup
   become: true
@@ -94,7 +93,6 @@
   ansible.builtin.apt:
     name:
       - chrony
-      - unattended-upgrades
     state: absent
     purge: true
     autoremove: true

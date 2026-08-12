@@ -4,9 +4,9 @@
 - name: Restart automation stack  # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     stack_home: "{{ automation_stack_home }}"
-  notify: restart docker compose stack
+  notify: Restart docker compose stack
 
 - name: Rollback automation stack  # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     stack_home: "{{ automation_stack_home }}"
-  notify: rollback docker compose stack
+  notify: Rollback docker compose stack

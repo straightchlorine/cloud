@@ -1,23 +1,5 @@
 ---
 
-- name: Validate firewall_enabled is defined
-  ansible.builtin.assert:
-    that:
-      - firewall_enabled is defined
-    fail_msg: "firewall_enabled must be defined"
-    success_msg: "[OK] firewall_enabled is defined"
-
-- name: Validate firewall policy variables are defined
-  ansible.builtin.assert:
-    that:
-      - firewall_policy_incoming is defined
-      - firewall_policy_outgoing is defined
-      - firewall_policy_routed is defined
-    fail_msg: >-
-      Firewall policy variables must be defined:
-      firewall_policy_incoming, firewall_policy_outgoing, firewall_policy_routed
-    success_msg: "[OK] Firewall policy variables are defined"
-
 - name: Validate firewall policies have valid values
   ansible.builtin.assert:
     that:
@@ -30,7 +12,6 @@
 - name: Validate firewall_logging has valid value
   ansible.builtin.assert:
     that:
-      - firewall_logging is defined
       - firewall_logging in ['on', 'off', 'low', 'medium', 'high', 'full']
     fail_msg: "firewall_logging must be one of: on, off, low, medium, high, full"
     success_msg: "[OK] firewall_logging has valid value"

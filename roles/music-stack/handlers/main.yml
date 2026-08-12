@@ -4,4 +4,4 @@
 - name: Restart music stack # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     stack_home: "{{ music_stack_home }}"
-  notify: restart docker compose stack
+  notify: Restart docker compose stack

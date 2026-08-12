@@ -1,0 +1,66 @@
+---
+# Unattended-upgrades for every Debian host - the actual apt update/upgrade
+# mechanism (daily). Anything Pi-hole-specific (pihole -up/-g) stays in the
+# dns role; this file only knows about plain Debian package updates.
+
+- name: Set PATH for root's crontab
+  # Cron's default PATH often excludes /usr/local/bin, where this repo's
+  # cron-invoked scripts (and their commands like pihole, ntfy-notify.sh)
+  # live. Set once, applies to every job in root's crontab.
+  ansible.builtin.cron:
+    name: PATH
+    env: true
+    value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    user: root
+  become: true
+
+- name: Install unattended-upgrades package
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+  become: true
+
+- name: Configure unattended-upgrades
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Enable automatic updates
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Compute reboot-pending notification time (12 hours before auto-reboot)
+  ansible.builtin.set_fact:
+    common_reboot_notify_total_minutes: >-
+      {{ ((common_auto_updates_reboot_time.split(':')[0] | int * 60
+      + common_auto_updates_reboot_time.split(':')[1] | int - 720) % 1440) }}
+  when: common_auto_updates_reboot_if_required
+
+- name: Create reboot-pending notification script
+  ansible.builtin.template:
+    src: reboot-notify.sh.j2
+    dest: /usr/local/bin/reboot-notify.sh
+    owner: root
+    group: root
+    mode: '0755'  # no secret embedded - calls the installed ntfy-notify.sh
+  become: true
+  when: common_auto_updates_reboot_if_required
+
+- name: Schedule reboot-pending notification
+  ansible.builtin.cron:
+    name: "Reboot pending notification"
+    minute: "{{ common_reboot_notify_total_minutes | int % 60 }}"
+    hour: "{{ common_reboot_notify_total_minutes | int // 60 }}"
+    job: "/usr/local/bin/reboot-notify.sh"
+    user: root
+  become: true
+  when: common_auto_updates_reboot_if_required

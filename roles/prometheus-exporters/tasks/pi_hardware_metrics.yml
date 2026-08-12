@@ -8,7 +8,7 @@
     group: "{{ prometheus_exporters_group }}"
     mode: "0755"
   become: true
-  notify: restart pi-hardware-metrics
+  notify: Restart pi-hardware-metrics
 
 - name: Create systemd service for Pi hardware metrics
   ansible.builtin.template:
@@ -32,7 +32,7 @@
   become: true
   notify:
     - Reload systemd
-    - restart pi-hardware-metrics
+    - Restart pi-hardware-metrics
 
 - name: Create systemd timer for Pi hardware metrics
   ansible.builtin.template:
@@ -44,11 +44,11 @@
   become: true
   notify:
     - Reload systemd
-    - restart pi-hardware-metrics-timer
+    - Restart pi-hardware-metrics-timer
 
 - name: Enable and start Pi hardware metrics timer
   ansible.builtin.systemd:
-    name: Pi-hardware-metrics.timer
+    name: pi-hardware-metrics.timer
     enabled: true
     state: started
     daemon_reload: true

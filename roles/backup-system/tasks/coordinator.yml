@@ -225,7 +225,7 @@
     backup_target: "{{ item }}"
   loop: "{{ backup_targets }}"
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Create systemd timers for each target
   ansible.builtin.template:
@@ -238,7 +238,7 @@
     backup_target: "{{ item }}"
   loop: "{{ backup_targets }}"
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Force handler execution
   ansible.builtin.meta: flush_handlers
@@ -312,7 +312,7 @@
     group: root
     mode: '0644'
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Create key rotation timer
   ansible.builtin.copy:
@@ -333,11 +333,11 @@
     group: root
     mode: '0644'
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: Enable key rotation timer
   ansible.builtin.systemd:
-    name: Backup-key-rotation.timer
+    name: backup-key-rotation.timer
     enabled: true
     state: started
     daemon_reload: true

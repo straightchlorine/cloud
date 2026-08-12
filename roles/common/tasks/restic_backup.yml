@@ -8,15 +8,15 @@
     msg: "Required backup variable '{{ item }}' is not defined or empty"
   when: vars[item] is not defined or vars[item] == ""
   loop:
-    - backup_service_name
+    - common_backup_service_name
     - restic_repository
     - restic_password
-    - backup_paths
+    - common_backup_paths
   no_log: false
 
 - name: Create backup user (if not already created)
   ansible.builtin.user:
-    name: Backup
+    name: backup
     system: true
     shell: /bin/bash
     home: "{{ common_backup_base_path }}"
@@ -48,7 +48,7 @@
 
 - name: Install restic on Arch Linux
   community.general.pacman:
-    name: Restic
+    name: restic
     state: present
     update_cache: true
   become: true
@@ -58,7 +58,7 @@
 
 - name: Install restic on Debian/Ubuntu
   ansible.builtin.apt:
-    name: Restic
+    name: restic
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -222,14 +222,14 @@
     common_protect_system: "strict"
     common_protect_home: "read-only"
     common_private_tmp: "yes"
-    common_read_write_paths: "{{ [backup_base_path] + backup_paths }}"
+    common_read_write_paths: "{{ [common_backup_base_path] + common_backup_paths }}"
     memory_limit: "{{ restic_memory_limit | default(omit) }}"
     nice_level: "{{ common_backup_nice_level }}"
     io_scheduling_class: "{{ common_backup_io_class }}"
   become: true
   notify:
-    - reload systemd
-    - restart backup service
+    - Reload systemd
+    - Restart backup service
 
 - name: Create systemd backup timer
   ansible.builtin.template:
@@ -245,8 +245,8 @@
     timer_randomized_delay: "{{ backup_randomized_delay }}"
   become: true
   notify:
-    - reload systemd
-    - restart backup timer
+    - Reload systemd
+    - Restart backup timer
 
 - name: Set permissions on backup paths for backup user
   ansible.builtin.file:
@@ -259,7 +259,7 @@
 
 - name: Initialize restic repository if it doesn't exist
   ansible.builtin.command: "{{ common_backup_base_path }}/scripts/init-{{ common_backup_service_name }}.sh"
-  become_user: backup
+  become_user: "{{ backup_user }}"
   become: true
   register: common_repository_init
   changed_when: "'initialized' in common_repository_init.stdout"
@@ -280,62 +280,31 @@
   become: true
   when: backup_enabled
 
-- name: Get current systemd service checksum
-  ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
-    checksum_algorithm: sha256
-  register: common_current_service_file
-  become: true
-
-- name: Force systemd service restart if configuration changed
-  ansible.builtin.systemd:
-    name: "backup-{{ common_backup_service_name }}.service"
-    state: stopped
-    daemon_reload: true
-  become: true
-  when: common_current_service_file.stat.exists
-
-- name: Verify backup service configuration and restart
-  ansible.builtin.systemd:
-    name: "backup-{{ common_backup_service_name }}.service"
-    daemon_reload: true
-    state: stopped
-  become: true
-  register: common_backup_service_status
-
-- name: Display backup service file checksum for verification
-  ansible.builtin.debug:
-    msg: "Service file checksum: {{ common_current_service_file.stat.checksum }}"
-
-- name: Verify critical service configuration
-  ansible.builtin.shell: |
-    grep -i "NoNewPrivileges=false"
-      "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
-  become: true
-  register: common_service_config_check
-  changed_when: false
-  failed_when: common_service_config_check.rc != 0
-
-- name: Verify deployed service configuration
+# NoNewPrivileges is deliberately set to false in the templated unit (see
+# common_no_new_privileges above) because the backup script re-execs through
+# sudo; systemd reports a false boolean back as "no", not "false".
+- name: Verify NoNewPrivileges override is applied to the deployed unit
   ansible.builtin.command:
     cmd: "systemctl show backup-{{ common_backup_service_name }}.service --property=User,NoNewPrivileges,Environment"
   register: common_deployed_service_config
   become: true
+  changed_when: false
+  failed_when: "'NoNewPrivileges=no' not in common_deployed_service_config.stdout"
 
 - name: Display backup configuration summary
   ansible.builtin.debug:
     msg: |
       [OK] Unified Restic Backup Configured for {{ common_backup_service_name }}:
 
-      common_Repository: {{ restic_repository }}
-      common_Schedule: {{ backup_schedule }}
-      Backup Paths: {{ backup_paths | join(', ') }}
+      Repository: {{ restic_repository }}
+      Schedule: {{ backup_schedule }}
+      Backup Paths: {{ common_backup_paths | join(', ') }}
       Service: backup-{{ common_backup_service_name }}.service
       Timer: backup-{{ common_backup_service_name }}.timer
       Script: {{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh
 
       Logs: {{ common_backup_base_path }}/logs/
-      common_Status: {{ 'Enabled' if backup_enabled else 'Disabled' }}
+      Status: {{ 'Enabled' if backup_enabled else 'Disabled' }}
       Restic Version: {{ common_restic_version_check.stdout }}
 
       Deployed Service Config:
