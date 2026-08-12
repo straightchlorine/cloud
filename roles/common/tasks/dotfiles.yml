@@ -1,0 +1,13 @@
+---
+# Deploy shared dotfiles to the connecting admin user's home directory.
+# Single source of truth: dotfiles/ at the repo root - not a role-owned
+# files/ dir, so it stays discoverable/editable without digging into roles/.
+
+- name: Deploy tmux configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../dotfiles/tmux.conf"
+    dest: "/home/{{ ansible_user }}/.tmux.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  become: true

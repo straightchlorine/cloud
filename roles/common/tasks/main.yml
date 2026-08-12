@@ -50,3 +50,6 @@
 
 - name: Configure unattended-upgrades
   ansible.builtin.include_tasks: auto_updates.yml
+
+- name: Deploy shared dotfiles
+  ansible.builtin.include_tasks: dotfiles.yml

@@ -14,7 +14,14 @@
   # hosts" play, which only carries [monitoring, prometheus, exporters] by
   # default - without this, `--tags dns` (or automation/music/backup) never
   # reaches it, so it silently never gets installed on a --tags-scoped run.
-  ansible.builtin.include_tasks: node_exporter.yml
+  # apply: is required, not just tags: on the include itself - plain tags:
+  # only gates whether the include statement runs, it does NOT propagate
+  # into the tasks defined inside node_exporter.yml, so without apply: every
+  # task in that file gets silently tag-filtered out anyway.
+  ansible.builtin.include_tasks:
+    file: node_exporter.yml
+    apply:
+      tags: [dns, automation, music, monitoring, backup]
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_node_exporter_enabled
@@ -32,7 +39,12 @@
   # play (site.yml), which only carries [monitoring, prometheus, exporters]
   # by default - without this, `ansible-playbook site.yml --tags dns` never
   # reaches it at all, so the exporter silently never gets installed.
-  ansible.builtin.include_tasks: pihole_exporter.yml
+  # apply: is required, not just tags: on the include itself - see the note
+  # on node_exporter above.
+  ansible.builtin.include_tasks:
+    file: pihole_exporter.yml
+    apply:
+      tags: [dns]
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_pihole_exporter_enabled
