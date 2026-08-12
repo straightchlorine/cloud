@@ -17,10 +17,17 @@
     - name: Download and install Node Exporter
       block:
         - name: Download Node Exporter checksums
+          # retries: GitHub release downloads redirect through
+          # objects.githubusercontent.com - occasional dropped connections on
+          # a Pi's link are transient, not a real failure.
           ansible.builtin.get_url:
             url: "{{ prometheus_exporters_node_exporter_checksum_url }}"
             dest: "/tmp/node_exporter_checksums.txt"
             timeout: 30
+          register: prom_exp_node_exporter_checksums_download
+          retries: 3
+          delay: 5
+          until: prom_exp_node_exporter_checksums_download is succeeded
 
         - name: Extract expected checksum
           ansible.builtin.shell: |
@@ -37,6 +44,10 @@
             dest: "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             checksum: "sha256:{{ prom_exp_expected_checksum.stdout }}"
             timeout: 60
+          register: prom_exp_node_exporter_archive_download
+          retries: 3
+          delay: 5
+          until: prom_exp_node_exporter_archive_download is succeeded
 
         - name: Extract Node Exporter archive
           ansible.builtin.unarchive:

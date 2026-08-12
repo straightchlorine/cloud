@@ -43,8 +43,17 @@ prometheus_exporters_pihole_exporter_enabled: true
 prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
-# Local Syncthing backup left off (role default) - no point wiring up
-# Syncthing on a box you're about to tear down.
+# Local Syncthing backup onto the optional attached drive (dns_optional_drive_*
+# defaults to /mnt/data - see roles/dns/defaults/main.yml). No "pihole" in the
+# path: the host itself is the pihole/dns box, so that'd just be noise.
+dns_backup_enabled: true
+dns_backup_dir: "/mnt/data/syncthing/backup"
+dns_backup_owner: "ansible"
+
+# DESTRUCTIVE, host-scoped on purpose: NOT a role default (see
+# roles/dns/defaults/main.yml) - a fresh drive on some future dns-group host
+# should never get wiped without an explicit per-host choice to do so.
+dns_optional_drive_format: true
 
 # NTP serving to the VLAN left off (role default: dns_ntp_server_enabled
 # false) - a disposable test box shouldn't become something else depends on.

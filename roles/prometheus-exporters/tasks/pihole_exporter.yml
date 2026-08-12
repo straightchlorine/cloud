@@ -1,6 +1,9 @@
 ---
 
 - name: Download Pi-hole Exporter binary
+  # retries: GitHub release downloads redirect through
+  # objects.githubusercontent.com - occasional dropped connections on a Pi's
+  # link are transient, not a real failure.
   ansible.builtin.get_url:
     url: "{{ pihole_exporter_binary_url }}"
     dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
@@ -9,6 +12,10 @@
     mode: "0755"
     timeout: 60
   become: true
+  register: prom_exp_pihole_exporter_download
+  retries: 3
+  delay: 5
+  until: prom_exp_pihole_exporter_download is succeeded
   notify: Restart pihole-exporter
 
 - name: Create Pi-hole Exporter configuration file
