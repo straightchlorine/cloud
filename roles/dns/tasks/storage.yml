@@ -24,31 +24,42 @@
 - name: Use the optional attached drive
   when: common_optional_drive_present
   block:
-    - name: Refuse to use an unformatted/unpartitioned drive unless explicitly allowed
+    - name: Determine whether the drive needs (re)formatting
+      # "has a filesystem" isn't enough on its own - it might be a foreign
+      # filesystem we don't want (a leftover installer USB stick with an
+      # iso9660 image on it, someone else's NTFS drive, etc). Only treat it
+      # as ready-to-use if what's already there matches what we actually want.
+      ansible.builtin.set_fact:
+        dns_optional_drive_needs_format: "{{ common_optional_drive_fstype != dns_optional_drive_filesystem }}"
+
+    - name: Refuse to use an unformatted/unexpected drive unless explicitly allowed
       ansible.builtin.fail:
         msg: >-
-          {{ common_optional_drive_device }} has no usable filesystem{{
-          " (it's a bare disk, or its partition table is empty/stale/multi-partition with nothing in use)"
+          {{ common_optional_drive_device }} {{ 'has no usable filesystem'
+          if not common_optional_drive_has_filesystem else
+          "has '" + common_optional_drive_fstype + "', not '" + dns_optional_drive_filesystem + "'"
+          }}{{ " (it's a bare disk, or its partition table is empty/stale/multi-partition with nothing in use)"
           if common_optional_drive_is_whole_disk else '' }}.
           Format it yourself, or set dns_optional_drive_format: true in
           host_vars to let this role wipe {{ common_optional_drive_device }}
           {{ 'entirely (any existing partition table included) ' if common_optional_drive_is_whole_disk else '' }}
           and format it as {{ dns_optional_drive_filesystem }} (DESTRUCTIVE).
       when:
-        - not common_optional_drive_has_filesystem
+        - dns_optional_drive_needs_format
         - not dns_optional_drive_format
 
     - name: Wipe any existing partition table before repartitioning
       # Only reached with dns_optional_drive_format explicitly true. Needed
       # because the "whole disk" case includes stale/multi-partition tables
-      # (e.g. a recycled drive) - wipefs guarantees a truly blank device for
-      # sfdisk below, rather than trying to reconcile with leftover
-      # partitions that aren't in use but are still on the disk.
+      # (e.g. a recycled drive) and drives with an unwanted foreign
+      # filesystem (e.g. an installer USB stick) - wipefs guarantees a truly
+      # blank device for sfdisk below, rather than trying to reconcile with
+      # whatever's already there.
       ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
       become: true
       changed_when: true
       when:
-        - not common_optional_drive_has_filesystem
+        - dns_optional_drive_needs_format
         - common_optional_drive_is_whole_disk
 
     - name: Create a single partition spanning the whole disk
@@ -62,7 +73,7 @@
       become: true
       changed_when: true
       when:
-        - not common_optional_drive_has_filesystem
+        - dns_optional_drive_needs_format
         - common_optional_drive_is_whole_disk
 
     - name: Wait for the kernel to expose the new partition device
@@ -71,7 +82,7 @@
       # case for this. partprobe forces a re-read; the stat loop then waits
       # for the device file itself before formatting.
       when:
-        - not common_optional_drive_has_filesystem
+        - dns_optional_drive_needs_format
         - common_optional_drive_is_whole_disk
       block:
         - name: Force the kernel to re-read the partition table
@@ -89,42 +100,22 @@
 
     - name: Determine the partition to format and mount
       # '1' only applies once we've just created a fresh partition above
-      # (whole disk, no filesystem yet). A whole disk that already has a
-      # filesystem was formatted directly with no partition table at all -
-      # the target there is the disk device itself, not device+"1".
+      # (whole disk, needs formatting). A whole disk that already has the
+      # filesystem we want was formatted directly with no partition table at
+      # all - the target there is the disk device itself, not device+"1".
       ansible.builtin.set_fact:
         dns_optional_drive_target: >-
           {{ (common_optional_drive_device ~ '1')
-          if (common_optional_drive_is_whole_disk and not common_optional_drive_has_filesystem)
+          if (common_optional_drive_is_whole_disk and dns_optional_drive_needs_format)
           else common_optional_drive_device }}
-
-    # TEMPORARY: pinpointing why format/mount keeps targeting the wrong
-    # device instead of the new partition - remove once resolved.
-    - name: DEBUG - dump optional-drive facts before formatting
-      ansible.builtin.debug:
-        msg:
-          common_optional_drive: "{{ common_optional_drive }}"
-          common_optional_drive_device: "{{ common_optional_drive_device }}"
-          common_optional_drive_is_whole_disk: "{{ common_optional_drive_is_whole_disk }}"
-          common_optional_drive_has_filesystem: "{{ common_optional_drive_has_filesystem }}"
-          dns_optional_drive_target: "{{ dns_optional_drive_target }}"
-
-    - name: DEBUG - show actual lsblk state right before formatting
-      ansible.builtin.command: "lsblk -f {{ common_optional_drive_device }}"
-      become: true
-      changed_when: false
-      register: dns_optional_drive_lsblk_debug
-
-    - name: DEBUG - print lsblk output
-      ansible.builtin.debug:
-        var: dns_optional_drive_lsblk_debug.stdout_lines
 
     - name: Format the optional drive (only runs when explicitly allowed above)
       community.general.filesystem:
         fstype: "{{ dns_optional_drive_filesystem }}"
         dev: "{{ dns_optional_drive_target }}"
+        force: "{{ dns_optional_drive_needs_format and not common_optional_drive_is_whole_disk }}"
       become: true
-      when: not common_optional_drive_has_filesystem
+      when: dns_optional_drive_needs_format
 
     - name: Create the mount point
       ansible.builtin.file:
