@@ -98,6 +98,27 @@
           if (common_optional_drive_is_whole_disk and not common_optional_drive_has_filesystem)
           else common_optional_drive_device }}
 
+    # TEMPORARY: pinpointing why format/mount keeps targeting the wrong
+    # device instead of the new partition - remove once resolved.
+    - name: DEBUG - dump optional-drive facts before formatting
+      ansible.builtin.debug:
+        msg:
+          common_optional_drive: "{{ common_optional_drive }}"
+          common_optional_drive_device: "{{ common_optional_drive_device }}"
+          common_optional_drive_is_whole_disk: "{{ common_optional_drive_is_whole_disk }}"
+          common_optional_drive_has_filesystem: "{{ common_optional_drive_has_filesystem }}"
+          dns_optional_drive_target: "{{ dns_optional_drive_target }}"
+
+    - name: DEBUG - show actual lsblk state right before formatting
+      ansible.builtin.command: "lsblk -f {{ common_optional_drive_device }}"
+      become: true
+      changed_when: false
+      register: dns_optional_drive_lsblk_debug
+
+    - name: DEBUG - print lsblk output
+      ansible.builtin.debug:
+        var: dns_optional_drive_lsblk_debug.stdout_lines
+
     - name: Format the optional drive (only runs when explicitly allowed above)
       community.general.filesystem:
         fstype: "{{ dns_optional_drive_filesystem }}"
