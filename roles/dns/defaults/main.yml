@@ -46,7 +46,7 @@ dns_ntp_allowed_networks: []
 
 # Optional attached drive (e.g. a USB SSD) - entirely opt-in. If none is
 # found, storage.yml is a no-op. See roles/dns/tasks/storage.yml.
-dns_optional_drive_mount_path: "/mnt/ssd"
+dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"
 dns_optional_drive_format: false  # DESTRUCTIVE if true - opt in per host
 dns_optional_drive_journald_enabled: true
