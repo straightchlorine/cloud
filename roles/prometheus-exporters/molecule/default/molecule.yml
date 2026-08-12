@@ -13,6 +13,15 @@ platforms:
 
 provisioner:
   name: ansible
+  env:
+    # CI/local both run `cd roles/<role> && molecule test`, so
+    # MOLECULE_PROJECT_DIRECTORY is roles/prometheus-exporters - one level up
+    # is roles/, letting `include_role: name: <any role>` resolve by name.
+    # converge.yml currently works around the absence of this with a raw
+    # include_tasks path (see its own comments) - this makes that workaround
+    # unnecessary for any test written from now on, without touching the
+    # existing one.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 
 verifier:
   name: ansible

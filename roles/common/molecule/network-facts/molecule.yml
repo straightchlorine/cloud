@@ -11,6 +11,12 @@ platforms:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:
   name: ansible
+  env:
+    # CI/local both run `cd roles/<role> && molecule test`, so
+    # MOLECULE_PROJECT_DIRECTORY is roles/common - one level up is roles/,
+    # letting `include_role: name: common` resolve itself by name instead
+    # of needing a raw include_tasks path workaround.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
   inventory:
     group_vars:
       all:

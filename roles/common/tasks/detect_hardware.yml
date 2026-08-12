@@ -1,26 +1,12 @@
 ---
-# Hardware detection for all systems (Pi, PC, VM)
-# Sets hardware-appropriate resource limits based on detected hardware
+# Resource limits by hardware platform. device_type is required in host_vars
+# (no auto-detection fallback: every host in this inventory sets it
+# explicitly, and a wrong guess silently mis-sizes container limits).
 
-- name: Detect hardware platform
-  ansible.builtin.shell: |
-    set -o pipefail
-    # Check for Raspberry Pi
-    if [ -f /proc/device-tree/model ]; then
-      cat /proc/device-tree/model
-    # Check for virtualization
-    elif systemd-detect-virt --quiet; then
-      echo "VM-$(systemd-detect-virt)"
-    # Check DMI for physical systems
-    elif [ -f /sys/class/dmi/id/product_name ]; then
-      echo "PC-$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
-    else
-      echo "unknown"
-    fi
-  args:
-    executable: /bin/bash
-  register: common_hardware_detection_raw
-  changed_when: false
+- name: Fail if device_type is not set
+  ansible.builtin.fail:
+    msg: "device_type must be set in host_vars (e.g. rpi4b, rpi3b, debian_vm, arch_linux)."
+  when: device_type is not defined
 
 - name: Gather system resources
   ansible.builtin.setup:
@@ -32,36 +18,22 @@
       - ansible_processor_cores
       - ansible_processor_vcpus
 
-- name: Parse hardware information # noqa: var-naming[no-role-prefix]
+- name: Map device_type to a hardware platform # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     hardware_platform: >-
-      {%- if device_type is defined -%}
-        {%- if device_type == 'rpi4b' -%}
-          rpi4
-        {%- elif device_type == 'rpi3b' -%}
-          rpi3
-        {%- elif device_type == 'rpi2b' -%}
-          rpi2
-        {%- elif device_type.endswith('_vm') or device_type.endswith('_pc') -%}
-          pc
-        {%- else -%}
-          {{ device_type }}
-        {%- endif -%}
-      {%- elif 'Raspberry Pi 4' in common_hardware_detection_raw.stdout -%}
+      {%- if device_type == 'rpi4b' -%}
         rpi4
-      {%- elif 'Raspberry Pi 3' in common_hardware_detection_raw.stdout -%}
+      {%- elif device_type == 'rpi3b' -%}
         rpi3
-      {%- elif 'Raspberry Pi 2' in common_hardware_detection_raw.stdout -%}
+      {%- elif device_type == 'rpi2b' -%}
         rpi2
-      {%- elif common_hardware_detection_raw.stdout.startswith('VM-')
-        or common_hardware_detection_raw.stdout.startswith('PC-') -%}
+      {%- elif device_type.endswith('_vm') or device_type.endswith('_pc') -%}
         pc
       {%- else -%}
-        unknown
+        {{ device_type }}
       {%- endif -%}
 
     hardware_details:
-      raw_detection: "{{ common_hardware_detection_raw.stdout }}"
       memory_mb: "{{ ansible_memtotal_mb }}"
       cpu_cores: "{{ ansible_processor_cores }}"
       cpu_count: "{{ ansible_processor_count }}"

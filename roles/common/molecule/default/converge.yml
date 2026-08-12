@@ -18,13 +18,10 @@
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
 
-    # include_role (not a raw include_tasks path) so the role's own
-    # defaults/main.yml loads - detect_hardware.yml depends on
-    # common_hardware_profiles being defined there.
-    - name: Include hardware detection
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: detect_hardware
+    # Hardware detection has its own dedicated scenario
+    # (roles/common/molecule/hardware-detection) with real assertions on
+    # hardware_platform/hardware_limits - no value in a second, unverified
+    # copy of the same include here.
 
     - name: Set timezone
       community.general.timezone:

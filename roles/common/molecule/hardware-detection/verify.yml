@@ -5,13 +5,16 @@
   become: true
   tasks:
     - name: Assert hardware facts are defined
+      # hardware_limits is per-service (hardware_limits.traefik.memory, etc,
+      # see common_hardware_profiles) - traefik is used here just because
+      # every platform profile defines it, not because it's special.
       ansible.builtin.assert:
         that:
           - hardware_platform is defined
           - hardware_details is defined
           - hardware_limits is defined
-          - hardware_limits.cpu_limit is defined
-          - hardware_limits.memory_limit is defined
+          - hardware_limits.traefik.memory is defined
+          - hardware_limits.traefik.cpus is defined
         fail_msg: |
           Hardware facts validation failed:
           hardware_platform: {{ hardware_platform | default('UNDEFINED') }}
@@ -20,7 +23,7 @@
     - name: Verify hardware_platform is valid
       ansible.builtin.assert:
         that:
-          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'pc', 'vm', 'unknown']
+          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'pc', 'unknown']
         fail_msg: "Invalid hardware_platform: {{ hardware_platform }}"
 
     - name: Display hardware detection results
@@ -28,5 +31,5 @@
         msg: |
           [OK] Hardware Detection:
           - Platform: {{ hardware_platform }}
-          - CPU Limit: {{ hardware_limits.cpu_limit }}
-          - Memory Limit: {{ hardware_limits.memory_limit }}
+          - Traefik memory limit: {{ hardware_limits.traefik.memory }}
+          - Traefik CPU limit: {{ hardware_limits.traefik.cpus }}

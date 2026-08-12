@@ -3,6 +3,10 @@
   hosts: all
   gather_facts: true
   become: true
+  vars:
+    # device_type is required (no auto-detect fallback) - see
+    # roles/common/tasks/detect_hardware.yml.
+    device_type: rpi4b
   tasks:
     - name: Include detect_hardware task
       ansible.builtin.include_role:
