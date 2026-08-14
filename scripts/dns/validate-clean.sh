@@ -105,8 +105,10 @@ fi
 check_absent /etc/chrony/chrony.conf
 if systemctl is-active --quiet systemd-timesyncd 2>/dev/null; then
   note_ok "systemd-timesyncd active"
+elif systemctl cat systemd-timesyncd.service >/dev/null 2>&1; then
+  note_left "systemd-timesyncd unit present but not active"
 else
-  note_left "systemd-timesyncd not active"
+  note_ok "no systemd-timesyncd unit on this image (NTP left to external source)"
 fi
 
 echo "-- journald relocation reverted --"

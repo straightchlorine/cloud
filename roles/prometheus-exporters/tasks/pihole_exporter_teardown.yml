@@ -50,3 +50,15 @@
     delete: true
   become: true
   failed_when: false
+
+- name: Remove the Pi-hole Exporter's src-unrestricted common firewall rule too
+  # The host's common_firewall_ports (host_vars) can also open 9617 with no src
+  # restriction (firewall role). 9617 is exclusively this exporter's port, so
+  # both rules should go with it. Delete of a non-existent rule is a no-op.
+  community.general.ufw:
+    rule: allow
+    port: "{{ prometheus_exporters_pihole_exporter_port }}"
+    proto: tcp
+    delete: true
+  become: true
+  failed_when: false

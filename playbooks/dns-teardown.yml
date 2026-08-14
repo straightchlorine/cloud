@@ -19,7 +19,7 @@
         tasks_from: network_facts
 
   tasks:
-    - name: SAFETY - require explicit confirmation
+    - name: Require explicit teardown confirmation
       ansible.builtin.assert:
         that:
           - dns_teardown_confirm | default(false) | bool
@@ -28,7 +28,7 @@
           and --limit <your-test-host>.
         quiet: true
 
-    - name: SAFETY - never tear down the production DNS host
+    - name: Never tear down the production DNS host
       ansible.builtin.assert:
         that:
           - inventory_hostname != 'pi-dns'
