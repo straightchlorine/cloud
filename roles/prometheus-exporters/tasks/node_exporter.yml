@@ -142,8 +142,10 @@
   become: true
 
 - name: Verify Node Exporter is responding
+  # Must target primary_ip, not localhost: the unit binds
+  # --web.listen-address={{ primary_ip }}:port, so 127.0.0.1:port refuses.
   ansible.builtin.uri:
-    url: "http://localhost:{{ prometheus_exporters_node_exporter_port }}/metrics"
+    url: "http://{{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: 10
   register: prom_exp_node_exporter_health
