@@ -291,14 +291,17 @@
   failed_when: false
 
 - name: Assert no Pi-hole services still listen on ports 53/80
+  # Trailing space (not a plain '0.0.0.0:53' substring) avoids matching the
+  # always-present mDNS/avahi listener on 5353 - ss always separates the local
+  # address field from the peer column, so the space is a reliable boundary.
   ansible.builtin.assert:
     that:
-      - "'0.0.0.0:53' not in dns_teardown_tcp_listeners.stdout"
-      - "'[::]:53' not in dns_teardown_tcp_listeners.stdout"
-      - "'0.0.0.0:53' not in dns_teardown_udp_listeners.stdout"
-      - "'[::]:53' not in dns_teardown_udp_listeners.stdout"
-      - "'0.0.0.0:80' not in dns_teardown_tcp_listeners.stdout"
-      - "'[::]:80' not in dns_teardown_tcp_listeners.stdout"
+      - "'0.0.0.0:53 ' not in dns_teardown_tcp_listeners.stdout"
+      - "'[::]:53 ' not in dns_teardown_tcp_listeners.stdout"
+      - "'0.0.0.0:53 ' not in dns_teardown_udp_listeners.stdout"
+      - "'[::]:53 ' not in dns_teardown_udp_listeners.stdout"
+      - "'0.0.0.0:80 ' not in dns_teardown_tcp_listeners.stdout"
+      - "'[::]:80 ' not in dns_teardown_tcp_listeners.stdout"
     fail_msg: >-
       Pi-hole services still listen on ports 53/80 after teardown. TCP:\n
       {{ dns_teardown_tcp_listeners.stdout }}UDP:\n

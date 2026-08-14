@@ -67,11 +67,13 @@ done
 
 echo "-- Listening ports --"
 listeners="$( { ss -H -ltn; ss -H -lun; } 2>/dev/null || true )"
-for port_line in "0.0.0.0:53" "[::]:53" "0.0.0.0:80" "[::]:80" ":9617"; do
+# Trailing space bounds each port so e.g. "0.0.0.0:53 " does not match the
+# always-present mDNS listener on 5353 (ss separates local address from peer).
+for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 "; do
   if printf '%s\n' "$listeners" | grep -qF -- "$port_line"; then
-    note_left "still listening on $port_line"
+    note_left "still listening on ${port_line% }"
   else
-    note_ok "no listener on $port_line"
+    note_ok "no listener on ${port_line% }"
   fi
 done
 if printf '%s\n' "$listeners" | grep -qF ":9100"; then
