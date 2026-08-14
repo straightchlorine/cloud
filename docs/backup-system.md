@@ -1,350 +1,210 @@
-# Enterprise Backup System
+# Backup System
 
-Multi-repository backup strategy with automated restore testing and performance monitoring.
+Restic-based backup of service hosts to a Hetzner Storage Box.
+Coordinator mode pulls from remote hosts over SSH. Standalone mode
+runs locally for independent machines.
 
-## Architecture
+Aspirational features (restore testing, Prometheus metrics, rollback
+orchestration) are tracked in [backup-improvement-roadmap.md](backup-improvement-roadmap.md)
+and are not currently implemented.
 
-### Multi-Repository Strategy
+## Current Design
 
-Backup data is organized into three tiers based on criticality:
+Each service has its own restic repository at
+`sftp:hetzner-storage:{{ vault_backup_repository_base }}/{service-name}`
+with a dedicated encryption password from vault. Retention is configured
+per service in `coordinator_targets` (see
+`inventory/production/host_vars/backup_wyse.yml`).
+
+### Topology
 
 ```
-Critical Repository              Services Repository           System Repository
-(14d/8w/12m/3y)                 (7d/4w/6m/1y)                (3d/2w/3m)
-├── System configs              ├── Application data          ├── Config files
-├── Database backups            ├── User data                 ├── Logs
-└── SSL certificates            └── Docker volumes            └── Cache
+pi-dns         --\
+pi-automation  ---> backup_wyse (coordinator) --SFTP--> Hetzner Storage Box
+pi-music       --/
+debian-monitoring  (standalone backup)
+station-arch       (standalone backup)
 ```
 
-- **Critical Repository**: System and database backups (14 daily, 8 weekly, 12
-  monthly, 3 yearly retention)
-- **Services Repository**: Application data backups (7 daily, 4 weekly, 6 monthly,
-  1 yearly retention)
-- **System Repository**: Configuration and logs (3 daily, 2 weekly, 3 monthly
-  retention)
+The coordinator (`backup_wyse`) pulls backups on a staggered schedule
+(01:00, 02:00, 03:00) via SSH keys stored under
+`/opt/backup/.ssh/nodes/<service>`. Each pull runs restic against the
+remote paths and pushes to the per-service Hetzner repo.
 
-### Backup Orchestration
+### Retention
 
-- **Systemd Integration**: Coordinated backup execution with timers
-- **Dependency Management**: Service-aware backup ordering to prevent conflicts
-- **Parallel Operations**: Up to 6 concurrent backup jobs for performance
-- **Retry Logic**: 3 attempts with 15-minute delays for transient failures
+Retention is not tiered. It is defined per service in host_vars:
 
-### Enterprise Features
+- `pi-dns`, `pi-automation`: 14 daily, 8 weekly, 12 monthly, 3 yearly
+- `pi-music`: 7 daily, 4 weekly, 6 monthly, 1 yearly
 
-- **Automated Restore Testing**: Weekly validation of 10% of backups
-- **Performance Monitoring**: Prometheus metrics on port 9102
-- **Security Hardening**: AES256 encryption with key rotation
-- **Compliance Reporting**: Audit trails and retention enforcement
+Adjust via `coordinator_targets[*].retention_policy`.
 
-## Directory Structure
+## Directory Layout
 
-### Enterprise Backup Base (`/opt/enterprise-backup/`)
+The base path `/opt/enterprise-backup` is the legacy directory name used
+by the role. Renaming is tracked as a separate cleanup task.
 
 ```
 /opt/enterprise-backup/
-├── config/
-│   ├── repository-config.yml    # Multi-repository configuration
-│   └── retention-policies.yml   # Retention enforcement rules
-├── scripts/
-│   ├── backup-coordinator.sh    # Main orchestration script
-│   ├── repository-health-monitor.sh  # Health monitoring
-│   ├── init-repositories.sh         # Repository initialization
-│   └── restore-test-runner.sh   # Automated restore testing
-├── keys/
-│   ├── dns-password             # DNS backup password
-│   ├── music-password           # Music backup password
-│   ├── automation-password      # Automation backup password
-│   └── monitoring-password      # Monitoring backup password
-├── logs/
-│   ├── backup-coordinator.log   # Orchestration logs
-│   ├── restore-testing.log      # Restore test results
-│   └── repository-health.log    # Repository status logs
-└── metrics/
-    └── backup-metrics.txt       # Performance metrics cache
-```
+  config/
+    repository-config.yml
+  scripts/
+    backup-coordinator.sh
+    init-repositories.sh
+  keys/
+    dns-password
+    automation-password
+    music-password
+    monitoring-password
+  logs/
+    backup-coordinator.log
 
-### Service-Specific Paths (`/opt/backup/`)
-
-```
 /opt/backup/
-├── cache/                       # Restic cache directory
-├── scripts/
-│   ├── backup-dns.sh           # DNS service backup
-│   ├── backup-music.sh         # Music service backup
-│   ├── backup-automation.sh    # Automation service backup
-│   └── backup-monitoring.sh    # Monitoring service backup
-└── logs/
-    ├── backup-dns.log          # DNS backup logs
-    ├── backup-music.log        # Music backup logs
-    ├── backup-automation.log   # Automation backup logs
-    └── backup-monitoring.log   # Monitoring backup logs
+  cache/
+  scripts/
+    backup-<service>.sh
+  logs/
+    backup-<service>.log
+  .ssh/
+    nodes/<service>
 ```
 
 ## Operations
 
-### Repository Management
+### Initialize repositories
 
-```bash
-# Initialize all repositories
+```
 sudo -u backup /opt/enterprise-backup/scripts/init-repositories.sh
+```
 
-# Check repository health
-sudo -u backup /opt/enterprise-backup/scripts/repository-health-monitor.sh
+### List snapshots
 
-# List all snapshots across repositories
+```
 sudo -u backup restic snapshots \
-  --password-file /opt/backup/keys/dns-password --repository [dns-repo]
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
 ```
 
-### Restore Operations
-
-```bash
-# List available snapshots
-sudo -u backup restic snapshots \
-  --password-file /opt/backup/keys/[service]-password --repository [repo]
-
-# Restore specific snapshot
-sudo -u backup restic restore [snapshot-id] \
-  --target /tmp/restore-[service] \
-  --password-file /opt/backup/keys/[service]-password \
-  --repository [repo]
-
-# Restore specific paths only
-sudo -u backup restic restore latest \
-  --target /tmp/restore \
-  --include /etc/pihole \
-  --password-file /opt/backup/keys/dns-password \
-  --repository [repo]
-```
-
-### Automated Restore Testing
-
-Weekly validation automatically runs, testing 10% of backup snapshots:
-
-```bash
-# Run restore testing manually
-sudo -u backup /opt/enterprise-backup/scripts/restore-test-runner.sh
-
-# Check restore test results
-tail -f /opt/enterprise-backup/logs/restore-testing.log
-
-# View test performance metrics
-cat /opt/enterprise-backup/metrics/restore-performance.json
-```
-
-## Monitoring
-
-### Systemd Services
-
-```bash
-# Check backup coordinator status
-sudo systemctl status backup-coordinator.service
-sudo systemctl status backup-coordinator.timer
-
-# Check repository health monitoring
-sudo systemctl status repository-health-monitor.service
-sudo systemctl status repository-health-monitor.timer
-
-# View service logs
-journalctl -u backup-coordinator -f
-journalctl -u repository-health-monitor -f
-```
-
-### Performance Metrics
-
-Prometheus endpoint on port 9102 exports:
+### Restore
 
 ```
-restic_backup_duration_seconds{service="dns",repository="critical"}
-restic_backup_size_bytes{service="music",repository="services"}
-restic_repository_health{repository="critical",status="healthy"}
-restore_test_duration_seconds{service="automation",success="true"}
-restore_test_data_integrity{service="dns",verified="true"}
+sudo -u backup restic restore <snapshot-id> \
+  --target /tmp/restore-<service> \
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
 ```
 
-Query example:
+Restore a subset with `--include /path`.
 
-```bash
-curl http://localhost:9102/metrics
+### Browse a snapshot
+
+```
+sudo -u backup restic mount /mnt/backup-browse \
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
 ```
 
-### Log Analysis
+### Repository integrity
 
-```bash
-# Enterprise backup logs
-tail -f /opt/enterprise-backup/logs/backup-coordinator.log
-
-# Service-specific backup logs
-tail -f /opt/backup/logs/backup-dns.log
-tail -f /opt/backup/logs/backup-music.log
-
-# Repository health logs
-tail -f /opt/enterprise-backup/logs/repository-health.log
-
-# Restore testing logs
-tail -f /opt/enterprise-backup/logs/restore-testing.log
+```
+sudo -u backup restic check \
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
 ```
 
-## Security
+### Manual prune (retention enforcement)
 
-### Encryption
-
-- **Algorithm**: AES256 encryption for all repositories
-- **Key Management**: Individual passwords per service/repository
-- **Key Rotation**: Scheduled rotation with backward compatibility
-- **Transit Security**: SSH encryption for remote repositories
-
-### Access Control
-
-- **Backup User**: Dedicated `backup` user with minimal privileges
-- **SSH Keys**: Service-specific SSH key authentication
-- **File Permissions**: Restrictive permissions on password files (600)
-- **Audit Trail**: All backup operations logged with timestamps
-
-### Repository Security
-
-```bash
-# Verify repository integrity
-sudo -u backup restic check --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-
-# Repository statistics and deduplication
-sudo -u backup restic stats --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-
-# Prune old snapshots (follows retention policy)
-sudo -u backup restic forget --prune --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
 ```
+sudo -u backup restic forget --prune \
+  --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --keep-yearly 3 \
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
+```
+
+## Systemd Services
+
+```
+backup-coordinator.service     # Orchestrates all pulls
+backup-coordinator.timer       # Triggers coordinator runs
+backup-<service>.service       # Per-target backup script
+backup-<service>.timer         # Per-target schedule
+```
+
+Inspect with:
+
+```
+systemctl status backup-coordinator.timer
+journalctl -u backup-coordinator -n 100
+```
+
+## Adding a Service
+
+Add an entry to `coordinator_targets` in
+`inventory/production/host_vars/backup_wyse.yml` with:
+
+- `service_name`, `hostname`, `target_host`, `ssh_user`, `ssh_key`
+- `common_backup_paths` and `backup_excludes`
+- `restic_repository` and `restic_password` (vault reference)
+- `retention_policy`
+- `restic_optimization` (`pack_size`, `read_concurrency`, `compression`)
+
+Re-run the coordinator playbook to deploy.
+
+## Security Notes
+
+- Restic encrypts repositories by default (per-repo AES-256 key derived
+  from password).
+- Each service has its own password file, mode 0600, owned by `backup`.
+- SSH keys for coordinator pulls are per-target, stored under
+  `/opt/backup/.ssh/nodes/`.
+- Sudoers entries are scoped to explicit restic subcommands, not
+  wildcarded.
+
+## Known Gaps
+
+These are explicit deficiencies, not features:
+
+- No automated restore test. Restores are verified manually.
+- No Prometheus metrics for backup health.
+- No automated repository health check beyond `restic check` on demand.
+- `roles/backup/defaults/main.yml` defines a tiered-repository model
+  that is not wired up in production; `backup_wyse.yml` uses a flat
+  per-service model.
+
+See [backup-improvement-roadmap.md](backup-improvement-roadmap.md) for
+the plan to close these gaps.
 
 ## Troubleshooting
 
-### Backup Failures
+### Coordinator run failed
 
-```bash
-# Check backup coordinator status
-sudo systemctl status backup-coordinator
-journalctl -u backup-coordinator -n 50
+```
+systemctl status backup-coordinator
+journalctl -u backup-coordinator -n 100
 
-# Test individual service backup
-sudo -u backup /opt/backup/scripts/backup-dns.sh --dry-run
-
-# Check repository connectivity
-sudo -u backup restic snapshots --password-file \
-  /opt/backup/keys/dns-password --repository [repo]
+# Test one target in isolation
+sudo -u backup /opt/backup/scripts/backup-<service>.sh
 ```
 
-### Repository Issues
+### SSH connectivity to a target
 
-```bash
-# Repository health check
-sudo -u backup restic check --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-
-# Rebuild repository index
-sudo -u backup restic rebuild-index --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-
-# Repair repository
-sudo -u backup restic repair packs --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
+```
+sudo -u backup ssh -i /opt/backup/.ssh/nodes/<service> \
+  <ssh_user>@<target_host> echo ok
 ```
 
-### SSH/Connectivity Issues
+### Hetzner repository access
 
-```bash
-# Test SSH connectivity
-sudo -u backup ssh -i /opt/backup/.ssh/backup_key \
-  backup-user@backup-server.com
-
-# Test repository access
-sudo -u backup restic cat config --password-file \
-  /opt/backup/keys/dns-password --repository [repo]
-
-# Network troubleshooting
-ping backup-server.com
-telnet backup-server.com 22
+```
+sudo -u backup restic cat config \
+  --password-file /opt/backup/keys/<service>-password \
+  --repo sftp:hetzner-storage:<repo-path>
 ```
 
-### Performance Issues
+### Cache growth
 
-```bash
-# Check cache size and efficiency
+```
 du -sh /opt/backup/cache
 sudo -u backup restic cache --cleanup
-
-# Monitor backup performance
-sudo -u backup restic stats --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-
-# Adjust concurrent operations
-# Edit /opt/enterprise-backup/config/repository-config.yml
-# Modify max_parallel_operations value
 ```
-
-### Restore Test Failures
-
-```bash
-# Check restore test logs
-tail -f /opt/enterprise-backup/logs/restore-testing.log
-
-# Manual restore test
-sudo -u backup /opt/enterprise-backup/scripts/restore-test-runner.sh \
-  --service dns --verbose
-
-# Verify restore data integrity
-sudo -u backup restic verify --password-file \
-  /opt/backup/keys/[service]-password --repository [repo]
-```
-
-## Compliance
-
-### Retention Enforcement
-
-- **Automated Pruning**: Systemd timers enforce retention policies
-- **Audit Logging**: All retention actions logged for compliance
-- **Policy Verification**: Regular checks ensure retention compliance
-
-### Backup Verification
-
-- **Integrity Checks**: Daily verification of repository integrity
-- **Restore Testing**: Weekly automated restore tests (10% sample)
-- **Performance Benchmarking**: Continuous performance monitoring
-
-### Disaster Recovery
-
-Full infrastructure restore order:
-
-1. Restore DNS configuration first (critical services depend on it)
-1. Restore automation stack (SSL certificates, reverse proxy)
-1. Restore monitoring infrastructure (metrics, alerting)
-1. Restore music stack (user-facing services)
-
-Emergency access to backups:
-
-```bash
-sudo -u backup restic mount /mnt/backup-browse \
-  --password-file /opt/backup/keys/[service]-password \
-  --repository [repo]
-```
-
-## Advanced Configuration
-
-### Multi-Repository Strategy Benefits
-
-- **Risk Distribution**: Separate repos reduce corruption impact
-- **Performance Optimization**: Compression and retention tuned per tier
-- **Cost Management**: Storage tiered by importance and recovery needs
-
-### Automated Operations
-
-- **Dependency Management**: Service-aware backup sequencing prevents conflicts
-- **Parallel Processing**: Concurrent backups for optimal performance
-- **Retry Logic**: Automatic retry on transient failures improves reliability
-
-### Operational Excellence
-
-- **Monitoring Integration**: Prometheus metrics for backup health alerting
-- **Performance Analytics**: Timing and efficiency metrics for capacity planning
-- **Automated Testing**: Validate backup integrity and catch issues early

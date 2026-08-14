@@ -4,7 +4,8 @@
 
 Ansible-based homelab deployment.
 
-**Repository:** [Codeberg](https://codeberg.org/piotrkrzysztof/cloud) (primary) ·
+**Repository:**
+[Codeberg](https://codeberg.org/piotrkrzysztof/cloud) (primary) ·
 [GitHub](https://github.com/straightchlorine/cloud) (mirror)
 
 ## Architecture
@@ -56,7 +57,7 @@ ansible-playbook -i inventory/production/hosts.yml \
 
 ```
 roles/
-├── common/              # Docker, packages, network facts, backup, promtail
+├── common/              # Docker, packages, network facts, backup
 ├── dns/                 # Pi-hole DNS + Chrony NTP
 ├── music-stack/         # Navidrome + yt-dlp + Beets
 ├── automation/          # Traefik + Vaultwarden + InfluxDB + Portainer
@@ -69,17 +70,7 @@ roles/
 
 ## Configuration
 
-All secrets live in `inventory/production/group_vars/all/vault.yml`
-(ansible-vault encrypted, not in repo). See
-[vault.yml.example](inventory/production/group_vars/vault.yml.example) for
-required variables.
+All secrets live in `inventory/production/group_vars/all/vault.yml`. See
+[vault.yml.example](inventory/production/group_vars/vault.yml.example).
 
 Host-specific config: `inventory/production/host_vars/{hostname}.yml`
-
-## Docs
-
-- [Backup System](docs/backup-system.md) — Multi-repository strategy, restore
-  procedures
-- [Monitoring Stack](docs/monitoring-stack.md) — Dashboards, alerting,
-  retention
-- [Testing](docs/testing.md) — Molecule tests, CI matrix

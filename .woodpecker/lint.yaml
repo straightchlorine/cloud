@@ -47,6 +47,7 @@ steps:
           playbooks/site.yml \
           playbooks/music-stack.yml \
           playbooks/automation-stack.yml \
+          playbooks/dns-teardown.yml \
           playbooks/backup/deploy-full-system.yml \
           playbooks/backup/deploy-coordinator.yml \
           playbooks/backup/test-system.yml \
