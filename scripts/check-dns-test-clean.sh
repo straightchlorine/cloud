@@ -54,7 +54,9 @@ else
   note_ok "pihole-FTL service not active"
 fi
 
-root_cron="$(crontab -l -u root 2>/dev/null || true)"
+# The dns role's crons live in root's crontab; only root may read it, so the
+# same sudo -n path the ufw check uses applies here too.
+root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
 for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
   if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
     note_left "root cron still has: $cron_job"

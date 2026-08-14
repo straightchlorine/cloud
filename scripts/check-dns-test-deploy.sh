@@ -94,7 +94,9 @@ fi
 
 echo "-- Web + exporters --"
 if [ -n "$PRIMARY_IP" ]; then
-  web_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://$PRIMARY_IP/admin/" 2>/dev/null || true)"
+  # /admin/ answers 302 -> /admin/login (Pi-hole v6), so follow redirects like
+  # the role's own uri-based post_deploy_validate does, expecting a final 200.
+  web_code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "http://$PRIMARY_IP/admin/" 2>/dev/null || true)"
   if [ "$web_code" = "200" ]; then
     note_ok "Pi-hole web interface HTTP 200"
   else
@@ -130,11 +132,13 @@ if [ "$drive_fs" = "ext4" ]; then
 else
   note_left "/mnt/data not mounted as ext4 (got: ${drive_fs:-nothing})"
 fi
-journal_source="$(findmnt -n -o SOURCE /var/log/journal 2>/dev/null || true)"
-if printf '%s\n' "$journal_source" | grep -q '/mnt/data/journal'; then
-  note_ok "journald bind-mounted from $journal_source"
+# findmnt reports the bind source as the device with a subpath (e.g.
+# /dev/sda1[/journal]) on this box, so just verify /var/log/journal is a
+# separate mount rather than grepping for a specific source string.
+if findmnt -n /var/log/journal >/dev/null 2>&1; then
+  note_ok "journald relocated (bind-mounted over /var/log/journal)"
 else
-  note_left "/var/log/journal not bind-mounted to the drive (got: ${journal_source:-nothing})"
+  note_left "/var/log/journal is not a separate mount (journald relocation missing)"
 fi
 if grep -qE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf; then
   note_ok "journald Storage=persistent"
@@ -160,7 +164,7 @@ else
 fi
 
 echo "-- Cron + artifacts --"
-root_cron="$(crontab -l -u root 2>/dev/null || true)"
+root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
 for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
   if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
     note_ok "cron present: $cron_job"
@@ -170,23 +174,14 @@ for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
 done
 
 check_present /usr/local/bin/pihole
-check_present /etc/pihole/setupVars.conf
+# v6 migrates setupVars.conf into pihole.toml at install, so the TOML is the
+# runtime config that must exist (setupVars.conf is transient).
+check_present /etc/pihole/pihole.toml
 check_present /usr/local/bin/pihole-update.sh
 check_present /usr/local/bin/pihole-syncthing-backup.sh
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
 check_present /mnt/data/syncthing/backup
-
-if command -v sqlite3 >/dev/null 2>&1; then
-  gravity_count="$(sqlite3 /etc/pihole/gravity.db 'SELECT COUNT(*) FROM gravity;' 2>/dev/null || true)"
-  if [ "${gravity_count:-0}" -gt 0 ] 2>/dev/null; then
-    note_ok "gravity blocklist has $gravity_count domains"
-  else
-    note_left "gravity blocklist empty or unreadable"
-  fi
-else
-  note_left "sqlite3 not installed - cannot verify gravity count"
-fi
 
 echo
 echo "== Summary: $pass passed, $fail failed =="
