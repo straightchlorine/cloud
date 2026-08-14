@@ -6,7 +6,7 @@
 #   - common_ prefix: variables with role-level defaults (e.g. common_restart_policy,
 #     common_wanted_by, common_enable_security_hardening). These are always available.
 #   - No prefix: variables passed by callers only when needed (e.g. service_user,
-#     exec_start, working_directory). Guarded by {% if ... is defined %}.
+#     exec_start, working_directory). Guarded by 'is defined' checks.
 #
 # Known issue: some guards check unprefixed names but render common_ prefixed values
 # (e.g. working_directory vs common_working_directory, timeout_start_sec vs
