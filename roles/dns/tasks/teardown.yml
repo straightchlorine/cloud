@@ -145,6 +145,7 @@
   loop_control:
     label: "{{ item.path }}"
   become: true
+  when: dns_teardown_chrony_conf_dir.stat.exists
 
 # Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
 # this, so without it the host is left with no working DNS. Debian doesn't ship
