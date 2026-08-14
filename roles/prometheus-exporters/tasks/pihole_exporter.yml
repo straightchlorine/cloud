@@ -47,16 +47,6 @@
     path: "/tmp/pihole_exporter_checksum.txt"
     state: absent
 
-- name: Create Pi-hole Exporter configuration file
-  ansible.builtin.template:
-    src: pihole-exporter.conf.j2
-    dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
-    mode: "0644"
-  become: true
-  notify: Restart pihole-exporter
-
 - name: Create Pi-hole Exporter systemd service
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"

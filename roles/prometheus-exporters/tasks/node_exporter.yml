@@ -133,16 +133,6 @@
     - Restart node-exporter
   when: node_exporter_install_method == "binary"
 
-- name: Create Node Exporter configuration file
-  ansible.builtin.template:
-    src: node-exporter.conf.j2
-    dest: "{{ prometheus_exporters_config_dir }}/node-exporter.conf"
-    owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
-    mode: '0644'
-  become: true
-  notify: Restart node-exporter
-
 - name: Enable and start Node Exporter service
   ansible.builtin.systemd:
     name: "{{ 'node-exporter' if node_exporter_install_method == 'binary' else 'prometheus-node-exporter' }}"
