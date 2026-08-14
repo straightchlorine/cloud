@@ -1,8 +1,10 @@
 ---
 # Reverse the DNS role so the host can be re-tested from a near-clean state.
-# Order matters: restore the system resolver LAST so the box keeps working DNS
-# throughout. Intended for a disposable test Pi, never the production DNS host
-# (playbooks/dns-teardown.yml enforces that guard before including this).
+# Order matters: `pihole uninstall` destroys the box's resolver, so working DNS
+# is restored as soon as Pi-hole and its packages are gone (before the storage
+# reversal), and verified again by the self-check block at the end. Intended for
+# a disposable test Pi, never the production DNS host (playbooks/dns-teardown.yml
+# enforces that guard before including this).
 
 - name: Gather service facts (systemd-timesyncd/systemd-resolved presence varies by image)
   ansible.builtin.service_facts:
@@ -66,20 +68,34 @@
   # scope for a DNS-role-only teardown.
 
 - name: Remove DNS role file artifacts
+  # Includes the pihole binary and pihole-FTL unit so a retry after a
+  # partially-interrupted `pihole uninstall` still leaves no dangling service,
+  # plus /tmp/pi-hole-repo for runs killed before the deploy block's cleanup.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
+    - /usr/local/bin/pihole
     - /usr/local/bin/pihole-update.sh
     - /usr/local/bin/pihole-syncthing-backup.sh
+    - /var/log/pihole-FTL.log
+    - /var/log/pihole.log
     - /var/log/pihole-syncthing-backup.log
     - /etc/logrotate.d/weekly-updates
     - /var/log/weekly-updates.log
     - /etc/chrony/chrony.conf
     - /etc/pihole.backup
+    - /etc/systemd/system/pihole-FTL.service
+    - /tmp/pi-hole-repo
   become: true
-  # Note: the Syncthing-shared backup dir (dns_backup_dir) is left intact - it is
-  # replicated user data, not role state.
+  # Note: the Syncthing-shared backup dir (dns_backup_dir) is left alone here -
+  # it is replicated user data, not role state (and lives on the optional drive,
+  # which is unmounted and wiped separately below).
+
+- name: Reload systemd after removing the Pi-hole service unit
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
 
 - name: Stop and disable chrony
   ansible.builtin.systemd:
@@ -99,12 +115,36 @@
   become: true
 
 - name: Re-enable systemd-timesyncd (chrony had replaced it)
+  # masked: false unmasks too, so a previously-masked unit cannot make this fail.
   ansible.builtin.systemd:
     name: systemd-timesyncd
     state: started
     enabled: true
+    masked: false
   become: true
   when: "'systemd-timesyncd.service' in ansible_facts.services"
+
+- name: Check whether /etc/chrony exists for backup cleanup
+  ansible.builtin.stat:
+    path: /etc/chrony
+  register: dns_teardown_chrony_conf_dir
+
+- name: "Find chrony config backups created by the deploy's 'backup: true'"
+  ansible.builtin.find:
+    paths: /etc/chrony
+    patterns: "chrony.conf.*"
+    file_type: file
+  register: dns_teardown_chrony_conf_backups
+  when: dns_teardown_chrony_conf_dir.stat.exists
+
+- name: Remove chrony config backups
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ dns_teardown_chrony_conf_backups.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
 
 # Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
 # this, so without it the host is left with no working DNS. Debian doesn't ship
@@ -204,11 +244,65 @@
   failed_when: false
 
 - name: Wipe the drive's filesystem signature so the next run re-tests detection from scratch
+  # This also makes any Syncthing-replicated backup dir on the drive
+  # (dns_backup_dir) unreadable - acceptable on a disposable test box, and the
+  # dir is recreated by the next deploy anyway.
   ansible.builtin.command: "wipefs -a {{ dns_optional_drive_mounted_source }}"
   become: true
   changed_when: true
   failed_when: false
   when: dns_optional_drive_mounted_source | length > 0
+
+# Self-verification: fail loudly if anything the role installed is still around.
+# A teardown that "succeeds" while leaving pihole running would silently poison
+# the next test run - this makes that impossible to miss.
+- name: Verify key Pi-hole artifacts are gone
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/pihole
+    - /etc/pihole
+    - /opt/pihole
+    - /etc/systemd/system/pihole-FTL.service
+    - /etc/chrony/chrony.conf
+  register: dns_teardown_verify
+
+- name: Assert key Pi-hole artifacts are gone
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: "{{ item.item }} still exists after teardown"
+    success_msg: "[OK] {{ item.item }} removed"
+  loop: "{{ dns_teardown_verify.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check for remaining TCP listeners on Pi-hole ports
+  ansible.builtin.command: ss -H -ltn
+  register: dns_teardown_tcp_listeners
+  changed_when: false
+  failed_when: false
+
+- name: Check for remaining UDP listeners on the Pi-hole DNS port
+  ansible.builtin.command: ss -H -lun
+  register: dns_teardown_udp_listeners
+  changed_when: false
+  failed_when: false
+
+- name: Assert no Pi-hole services still listen on ports 53/80
+  ansible.builtin.assert:
+    that:
+      - "'0.0.0.0:53' not in dns_teardown_tcp_listeners.stdout"
+      - "'[::]:53' not in dns_teardown_tcp_listeners.stdout"
+      - "'0.0.0.0:53' not in dns_teardown_udp_listeners.stdout"
+      - "'[::]:53' not in dns_teardown_udp_listeners.stdout"
+      - "'0.0.0.0:80' not in dns_teardown_tcp_listeners.stdout"
+      - "'[::]:80' not in dns_teardown_tcp_listeners.stdout"
+    fail_msg: >-
+      Pi-hole services still listen on ports 53/80 after teardown. TCP:\n
+      {{ dns_teardown_tcp_listeners.stdout }}UDP:\n
+      {{ dns_teardown_udp_listeners.stdout }}
+    success_msg: "[OK] No Pi-hole services listening on ports 53/80"
 
 # ponytail: firewall rules the role/firewall added are left in place — harmless
 # residue on a test box, and reversing ufw risks locking out SSH. Run

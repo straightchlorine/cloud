@@ -9,6 +9,15 @@
   hosts: dns
   become: true
   gather_facts: true
+  pre_tasks:
+    - name: Gather network facts for teardown
+      # Provides primary_network_cidr, which the pihole-exporter teardown needs
+      # to match (and so delete) its src-restricted ufw rule; it is a custom
+      # fact, not present in the normal gather_facts payload.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
   tasks:
     - name: SAFETY - require explicit confirmation
       ansible.builtin.assert:

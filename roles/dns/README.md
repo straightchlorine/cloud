@@ -140,6 +140,38 @@ Pi-hole as DNS server.
 Pi-hole forwards to firewall/router DNS by default. Modify `pihole_dns_servers` in
 host_vars to change upstream servers.
 
+## Teardown & Re-test
+
+The role ships a repeatable teardown for disposable test hosts (e.g. `pi-dns-test`),
+so the same box can be re-deployed and re-tested end-to-end:
+
+```bash
+# 1. Tear down the DNS role + Pi-hole exporter on the test host
+ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
+  --limit pi-dns-test -e dns_teardown_confirm=true
+
+# 2. Verify the box is clean enough for a fresh test
+./scripts/check-dns-test-clean.sh pi-dns-test
+```
+
+The teardown playbook refuses to run without `dns_teardown_confirm=true` and
+hard-refuses the production DNS host (`pi-dns` / `192.168.20.10`). It removes
+Pi-hole, its cron jobs, auto-update/backup scripts, chrony (restoring
+`systemd-timesyncd`), reverses the journald relocation and optional-drive mount,
+restores working DNS, and ends with a self-check that fails if Pi-hole artifacts
+or ports 53/80 are still present.
+
+What intentionally stays (shared/fleet state, re-applied idempotently by the next
+`site.yml` run):
+
+- UFW rules (reversing them risks locking out SSH - `ufw --force reset` by hand
+  for a truly bare firewall)
+- `node-exporter` / the `prometheus` user and directories
+- `unattended-upgrades`, `fail2ban` and other common-role state
+
+`scripts/check-dns-test-clean.sh` verifies all of the above and exits non-zero
+on any leftover.
+
 ## Validation
 
 Pre-deployment (`validate.yml`) checks that:

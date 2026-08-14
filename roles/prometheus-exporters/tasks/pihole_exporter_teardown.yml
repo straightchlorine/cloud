@@ -25,18 +25,28 @@
   become: true
 
 - name: Remove Pi-hole Exporter binary and config
+  # /tmp/pihole_exporter_checksum.txt too: a run interrupted between the
+  # checksum download and pihole_exporter.yml's own cleanup would leave it
+  # behind, and the stale file would then be force-re-fetched next deploy.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
     - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
     - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+    - "/tmp/pihole_exporter_checksum.txt"
   become: true
 
 - name: Remove firewall rule for Pi-hole Exporter
+  # Mirror the add in firewall.yml (same src + proto) so the delete actually
+  # matches the src-restricted rule - community.general.ufw only removes a rule
+  # whose parameters match, so deleting by port alone would silently leave it.
   community.general.ufw:
     rule: allow
     port: "{{ prometheus_exporters_pihole_exporter_port }}"
+    proto: tcp
+    src: "{{ prometheus_exporters_firewall_source }}"
+    comment: "Pi-hole Prometheus Exporter"
     delete: true
   become: true
   failed_when: false
