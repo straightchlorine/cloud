@@ -19,6 +19,22 @@
   when: prometheus_exporters_enabled
   tags: [dns, automation, music, monitoring, backup]
 
+- name: Gather network facts
+  # primary_ip is rendered into the exporters' systemd units
+  # (--web.listen-address). The fleet-wide play's common role normally provides
+  # it, but that role is tagged [common, base] - on `--tags dns`-style scoped
+  # runs it never executes, primary_ip is undefined, and the systemd template's
+  # 'is defined' guard then SILENTLY drops the ExecStart line, leaving a unit
+  # systemd rejects with BadUnitSetting. Same tag-propagation rules as the
+  # includes above: apply: is required, tags: alone does nothing.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+    apply:
+      tags: [dns, automation, music, monitoring, backup]
+  when: prometheus_exporters_enabled
+  tags: [dns, automation, music, monitoring, backup]
+
 - name: Include Node Exporter setup
   # Also tagged with every host-specific play tag in site.yml: node_exporter
   # runs on every host, but this task lives in the fleet-wide "Configure all
