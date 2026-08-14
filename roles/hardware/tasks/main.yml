@@ -1,7 +1,8 @@
 ---
-# Resource limits by hardware platform. device_type is required in host_vars
-# (no auto-detection fallback: every host in this inventory sets it
-# explicitly, and a wrong guess silently mis-sizes container limits).
+# Hardware curation: map device_type (host_vars) to a hardware platform and
+# resource limit profile. Read-only - sets hardware_platform, hardware_details
+# and hardware_limits.
+# Extracted from the old roles/common/tasks/detect_hardware.yml.
 
 - name: Fail if device_type is not set
   ansible.builtin.fail:
@@ -18,7 +19,7 @@
       - ansible_processor_cores
       - ansible_processor_vcpus
 
-- name: Map device_type to a hardware platform # noqa: var-naming[no-role-prefix]
+- name: Map device_type to a hardware platform
   ansible.builtin.set_fact:
     hardware_platform: >-
       {%- if device_type == 'rpi4b' -%}
@@ -43,10 +44,9 @@
   ansible.builtin.fail:
     msg: >-
       hardware_platform '{{ hardware_platform }}' is not a key of
-      common_hardware_profiles. Valid keys:
-      {{ common_hardware_profiles.keys() | list }}
-  when: hardware_platform not in common_hardware_profiles
+      hardware_profiles. Valid keys: {{ hardware_profiles.keys() | list }}
+  when: hardware_platform not in hardware_profiles
 
-- name: Set hardware-specific resource limits from platform profile # noqa: var-naming[no-role-prefix]
+- name: Set hardware-specific resource limits from platform profile
   ansible.builtin.set_fact:
-    hardware_limits: "{{ common_hardware_profiles[hardware_platform] }}"
+    hardware_limits: "{{ hardware_profiles[hardware_platform] }}"

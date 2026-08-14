@@ -1,0 +1,22 @@
+---
+# Ansible Galaxy metadata for the os discovery role.
+# Not published to Galaxy; kept minimal (see roles/common/meta/main.yml).
+
+galaxy_info:
+  namespace: homelab
+  role_name: os
+  description: Discover and normalize the device OS and CPU architecture
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm # Debian 12
+        - trixie # Debian 13
+
+collections:
+  - ansible.utils
+
+# No dependencies - this should always be safe to include first.
+dependencies: []

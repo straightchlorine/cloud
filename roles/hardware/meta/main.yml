@@ -1,0 +1,22 @@
+---
+# Ansible Galaxy metadata for the hardware discovery role.
+# Not published to Galaxy; kept minimal (see roles/common/meta/main.yml).
+
+galaxy_info:
+  namespace: homelab
+  role_name: hardware
+  description: Detect hardware platform and derive resource limits from device_type
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm # Debian 12
+        - trixie # Debian 13
+
+collections:
+  - ansible.utils
+
+# No dependencies - include explicitly when resource limits are needed.
+dependencies: []

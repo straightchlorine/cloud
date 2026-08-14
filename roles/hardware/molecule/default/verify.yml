@@ -1,13 +1,13 @@
 ---
-- name: Verify hardware detection
+- name: Verify hardware discovery
   hosts: all
   gather_facts: true
   become: true
   tasks:
     - name: Assert hardware facts are defined
       # hardware_limits is per-service (hardware_limits.traefik.memory, etc,
-      # see common_hardware_profiles) - traefik is used here just because
-      # every platform profile defines it, not because it's special.
+      # see hardware_profiles) - traefik is used here just because every
+      # platform profile defines it, not because it's special.
       ansible.builtin.assert:
         that:
           - hardware_platform is defined

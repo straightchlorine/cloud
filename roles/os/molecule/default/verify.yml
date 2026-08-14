@@ -1,0 +1,36 @@
+---
+- name: Verify os discovery
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Assert normalized OS/arch facts are defined
+      ansible.builtin.assert:
+        that:
+          - os_family is defined
+          - os_name is defined
+          - os_version is defined
+          - os_codename is defined
+          - os_is_debian is defined
+          - os_arch_machine is defined
+          - os_arch_raw is defined
+          - os_arch_download is defined
+          - os_is_arm is defined
+          - os_is_64bit is defined
+        fail_msg: "One or more os_* facts were not set"
+
+    - name: Assert Debian family and a supported download arch
+      ansible.builtin.assert:
+        that:
+          - os_is_debian
+          - os_arch_download in ['amd64', '386', 'armv5', 'armv6', 'armv7', 'arm64']
+        fail_msg: >-
+          Unexpected discovered values: os_family={{ os_family }}
+          os_arch_machine={{ os_arch_machine }}
+          os_arch_download={{ os_arch_download }}
+
+    - name: Display discovery result
+      ansible.builtin.debug:
+        msg: >-
+          [OK] OS/arch: {{ os_name }} {{ os_version }}
+          / {{ os_arch_machine }} -> {{ os_arch_download }}
+          (arm={{ os_is_arm }}, 64bit={{ os_is_64bit }})

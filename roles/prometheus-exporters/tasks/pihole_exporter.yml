@@ -7,6 +7,11 @@
   ansible.builtin.get_url:
     url: "{{ pihole_exporter_checksum_url }}"
     dest: "/tmp/pihole_exporter_checksum.txt"
+    # force: a partial file can be left behind by a previous dropped
+    # connection, and without a checksum to validate against get_url would
+    # consider that existing file good and skip the fetch - silently leaving
+    # stale checksums for grep to fail on.
+    force: true
     timeout: 30
   register: prom_exp_pihole_exporter_checksum_download
   retries: 3

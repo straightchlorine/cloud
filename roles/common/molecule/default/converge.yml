@@ -18,10 +18,9 @@
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
 
-    # Hardware detection has its own dedicated scenario
-    # (roles/common/molecule/hardware-detection) with real assertions on
-    # hardware_platform/hardware_limits - no value in a second, unverified
-    # copy of the same include here.
+    # Hardware detection now lives in the standalone 'hardware' role with its
+    # own molecule scenario (roles/hardware/molecule) asserting
+    # hardware_platform/hardware_limits - no value in a duplicate include here.
 
     - name: Set timezone
       community.general.timezone:

@@ -1,0 +1,39 @@
+---
+# os role defaults - OS/architecture discovery, usable by any device role.
+# Consume the published os_* facts to validate the OS and pick the right
+# binary/package architecture for a download.
+
+# OS families this role accepts. Everything in this fleet is Debian-family
+# (Pi-hole, chrony and the exporters are all Debian-based).
+os_supported_families:
+  - Debian
+
+# ansible_architecture -> the canonical "<os>-<arch>" download suffix used by
+# the Prometheus/node_exporter style of release (linux-<arch>). Add entries as
+# new device types are introduced.
+os_arch_download_map:
+  x86_64: "amd64"
+  i386: "386"
+  i686: "386"
+  armv5tel: "armv5"
+  armv5tejl: "armv5"
+  armv6l: "armv6"
+  armv7l: "armv7"
+  armv8l: "arm64"
+  aarch64: "arm64"
+
+# Architectures treated as ARM. Some projects collapse every ARM variant down to
+# a single "linux-arm" binary (e.g. eko/pihole-exporter) - gating on os_is_arm
+# is the robust way to handle that.
+os_arch_arm:
+  - armv5tel
+  - armv5tejl
+  - armv6l
+  - armv7l
+  - armv8l
+  - aarch64
+
+# Architectures treated as 64-bit.
+os_arch_64bit:
+  - x86_64
+  - aarch64

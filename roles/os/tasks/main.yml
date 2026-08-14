@@ -1,0 +1,51 @@
+---
+# Discover the device OS + CPU architecture "in one go" and publish them as
+# normalized os_* facts, so any role can validate the OS and select the right
+# binary/package architecture without re-implementing Ansible fact mapping.
+# Read-only and idempotent - safe to include from any role.
+
+- name: Ensure OS and architecture facts are available
+  ansible.builtin.setup:
+    gather_subset: ["!all", "min"]
+  # Always gathered here so the role is self-sufficient regardless of whether
+  # the calling play set gather_facts.
+
+- name: Reject unsupported OS families
+  ansible.builtin.fail:
+    msg: >-
+      os discovery supports only {{ os_supported_families | join(', ') }} -
+      got {{ ansible_os_family }} ({{ ansible_distribution }}
+      {{ ansible_distribution_version }}).
+  when: ansible_os_family not in os_supported_families
+
+- name: Reject architectures without a download mapping
+  ansible.builtin.fail:
+    msg: >-
+      No os_arch_download_map entry for ansible_architecture
+      '{{ ansible_architecture }}'. Supported:
+      {{ os_arch_download_map.keys() | sort | join(', ') }}.
+  when: ansible_architecture not in os_arch_download_map
+
+- name: Publish normalized OS facts
+  ansible.builtin.set_fact:
+    os_family: "{{ ansible_os_family }}"
+    os_name: "{{ ansible_distribution }}"
+    os_version: "{{ ansible_distribution_major_version | default(ansible_distribution_version) }}"
+    os_codename: "{{ ansible_distribution_release | default('') }}"
+    os_is_debian: "{{ ansible_os_family == 'Debian' }}"
+
+- name: Publish normalized architecture facts
+  ansible.builtin.set_fact:
+    os_arch_machine: "{{ ansible_architecture }}"
+    os_arch_raw: "{{ ansible_machine | default(ansible_architecture) }}"
+    os_arch_download: "{{ os_arch_download_map[ansible_architecture] }}"
+    os_is_arm: "{{ ansible_architecture in os_arch_arm }}"
+    os_is_64bit: "{{ ansible_architecture in os_arch_64bit }}"
+
+- name: Report discovered OS and architecture
+  ansible.builtin.debug:
+    msg: >-
+      [OK] OS/arch: {{ os_name }} {{ os_version }}
+      ({{ os_family }}, {{ os_codename }}) on
+      {{ os_arch_machine }} -> download suffix '{{ os_arch_download }}'
+      (arm={{ os_is_arm }}, 64bit={{ os_is_64bit }})

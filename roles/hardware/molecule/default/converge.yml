@@ -1,14 +1,13 @@
 ---
-- name: Converge - Hardware detection
+- name: Converge - hardware discovery role
   hosts: all
   gather_facts: true
   become: true
   vars:
     # device_type is required (no auto-detect fallback) - see
-    # roles/common/tasks/detect_hardware.yml.
+    # roles/hardware/tasks/main.yml.
     device_type: rpi4b
   tasks:
-    - name: Include detect_hardware task
+    - name: Run hardware discovery
       ansible.builtin.include_role:
-        name: common
-        tasks_from: detect_hardware
+        name: hardware

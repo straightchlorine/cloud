@@ -1,0 +1,15 @@
+---
+role_name_check: 0
+driver:
+  name: podman
+platforms:
+  - name: test
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
+    pre_build_image: true
+    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+provisioner:
+  name: ansible
+verifier:
+  name: ansible

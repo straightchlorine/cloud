@@ -1,0 +1,8 @@
+---
+- name: Converge - os discovery role
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Run os discovery
+      ansible.builtin.include_role:
+        name: os
