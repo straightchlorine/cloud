@@ -5,8 +5,19 @@
   tags: [validation]
 
 - name: Include common setup tasks
-  ansible.builtin.include_tasks: common_setup.yml
+  # Also tagged with every host-specific play tag in site.yml: this creates the
+  # user, directories (including {{ prometheus_exporters_base_dir }}/bin) and
+  # packages that node_exporter.yml et al. depend on, but an untagged include
+  # is skipped on `--tags dns`-style scoped runs - the exporters then fail
+  # with "Destination directory ... does not exist".
+  # apply: is required, not just tags: on the include itself - see the note on
+  # node_exporter below.
+  ansible.builtin.include_tasks:
+    file: common_setup.yml
+    apply:
+      tags: [dns, automation, music, monitoring, backup]
   when: prometheus_exporters_enabled
+  tags: [dns, automation, music, monitoring, backup]
 
 - name: Include Node Exporter setup
   # Also tagged with every host-specific play tag in site.yml: node_exporter
