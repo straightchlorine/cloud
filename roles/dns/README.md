@@ -152,7 +152,17 @@ ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
 
 # 2. Verify the box is clean enough for a fresh test
 ./scripts/check-dns-test-clean.sh pi-dns-test
+
+# 3. Re-deploy, then verify the box is actually healthy end-to-end
+ansible-playbook -i inventory/production playbooks/site.yml --limit pi-dns-test --tags dns
+./scripts/check-dns-test-deploy.sh pi-dns-test
 ```
+
+The two scripts form the full test cycle: `check-dns-test-clean.sh` proves the
+host is back to a near-bare state (exit 1 on any leftover), and
+`check-dns-test-deploy.sh` proves Pi-hole DNS + ad-blocking, the web UI, both
+exporters, chrony sync, the optional-drive mount + journald relocation and the
+firewall rules are all working (exit 1 on any failure).
 
 The teardown playbook refuses to run without `dns_teardown_confirm=true` and
 hard-refuses the production DNS host (`pi-dns` / `192.168.20.10`). It removes
