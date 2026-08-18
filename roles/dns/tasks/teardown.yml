@@ -1,17 +1,16 @@
 ---
 # Reverse the DNS role so the host can be re-tested from a near-clean state.
 # Order matters: `pihole uninstall` destroys the box's resolver, so working DNS
-# is restored as soon as Pi-hole and its packages are gone (before the storage
-# reversal), and verified again by the self-check block at the end. Intended for
-# a disposable test Pi, never the production DNS host (playbooks/dns-teardown.yml
-# enforces that guard before including this).
+# is restored before the storage reversal and verified again by the self-check
+# block at the end. Meant for disposable test Pis, never production
+# (playbooks/dns-teardown.yml enforces that guard).
 
 - name: Gather service facts (systemd-timesyncd/systemd-resolved presence varies by image)
   ansible.builtin.service_facts:
 
 - name: Uninstall Pi-hole
-  # ponytail: `yes |` answers the uninstaller's confirm prompt; `removes:` makes
-  # it idempotent (skips when pihole is already gone). If a future Pi-hole build
+  # `yes |` answers the uninstaller's confirm prompt; `removes:` makes it
+  # idempotent (skips when pihole is already gone). If a future Pi-hole build
   # changes the prompt, switch to the repo's automated install/uninstall.sh.
   ansible.builtin.shell:
     cmd: yes | pihole uninstall
@@ -21,10 +20,8 @@
   failed_when: false
 
 - name: Remove the pihole system user
-  # Belt-and-suspenders, same reasoning as the config cleanup below:
-  # `pihole uninstall` does this too, but the `removes:` guard above can skip
-  # it entirely on a retry where the binary is already gone but a prior
-  # partial run never got this far.
+  # Belt-and-suspenders: `pihole uninstall` also does this, but the `removes:`
+  # guard above can skip it when the binary is already gone after a partial run.
   ansible.builtin.user:
     name: pihole
     state: absent
@@ -40,11 +37,10 @@
   failed_when: false
 
 - name: Force-remove any leftover Pi-hole config and install directories
-  # Belt-and-suspenders: `pihole uninstall` should already remove these, but
-  # if it exits early/partially (interrupted, changed prompt, etc.) a stale
-  # /etc/pihole silently breaks the next install - the installer only adds
-  # its default blocklist when adlists.list is absent, and reuses whatever
-  # gravity.db/pihole.toml is already there instead of building fresh ones.
+  # Belt-and-suspenders: `pihole uninstall` should already remove these, but a
+  # stale /etc/pihole silently breaks the next install - the installer only
+  # adds its default blocklist when adlists.list is absent, and otherwise
+  # reuses whatever gravity.db/pihole.toml is already there.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -64,8 +60,8 @@
     - "Pi-hole Syncthing local backup"
   become: true
   # Note: unattended-upgrades and its "Reboot pending notification" cron are
-  # common-role state (every host has them, like fail2ban/SSH) - out of
-  # scope for a DNS-role-only teardown.
+  # common-role state (every host has them) - out of scope for a DNS-only
+  # teardown.
 
 - name: Remove DNS role file artifacts
   # Includes the pihole binary and pihole-FTL unit so a retry after a
@@ -88,9 +84,9 @@
     - /etc/systemd/system/pihole-FTL.service
     - /tmp/pi-hole-repo
   become: true
-  # Note: the Syncthing-shared backup dir (dns_backup_dir) is left alone here -
-  # it is replicated user data, not role state (and lives on the optional drive,
-  # which is unmounted and wiped separately below).
+  # Syncthing-shared backup dir (dns_backup_dir) is left alone - it is
+  # replicated user data, not role state (and lives on the optional drive,
+  # unmounted and wiped separately below).
 
 - name: Reload systemd after removing the Pi-hole service unit
   ansible.builtin.systemd:
@@ -148,10 +144,9 @@
   when: dns_teardown_chrony_conf_dir.stat.exists
 
 # Restore the resolver Pi-hole disabled/rewrote. `pihole uninstall` does NOT do
-# this, so without it the host is left with no working DNS. Debian doesn't ship
-# systemd-resolved enabled by default (unlike Ubuntu), so check it actually
-# exists before trying to use it - otherwise fall back to a plain resolv.conf
-# using the same upstream resolvers the role was configured with.
+# this, so without it the host would have no working DNS. Debian doesn't ship
+# systemd-resolved enabled by default (unlike Ubuntu), so check it exists first,
+# else fall back to a plain resolv.conf with the same upstream resolvers.
 - name: Restore working DNS resolution
   become: true
   block:
@@ -196,7 +191,7 @@
       until: dns_teardown_resolve.rc == 0
 
 # Reverse storage.yml's journald relocation (real role state that would
-# confuse a retest).
+# confuse a retest, unlike the firewall rules which are left alone below).
 - name: Stop systemd-journald before reverting storage relocation
   ansible.builtin.systemd:
     name: systemd-journald
@@ -226,11 +221,10 @@
   become: true
   failed_when: false
 
-# The optional-drive mount is also unmounted and wiped, unlike the firewall
-# rules below: detect_optional_drive.yml treats anything already mounted as
-# "in use" and skips it entirely, so a left-mounted drive can never be
-# re-exercised by the next test run - it would silently stop testing the
-# detect/wipe/repartition/format path at all.
+# The optional-drive mount is unmounted and wiped, unlike the firewall rules:
+# detect_optional_drive.yml treats anything mounted as "in use" and skips it,
+# so a left-mounted drive would silently stop the next run from exercising
+# the detect/wipe/repartition/format path at all.
 - name: Find what's mounted at the optional drive path (if anything)
   ansible.builtin.set_fact:
     dns_optional_drive_mounted_source: >-
@@ -245,9 +239,9 @@
   failed_when: false
 
 - name: Wipe the drive's filesystem signature so the next run re-tests detection from scratch
-  # This also makes any Syncthing-replicated backup dir on the drive
-  # (dns_backup_dir) unreadable - acceptable on a disposable test box, and the
-  # dir is recreated by the next deploy anyway.
+  # Also makes any Syncthing-replicated backup dir on the drive (dns_backup_dir)
+  # unreadable - acceptable on a disposable test box; the dir is recreated by
+  # the next deploy anyway.
   ansible.builtin.command: "wipefs -a {{ dns_optional_drive_mounted_source }}"
   become: true
   changed_when: true
@@ -256,7 +250,7 @@
 
 # Self-verification: fail loudly if anything the role installed is still around.
 # A teardown that "succeeds" while leaving pihole running would silently poison
-# the next test run - this makes that impossible to miss.
+# the next test run.
 - name: Verify key Pi-hole artifacts are gone
   ansible.builtin.stat:
     path: "{{ item }}"
@@ -308,6 +302,6 @@
       {{ dns_teardown_udp_listeners.stdout }}
     success_msg: "[OK] No Pi-hole services listening on ports 53/80"
 
-# ponytail: firewall rules the role/firewall added are left in place — harmless
-# residue on a test box, and reversing ufw risks locking out SSH. Run
-# `ufw --force reset` by hand if you want a truly bare firewall.
+# Note: firewall rules the role added are left in place - harmless residue on a
+# test box, and reversing ufw risks locking out SSH. Run `ufw --force reset`
+# by hand if you want a truly bare firewall.

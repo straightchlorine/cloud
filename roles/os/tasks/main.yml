@@ -1,8 +1,6 @@
 ---
-# Discover the device OS + CPU architecture "in one go" and publish them as
-# normalized os_* facts, so any role can validate the OS and select the right
-# binary/package architecture without re-implementing Ansible fact mapping.
-# Read-only and idempotent - safe to include from any role.
+# Publish normalized os_* facts (OS + arch) so any role can validate the OS
+# and select the right binary/package architecture - read-only, idempotent.
 
 - name: Ensure OS and architecture facts are available
   ansible.builtin.setup:

@@ -1,11 +1,8 @@
 #!/bin/bash
-# Shared ntfy notification helper, installed on every host (ntfy is a
-# fleet-wide service - see group_vars/all/all.yml). Embeds vault_ntfy_api_key,
-# so this file is root-only (mode 0700).
-#
+# Sends a notification to the fleet-wide ntfy topic (group_vars/all/all.yml).
+# Root-only (0700): embeds vault_ntfy_api_key via Jinja2.
 # Usage: ntfy-notify.sh <title> <message> [priority] [tags]
-#   priority: ntfy priority, default "default"
-#   tags:     ntfy emoji tags, e.g. "rotating_light", default none
+#   priority: default "default"; tags: ntfy emoji, e.g. "rotating_light"
 
 TITLE="$1"
 MESSAGE="$2"

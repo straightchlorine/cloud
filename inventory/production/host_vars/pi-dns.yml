@@ -1,10 +1,6 @@
 ---
-# DNS server specific configuration - Pi-hole on Debian Bookworm
-
-# Device Configuration
 device_type: rpi3b
 
-# Pi-hole configuration
 dns_pihole_dns_servers:
   - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
@@ -12,48 +8,39 @@ dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
-  - jq  # pihole-syncthing-backup.sh builds/parses the Pi-hole API JSON with it
+  - jq  # pihole-syncthing-backup.sh parses the Pi-hole API JSON with this
 
-# Automatic updates: unattended-upgrades itself is the common role's job, so
-# the reboot window is a common_ setting. dns_auto_updates_enabled only gates
-# the Pi-hole-specific weekly `pihole -up`/`pihole -g` cron.
+# dns_auto_updates gates only the Pi-hole weekly cron; Debian updates + reboot
+# are fleet-wide via the common role.
 dns_auto_updates_enabled: true
 common_auto_updates_reboot_if_required: true
 
-# NTP: chrony always syncs the box's own clock. This host also serves NTP to
-# the rest of the VLAN (dns_ntp_server_enabled) - see chrony.conf.j2.
+# Serves NTP to the VLAN (see chrony.conf.j2 `allow` + firewall rule).
 dns_ntp_server_enabled: true
-# OPNsense (192.168.20.1) already runs NTP - use it as the local, low-latency
-# upstream instead of hitting the public pool from every device.
+# OPNsense already runs NTP here - use it as the low-latency upstream.
 dns_ntp_upstream_server: "192.168.20.1"
 dns_ntp_allowed_networks:
   - "{{ primary_network_cidr }}"
 
-# Firewall configuration for DNS services
 common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
   - {port: 80, comment: "Pi-hole Web Interface"}
-  # No blanket 123/udp here: ufw is first-match, so an unrestricted allow would
-  # shadow the src-restricted NTP rule the dns role adds from
-  # dns_ntp_allowed_networks.
+  # No blanket 123/udp: ufw is first-match, so an unrestricted allow would
+  # shadow the src-restricted NTP rule from dns_ntp_allowed_networks.
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
 
-# Prometheus exporters configuration
 prometheus_exporters_pihole_exporter_enabled: true
 prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
-# Secondary local backup to Syncthing (Teleporter + pihole-FTL.db snapshot).
-# Syncthing runs as the ansible user (send-only from this Pi) - same account
-# used for deployment and manual admin, kept uniform across the fleet.
+# Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as ansible user.
 dns_backup_enabled: true
 dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
 dns_backup_owner: "ansible"
 
-# Enterprise backup configuration
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
 restic_password: "{{ vault_restic_dns_password }}"

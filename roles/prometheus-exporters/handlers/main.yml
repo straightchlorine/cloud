@@ -48,4 +48,4 @@
   become: true
   when: prometheus_exporters_docker_exporter_enabled
 
-# restart docker uses common handler
+# docker restart handler lives in common (templates/docker handlers not loaded here)

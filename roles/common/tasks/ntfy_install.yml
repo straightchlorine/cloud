@@ -1,8 +1,6 @@
 ---
-# Installs the shared ntfy CLI helper on every host. Any script (common or
-# role-specific) can then just call `/usr/local/bin/ntfy-notify.sh title msg`
-# instead of embedding its own curl/API-key logic.
-
+# Installs the shared ntfy CLI helper on every host, so scripts can just call
+# ntfy-notify.sh instead of embedding their own curl/API-key logic.
 - name: Install the ntfy notification helper
   ansible.builtin.template:
     src: ntfy-notify.sh.j2

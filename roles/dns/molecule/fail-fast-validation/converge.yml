@@ -4,16 +4,14 @@
   tasks:
     # roles/dns/tasks/validate.yml's first task is
     # `include_role: name: common, tasks_from: unified_validation`. Like every
-    # other cross-role include in this repo's molecule scenarios (see
-    # roles/dns/molecule/default/converge.yml's comment history, and
-    # roles/prometheus-exporters' own converge.yml), `include_role: name: common`
-    # does not resolve inside the dns role's molecule sandbox - there is no
-    # cross-role roles_path configured (see the molecule.yml in this scenario).
-    # So we include_tasks the common role's unified_validation.yml directly by
-    # relative path instead, and drive it with the dns role's real
+    # other cross-role include in this repo's molecule scenarios, `include_role:
+    # name: common` does not resolve inside the dns role's molecule sandbox
+    # (no cross-role roles_path configured - see the molecule.yml in this
+    # scenario). So we include_tasks the common role's unified_validation.yml
+    # directly by relative path, and drive it with the dns role's real
     # required_variables/vault_placeholders (kept in sync with
     # roles/dns/tasks/validate.yml by hand - there is no way to include that
-    # file wholesale, see the comment on Case 3 below).
+    # file wholesale, see the comment on Case 3).
 
     # Case 1: a required DNS variable is missing.
     - name: "Case 1: unified_validation fails when a required DNS variable is missing"
@@ -22,8 +20,8 @@
         validation_type: "full"
         validation_role: "dns"
         # Mirrors roles/dns/tasks/validate.yml's required_variables list, with
-        # dns_pihole_interface deliberately left unset below (not given a
-        # value in this block's vars) so the loop fails on it specifically.
+        # dns_pihole_interface deliberately left unset so the loop fails on it
+        # specifically.
         required_variables:
           - vault_pihole_webpassword
           - dns_pihole_interface
@@ -67,10 +65,8 @@
         validation_context: "DNS services"
         validation_type: "full"
         validation_role: "dns"
-        # Mirrors roles/dns/tasks/validate.yml's vault_placeholders entry.
-        # required_variables is deliberately omitted here so only the vault
-        # placeholder check runs (it is gated on `required_variables is
-        # defined`), isolating this case to the vault check alone.
+        # Deliberately omit required_variables so only the vault check runs
+        # (it is gated on `required_variables is defined`), isolating this case.
         vault_placeholders:
           - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
         vault_pihole_webpassword: "your-secure-web-password"
@@ -102,23 +98,13 @@
     # Case 3: the dns role's own NTP-allowed-networks guard in validate.yml.
     #
     # Unlike Cases 1 and 2, this guard is NOT in a common-role file we can
-    # include_tasks by relative path - it lives inline in
-    # roles/dns/tasks/validate.yml, whose very first task is the
-    # include_role: name: common call explained above. That means the real
-    # validate.yml cannot be included wholesale here either: it would abort at
-    # task 1 (common not resolving), never reaching the NTP guard, and that
-    # failure would be indistinguishable from this case's expected one - not a
-    # real test of the guard.
-    #
-    # We therefore cannot exercise the real guard in this sandbox. What
-    # follows is a byte-for-byte copy of the guard task from
-    # roles/dns/tasks/validate.yml (keep it in sync by hand if that file
-    # changes) so we are at least exercising the guard's own name/msg/when,
-    # rather than an assertion that just restates
-    # "dns_ntp_server_enabled and dns_ntp_allowed_networks | length == 0" and
-    # proves nothing. See this scenario's `notes` in the review response for
-    # the rejected alternative (a provisioner roles_path that would let
-    # `include_role: name: dns, tasks_from: validate` resolve for real).
+    # include_tasks by relative path - it lives inline in validate.yml, whose
+    # very first task is the include_role: name: common call explained above.
+    # That means the real validate.yml cannot be included wholesale here
+    # either (it would abort at task 1), so this is a byte-for-byte copy of
+    # the guard task (keep it in sync by hand if that file changes) - we are
+    # at least exercising the guard's own name/msg/when rather than an
+    # assertion that just restates the condition and proves nothing.
     - name: "Case 3: reproduce the dns role's NTP-allowed-networks guard (see comment above)"
       vars:
         dns_ntp_server_enabled: true

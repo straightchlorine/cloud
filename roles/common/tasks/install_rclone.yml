@@ -1,7 +1,4 @@
 ---
-# Install rclone on individual hosts
-# Use this when you need rclone on target hosts for other purposes
-
 - name: Install rclone via package manager
   ansible.builtin.apt:
     name: rclone

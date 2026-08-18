@@ -1,9 +1,8 @@
 ---
 
-# DNS / Pi-hole host provisioning. Assumes a Debian-family OS; the os discovery
-# role gathers + validates the device's OS/architecture in one go so that any
-# arch-specific binary download (e.g. an exporter) can select the right
-# architecture from os_arch_download.
+# DNS / Pi-hole host provisioning. The os role publishes os_* facts
+# (incl. os_arch_download) that this role's validation and arch-specific
+# downloads rely on.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os

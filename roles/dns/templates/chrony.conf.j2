@@ -1,12 +1,6 @@
-# Chrony NTP configuration for {{ inventory_hostname }}
-# Welcome to the chrony configuration file. See chrony.conf(5) for more
-# information about usable directives.
-
-# Local network NTP source (the VLAN router) - lower latency and no external
-# dependency for the common case. Preferred over the public pool below.
+# Local upstream (VLAN router) - lower latency, no external dependency.
 server {{ dns_ntp_upstream_server }} iburst prefer
 
-# Public NTP servers as a fallback if the local source is unreachable.
 pool 2.debian.pool.ntp.org iburst maxsources 4
 pool 0.debian.pool.ntp.org iburst maxsources 1
 pool 1.debian.pool.ntp.org iburst maxsources 1
@@ -14,41 +8,20 @@ pool 3.debian.pool.ntp.org iburst maxsources 2
 server time.cloudflare.com iburst
 server time.google.com iburst
 
-# Record the rate at which the system clock gains/losses time.
 driftfile /var/lib/chrony/drift
-
-# Allow the system clock to be stepped in the first three updates
-# if its offset is larger than 1 second.
 makestep 1.0 3
-
-# Enable kernel synchronization of the real-time clock (RTC).
 rtcsync
 
-# Enable hardware timestamping on all interfaces that support it.
-#hwtimestamp *
-
-# Increase the minimum number of selectable sources required to adjust
-# the system clock.
-#minsources 2
-
 {% if dns_ntp_server_enabled %}
-# Allow NTP client access from these networks (dns_ntp_server_enabled: true)
+# Allow NTP client access from these networks
 {% for network in dns_ntp_allowed_networks %}
 allow {{ network }}
 {% endfor %}
 
-# Serve time even if not synchronized to a time source.
+# Serve time even when not synchronized to a source.
 local stratum 8
 {% endif %}
 
-# Specify file containing keys for NTP authentication.
 keyfile /etc/chrony/chrony.keys
-
-# Get TAI-UTC offset and leap seconds from the system tz database.
 leapsectz right/UTC
-
-# Specify directory for log files.
 logdir /var/log/chrony
-
-# Select which information is logged.
-#log measurements statistics tracking

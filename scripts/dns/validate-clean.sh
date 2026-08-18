@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Post-teardown verification for a disposable DNS test host (default pi-dns-test).
-# Run after playbooks/dns-teardown.yml to confirm the box is clean enough for a
-# fresh dns-role test. Exits non-zero if any leftover is found. Pairs with
-# scripts/check-dns-test-deploy.sh, which verifies a deployed host is healthy.
-#
-# Usage: ./scripts/check-dns-test-clean.sh [ansible-host-alias]
+# Post-teardown check for a disposable DNS test host (default pi-dns-test).
+# Run after playbooks/dns-teardown.yml to confirm the box is clean enough for
+# a fresh dns-role test. Pairs with validate-deploy.sh (deployed host check).
+# Usage: ./scripts/dns/validate-clean.sh [ansible-host-alias]
 set -euo pipefail
 
 HOST="${1:-pi-dns-test}"
@@ -54,8 +52,7 @@ else
   note_ok "pihole-FTL service not active"
 fi
 
-# The dns role's crons live in root's crontab; only root may read it, so the
-# same sudo -n path the ufw check uses applies here too.
+# dns role crons live in root's crontab; only root may read it.
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
 for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
   if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
@@ -67,8 +64,8 @@ done
 
 echo "-- Listening ports --"
 listeners="$( { ss -H -ltn; ss -H -lun; } 2>/dev/null || true )"
-# Trailing space bounds each port so e.g. "0.0.0.0:53 " does not match the
-# always-present mDNS listener on 5353 (ss separates local address from peer).
+# Trailing space bounds each port so "0.0.0.0:53 " doesn't match the
+# always-present mDNS listener on 5353 (ss separates local/peer addr).
 for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 "; do
   if printf '%s\n' "$listeners" | grep -qF -- "$port_line"; then
     note_left "still listening on ${port_line% }"
@@ -129,9 +126,8 @@ if findmnt -n /mnt/data >/dev/null 2>&1; then
 else
   note_ok "/mnt/data unmounted"
 fi
-# The teardown wipes the drive; any leftover filesystem signature on an sd*
-# device means it was not (fully) wiped. The SD card is mmcblk*, not sd*, so
-# this only inspects the optional USB/SATA drive.
+# Teardown wipes the drive; leftover signatures on sd* (USB/SATA - the
+# SD card is mmcblk*) mean it wasn't fully wiped.
 sd_sigs="$(lsblk -no FSTYPE /dev/sd* 2>/dev/null | grep . || true)"
 if [ -n "$sd_sigs" ]; then
   note_left "optional drive still has filesystem signatures: $sd_sigs"

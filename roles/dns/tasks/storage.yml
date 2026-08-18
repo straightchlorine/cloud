@@ -1,15 +1,9 @@
 ---
-# Opportunistically uses an attached-but-unused drive if one is found - never
-# required. See roles/common/tasks/detect_optional_drive.yml for the
-# (non-destructive) detection this depends on.
-#
-# What we do with it, and why: systemd-journald writes constantly, so
-# relocating it off the SD card is the real card-longevity win. We don't
-# touch Pi-hole's own gravity.db/query-log/FTL database paths - those are
-# baked into the installer and fragile to relocate for little extra benefit.
-# The Syncthing backup dir (dns_backup_dir) can be pointed at
-# {{ dns_optional_drive_mount_path }} manually in host_vars if you want it
-# there too - no auto-magic, it's already a plain configurable var.
+# Optional, non-destructive: use an attached-but-unused drive if one exists
+# (see roles/common/tasks/detect_optional_drive.yml for the detection). Only
+# journald is relocated off the SD card - Pi-hole's own DB paths are baked
+# into the installer and fragile to move. dns_backup_dir is a plain var if you
+# also want that on the drive.
 
 - name: Detect an optional attached drive
   ansible.builtin.include_role:
@@ -25,10 +19,9 @@
   when: common_optional_drive_present
   block:
     - name: Determine whether the drive needs (re)formatting
-      # "has a filesystem" isn't enough on its own - it might be a foreign
-      # filesystem we don't want (a leftover installer USB stick with an
-      # iso9660 image on it, someone else's NTFS drive, etc). Only treat it
-      # as ready-to-use if what's already there matches what we actually want.
+      # "Has a filesystem" isn't enough - a foreign one we don't want (e.g. a
+      # leftover installer USB stick) would be reused as-is. Only treat the drive
+      # as ready if what's there matches what we actually want.
       ansible.builtin.set_fact:
         dns_optional_drive_needs_format: "{{ common_optional_drive_fstype != dns_optional_drive_filesystem }}"
 
@@ -49,12 +42,9 @@
         - not dns_optional_drive_format
 
     - name: Wipe any existing partition table before repartitioning
-      # Only reached with dns_optional_drive_format explicitly true. Needed
-      # because the "whole disk" case includes stale/multi-partition tables
-      # (e.g. a recycled drive) and drives with an unwanted foreign
-      # filesystem (e.g. an installer USB stick) - wipefs guarantees a truly
-      # blank device for sfdisk below, rather than trying to reconcile with
-      # whatever's already there.
+      # Only reached with dns_optional_drive_format true - covers whole disks
+      # with stale/multi-partition tables and foreign filesystems, so sfdisk
+      # below starts from a truly blank device.
       ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
       become: true
       changed_when: true
@@ -63,10 +53,9 @@
         - common_optional_drive_is_whole_disk
 
     - name: Create a single partition spanning the whole disk
-      # sfdisk over community.general.parted: no extra package needed
-      # (util-linux is Essential:yes on Debian; parted is not installed by
-      # default). "type=L" = a plain Linux filesystem partition; omitting
-      # size makes it span the rest of the disk.
+      # sfdisk over community.general.parted: util-linux is Essential on Debian,
+      # parted is not installed by default. "type=L" = plain Linux partition;
+      # omitting size makes it span the rest of the disk.
       ansible.builtin.command:
         cmd: "sfdisk {{ common_optional_drive_device }}"
         stdin: "type=L"
@@ -77,10 +66,9 @@
         - common_optional_drive_is_whole_disk
 
     - name: Wait for the kernel to expose the new partition device
-      # sfdisk creating a partition doesn't guarantee the new /dev/sdaN node
-      # exists immediately - USB-attached drives on a Pi are a known-flaky
-      # case for this. partprobe forces a re-read; the stat loop then waits
-      # for the device file itself before formatting.
+      # sfdisk doesn't guarantee the new /dev/sdaN node exists immediately -
+      # USB-attached drives on a Pi are known-flaky here. partprobe forces a
+      # re-read; the stat loop waits for the device file before formatting.
       when:
         - dns_optional_drive_needs_format
         - common_optional_drive_is_whole_disk
@@ -99,10 +87,9 @@
           delay: 1
 
     - name: Determine the partition to format and mount
-      # '1' only applies once we've just created a fresh partition above
-      # (whole disk, needs formatting). A whole disk that already has the
-      # filesystem we want was formatted directly with no partition table at
-      # all - the target there is the disk device itself, not device+"1".
+      # A '1' suffix only applies to a partition we just created. A whole disk
+      # that already matches our filesystem was formatted bare (no partition
+      # table), so the target there is the device itself.
       ansible.builtin.set_fact:
         dns_optional_drive_target: >-
           {{ (common_optional_drive_device ~ '1')

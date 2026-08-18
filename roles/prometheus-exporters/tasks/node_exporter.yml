@@ -23,10 +23,8 @@
           ansible.builtin.get_url:
             url: "{{ prometheus_exporters_node_exporter_checksum_url }}"
             dest: "/tmp/node_exporter_checksums.txt"
-            # force: a partial file can be left behind by a previous dropped
-            # connection, and without a checksum to validate against get_url
-            # would consider that existing file good and skip the fetch -
-            # silently leaving stale/truncated checksums for grep to fail on.
+            # force: a partial file can be left behind by a dropped connection; get_url
+            # would accept it without a checksum and grep would read stale data.
             force: true
             timeout: 30
           register: prom_exp_node_exporter_checksums_download

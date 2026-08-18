@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Post-deployment verification for a disposable DNS test host (default pi-dns-test).
-# Run after a successful site.yml deploy to confirm Pi-hole, its exporters, NTP,
-# the optional-drive/journald relocation and the firewall are all actually
-# working. Pairs with scripts/check-dns-test-clean.sh: clean = "ready to deploy",
-# this = "deployed and healthy". Exits non-zero if any check fails.
-#
-# Usage: ./scripts/check-dns-test-deploy.sh [ansible-host-alias]
+# Post-deployment check for a disposable DNS test host (default pi-dns-test).
+# Run after a successful site.yml deploy to confirm Pi-hole, exporters,
+# NTP, drive/journald relocation and firewall all work. Pairs with
+# validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".
+# Usage: ./scripts/dns/validate-deploy.sh [ansible-host-alias]
 set -euo pipefail
 
 HOST="${1:-pi-dns-test}"
@@ -35,7 +33,7 @@ check_present() {
   fi
 }
 
-# primary_ip as Ansible computes it (the default-route source address).
+# default-route source address, same as Ansible's primary_ip fact.
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
   PRIMARY_IP="$(hostname -I | awk '{print $1}')"
@@ -67,8 +65,8 @@ fi
 
 echo "-- Listening ports --"
 listeners="$( { ss -H -ltn; ss -H -lun; } 2>/dev/null || true )"
-# Trailing space bounds each port so e.g. "0.0.0.0:53 " does not match the
-# always-present mDNS listener on 5353 (ss separates local address from peer).
+# Trailing space bounds each port so "0.0.0.0:53 " doesn't match the
+# always-present mDNS listener on 5353 (ss separates local/peer addr).
 for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 " ":9100 "; do
   if printf '%s\n' "$listeners" | grep -qF -- "$port_line"; then
     note_ok "listening on ${port_line% }"
@@ -96,8 +94,8 @@ fi
 
 echo "-- Web + exporters --"
 if [ -n "$PRIMARY_IP" ]; then
-  # /admin/ answers 302 -> /admin/login (Pi-hole v6), so follow redirects like
-  # the role's own uri-based post_deploy_validate does, expecting a final 200.
+  # /admin/ redirects (302) to /admin/login in Pi-hole v6; follow like the
+  # role's uri-based post_deploy_validate, expecting final 200.
   web_code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "http://$PRIMARY_IP/admin/" 2>/dev/null || true)"
   if [ "$web_code" = "200" ]; then
     note_ok "Pi-hole web interface HTTP 200"
@@ -134,9 +132,8 @@ if [ "$drive_fs" = "ext4" ]; then
 else
   note_left "/mnt/data not mounted as ext4 (got: ${drive_fs:-nothing})"
 fi
-# findmnt reports the bind source as the device with a subpath (e.g.
-# /dev/sda1[/journal]) on this box, so just verify /var/log/journal is a
-# separate mount rather than grepping for a specific source string.
+# findmnt shows the bind source as device-with-subpath (e.g.
+# /dev/sda1[/journal]); just check /var/log/journal is its own mount.
 if findmnt -n /var/log/journal >/dev/null 2>&1; then
   note_ok "journald relocated (bind-mounted over /var/log/journal)"
 else
@@ -176,8 +173,8 @@ for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
 done
 
 check_present /usr/local/bin/pihole
-# v6 migrates setupVars.conf into pihole.toml at install, so the TOML is the
-# runtime config that must exist (setupVars.conf is transient).
+# Pi-hole v6 migrates setupVars.conf into pihole.toml at install; TOML is
+# the runtime config that must exist (setupVars.conf is transient).
 check_present /etc/pihole/pihole.toml
 check_present /usr/local/bin/pihole-update.sh
 check_present /usr/local/bin/pihole-syncthing-backup.sh

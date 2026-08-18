@@ -2,14 +2,13 @@
 - name: Verify role functionality
   hosts: all
   tasks:
-    # Re-gather facts since they don't persist between playbooks in Molecule
+        # Re-gather facts: they don't persist between playbooks in Molecule.
     - name: Gather system facts
       ansible.builtin.setup:
         gather_subset:
           - network
           - hardware
 
-    # Network Facts Verification
     - name: Verify network interfaces exist
       ansible.builtin.assert:
         that:
@@ -34,7 +33,6 @@
         fail_msg: "Hostname is not set"
         success_msg: "Hostname: {{ ansible_hostname }}"
 
-    # Hardware Facts Verification
     - name: Verify system memory is detected
       ansible.builtin.assert:
         that:
@@ -59,7 +57,6 @@
         fail_msg: "CPU cores not detected"
         success_msg: "CPU cores: {{ ansible_processor_cores }}"
 
-    # OS Verification
     - name: Verify OS distribution
       ansible.builtin.assert:
         that:
@@ -68,7 +65,6 @@
         fail_msg: "Not running on Debian/Ubuntu"
         success_msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
 
-    # ntfy notification scripts
     - name: Verify ntfy/reboot-notify scripts rendered
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -115,7 +111,6 @@
           on the PATH cron entry in auto_updates.yml), not a hardcoded path.
         success_msg: "[OK] reboot-notify.sh.j2 calls ntfy-notify.sh via PATH"
 
-    # Display verification summary
     - name: Display verification results
       ansible.builtin.debug:
         msg: |

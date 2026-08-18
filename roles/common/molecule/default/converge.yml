@@ -18,17 +18,16 @@
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
 
-    # Hardware detection now lives in the standalone 'hardware' role with its
-    # own molecule scenario (roles/hardware/molecule) asserting
-    # hardware_platform/hardware_limits - no value in a duplicate include here.
+    # Hardware detection moved to a standalone 'hardware' role with its own
+    # molecule scenario - no duplicate include needed here.
 
     - name: Set timezone
       community.general.timezone:
         name: "{{ timezone }}"
       become: true
 
-    # Catches undefined/misnamed template vars that would otherwise silently
-    # drop a notification instead of failing.
+    # Catch undefined/misnamed template vars that would silently drop the
+    # notification instead of failing.
     - name: Render the ntfy notification helper
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/ntfy-notify.sh.j2"

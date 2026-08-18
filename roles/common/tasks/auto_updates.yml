@@ -1,7 +1,6 @@
 ---
-# Unattended-upgrades for every Debian host - the actual apt update/upgrade
-# mechanism (daily). Anything Pi-hole-specific (pihole -up/-g) stays in the
-# dns role; this file only knows about plain Debian package updates.
+# Fleet-wide unattended-upgrades (daily apt upgrade). Pi-hole-specific
+# pihole -up/-g stays in the dns role; this file only knows Debian packages.
 
 - name: Set PATH for root's crontab
   # Cron's default PATH often excludes /usr/local/bin, where this repo's

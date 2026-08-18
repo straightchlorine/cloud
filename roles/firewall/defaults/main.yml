@@ -1,15 +1,12 @@
 ---
-# Default firewall configuration
 firewall_enabled: true
 firewall_policy_incoming: deny
 firewall_policy_outgoing: allow
 firewall_policy_routed: deny
 
-# Host-specific extra ports, on top of common_firewall_ports
+# Host-specific ports in addition to common_firewall_ports
 firewall_ports: []
 
-# Additional firewall rules (more complex rules)
 firewall_rules: []
 
-# Logging configuration
 firewall_logging: "low"

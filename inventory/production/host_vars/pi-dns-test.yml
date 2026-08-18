@@ -1,66 +1,52 @@
 ---
-# Disposable clone of pi-dns.yml for testing the dns role end-to-end on
-# throwaway hardware. Delete this file and the pi-dns-test entry in
-# hosts.yml once you're done testing.
+# Disposable clone of pi-dns.yml for testing the dns role. Delete this file
+# and the pi-dns-test entry in hosts.yml once done.
 
-# Device Configuration
 device_type: rpi3b # adjust if your spare Pi is a different model
 
-# Pi-hole configuration
 # OPNsense unbound instance on this VLAN - no external resolvers.
 dns_pihole_dns_servers:
   - "192.168.20.1"
 dns_pihole_interface: "{{ primary_interface }}"
-# OPNsense (192.168.20.1) already runs NTP - use it as the local, low-latency
-# upstream instead of hitting the public pool from every device.
+# OPNsense already runs NTP here - use it as the low-latency upstream.
 dns_ntp_upstream_server: "192.168.20.1"
 dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
-  - jq  # pihole-syncthing-backup.sh builds/parses the Pi-hole API JSON with it
+  - jq  # pihole-syncthing-backup.sh parses the Pi-hole API JSON with this
 
-# Automatic updates: unattended-upgrades itself is the common role's job, so
-# the reboot window is a common_ setting. dns_auto_updates_enabled only gates
-# the Pi-hole-specific weekly `pihole -up`/`pihole -g` cron.
+# dns_auto_updates gates only the Pi-hole weekly cron; Debian updates + reboot
+# are fleet-wide via the common role.
 dns_auto_updates_enabled: true
 common_auto_updates_reboot_if_required: true
 
-# Firewall configuration for DNS services
 common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
   - {port: 80, comment: "Pi-hole Web Interface"}
-  # No 123/udp: this box doesn't serve NTP (dns_ntp_server_enabled is left at
-  # its false default), and a blanket allow would shadow the src-restricted
-  # NTP rule the dns role adds when it is enabled - ufw is first-match.
+  # No 123/udp: this box doesn't serve NTP, so an unrestricted allow would
+  # shadow the src-restricted NTP rule the dns role adds when it is enabled.
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
 
-# Prometheus exporters configuration
 prometheus_exporters_pihole_exporter_enabled: true
 prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
-# Local Syncthing backup onto the optional attached drive (dns_optional_drive_*
-# defaults to /mnt/data - see roles/dns/defaults/main.yml). No "pihole" in the
-# path: the host itself is the pihole/dns box, so that'd just be noise.
+# Local backup on the optional attached drive (dns_optional_drive_* /mnt/data).
 dns_backup_enabled: true
 dns_backup_dir: "/mnt/data/syncthing/backup"
 dns_backup_owner: "ansible"
 
-# DESTRUCTIVE, host-scoped on purpose: NOT a role default (see
-# roles/dns/defaults/main.yml) - a fresh drive on some future dns-group host
-# should never get wiped without an explicit per-host choice to do so.
+# DESTRUCTIVE, host-scoped on purpose - NOT a role default: a future dns-group
+# host should never get wiped without an explicit per-host choice.
 dns_optional_drive_format: true
 
-# NTP serving to the VLAN left off (role default: dns_ntp_server_enabled
-# false) - a disposable test box shouldn't become something else depends on.
-
-# Off-site restic backup: required by validate.yml but disabled and pointed
-# at a placeholder repo so this disposable box can never write into pi-dns's
-# real Hetzner backup repository.
+# NTP serving left off - a test box shouldn't become another's dependency.
+# Off-site restic backup disabled with a placeholder repo - never write into
+# pi-dns's real Hetzner backup.
 restic_enabled: false
 restic_repository: "sftp:hetzner-storage:unused-dns-test-placeholder"
 restic_password: "unused-dns-test-placeholder"

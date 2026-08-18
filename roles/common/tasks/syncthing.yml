@@ -1,0 +1,75 @@
+---
+# Install Syncthing from the official apt repository (stable-v2 channel),
+# not the Debian package which lags badly. Mirrors the Docker key/repo pattern.
+# Opt in fleet-wide via common_syncthing_enabled; configure folders/devices
+# per-host in host_vars.
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Add Syncthing release GPG key
+  ansible.builtin.get_url:
+    url: https://syncthing.net/release-key.gpg
+    dest: /etc/apt/keyrings/syncthing-archive-keyring.gpg
+    mode: '0644'
+  become: true
+  register: common_syncthing_key
+  until: common_syncthing_key is succeeded
+  retries: 3
+  delay: 2
+
+- name: Add Syncthing stable-v2 apt repository
+  ansible.builtin.apt_repository:
+    repo: |
+      deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg]
+      https://apt.syncthing.net/ syncthing stable-v2
+    filename: syncthing
+    state: present
+  become: true
+  register: common_syncthing_repo
+  until: common_syncthing_repo is succeeded
+  retries: 3
+  delay: 2
+  notify: Update apt cache
+
+- name: Pin Syncthing repo priority to prefer official packages over Debian
+  ansible.builtin.copy:
+    content: |
+      Package: *
+      Pin: origin apt.syncthing.net
+      Pin-Priority: 990
+    dest: /etc/apt/preferences.d/syncthing.pref
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Install Syncthing
+  ansible.builtin.apt:
+    name: syncthing
+    state: present
+    update_cache: true
+  become: true
+
+- name: Create Syncthing home directory
+  ansible.builtin.file:
+    path: "{{ common_syncthing_home }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user_gid | default(ansible_user) }}"
+    mode: '0750'
+  become: true
+
+- name: Enable Syncthing service for the ansible user
+  ansible.builtin.systemd:
+    name: "syncthing@{{ ansible_user }}.service"
+    enabled: true
+    scope: user
+  become: true
+  # systemd --user needs to know which user; delegate via the service unit name.
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+  notify: Reload systemd

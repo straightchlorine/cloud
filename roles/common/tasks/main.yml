@@ -1,6 +1,4 @@
 ---
-# Common tasks for all hosts running Debian Bookworm
-
 - name: Install essential packages using common package management
   ansible.builtin.include_tasks: packages.yml
 

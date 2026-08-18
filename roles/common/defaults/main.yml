@@ -1,6 +1,4 @@
 ---
-# Default values for common role
-
 # Security Configuration
 common_fail2ban_enabled: true
 common_fail2ban_ssh_maxretry: 3

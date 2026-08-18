@@ -1,16 +1,14 @@
 ---
-# retries on the two downloads: GitHub release downloads redirect through
+# Retries on the downloads: GitHub release downloads redirect through
 # objects.githubusercontent.com - occasional dropped connections on a Pi's
 # link are transient, not a real failure.
-
 - name: Download Pi-hole Exporter checksum
   ansible.builtin.get_url:
     url: "{{ pihole_exporter_checksum_url }}"
     dest: "/tmp/pihole_exporter_checksum.txt"
-    # force: a partial file can be left behind by a previous dropped
-    # connection, and without a checksum to validate against get_url would
-    # consider that existing file good and skip the fetch - silently leaving
-    # stale checksums for grep to fail on.
+    # force: a partial file can be left by a dropped connection; without a checksum
+    # to validate against, get_url would accept the existing file and silently
+    # run grep against stale checksums.
     force: true
     timeout: 30
   register: prom_exp_pihole_exporter_checksum_download

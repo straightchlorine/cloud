@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Secondary LOCAL Pi-hole backup for Syncthing: writes a Teleporter config
-# archive + a consistent pihole-FTL.db snapshot into the Syncthing-shared dir.
-# Primary/off-site backup is the restic coordinator. Managed by Ansible
-# (roles/dns) - do not edit by hand.
+# Local Pi-hole -> Syncthing backup: Teleporter archive + FTL DB snapshot.
+# Primary/off-site backup is restic (see restic_backup.yml). Managed by Ansible.
 #
-# Pi-hole v6 dropped the `pihole -a -t` Teleporter CLI export; it is now
-# REST-API-only (GET /api/teleporter with a session sid from POST /api/auth).
-# This file embeds the web password, so it is root-only (mode 0700).
+# Pi-hole v6 dropped the `pihole -a -t` Teleporter CLI; it's now REST-API-only
+# (GET /api/teleporter with a sid from POST /api/auth). Root-only (0700) since
+# this file embeds the web password.
 set -euo pipefail
 
 trap 'ntfy-notify.sh "Pi-hole Syncthing backup failed: {{ inventory_hostname }}" \
@@ -20,7 +18,6 @@ WEBPASSWORD="{{ vault_pihole_webpassword }}"
 
 mkdir -p "$DEST"
 
-# 1. Teleporter config archive (timestamped) - the canonical restore unit.
 SID=$(jq -n --arg pw "$WEBPASSWORD" '{password:$pw}' \
   | curl -s -X POST http://127.0.0.1/api/auth --data @- \
   | jq -r '.session.sid')
@@ -38,20 +35,17 @@ curl -s -H "X-FTL-SID: $SID" \
 
 curl -s -X DELETE -H "X-FTL-SID: $SID" http://127.0.0.1/api/auth >/dev/null
 
-# 2. Consistent snapshot of the long-term query DB using SQLite's online backup
-#    API (safe while FTL is writing; a plain cp can capture a torn write).
+# SQLite online backup: safe while FTL is writing; cp can capture a torn write.
 if [ -f "$FTL_DB" ]; then
   pihole-FTL sqlite3 "$FTL_DB" ".backup '${DEST}/pihole-FTL.db'"
 fi
 
-# 3. Retention: keep only the newest $RETENTION teleporter archives. The
-#    pihole-FTL.db is a single overwriting snapshot - use Syncthing file
-#    versioning if you want its history.
+# Retention: keep newest $RETENTION archives; FTL DB is overwritten in place.
 ls -1t "$DEST"/pi-hole_*_teleporter_*.zip 2>/dev/null \
   | tail -n +"$((RETENTION + 1))" \
   | xargs -r rm -f || true
 
-# 4. Hand ownership to the Syncthing user so it can read/replicate the files.
+# Hand ownership to the Syncthing user so it can replicate the files.
 chown -R "$OWNER" "$DEST"
 
 ntfy-notify.sh "Pi-hole Syncthing backup OK: {{ inventory_hostname }}" \

@@ -1,7 +1,4 @@
 ---
-# Common package management tasks
-# Standardizes package installation across all roles
-
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true

@@ -1,7 +1,6 @@
 ---
-# Deploy shared dotfiles to the connecting admin user's home directory.
-# Single source of truth: dotfiles/ at the repo root - not a role-owned
-# files/ dir, so it stays discoverable/editable without digging into roles/.
+# Shared dotfiles live at the repo root (dotfiles/), not in a role-owned
+# files/ dir, so they stay discoverable without digging into roles/.
 
 - name: Deploy tmux configuration
   ansible.builtin.copy:

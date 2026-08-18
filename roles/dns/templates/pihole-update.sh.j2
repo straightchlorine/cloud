@@ -1,8 +1,6 @@
 #!/bin/bash
-# Weekly Pi-hole update script.
-# System package updates + reboot-if-required are handled separately and daily
-# by unattended-upgrades, which the common role configures fleet-wide -
-# running `apt upgrade` here too would just race it for the apt lock.
+# No `apt upgrade` here: unattended-upgrades (common role) does that daily,
+# fleet-wide - we'd just race it for the apt lock.
 
 LOG_FILE="/var/log/weekly-updates.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -10,14 +8,12 @@ FAILED=0
 
 echo "[$DATE] Starting Pi-hole update..." >> $LOG_FILE
 
-# Update Pi-hole core
 echo "[$DATE] Updating Pi-hole..." >> $LOG_FILE
 if ! pihole -up >> $LOG_FILE 2>&1; then
   FAILED=1
   echo "[$DATE] pihole -up failed" >> $LOG_FILE
 fi
 
-# Update Pi-hole gravity (blocklists)
 echo "[$DATE] Updating Pi-hole gravity..." >> $LOG_FILE
 if ! pihole -g >> $LOG_FILE 2>&1; then
   FAILED=1

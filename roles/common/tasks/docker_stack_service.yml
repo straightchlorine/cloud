@@ -1,8 +1,4 @@
 ---
-# Common Docker Stack Systemd Service Creation
-# Eliminates duplication between automation and music-stack roles
-# Usage: Include this task with required variables
-
 - name: Create systemd service for Docker stack auto-start
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"

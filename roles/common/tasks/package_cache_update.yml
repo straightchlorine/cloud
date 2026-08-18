@@ -1,7 +1,4 @@
 ---
-# Standardized package cache update
-# Used by all playbooks to eliminate pre-task duplication
-
 - name: Update package cache
   ansible.builtin.apt:
     update_cache: true

@@ -1,11 +1,8 @@
 ---
-# Backup pre-flight check for all roles.
-# Only checks free disk space: it is included for hosts: all in
-# playbooks/site.yml, and hosts that back up via a remote coordinator (e.g.
-# pi-dns) have no local common_backup_base_path directory of their own, so any
-# check that requires the path to already exist or be writable would hard-fail
-# there. Directory creation/writability is exercised for real by
-# restic_backup.yml, which is only included on hosts that actually need it.
+# Pre-flight for every host: only check free disk space. Coordinator-backed
+# hosts (e.g. pi-dns) have no local common_backup_base_path, so any check
+# requiring the path to exist would hard-fail there; real creation/writability
+# is exercised by restic_backup.yml on hosts that actually need it.
 
 - name: Check available disk space for backup operations
   ansible.builtin.shell: |

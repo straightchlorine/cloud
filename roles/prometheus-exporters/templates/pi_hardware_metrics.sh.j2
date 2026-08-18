@@ -1,17 +1,14 @@
 #!/bin/bash
-# Pi Hardware Metrics Collection Script for Prometheus Node Exporter
-# Collects Raspberry Pi specific hardware metrics
-
+# Raspberry Pi hardware metrics for the node exporter textfile collector.
 set -euo pipefail
 
 TEXTFILE_DIR="{{ prometheus_exporters_node_exporter_textfile_dir }}"
 PROM_FILE="$TEXTFILE_DIR/pi_hardware.prom"
 TEMP_FILE="$TEXTFILE_DIR/pi_hardware.prom.$$"
 
-# Create textfile directory if it doesn't exist
 mkdir -p "$TEXTFILE_DIR"
 
-# Function to safely read values with fallback
+# Read a value file, falling back to 0 when unreadable.
 safe_read() {
     local file="$1"
     local fallback="${2:-0}"

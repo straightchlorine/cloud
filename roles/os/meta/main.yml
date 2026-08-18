@@ -1,7 +1,4 @@
 ---
-# Ansible Galaxy metadata for the os discovery role.
-# Not published to Galaxy; kept minimal (see roles/common/meta/main.yml).
-
 galaxy_info:
   namespace: homelab
   role_name: os
@@ -18,5 +15,5 @@ galaxy_info:
 collections:
   - ansible.utils
 
-# No dependencies - this should always be safe to include first.
+# Safe to include first: no dependencies.
 dependencies: []

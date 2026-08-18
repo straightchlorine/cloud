@@ -21,8 +21,8 @@
     prometheus_exporters_pihole_exporter_enabled: false
     prometheus_exporters_docker_exporter_enabled: false
     prometheus_exporters_pihole_exporter_port: 9617
-    # Referenced by pihole_exporter_teardown.yml's ufw delete, which must mirror
-    # the src-restricted rule firewall.yml adds on a real host.
+    # pihole_exporter_teardown.yml's ufw delete must mirror firewall.yml's
+    # src-restricted rule add.
     prometheus_exporters_firewall_source: "192.168.0.0/16"
 
   tasks:
@@ -86,10 +86,9 @@
       become: true
       when: prometheus_exporters_node_exporter_enabled
 
-    # Simulate a prior Pi-hole Exporter install so pihole_exporter_teardown.yml
-    # (below) has real artifacts to remove, instead of a no-op on empty paths.
-    # Tagged molecule-idempotence-notest: create-then-delete is legitimately
-    # non-idempotent as a fixture cycle, so skip it on molecule's 2nd (idempotence) run.
+    # Simulate a prior Pi-hole Exporter install so teardown has real artifacts
+    # to remove. Tagged molecule-idempotence-notest: create-then-delete is
+    # non-idempotent, so skip on the idempotence run.
     - name: Create fake Pi-hole Exporter artifacts to exercise teardown
       ansible.builtin.copy:
         content: "fake binary for molecule test\n"
@@ -113,9 +112,8 @@
       become: true
       tags: [molecule-idempotence-notest]
 
-    # include_role: name: prometheus-exporters doesn't resolve here (no
-    # cross-role roles_path in molecule's sandbox), so include_tasks by
-    # explicit relative path instead - same trick the dns role's tests use.
+    # include_role: name: prometheus-exporters doesn't resolve in Molecule's
+    # sandbox (no cross-role roles_path), so include_tasks by relative path.
     - name: Run pihole_exporter_teardown.yml against the fake artifacts
       ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/pihole_exporter_teardown.yml"
       tags: [molecule-idempotence-notest]

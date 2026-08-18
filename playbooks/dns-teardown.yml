@@ -1,8 +1,5 @@
 ---
-# Repeatable teardown of the DNS (Pi-hole) role for iterative testing on a
-# disposable Pi. Refuses to run without an explicit confirmation flag and hard
-# refuses the production DNS host.
-#
+# Requires dns_teardown_confirm=true and hard-refuses the production host.
 #   ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
 #     --limit <your-test-host> -e dns_teardown_confirm=true
 - name: Tear down the DNS role for repeatable testing
@@ -11,9 +8,8 @@
   gather_facts: true
   pre_tasks:
     - name: Gather network facts for teardown
-      # Provides primary_network_cidr, which the pihole-exporter teardown needs
-      # to match (and so delete) its src-restricted ufw rule; it is a custom
-      # fact, not present in the normal gather_facts payload.
+      # pihole-exporter teardown needs primary_network_cidr to delete its src-restricted
+      # ufw rule; it's a custom fact, not in the normal gather_facts payload.
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts

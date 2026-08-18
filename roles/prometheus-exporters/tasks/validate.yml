@@ -1,6 +1,4 @@
 ---
-# Prometheus exporters validation using unified framework
-
 - name: Run prometheus exporters comprehensive validation # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
@@ -23,7 +21,7 @@
       - "{{ prometheus_exporters_base_dir }}/bin"
   tags: [validation]
 
-# Role-specific validation tasks that supplement unified validation
+# Role-specific checks that supplement unified_validation above
 - name: Validate exporter architecture support
   ansible.builtin.fail:
     msg: "Architecture {{ ansible_architecture }} is not supported by Prometheus exporters"

@@ -1,8 +1,6 @@
 ---
-# Unified validation framework for all infrastructure components
-# Replaces all role-specific validation files to eliminate redundancy
-# Supports all validation types: backup, vault, service_startup, variables
-
+# Shared validation framework - validates required vars, vault placeholders
+# and backup paths. Replaces per-role validation files.
 - name: Validate required validation parameters
   ansible.builtin.fail:
     msg: >-

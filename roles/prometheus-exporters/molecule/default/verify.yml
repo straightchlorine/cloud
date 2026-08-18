@@ -8,7 +8,6 @@
     prometheus_exporters_config_dir: "/etc/prometheus/exporters"
     prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
   tasks:
-    # User and group verification
     - name: Check if prometheus user exists
       ansible.builtin.getent:
         database: passwd
@@ -35,7 +34,6 @@
         fail_msg: "Prometheus group does not exist"
         success_msg: "[OK] Prometheus group exists"
 
-    # Directory verification
     - name: Verify prometheus-exporters directories exist
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -59,7 +57,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-    # Ownership verification
     - name: Verify directory ownership
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -85,7 +82,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-    # Configuration file verification
     - name: Verify node exporter config exists
       ansible.builtin.stat:
         path: "{{ prometheus_exporters_config_dir }}/node_exporter.conf"
@@ -99,8 +95,7 @@
         fail_msg: "Node exporter config does not exist or has wrong permissions"
         success_msg: "[OK] Node exporter config file exists with correct permissions"
 
-    # Teardown verification: the fake Pi-hole Exporter artifacts created in
-    # converge.yml should be gone after pihole_exporter_teardown.yml ran.
+    # Fake pihole_exporter artifacts from converge.yml should be gone.
     - name: Check Pi-hole Exporter artifacts removed by teardown
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -120,7 +115,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-    # Display verification summary
     - name: Display prometheus-exporters role verification results
       ansible.builtin.debug:
         msg: |

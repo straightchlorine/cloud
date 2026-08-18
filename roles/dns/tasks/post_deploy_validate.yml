@@ -52,9 +52,9 @@
   tags: [post_validation]
 
 - name: Verify gravity has an active blocklist
-  # A blank gravity.db (e.g. the default-blocklist download failed, or
-  # gravity was never rebuilt) makes Pi-hole resolve everything normally -
-  # check this directly instead of only inferring it from one test domain.
+  # A blank gravity.db (e.g. the default-blocklist download failed, or gravity
+  # was never rebuilt) makes Pi-hole resolve everything normally - check this
+  # directly instead of only inferring it from one test domain.
   ansible.builtin.assert:
     that:
       - dns_pihole_api.json.gravity.domains_being_blocked | int > 0

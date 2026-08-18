@@ -1,7 +1,4 @@
 ---
-# Common port connectivity tests for post-deployment validation
-# Tests that configured firewall ports are actually accessible
-
 - name: Test SSH connectivity (always required)
   ansible.builtin.wait_for:
     port: "{{ ssh_port }}"
@@ -15,7 +12,7 @@
   loop: "{{ common_firewall_ports }}"
   when:
     - common_firewall_ports is defined
-    - item.port != ssh_port  # Skip SSH as it's tested separately
+    - item.port != ssh_port  # Skip SSH - tested separately above
   loop_control:
     label: "{{ item.comment }} ({{ item.port }})"
   tags: [post_validation, connectivity]

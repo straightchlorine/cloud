@@ -1,6 +1,4 @@
 ---
-# Prometheus exporters role default variables
-
 # Global exporter configuration
 prometheus_exporters_enabled: true
 prometheus_exporters_user: "prometheus"

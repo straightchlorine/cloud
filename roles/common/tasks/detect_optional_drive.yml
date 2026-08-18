@@ -1,19 +1,14 @@
 ---
-# Non-fatal detection of an unused, non-boot drive (e.g. a USB SSD that may
-# or may not be plugged in - and may or may not already have a partition
-# table on it from a previous life). Only considers real disks/partitions -
-# excludes loop/rom/zram/etc devices, which lsblk also reports as unmounted
-# but aren't attachable storage. Never fails, never mounts, never formats -
-# it only sets facts for the caller to act on:
+# Non-fatal detection of an unused, non-boot drive (may be unplugged, or
+# carry a stale partition table). Only real disks/partitions are considered
+# (no loop/rom/zram). Never mounts or formats - just sets facts:
 #   common_optional_drive_present        - bool
 #   common_optional_drive_device         - "/dev/sda" or "/dev/sda1" ("" if none found)
-#   common_optional_drive_is_whole_disk  - bool (device is a bare disk, not a partition)
+#   common_optional_drive_is_whole_disk  - bool (bare disk, not a partition)
 #   common_optional_drive_has_filesystem - bool (false = needs formatting)
-#   common_optional_drive_fstype         - "" if none, else whatever's actually there
-#                                           (e.g. "iso9660" for a leftover installer
-#                                           USB stick) - callers should check this
-#                                           against what they actually want, not just
-#                                           has_filesystem, before mounting as-is.
+#   common_optional_drive_fstype         - "" or whatever's there (callers should
+#                                          compare against what they want, not just
+#                                          has_filesystem, before mounting as-is)
 
 - name: Detect an unused, non-boot drive
   ansible.builtin.shell:

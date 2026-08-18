@@ -25,7 +25,7 @@
 
 - name: Apply UFW policies and rules
   become: true
-  # ufw lives in /usr/sbin, which is absent from a non-login shell's PATH for some remote users
+    # ufw lives in /usr/sbin, absent from non-login shells' PATH.
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   block:

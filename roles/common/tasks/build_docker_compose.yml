@@ -1,8 +1,4 @@
 ---
-# Common Docker Compose File Builder
-# Generates standardized docker-compose.yml files from service definitions
-# Eliminates template duplication across roles
-
 - name: Ensure compose directory exists
   ansible.builtin.file:
     path: "{{ compose_file_path | dirname }}"

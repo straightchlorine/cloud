@@ -21,9 +21,9 @@
     dns_backup_owner: "molecule"
   tasks:
     # Pi-hole's basic-install.sh cannot run in a container, so we exercise the
-    # part that IS container-testable and has historically broken: rendering the
-    # setupVars.conf template. This catches undefined/misnamed template vars
-    # that would otherwise silently write a blank value onto a real Pi.
+    # part that IS container-testable and has historically broken: rendering
+    # the setupVars.conf template. Catches undefined/misnamed template vars
+    # that would silently write a blank value onto a real Pi.
     - name: Render Pi-hole setupVars from the role template
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"
@@ -37,8 +37,8 @@
         mode: "0644"
 
     # Catches misnamed/undefined template vars in the two cron-invoked
-    # scripts that stay dns-specific (they run pihole -up/-g and the
-    # Teleporter export - unattended-upgrades/reboot-notify moved to common).
+    # scripts that stay dns-specific (pihole -up/-g and the Teleporter
+    # export - unattended-upgrades/reboot-notify moved to common).
     - name: Render the Pi-hole update script
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/pihole-update.sh.j2"

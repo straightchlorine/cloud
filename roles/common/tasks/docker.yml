@@ -1,7 +1,4 @@
 ---
-# Common Docker setup with user namespace mapping
-# Used by automation and music-stack roles
-
 - name: Check if Docker is already installed
   ansible.builtin.command: docker --version
   register: common_docker_check

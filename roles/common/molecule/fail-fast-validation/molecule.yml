@@ -14,8 +14,7 @@ provisioner:
   env:
     # CI/local both run `cd roles/<role> && molecule test`, so
     # MOLECULE_PROJECT_DIRECTORY is roles/common - one level up is roles/,
-    # letting `include_role: name: common` resolve itself by name instead
-    # of needing a raw include_tasks path workaround.
+    # letting `include_role: name: common` resolve by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
   # Note: Intentionally minimal inventory - no variables set
   inventory:

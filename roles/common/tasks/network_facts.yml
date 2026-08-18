@@ -1,7 +1,4 @@
 ---
-# Network facts collection for dynamic IP configuration
-# Provides standardized network variables for all roles
-
 - name: Gather network facts
   ansible.builtin.setup:
     gather_subset:

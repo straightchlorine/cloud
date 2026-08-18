@@ -1,6 +1,4 @@
 ---
-# Handlers for common role
-
 - name: Restart fail2ban
   ansible.builtin.systemd:
     name: fail2ban
@@ -13,13 +11,11 @@
     state: restarted
   become: true
 
-# Common systemd handler - used by multiple roles
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
   become: true
 
-# Backup service restart handler
 - name: Restart backup service
   ansible.builtin.systemd:
     name: "backup-{{ common_backup_service_name }}.service"
@@ -27,7 +23,6 @@
     daemon_reload: true
   become: true
 
-# Backup timer restart handler
 - name: Restart backup timer
   ansible.builtin.systemd:
     name: "backup-{{ common_backup_service_name }}.timer"
@@ -36,14 +31,12 @@
     daemon_reload: true
   become: true
 
-# Common Docker Compose stack restart handler - parameterized for different stacks
 - name: Restart docker compose stack
   community.docker.docker_compose_v2:
     project_src: "{{ stack_home }}"
     state: restarted
   become_user: "{{ ansible_user }}"
 
-# Common Docker Compose stack rollback handler - parameterized for different stacks
 - name: Rollback docker compose stack
   block:
     - name: Stop current stack

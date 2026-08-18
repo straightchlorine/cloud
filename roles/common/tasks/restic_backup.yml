@@ -1,8 +1,4 @@
 ---
-# Unified Restic Backup Implementation
-# Eliminates redundancy between automation and enterprise-backup roles
-# Provides scalable backup solution with enterprise features when needed
-
 - name: Validate required backup variables
   ansible.builtin.fail:
     msg: "Required backup variable '{{ item }}' is not defined or empty"

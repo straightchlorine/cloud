@@ -1,6 +1,4 @@
 ---
-# Verify Docker installation and configuration
-
 - name: Verify Docker installation
   hosts: all
   gather_facts: true

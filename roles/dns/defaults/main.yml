@@ -1,17 +1,12 @@
 ---
-
-# Pi-hole Installation Security
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-dns_pihole_version: "v6.4.3"  # Pin to verified release version
-
-# Pi-hole Configuration
-# pihole_webpassword: MUST be set in vault or host_vars - no default
+dns_pihole_version: "v6.4.3"  # Pin to verified release; override per host in host_vars.
+# pihole_webpassword: MUST be set in vault/host_vars - no default.
 dns_pihole_interface: "{{ primary_interface }}"
 dns_pihole_dns_servers:
   - 9.9.9.9
   - 149.112.112.112
 
-# Package Configuration
 dns_pihole_packages:
   - git
   - curl
@@ -19,33 +14,27 @@ dns_pihole_packages:
   - dnsutils
   - jq
 
-# Automatic Updates (Pi-hole itself; Debian package updates are handled
-# fleet-wide by the common role - common_auto_updates_reboot_if_required etc.)
+# Pi-hole itself; Debian package updates are fleet-wide via the common role.
 dns_auto_updates_enabled: true
 dns_auto_update_time: "2:00"
 dns_auto_update_day: "Monday"
 
-# Secondary local backup (Teleporter + FTL DB snapshot) for Syncthing.
-# Primary/off-site backup remains the restic coordinator.
+# Local Syncthing backup (Teleporter + FTL DB); primary/off-site is restic.
 dns_backup_enabled: false
 dns_backup_retention: 14
 dns_backup_schedule_hour: "3"
 dns_backup_schedule_minute: "30"
-# dns_backup_dir:   MUST be set in host_vars - the Syncthing-shared folder
-# dns_backup_owner: MUST be set in host_vars - the user that runs Syncthing
+# Must be set in host_vars:
+# dns_backup_dir:   Syncthing-shared folder
+# dns_backup_owner: the Syncthing user
 
-# NTP: chrony always syncs the box's own clock (chrony_sync.yml, required for
-# Pi-hole's TLS blocklist download). dns_ntp_server_enabled only controls
-# whether it ALSO advertises itself as an NTP server for the rest of the
-# VLAN (see chrony.conf.j2's `allow` lines and main.yml's firewall rule).
+# chrony_sync.yml always syncs the clock; this only gates whether it also
+# advertises as an NTP server for the VLAN (chrony.conf.j2 `allow` + firewall).
 dns_ntp_server_enabled: false
 dns_ntp_allowed_networks: []
 
-# Pi-hole metrics are exported by the prometheus-exporters role
-# (prometheus_exporters_pihole_exporter_enabled), not by this role.
-
-# Optional attached drive (e.g. a USB SSD) - entirely opt-in. If none is
-# found, storage.yml is a no-op. See roles/dns/tasks/storage.yml.
+# Metrics are exported by prometheus-exporters, not this role.
+# Optional attached drive - opt in per host; no-op if none is found (see storage.yml).
 dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"
 dns_optional_drive_format: false  # DESTRUCTIVE if true - opt in per host

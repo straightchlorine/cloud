@@ -5,13 +5,11 @@
   tags: [validation]
 
 - name: Include common setup tasks
-  # Also tagged with every host-specific play tag in site.yml: this creates the
-  # user, directories (including {{ prometheus_exporters_base_dir }}/bin) and
-  # packages that node_exporter.yml et al. depend on, but an untagged include
-  # is skipped on `--tags dns`-style scoped runs - the exporters then fail
-  # with "Destination directory ... does not exist".
-  # apply: is required, not just tags: on the include itself - see the note on
-  # node_exporter below.
+  # Also tagged with every host-specific play tag in site.yml: these create
+  # the user/dirs/packages that node_exporter.yml et al. depend on. apply: is
+  # required, not just tags: - plain tags on an include do NOT propagate into
+  # the tasks inside, so without apply: they'd be silently tag-filtered out on
+  # --tags-scoped runs ("Destination directory does not exist").
   ansible.builtin.include_tasks:
     file: common_setup.yml
     apply:
@@ -20,13 +18,12 @@
   tags: [dns, automation, music, monitoring, backup]
 
 - name: Gather network facts
-  # primary_ip is rendered into the exporters' systemd units
-  # (--web.listen-address). The fleet-wide play's common role normally provides
-  # it, but that role is tagged [common, base] - on `--tags dns`-style scoped
-  # runs it never executes, primary_ip is undefined, and the systemd template's
-  # 'is defined' guard then SILENTLY drops the ExecStart line, leaving a unit
-  # systemd rejects with BadUnitSetting. Same tag-propagation rules as the
-  # includes above: apply: is required, tags: alone does nothing.
+  # primary_ip is rendered into the exporters' systemd units. The fleet play's
+  # common role normally provides it, but that role is tagged [common, base] -
+  # on --tags-dns runs it never executes, primary_ip stays undefined, and the
+  # systemd template's 'is defined' guard then silently drops ExecStart (unit
+  # rejected). apply: is required here for the same tag-propagation reason as
+  # the includes above.
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
@@ -36,15 +33,10 @@
   tags: [dns, automation, music, monitoring, backup]
 
 - name: Include Node Exporter setup
-  # Also tagged with every host-specific play tag in site.yml: node_exporter
-  # runs on every host, but this task lives in the fleet-wide "Configure all
-  # hosts" play, which only carries [monitoring, prometheus, exporters] by
-  # default - without this, `--tags dns` (or automation/music/backup) never
-  # reaches it, so it silently never gets installed on a --tags-scoped run.
-  # apply: is required, not just tags: on the include itself - plain tags:
-  # only gates whether the include statement runs, it does NOT propagate
-  # into the tasks defined inside node_exporter.yml, so without apply: every
-  # task in that file gets silently tag-filtered out anyway.
+  # node_exporter runs on every host but lives in the fleet-wide play, which
+  # only carries [monitoring, prometheus, exporters] by default - without the
+  # extra tags, --tags dns (or automation/music/backup) never reaches it. apply:
+  # propagates the tags into node_exporter.yml's tasks (see note above).
   ansible.builtin.include_tasks:
     file: node_exporter.yml
     apply:
@@ -62,12 +54,10 @@
     - ansible_architecture in ['armv7l', 'aarch64']
 
 - name: Include Pi-hole Exporter setup
-  # Also tagged dns: this task lives in the fleet-wide "Configure all hosts"
-  # play (site.yml), which only carries [monitoring, prometheus, exporters]
-  # by default - without this, `ansible-playbook site.yml --tags dns` never
-  # reaches it at all, so the exporter silently never gets installed.
-  # apply: is required, not just tags: on the include itself - see the note
-  # on node_exporter above.
+  # Also tagged dns: lives in the fleet-wide play, which only carries
+  # [monitoring, prometheus, exporters] by default - without this,
+  # `--tags dns` never reaches the exporter. See node_exporter above for
+  # why apply: is required in addition to tags:.
   ansible.builtin.include_tasks:
     file: pihole_exporter.yml
     apply:

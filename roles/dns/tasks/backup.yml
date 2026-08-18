@@ -1,7 +1,6 @@
 ---
-# Secondary LOCAL Pi-hole backup dropped into a Syncthing-shared folder
-# (Teleporter config archive + a consistent pihole-FTL.db snapshot). The
-# primary/off-site backup remains the restic coordinator.
+# Secondary LOCAL Pi-hole backup (Teleporter config archive + a consistent
+# pihole-FTL.db snapshot). The primary off-site backup is the restic role.
 
 - name: Validate local backup configuration
   ansible.builtin.assert:
@@ -28,7 +27,7 @@
     dest: /usr/local/bin/pihole-syncthing-backup.sh
     owner: root
     group: root
-    mode: "0700"  # embeds vault_pihole_webpassword
+    mode: "0700"
   become: true
 
 - name: Schedule the Pi-hole Syncthing backup

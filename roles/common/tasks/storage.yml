@@ -1,7 +1,4 @@
 ---
-# Common SSD storage setup with parameterized mount path
-# Used by automation and music-stack roles
-
 - name: Install filesystem utilities
   ansible.builtin.apt:
     name: "{{ common_filesystem_utilities }}"

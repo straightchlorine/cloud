@@ -1,14 +1,9 @@
 ---
 - name: Converge - Fail-Fast Validation
   hosts: all
-  # Intentionally omit ALL required variables:
-  # - prometheus_exporters_enabled
-  # - prometheus_exporters_base_dir
-  # - prometheus_exporters_node_exporter_enabled
-  # - prometheus_environment
-  # - prometheus_role
-  # - device_type
-  # This tests that the role validation fails gracefully with clear error messages
+    # Intentionally omit ALL required variables to test fail-fast behavior:
+    # prometheus_exporters_enabled, base_dir, node_exporter_enabled,
+    # prometheus_environment, prometheus_role, device_type
   tasks:
     - name: Include prometheus-exporters validation (expect to fail)
       block:

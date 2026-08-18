@@ -1,10 +1,6 @@
 ---
-# Uses unified validation framework to eliminate redundancy
-
-# This file is also included directly by site.yml's pre-deployment validation
-# (include_role: dns tasks_from: validate), which does NOT run main.yml - so it
-# must be self-sufficient here rather than relying on the os include that
-# starts main.yml. Running the discovery again is idempotent and cheap.
+# Also included directly by site.yml's pre-validation (not via main.yml), so it
+# re-runs os discovery itself - cheap and idempotent.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -31,8 +27,6 @@
       - "/opt/pihole"
   tags: [validation]
 
-# First, cheapest gate before touching any dns/pihole logic - consumes the
-# os_* facts published by the os discovery role above.
 - name: Confirm the host OS and architecture are supported
   ansible.builtin.assert:
     that:
