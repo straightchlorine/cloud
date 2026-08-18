@@ -1,0 +1,59 @@
+---
+# Reverse common/tasks/syncthing.yml. Only runs after a teardown playbook sets
+# teardown_confirmed (see playbooks/dns-teardown.yml). Removes the service,
+# the package and the apt repo/keys it was installed from - the host returns
+# to its pre-syncthing state.
+
+- name: Stop and disable Syncthing service
+  ansible.builtin.systemd:
+    name: syncthing
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  become: true
+  failed_when: false
+
+- name: Remove Syncthing service unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/syncthing.service
+    state: absent
+  become: true
+
+- name: Remove Syncthing package
+  ansible.builtin.apt:
+    name: syncthing
+    state: absent
+    purge: true
+  become: true
+
+- name: Remove Syncthing apt repository
+  ansible.builtin.apt_repository:
+    repo: |
+      deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg]
+      https://apt.syncthing.net/ syncthing stable-v2
+    filename: syncthing
+    state: absent
+  become: true
+
+- name: Remove Syncthing GPG keyring
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/syncthing-archive-keyring.gpg
+    state: absent
+  become: true
+
+- name: Remove Syncthing apt pinning
+  ansible.builtin.file:
+    path: /etc/apt/preferences.d/syncthing.pref
+    state: absent
+  become: true
+
+- name: Remove Syncthing home directory (config + data)
+  ansible.builtin.file:
+    path: "{{ common_syncthing_home }}"
+    state: absent
+  become: true
+
+- name: Update apt cache after removing Syncthing repo
+  ansible.builtin.apt:
+    update_cache: true
+  become: true

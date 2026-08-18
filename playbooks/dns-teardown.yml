@@ -67,7 +67,7 @@
     - name: Tear down Syncthing (common role)
       ansible.builtin.include_role:
         name: common
-        tasks_from: syncthing
+        tasks_from: syncthing_teardown
       when:
         - teardown_confirmed | default(false) | bool
         - common_syncthing_enabled | default(false) | bool

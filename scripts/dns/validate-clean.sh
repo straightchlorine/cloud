@@ -52,8 +52,11 @@ else
   note_ok "pihole-FTL service not active"
 fi
 
-# Syncthing teardown (system unit removed + service stopped; package stays).
+# Syncthing fully torn down: unit removed, service stopped, package purged.
 check_absent /etc/systemd/system/syncthing.service
+check_absent /etc/apt/preferences.d/syncthing.pref
+check_absent /etc/apt/keyrings/syncthing-archive-keyring.gpg
+check_absent /usr/bin/syncthing
 if systemctl is-active --quiet syncthing 2>/dev/null; then
   note_left "syncthing service still active"
 else

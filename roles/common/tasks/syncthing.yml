@@ -8,8 +8,8 @@
 # needs a login session/user bus that headless hosts don't have, which makes
 # it unreliable to drive from Ansible.
 #
-# Teardown tasks at the end are gated on teardown_confirmed (set by a teardown
-# playbook after its confirm flag passes - see playbooks/dns-teardown.yml).
+# Teardown lives in syncthing_teardown.yml - kept separate so the teardown
+# playbook never re-runs these install tasks.
 
 - name: Ensure apt keyrings directory exists
   ansible.builtin.file:
@@ -86,20 +86,3 @@
     state: started
     daemon_reload: true
   become: true
-
-# ---- Teardown (only runs after a teardown playbook sets teardown_confirmed) ----
-- name: Stop and disable Syncthing service
-  ansible.builtin.systemd:
-    name: syncthing
-    enabled: false
-    state: stopped
-    daemon_reload: true
-  become: true
-  when: teardown_confirmed | default(false) | bool
-
-- name: Remove Syncthing service unit
-  ansible.builtin.file:
-    path: /etc/systemd/system/syncthing.service
-    state: absent
-  become: true
-  when: teardown_confirmed | default(false) | bool
