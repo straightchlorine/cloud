@@ -66,6 +66,7 @@ common_service_restart: "always"
 # Teardown is triggered by a teardown playbook's confirm flag (teardown_confirmed
 # fact), not a separate syncthing flag - see playbooks/dns-teardown.yml.
 common_syncthing_enabled: false
+common_syncthing_home: "/home/{{ ansible_user }}/.config/syncthing"
 
 # Hardware detection (device_type -> hardware_platform -> resource limits)
 # has moved out of this role into the standalone 'hardware' role - see
