@@ -4,9 +4,9 @@
 # Opt in fleet-wide via common_syncthing_enabled; configure folders/devices
 # per-host in host_vars.
 #
-# systemctl --user needs the user's systemd instance running. On a headless
-# host (no login session) that only happens once loginctl linger is enabled,
-# so linger comes before the service is enabled/started.
+# Runs as a system-level service (not syncthing@.user) - user-scope systemd
+# needs a login session/user bus that headless hosts don't have, which makes
+# it unreliable to drive from Ansible.
 #
 # Teardown tasks at the end are gated on teardown_confirmed (set by a teardown
 # playbook after its confirm flag passes - see playbooks/dns-teardown.yml).
@@ -70,46 +70,36 @@
     mode: '0750'
   become: true
 
-- name: Enable user lingering so the syncthing user service can run headless
-  ansible.builtin.command:
-    cmd: loginctl enable-linger {{ ansible_user }}
+- name: Deploy the Syncthing system service unit
+  ansible.builtin.template:
+    src: syncthing.service.j2
+    dest: /etc/systemd/system/syncthing.service
+    owner: root
+    group: root
+    mode: '0644'
   become: true
-  register: common_syncthing_linger
-  changed_when: "'already' not in (common_syncthing_linger.stdout | default(''))"
 
-- name: Enable and start Syncthing user service
+- name: Enable and start Syncthing
   ansible.builtin.systemd:
-    name: "syncthing@{{ ansible_user }}.service"
+    name: syncthing
     enabled: true
     state: started
-    scope: user
+    daemon_reload: true
   become: true
-  become_user: "{{ ansible_user }}"
-  register: common_syncthing_service
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
-  # linger was just enabled above; the user manager may take a moment to start,
-  # so retry on a transient "cannot connect to user bus" failure.
-  until: common_syncthing_service is not failed
-  retries: 5
-  delay: 3
 
 # ---- Teardown (only runs after a teardown playbook sets teardown_confirmed) ----
-- name: Remove Syncthing service configuration
-  ansible.builtin.file:
-    path: "/etc/systemd/system/syncthing@{{ ansible_user }}.service"
-    state: absent
+- name: Stop and disable Syncthing service
+  ansible.builtin.systemd:
+    name: syncthing
+    enabled: false
+    state: stopped
+    daemon_reload: true
   become: true
   when: teardown_confirmed | default(false) | bool
 
-- name: Disable and stop Syncthing user service
-  ansible.builtin.systemd:
-    name: "syncthing@{{ ansible_user }}.service"
-    enabled: false
-    state: stopped
-    scope: user
+- name: Remove Syncthing service unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/syncthing.service
+    state: absent
   become: true
-  become_user: "{{ ansible_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
   when: teardown_confirmed | default(false) | bool

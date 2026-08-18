@@ -1,0 +1,27 @@
+[Unit]
+Description=Syncthing - continuous file synchronization
+Documentation=man:syncthing(1) https://docs.syncthing.net
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# System-level service running syncthing as the ansible user - avoids the
+# user-scope bus entirely, which is unreliable on headless hosts with no
+# login session. --no-restart lets systemd own the restart policy.
+User={{ ansible_user }}
+Group={{ ansible_user_gid | default(ansible_user) }}
+Environment=HOME={{ ansible_user_home | default('/home/' + ansible_user) }}
+ExecStart=/usr/bin/syncthing serve --no-browser --no-restart --logflags=0
+Restart=on-failure
+RestartSec=60
+SuccessExitStatus=3 4
+RestartForceExitStatus=3 4
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target
