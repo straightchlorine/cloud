@@ -16,11 +16,13 @@ Restart=on-failure
 RestartSec=60
 SuccessExitStatus=3 4
 RestartForceExitStatus=3 4
-# Hardening
+# Hardening.
+# No ProtectHome: syncthing writes its config and index DB under the user's
+# home (~/.config/syncthing), so /home must stay writable. ProtectSystem=full
+# still covers the rest of the OS tree.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=read-only
 PrivateDevices=true
 
 [Install]

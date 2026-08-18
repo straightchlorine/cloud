@@ -45,7 +45,7 @@ else
 fi
 
 echo "-- Services --"
-for svc in pihole-FTL pihole-exporter node-exporter chrony; do
+for svc in pihole-FTL pihole-exporter node-exporter chrony syncthing; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     note_ok "$svc active"
   else

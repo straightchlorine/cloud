@@ -52,6 +52,14 @@ else
   note_ok "pihole-FTL service not active"
 fi
 
+# Syncthing teardown (system unit removed + service stopped; package stays).
+check_absent /etc/systemd/system/syncthing.service
+if systemctl is-active --quiet syncthing 2>/dev/null; then
+  note_left "syncthing service still active"
+else
+  note_ok "syncthing service not active"
+fi
+
 # dns role crons live in root's crontab; only root may read it.
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
 for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
