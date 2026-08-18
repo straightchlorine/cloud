@@ -1,60 +1,64 @@
 ---
 # Removes pihole_exporter artifacts only. The shared prometheus user/group
 # stays - node_exporter and pi_hardware_metrics still run under it.
+# Gated on teardown_confirmed so it can never run outside a teardown playbook.
 
-- name: Stop and disable Pi-hole Exporter service
-  ansible.builtin.systemd:
-    name: pihole-exporter
-    state: stopped
-    enabled: false
-  become: true
-  failed_when: false
+- name: Tear down Pi-hole Exporter
+  when: teardown_confirmed | default(false) | bool
+  block:
+    - name: Stop and disable Pi-hole Exporter service
+      ansible.builtin.systemd:
+        name: pihole-exporter
+        state: stopped
+        enabled: false
+      become: true
+      failed_when: false
 
-- name: Remove Pi-hole Exporter systemd service
-  ansible.builtin.file:
-    path: /etc/systemd/system/pihole-exporter.service
-    state: absent
-  become: true
+    - name: Remove Pi-hole Exporter systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/pihole-exporter.service
+        state: absent
+      become: true
 
-- name: Reload systemd after removing the unit file
-  # Not a notify: can run from playbooks (e.g. dns-teardown.yml) that never
-  # load roles/common's handlers into scope.
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
+    - name: Reload systemd after removing the unit file
+      # Not a notify: can run from playbooks (e.g. dns-teardown.yml) that never
+      # load roles/common's handlers into scope.
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
 
-- name: Remove Pi-hole Exporter binary and config
-  # /tmp/pihole_exporter_checksum.txt too: an interrupted run between download
-  # and cleanup leaves a stale checksum that forces a re-fetch next deploy.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
-    - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    - "/tmp/pihole_exporter_checksum.txt"
-  become: true
+    - name: Remove Pi-hole Exporter binary and config
+      # /tmp/pihole_exporter_checksum.txt too: an interrupted run between download
+      # and cleanup leaves a stale checksum that forces a re-fetch next deploy.
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+        - "/tmp/pihole_exporter_checksum.txt"
+      become: true
 
-- name: Remove firewall rule for Pi-hole Exporter
-  # Mirror firewall.yml's add (same src + proto): ufw only deletes rules whose
-  # parameters match, so deleting by port alone would silently leave it.
-  community.general.ufw:
-    rule: allow
-    port: "{{ prometheus_exporters_pihole_exporter_port }}"
-    proto: tcp
-    src: "{{ prometheus_exporters_firewall_source }}"
-    comment: "Pi-hole Prometheus Exporter"
-    delete: true
-  become: true
-  failed_when: false
+    - name: Remove firewall rule for Pi-hole Exporter
+      # Mirror firewall.yml's add (same src + proto): ufw only deletes rules whose
+      # parameters match, so deleting by port alone would silently leave it.
+      community.general.ufw:
+        rule: allow
+        port: "{{ prometheus_exporters_pihole_exporter_port }}"
+        proto: tcp
+        src: "{{ prometheus_exporters_firewall_source }}"
+        comment: "Pi-hole Prometheus Exporter"
+        delete: true
+      become: true
+      failed_when: false
 
-- name: Remove the Pi-hole Exporter's src-unrestricted common firewall rule too
-  # common_firewall_ports may also open 9617 with no src restriction. 9617 is
-  # this exporter's exclusive port, so both rules go with it. Missing = no-op.
-  community.general.ufw:
-    rule: allow
-    port: "{{ prometheus_exporters_pihole_exporter_port }}"
-    proto: tcp
-    delete: true
-  become: true
-  failed_when: false
+    - name: Remove the Pi-hole Exporter's src-unrestricted common firewall rule too
+      # common_firewall_ports may also open 9617 with no src restriction. 9617 is
+      # this exporter's exclusive port, so both rules go with it. Missing = no-op.
+      community.general.ufw:
+        rule: allow
+        port: "{{ prometheus_exporters_pihole_exporter_port }}"
+        proto: tcp
+        delete: true
+      become: true
+      failed_when: false

@@ -3,6 +3,9 @@
 # not the Debian package which lags badly. Mirrors the Docker key/repo pattern.
 # Opt in fleet-wide via common_syncthing_enabled; configure folders/devices
 # per-host in host_vars.
+#
+# Teardown tasks at the end are gated on teardown_confirmed (set by a teardown
+# playbook after its confirm flag passes - see playbooks/dns-teardown.yml).
 - name: Ensure apt keyrings directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings
@@ -50,7 +53,7 @@
     path: "/etc/systemd/system/syncthing@{{ ansible_user }}.service"
     state: absent
   become: true
-  when: common_syncthing_teardown_enabled | default(false) | bool
+  when: teardown_confirmed | default(false) | bool
 
 - name: Disable and stop Syncthing user service
   ansible.builtin.systemd:
@@ -59,7 +62,7 @@
     state: stopped
     scope: user
   become: true
-  when: common_syncthing_teardown_enabled | default(false) | bool
+  when: teardown_confirmed | default(false) | bool
   notify: Update apt cache
 
 - name: Pin Syncthing repo priority to prefer official packages over Debian

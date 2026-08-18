@@ -63,12 +63,9 @@ common_service_restart: "always"
 
 # Syncthing installation (optional, fleet-wide file sharing).
 # Set common_syncthing_enabled=true in host_vars to install Syncthing on all hosts.
+# Teardown is triggered by a teardown playbook's confirm flag (teardown_confirmed
+# fact), not a separate syncthing flag - see playbooks/dns-teardown.yml.
 common_syncthing_enabled: false
-
-# Syncthing teardown opt-in.
-# Set common_syncthing_teardown_enabled=true to remove Syncthing service and config
-# during role teardown (default: false, keeps Syncthing running).
-common_syncthing_teardown_enabled: false
 
 # Hardware detection (device_type -> hardware_platform -> resource limits)
 # has moved out of this role into the standalone 'hardware' role - see

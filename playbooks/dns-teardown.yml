@@ -1,7 +1,16 @@
 ---
-# Requires dns_teardown_confirm=true and hard-refuses the production host.
+# Single confirmation flag cascades into all related teardowns.
 #   ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
 #     --limit <your-test-host> -e dns_teardown_confirm=true
+#
+# Pattern (shared by every teardown playbook):
+#   1. Gate on this role's own flag (dns_teardown_confirm) and hard-refuse
+#      the production host.
+#   2. Set the shared fact teardown_confirmed: true.
+#   3. Run the teardown manifest below - every included teardown task file
+#      checks teardown_confirmed, so nothing can run outside a confirmed
+#      teardown. Future playbooks (media-teardown.yml, automation-teardown.yml)
+#      follow the same shape with their own confirm flag.
 - name: Tear down the DNS role for repeatable testing
   hosts: dns
   become: true
@@ -34,15 +43,31 @@
           is the PRODUCTION DNS host. Point --limit at your test Pi instead.
         quiet: true
 
+    - name: Mark this run as a confirmed teardown
+      # Single point of truth: every teardown task file below (and in other
+      # roles) checks this fact before removing anything.
+      ansible.builtin.set_fact:
+        teardown_confirmed: true
+
     - name: Run DNS role teardown
       ansible.builtin.include_role:
         name: dns
         tasks_from: teardown
+      when: teardown_confirmed | default(false) | bool
 
     - name: Tear down the Pi-hole exporter (prometheus-exporters' state, not dns's)
       ansible.builtin.include_role:
         name: prometheus-exporters
         tasks_from: pihole_exporter_teardown
       when:
+        - teardown_confirmed | default(false) | bool
         - prometheus_exporters_pihole_exporter_enabled | default(false)
         - "'dns' in group_names"
+
+    - name: Tear down Syncthing (common role)
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: syncthing
+      when:
+        - teardown_confirmed | default(false) | bool
+        - common_syncthing_enabled | default(false) | bool
