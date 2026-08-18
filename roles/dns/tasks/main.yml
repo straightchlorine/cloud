@@ -183,6 +183,12 @@
   ansible.builtin.include_tasks: backup.yml
   when: dns_backup_enabled
 
+- name: Install Syncthing (common role, optional)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing
+  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+
 - name: Configure firewall
   ansible.builtin.include_role:
     name: firewall

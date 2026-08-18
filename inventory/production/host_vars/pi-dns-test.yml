@@ -50,3 +50,9 @@ dns_optional_drive_format: true
 restic_enabled: false
 restic_repository: "sftp:hetzner-storage:unused-dns-test-placeholder"
 restic_password: "unused-dns-test-placeholder"
+
+# Syncthing installation (official apt stable-v2 channel).
+# Set common_syncthing_enabled=true to install Syncthing on this host;
+# the DNS backup script assumes syncthing is running and sharing
+# the folder at {{ dns_backup_dir }}.
+common_syncthing_enabled: true

@@ -61,6 +61,15 @@ common_firewall_ports: []
 # Docker service defaults
 common_service_restart: "always"
 
+# Syncthing installation (optional, fleet-wide file sharing).
+# Set common_syncthing_enabled=true in host_vars to install Syncthing on all hosts.
+common_syncthing_enabled: false
+
+# Syncthing teardown opt-in.
+# Set common_syncthing_teardown_enabled=true to remove Syncthing service and config
+# during role teardown (default: false, keeps Syncthing running).
+common_syncthing_teardown_enabled: false
+
 # Hardware detection (device_type -> hardware_platform -> resource limits)
 # has moved out of this role into the standalone 'hardware' role - see
 # roles/hardware/defaults/main.yml (hardware_profiles).

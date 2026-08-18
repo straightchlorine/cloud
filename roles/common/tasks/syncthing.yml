@@ -33,6 +33,33 @@
   until: common_syncthing_repo is succeeded
   retries: 3
   delay: 2
+
+- name: Enable and start Syncthing user service
+  ansible.builtin.systemd:
+    name: "syncthing@{{ ansible_user }}.service"
+    enabled: true
+    scope: user
+  become: true
+  # systemd --user needs to know which user; delegate via the service unit name.
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+  notify: Reload systemd
+
+- name: Remove Syncthing service configuration
+  ansible.builtin.file:
+    path: "/etc/systemd/system/syncthing@{{ ansible_user }}.service"
+    state: absent
+  become: true
+  when: common_syncthing_teardown_enabled | default(false) | bool
+
+- name: Disable and stop Syncthing user service
+  ansible.builtin.systemd:
+    name: "syncthing@{{ ansible_user }}.service"
+    enabled: false
+    state: stopped
+    scope: user
+  become: true
+  when: common_syncthing_teardown_enabled | default(false) | bool
   notify: Update apt cache
 
 - name: Pin Syncthing repo priority to prefer official packages over Debian
