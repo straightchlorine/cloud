@@ -11,7 +11,7 @@
     mode: "0755"
   become: true
 
-- name: Deploy the ntfy API key as a separate root-only file
+- name: Deploy the ntfy API key as a separate root-only file (skip if vault_ntfy_api_key is undefined)
   ansible.builtin.copy:
     dest: /etc/ntfy/notify-api-key
     content: "{{ vault_ntfy_api_key }}\n"
@@ -20,6 +20,7 @@
     mode: "0600"
   no_log: true
   become: true
+  when: vault_ntfy_api_key is defined
 
 - name: Install the ntfy notification helper
   ansible.builtin.template:

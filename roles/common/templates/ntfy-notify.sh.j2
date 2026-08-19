@@ -7,9 +7,14 @@
 
 API_KEY_FILE="/etc/ntfy/notify-api-key"
 
+# Fail silently when no API key is configured: the notification helpers
+# (pihole-update.sh, reboot-notify.sh, etc.) call us unconditionally as a
+# one-liner; if they were to exit with set -e they'd abort the whole task.
+# Exit 0 so notifications are simply no-ops on hosts without a configured
+# key. Uncomment the next two lines for diagnostics while debugging.
 if [ ! -r "$API_KEY_FILE" ]; then
-  echo "ntfy-notify.sh: cannot read API key file at $API_KEY_FILE" >&2
-  exit 1
+  # echo "ntfy-notify.sh: cannot read API key file at $API_KEY_FILE" >&2
+  exit 0
 fi
 
 TITLE="$1"

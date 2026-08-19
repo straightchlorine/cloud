@@ -235,12 +235,16 @@ else
   note_ok "reboot-notify.sh absent (host has common_auto_updates_reboot_if_required: false)"
 fi
 check_present /etc/ntfy/notify-api-key
-ntfy_mode="$(stat -c '%a' /etc/ntfy/notify-api-key 2>/dev/null || true)"
-ntfy_owner="$(stat -c '%U' /etc/ntfy/notify-api-key 2>/dev/null || true)"
-if [ "$ntfy_mode" = "600" ] && [ "$ntfy_owner" = "root" ]; then
-  note_ok "ntfy API key 0600 root:root (secret not world-readable)"
+if [ -e "/etc/ntfy/notify-api-key" ]; then
+  ntfy_mode="$(stat -c '%a' /etc/ntfy/notify-api-key 2>/dev/null || true)"
+  ntfy_owner="$(stat -c '%U' /etc/ntfy/notify-api-key 2>/dev/null || true)"
+  if [ "$ntfy_mode" = "600" ] && [ "$ntfy_owner" = "root" ]; then
+    note_ok "ntfy API key 0600 root:root (secret not world-readable)"
+  else
+    note_left "ntfy API key perms/owner wrong (mode=$ntfy_mode owner=$ntfy_owner)"
+  fi
 else
-  note_left "ntfy API key perms/owner wrong (mode=$ntfy_mode owner=$ntfy_owner)"
+  note_ok "ntfy API key absent (notifications will be no-ops; uncomment the key deployment to enable)"
 fi
 
 echo "-- Prometheus exporters --"
