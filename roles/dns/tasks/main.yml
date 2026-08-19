@@ -189,6 +189,13 @@
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
 
+- name: Ensure Syncthing backup folder is configured
+  ansible.builtin.command: >
+    syncthing cli config folders list | grep -q "backup" || \
+    syncthing cli config folders add --id "backup" --label "backup" --path "{{ dns_backup_dir }}"
+  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+  changed_when: false
+
 - name: Configure firewall
   ansible.builtin.include_role:
     name: firewall
