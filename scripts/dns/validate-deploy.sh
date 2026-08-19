@@ -33,6 +33,31 @@ check_present() {
   fi
 }
 
+# check_script <path> [expected-mode] - verifies a deployed script exists, is
+# executable, and (when expected-mode given) has exactly that octal mode.
+check_script() {
+  local path="$1"
+  local want_mode="${2:-}"
+  if [ ! -e "$path" ]; then
+    note_left "$path missing"
+    return
+  fi
+  if [ ! -x "$path" ]; then
+    note_left "$path not executable"
+    return
+  fi
+  note_ok "$path present + executable"
+  if [ -n "$want_mode" ]; then
+    local got_mode
+    got_mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+    if [ "$got_mode" = "$want_mode" ]; then
+      note_ok "$path mode $want_mode"
+    else
+      note_left "$path mode is $got_mode (expected $want_mode)"
+    fi
+  fi
+}
+
 # default-route source address, same as Ansible's primary_ip fact.
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
@@ -171,16 +196,67 @@ for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
     note_left "cron missing: $cron_job"
   fi
 done
+# Reboot cron only exists on hosts that deploy reboot-notify.sh
+# (common_auto_updates_reboot_if_required: true).
+if [ -e /usr/local/bin/reboot-notify.sh ]; then
+  if printf '%s\n' "$root_cron" | grep -qF -- "Reboot pending notification"; then
+    note_ok "cron present: Reboot pending notification"
+  else
+    note_left "cron missing: Reboot pending notification"
+  fi
+else
+  if printf '%s\n' "$root_cron" | grep -qF -- "Reboot pending notification"; then
+    note_left "reboot-notify.sh absent but 'Reboot pending notification' cron present (stale)"
+  else
+    note_ok "no reboot cron (host has no reboot-notify.sh)"
+  fi
+fi
 
-check_present /usr/local/bin/pihole
+check_script /usr/local/bin/pihole
 # Pi-hole v6 migrates setupVars.conf into pihole.toml at install; TOML is
 # the runtime config that must exist (setupVars.conf is transient).
 check_present /etc/pihole/pihole.toml
-check_present /usr/local/bin/pihole-update.sh
-check_present /usr/local/bin/pihole-syncthing-backup.sh
+check_script /usr/local/bin/pihole-update.sh 755
+# pihole-syncthing-backup.sh embeds the Pi-hole web password - must stay 0700
+# root-only, exactly like ntfy-notify.sh did before the key was split out.
+check_script /usr/local/bin/pihole-syncthing-backup.sh 700
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
 check_present /mnt/data/syncthing/backup
+
+echo "-- Notification helper + ntfy key (common role) --"
+check_script /usr/local/bin/ntfy-notify.sh 755
+# reboot-notify.sh is only deployed when common_auto_updates_reboot_if_required
+# is true (it is on pi-dns-test / pi-dns) - a host without it simply lacks a
+# "Reboot pending notification" cron instead.
+if [ -e /usr/local/bin/reboot-notify.sh ]; then
+  check_script /usr/local/bin/reboot-notify.sh 755
+else
+  note_ok "reboot-notify.sh absent (host has common_auto_updates_reboot_if_required: false)"
+fi
+check_present /etc/ntfy/notify-api-key
+ntfy_mode="$(stat -c '%a' /etc/ntfy/notify-api-key 2>/dev/null || true)"
+ntfy_owner="$(stat -c '%U' /etc/ntfy/notify-api-key 2>/dev/null || true)"
+if [ "$ntfy_mode" = "600" ] && [ "$ntfy_owner" = "root" ]; then
+  note_ok "ntfy API key 0600 root:root (secret not world-readable)"
+else
+  note_left "ntfy API key perms/owner wrong (mode=$ntfy_mode owner=$ntfy_owner)"
+fi
+
+echo "-- Prometheus exporters --"
+# node-exporter is shared fleet state (remains after a dns teardown); the
+# pihole-exporter binary/config are dns-scoped and must be present after deploy.
+for exp in \
+  /opt/prometheus-exporters/bin/node_exporter \
+  /opt/prometheus-exporters/bin/pihole_exporter \
+  /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do
+  if [ -x "$exp" ]; then
+    note_ok "$exp present + executable"
+  else
+    note_left "$exp missing or not executable"
+  fi
+done
+check_present /etc/prometheus/exporters/pihole-exporter.conf
 
 echo
 echo "== Summary: $pass passed, $fail failed =="

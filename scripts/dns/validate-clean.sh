@@ -46,6 +46,14 @@ check_absent /var/log/pihole-syncthing-backup.log
 check_absent /etc/pihole.backup
 check_absent /tmp/pi-hole-repo
 
+echo "-- Notification scripts + ntfy key (should be torn down with the role) --"
+# ntfy-notify.sh and reboot-notify.sh are common-role helpers the dns teardown
+# removes; the API key must not survive in /etc/ntfy either.
+check_absent /usr/local/bin/ntfy-notify.sh
+check_absent /usr/local/bin/reboot-notify.sh
+check_absent /etc/ntfy/notify-api-key
+check_absent /etc/ntfy
+
 if systemctl is-active --quiet pihole-FTL 2>/dev/null; then
   note_left "pihole-FTL service still active"
 else
@@ -65,7 +73,7 @@ fi
 
 # dns role crons live in root's crontab; only root may read it.
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
-for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
+for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup" "Reboot pending notification"; do
   if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
     note_left "root cron still has: $cron_job"
   else
@@ -161,6 +169,16 @@ if systemctl is-active --quiet node-exporter 2>/dev/null; then
 else
   note_left "node-exporter not active (shared exporter state should remain)"
 fi
+# Shared exporters that must remain executable exactly as the deploy left them.
+for exp in \
+  /opt/prometheus-exporters/bin/node_exporter \
+  /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do
+  if [ -x "$exp" ]; then
+    note_ok "$exp remains (shared exporter state)"
+  else
+    note_left "$exp missing (shared exporter state should remain)"
+  fi
+done
 if getent passwd prometheus >/dev/null 2>&1; then
   note_ok "prometheus user remains (shared)"
 else
