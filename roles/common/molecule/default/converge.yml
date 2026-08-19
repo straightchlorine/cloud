@@ -32,7 +32,15 @@
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/ntfy-notify.sh.j2"
         dest: /tmp/ntfy-notify.rendered.sh
-        mode: "0700"
+        mode: "0755"
+
+    # Render the API key file the same way ntfy_install.yml does, so verify.yml
+    # can assert the secret lives only there - never embedded in the script.
+    - name: Render the ntfy API key file
+      ansible.builtin.copy:
+        dest: /tmp/ntfy-api-key
+        content: "{{ vault_ntfy_api_key }}\n"
+        mode: "0600"
 
     - name: Render the reboot-pending notification script
       ansible.builtin.template:

@@ -29,8 +29,7 @@ galaxy_info:
     - hardware
 
 dependencies:
-  - role: common
-    tasks_from: detect_hardware
+  - role: hardware
     when: pi_hardware_metrics_enabled
 
 collections:

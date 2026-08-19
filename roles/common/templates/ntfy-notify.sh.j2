@@ -1,14 +1,24 @@
 #!/bin/bash
 # Sends a notification to the fleet-wide ntfy topic (group_vars/all/all.yml).
-# Root-only (0700): embeds vault_ntfy_api_key via Jinja2.
+# Reads the API key from /etc/ntfy/notify-api-key (root:root 0600) so the
+# script itself can be world-executable without exposing secrets.
 # Usage: ntfy-notify.sh <title> <message> [priority] [tags]
 #   priority: default "default"; tags: ntfy emoji, e.g. "rotating_light"
+
+API_KEY_FILE="/etc/ntfy/notify-api-key"
+
+if [ ! -r "$API_KEY_FILE" ]; then
+  echo "ntfy-notify.sh: cannot read API key file at $API_KEY_FILE" >&2
+  exit 1
+fi
 
 TITLE="$1"
 MESSAGE="$2"
 PRIORITY="${3:-default}"
 TAGS="${4:-}"
 
-curl -s -H "Authorization: Bearer {{ vault_ntfy_api_key }}" \
+API_KEY=$(head -c 4096 "$API_KEY_FILE")
+
+curl -s -H "Authorization: Bearer $API_KEY" \
   -H "Title: $TITLE" -H "Priority: $PRIORITY" -H "Tags: $TAGS" \
   -d "$MESSAGE" "{{ ntfy_server_url }}/{{ ntfy_topic }}" >/dev/null 2>&1 || true

@@ -89,12 +89,24 @@
         src: /tmp/ntfy-notify.rendered.sh
       register: common_ntfy_notify_rendered
 
-    - name: Assert the ntfy API key rendered into the helper
+    - name: Assert the ntfy API key is NOT embedded in the helper script
       ansible.builtin.assert:
         that:
-          - "'molecule-test-ntfy-key' in (common_ntfy_notify_rendered.content | b64decode)"
-        fail_msg: "ntfy-notify.sh.j2 did not render vault_ntfy_api_key"
-        success_msg: "[OK] ntfy-notify.sh.j2 renders the API key correctly"
+          - "'molecule-test-ntfy-key' not in (common_ntfy_notify_rendered.content | b64decode)"
+        fail_msg: "ntfy-notify.sh.j2 still embeds vault_ntfy_api_key - key must live in a separate file"
+        success_msg: "[OK] ntfy-notify.sh.j2 does not embed the API key"
+
+    - name: Read the rendered ntfy API key file
+      ansible.builtin.slurp:
+        src: /tmp/ntfy-api-key
+      register: common_ntfy_api_key_rendered
+
+    - name: Assert the API key lives in the separate key file
+      ansible.builtin.assert:
+        that:
+          - "'molecule-test-ntfy-key' in (common_ntfy_api_key_rendered.content | b64decode)"
+        fail_msg: "ntfy API key file did not receive vault_ntfy_api_key"
+        success_msg: "[OK] API key written to separate key file"
 
     - name: Read the rendered reboot-notify script
       ansible.builtin.slurp:

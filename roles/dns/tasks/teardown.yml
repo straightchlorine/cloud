@@ -50,7 +50,7 @@
     - /opt/pihole
   become: true
 
-- name: Remove Pi-hole cron jobs
+- name: Remove Pi-hole and notification cron jobs
   ansible.builtin.cron:
     name: "{{ item }}"
     state: absent
@@ -58,16 +58,18 @@
   loop:
     - "Weekly Pi-hole updates"
     - "Pi-hole Syncthing local backup"
+    - "Reboot pending notification"
   become: true
-  # Note: unattended-upgrades and its "Reboot pending notification" cron are
-  # common-role state (every host has them) - out of scope for a DNS-only
-  # teardown.
+  # unattended-upgrades itself (apt config + reboot cron) is fleet-wide common
+  # state, but its reboot-notify.sh helper + cron are cleanly removable too.
 
 - name: Remove DNS role file artifacts
   # Includes the pihole binary and pihole-FTL unit so a retry after a
   # partially-interrupted `pihole uninstall` still leaves no dangling service,
   # plus /tmp/pi-hole-repo for runs killed before the deploy block's cleanup.
-  # Also removes ntfy-notify.sh and related scripts deployed by the common role.
+  # Also removes the notification scripts deployed by the common role
+  # (ntfy-notify.sh, reboot-notify.sh), their ntfy API key file, and the
+  # /etc/ntfy dir that held it - so no helper script/secret survives.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -76,6 +78,9 @@
     - /usr/local/bin/pihole-update.sh
     - /usr/local/bin/pihole-syncthing-backup.sh
     - /usr/local/bin/ntfy-notify.sh
+    - /usr/local/bin/reboot-notify.sh
+    - /etc/ntfy/notify-api-key
+    - /etc/ntfy
     - /var/log/pihole-FTL.log
     - /var/log/pihole.log
     - /var/log/pihole-syncthing-backup.log
@@ -263,6 +268,9 @@
     - /etc/systemd/system/pihole-FTL.service
     - /etc/chrony/chrony.conf
     - /usr/local/bin/ntfy-notify.sh
+    - /usr/local/bin/reboot-notify.sh
+    - /etc/ntfy/notify-api-key
+    - /etc/ntfy
   register: dns_teardown_verify
 
 - name: Assert key Pi-hole artifacts are gone

@@ -7,8 +7,7 @@
 
 - name: Detect hardware for resource allocation
   ansible.builtin.include_role:
-    name: common
-    tasks_from: detect_hardware
+    name: hardware
   tags: [hardware, validation]
 
 - name: Gather network facts for dynamic configuration
