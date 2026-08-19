@@ -67,6 +67,7 @@
   # Includes the pihole binary and pihole-FTL unit so a retry after a
   # partially-interrupted `pihole uninstall` still leaves no dangling service,
   # plus /tmp/pi-hole-repo for runs killed before the deploy block's cleanup.
+  # Also removes ntfy-notify.sh and related scripts deployed by the common role.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -74,6 +75,7 @@
     - /usr/local/bin/pihole
     - /usr/local/bin/pihole-update.sh
     - /usr/local/bin/pihole-syncthing-backup.sh
+    - /usr/local/bin/ntfy-notify.sh
     - /var/log/pihole-FTL.log
     - /var/log/pihole.log
     - /var/log/pihole-syncthing-backup.log
@@ -260,6 +262,7 @@
     - /opt/pihole
     - /etc/systemd/system/pihole-FTL.service
     - /etc/chrony/chrony.conf
+    - /usr/local/bin/ntfy-notify.sh
   register: dns_teardown_verify
 
 - name: Assert key Pi-hole artifacts are gone
