@@ -193,8 +193,13 @@
   ansible.builtin.command: >
     syncthing cli config folders list | grep -q "backup" || \
     syncthing cli config folders add --id "backup" --label "backup" --path "{{ dns_backup_dir }}"
-  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+  when: >
+    common_syncthing_enabled | default(false) | bool
+    and dns_backup_enabled
+    and (ansible_facts['services']['syncthing-user'] is defined
+         and ansible_facts['services']['syncthing-user']['state'] == 'running')
   changed_when: false
+  ignore_errors: true
 
 - name: Configure firewall
   ansible.builtin.include_role:
