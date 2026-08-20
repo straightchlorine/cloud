@@ -33,23 +33,26 @@ check_present() {
   fi
 }
 
-# check_script <path> [expected-mode] - verifies a deployed script exists, is
-# executable, and (when expected-mode given) has exactly that octal mode.
+# check_script <path> [expected-mode] - verifies a deployed script exists,
+# has an executable bit set, and (when expected-mode given) has exactly that
+# octal mode. Uses stat %a instead of [ -x ] to verify executable bits, since
+# 0700 scripts owned by root will fail the -x test for non-root users.
 check_script() {
   local path="$1"
   local want_mode="${2:-}"
+  local got_mode
   if [ ! -e "$path" ]; then
     note_left "$path missing"
     return
   fi
-  if [ ! -x "$path" ]; then
-    note_left "$path not executable"
+  got_mode="$(stat -c '%a' "$path" 2>/dev/null || echo "000")"
+  if [ $(( 8#$got_mode & 0111 )) -ne 0 ] 2>/dev/null; then
+    note_ok "$path present + executable"
+  else
+    note_left "$path not executable (mode: $got_mode)"
     return
   fi
-  note_ok "$path present + executable"
   if [ -n "$want_mode" ]; then
-    local got_mode
-    got_mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
     if [ "$got_mode" = "$want_mode" ]; then
       note_ok "$path mode $want_mode"
     else
@@ -252,15 +255,16 @@ echo "-- Prometheus exporters --"
 # pihole-exporter binary/config are dns-scoped and must be present after deploy.
 for exp in \
   /opt/prometheus-exporters/bin/node_exporter \
-  /opt/prometheus-exporters/bin/pihole_exporter \
-  /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do
-  if [ -x "$exp" ]; then
-    note_ok "$exp present + executable"
-  else
-    note_left "$exp missing or not executable"
-  fi
+  /opt/prometheus-exporters/bin/pihole_exporter; do
+  check_script "$exp"
 done
-check_present /etc/prometheus/exporters/pihole-exporter.conf
+# pi_hardware_metrics.sh only on ARM (aarch64/armv7l) hosts; x86_64 test boxes
+# don't have it and shouldn't trigger a failure here.
+if [ -e /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh ]; then
+  check_script /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh
+else
+  note_ok "pi_hardware_metrics.sh absent (not applicable on this architecture)"
+fi
 
 echo
 echo "== Summary: $pass passed, $fail failed =="

@@ -47,11 +47,17 @@
   tags: [dns, automation, music, monitoring, backup]
 
 - name: Include Pi hardware metrics setup
-  ansible.builtin.include_tasks: pi_hardware_metrics.yml
+  # Same tag-propagation rationale as node_exporter above: without tags: the
+  # --tags-scoped deploy run (e.g. --tags dns) never reaches this include.
+  ansible.builtin.include_tasks:
+    file: pi_hardware_metrics.yml
+    apply:
+      tags: [dns, automation, music, monitoring, backup]
   when:
     - prometheus_exporters_enabled
     - pi_hardware_metrics_enabled
     - ansible_architecture in ['armv7l', 'aarch64']
+  tags: [dns, automation, music, monitoring, backup]
 
 - name: Include Pi-hole Exporter setup
   # Also tagged dns: lives in the fleet-wide play, which only carries
