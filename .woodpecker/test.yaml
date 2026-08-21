@@ -23,7 +23,7 @@ matrix:
   # The other roles still carry pre-refactor, fixture-based scenarios that
   # would burn runner resources without catching regressions - re-add each
   # role here as its tests are rebuilt on the dns pattern
-  # (docs/testing-best-practices.md).
+  # (docs/testing/molecule-standard.md).
   ROLE:
     - dns
 
