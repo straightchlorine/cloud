@@ -151,16 +151,16 @@ ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
   --limit pi-dns-test -e dns_teardown_confirm=true
 
 # 2. Verify the box is clean enough for a fresh test
-./scripts/check-dns-test-clean.sh pi-dns-test
+./scripts/dns/validate-clean.sh pi-dns-test
 
 # 3. Re-deploy, then verify the box is actually healthy end-to-end
 ansible-playbook -i inventory/production playbooks/site.yml --limit pi-dns-test --tags dns
-./scripts/check-dns-test-deploy.sh pi-dns-test
+./scripts/dns/validate-deploy.sh pi-dns-test
 ```
 
-The two scripts form the full test cycle: `check-dns-test-clean.sh` proves the
+The two scripts form the full test cycle: `validate-clean.sh` proves the
 host is back to a near-bare state (exit 1 on any leftover), and
-`check-dns-test-deploy.sh` proves Pi-hole DNS + ad-blocking, the web UI, both
+`validate-deploy.sh` proves Pi-hole DNS + ad-blocking, the web UI, both
 exporters, chrony sync, the optional-drive mount + journald relocation and the
 firewall rules are all working (exit 1 on any failure).
 
@@ -179,7 +179,7 @@ What intentionally stays (shared/fleet state, re-applied idempotently by the nex
 - `node-exporter` / the `prometheus` user and directories
 - `unattended-upgrades`, `fail2ban` and other common-role state
 
-`scripts/check-dns-test-clean.sh` verifies all of the above and exits non-zero
+`scripts/dns/validate-clean.sh` verifies all of the above and exits non-zero
 on any leftover.
 
 ## Validation

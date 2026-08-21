@@ -219,6 +219,30 @@
   become: true
   when: dns_ntp_server_enabled
 
+- name: Re-apply fleet notification helpers (ntfy + reboot)
+  # The dns teardown removes the shared common-role notification helpers
+  # (ntfy-notify.sh, reboot-notify.sh, /etc/ntfy) so a fresh test starts clean.
+  # A later dns-only redeploy is `--tags dns`, which does NOT run the common
+  # role's own play (#2) - so this duck re-installs them here, gated on the same
+  # host config the common role uses. Without this, a dns-only deploy after a
+  # teardown silently ships without notifications even though the ntfy API key
+  # is configured. Tagged [dns,...] so the includes run under `--tags dns`
+  # (same tag-propagation fix as the exporters' pi_hardware_metrics include).
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: ntfy_install
+  tags: [dns, common, base]
+
+- name: Re-apply unattended-reboot notification (common)
+  # Reinstalls reboot-notify.sh + its cron when common_auto_updates_reboot_if_required
+  # is true (pi-dns-test / pi-dns). Idempotent - on a full site.yml deploy the
+  # common role already ran these, so this is a no-op that keeps a dns-only
+  # redeploy consistent.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: auto_updates
+  tags: [dns, common, base]
+
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
   tags: [post_validation]

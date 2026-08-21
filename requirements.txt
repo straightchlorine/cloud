@@ -1,25 +1,20 @@
 # Ansible and core dependencies
-ansible-core>=2.15,<2.17
-ansible-lint>=24.2.0
+ansible-core>=2.17,<2.22
+ansible-lint>=26.8.0
 
 # Molecule testing framework
-molecule>=6.0.0
-molecule-plugins[podman]>=23.5.0
-
-# Ansible collections (informational - install via ansible-galaxy)
-# ansible.utils
-# community.general
-# containers.podman
+molecule>=26.8.0
+molecule-plugins[podman]>=26.7.15
 
 # Linting and validation
-yamllint>=1.35.0
-jinja2>=3.1.0
+yamllint>=1.38.0
+jinja2>=3.1.6
 
 # IP address handling (required by ansible.utils.ipaddr filter)
 netaddr>=1.3.0
 
 # Pre-commit hooks
-pre-commit>=3.5.0
+pre-commit>=4.6.2
 
 # Optional: Better error messages and docs
-jsonschema>=4.0.0
+jsonschema>=4.26.0

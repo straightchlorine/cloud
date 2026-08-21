@@ -230,12 +230,15 @@ check_present /mnt/data/syncthing/backup
 echo "-- Notification helper + ntfy key (common role) --"
 check_script /usr/local/bin/ntfy-notify.sh 755
 # reboot-notify.sh is only deployed when common_auto_updates_reboot_if_required
-# is true (it is on pi-dns-test / pi-dns) - a host without it simply lacks a
-# "Reboot pending notification" cron instead.
+# is true (it is on pi-dns-test / pi-dns). The config value isn't readable over
+# SSH, so absence is judged against this host's known deploy intent - the test
+# and prod dns hosts both set the flag true, so a missing script is a FAIL, not
+# an OK (previously the "false" note misled by inferring config from a file the
+# dns teardown had simply removed).
 if [ -e /usr/local/bin/reboot-notify.sh ]; then
   check_script /usr/local/bin/reboot-notify.sh 755
 else
-  note_ok "reboot-notify.sh absent (host has common_auto_updates_reboot_if_required: false)"
+  note_left "reboot-notify.sh missing (common_auto_updates_reboot_if_required is true for dns hosts)"
 fi
 check_present /etc/ntfy/notify-api-key
 if [ -e "/etc/ntfy/notify-api-key" ]; then
@@ -247,7 +250,7 @@ if [ -e "/etc/ntfy/notify-api-key" ]; then
     note_left "ntfy API key perms/owner wrong (mode=$ntfy_mode owner=$ntfy_owner)"
   fi
 else
-  note_ok "ntfy API key absent (notifications will be no-ops; uncomment the key deployment to enable)"
+  note_left "ntfy API key absent (key deploy auto-skips unless vault_ntfy_api_key is defined; set it on the controller to enable notifications)"
 fi
 
 echo "-- Prometheus exporters --"
