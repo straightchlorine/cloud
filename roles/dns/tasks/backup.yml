@@ -26,7 +26,7 @@
   # coreutils `install` below with root:root + 0700.
   ansible.builtin.template:
     src: pihole-syncthing-backup.sh.j2
-    dest: /tmp/pihole-syncthing-backup.sh.installing
+    dest: /tmp/pihole-syncthing-backup.installing
     mode: "0700"
   become: true
 
@@ -40,14 +40,14 @@
       - root
       - -m
       - "0700"
-      - /tmp/pihole-syncthing-backup.sh.installing
-      - /usr/local/bin/pihole-syncthing-backup.sh
+      - /tmp/pihole-syncthing-backup.installing
+      - /usr/local/bin/pihole-syncthing-backup
   become: true
   changed_when: false
 
-- name: Remove the pihole-syncthing-backup.sh staging copy
+- name: Remove the pihole-syncthing-backup staging copy
   ansible.builtin.file:
-    path: /tmp/pihole-syncthing-backup.sh.installing
+    path: /tmp/pihole-syncthing-backup.installing
     state: absent
   become: true
 
@@ -56,6 +56,6 @@
     name: "Pi-hole Syncthing local backup"
     minute: "{{ dns_backup_schedule_minute }}"
     hour: "{{ dns_backup_schedule_hour }}"
-    job: "/usr/local/bin/pihole-syncthing-backup.sh >> /var/log/pihole-syncthing-backup.log 2>&1"
+    job: "/usr/local/bin/pihole-syncthing-backup >> /var/log/pihole-syncthing-backup.log 2>&1"
     user: root
   become: true

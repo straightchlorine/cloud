@@ -7,8 +7,16 @@
 # this file embeds the web password.
 set -euo pipefail
 
-trap 'ntfy-notify.sh "Pi-hole Syncthing backup failed: {{ inventory_hostname }}" \
-  "Unexpected error at line $LINENO. Check /var/log/pihole-syncthing-backup.log." high rotating_light' ERR
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: pihole-syncthing-backup"
+  echo ""
+  echo "Back up Pi-hole (Teleporter archive + FTL DB) to the Syncthing-shared folder."
+  echo "Sends ntfy notification on success or failure."
+  exit 0
+fi
+
+trap 'ntfy-notify "$(hostname): Pi-hole Syncthing backup failed" \
+  "Unexpected error at line $LINENO. Check /var/log/pihole-syncthing-backup.log." high rotating_light,error' ERR
 
 DEST="{{ dns_backup_dir }}"
 RETENTION="{{ dns_backup_retention }}"
@@ -24,8 +32,8 @@ SID=$(jq -n --arg pw "$WEBPASSWORD" '{password:$pw}' \
 
 if [ -z "$SID" ] || [ "$SID" = "null" ]; then
   echo "Pi-hole Teleporter backup failed: could not authenticate against the API" >&2
-  ntfy-notify.sh "Pi-hole Syncthing backup failed: {{ inventory_hostname }}" \
-    "Could not authenticate against the Pi-hole API." high rotating_light
+  ntfy-notify "$(hostname): Pi-hole Syncthing backup failed" \
+    "Could not authenticate against the Pi-hole API." high rotating_light,error
   exit 1
 fi
 
@@ -48,5 +56,5 @@ ls -1t "$DEST"/pi-hole_*_teleporter_*.zip 2>/dev/null \
 # Hand ownership to the Syncthing user so it can replicate the files.
 chown -R "$OWNER" "$DEST"
 
-ntfy-notify.sh "Pi-hole Syncthing backup OK: {{ inventory_hostname }}" \
-  "Teleporter archive and pihole-FTL.db snapshot written to $DEST." default
+ntfy-notify "$(hostname): Pi-hole Syncthing backup successful" \
+  "Teleporter archive and pihole-FTL.db snapshot written to $DEST." default white_check_mark

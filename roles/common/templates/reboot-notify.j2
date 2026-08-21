@@ -1,0 +1,18 @@
+#!/bin/bash
+# Fires 12h before unattended-upgrades' reboot window, so a pending reboot is
+# known before the scheduled time. Only notifies if /var/run/reboot-required
+# exists (set by that day's unattended-upgrades run; if later than this check,
+# the heads-up lands the next day).
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: reboot-notify"
+  echo ""
+  echo "Check if a reboot is pending and send a ntfy notification."
+  echo "Called by cron 12 hours before the scheduled auto-reboot."
+  exit 0
+fi
+
+if [ -f /var/run/reboot-required ]; then
+  ntfy-notify "$(hostname): Reboot pending" \
+    "System will reboot at {{ common_auto_updates_reboot_time }} for pending updates." default warning
+fi

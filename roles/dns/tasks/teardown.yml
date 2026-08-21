@@ -61,39 +61,39 @@
     - "Reboot pending notification"
   become: true
   # unattended-upgrades itself (apt config + reboot cron) is fleet-wide common
-  # state, but its reboot-notify.sh helper + cron are cleanly removable too.
+  # state, but its reboot-notify helper + cron are cleanly removable too.
 
 - name: Remove DNS role file artifacts
   # Includes the pihole binary and pihole-FTL unit so a retry after a
   # partially-interrupted `pihole uninstall` still leaves no dangling service,
   # plus /tmp/pi-hole-repo for runs killed before the deploy block's cleanup.
   # Also removes the notification scripts deployed by the common role
-  # (ntfy-notify.sh, reboot-notify.sh), their ntfy API key file, and the
+  # (ntfy-notify, reboot-notify), their ntfy API key file, and the
   # /etc/ntfy dir that held it - so no helper script/secret survives.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
-  loop:
-    - /usr/local/bin/pihole
-    - /usr/local/bin/pihole-update.sh
-    - /usr/local/bin/pihole-syncthing-backup.sh
-    - /usr/local/bin/ntfy-notify.sh
-    - /usr/local/bin/reboot-notify.sh
-    - /tmp/ntfy-notify.sh.installing
-    - /tmp/reboot-notify.sh.installing
-    - /tmp/pihole-update.sh.installing
-    - /tmp/pihole-syncthing-backup.sh.installing
-    - /etc/ntfy/notify-api-key
-    - /etc/ntfy
-    - /var/log/pihole-FTL.log
-    - /var/log/pihole.log
-    - /var/log/pihole-syncthing-backup.log
-    - /etc/logrotate.d/weekly-updates
-    - /var/log/weekly-updates.log
-    - /etc/chrony/chrony.conf
-    - /etc/pihole.backup
-    - /etc/systemd/system/pihole-FTL.service
-    - /tmp/pi-hole-repo
+    loop:
+      - /usr/local/bin/pihole
+      - /usr/local/bin/pihole-update
+      - /usr/local/bin/pihole-syncthing-backup
+      - /usr/local/bin/ntfy-notify
+      - /usr/local/bin/reboot-notify
+      - /tmp/ntfy-notify.installing
+      - /tmp/reboot-notify.installing
+      - /tmp/pihole-update.installing
+      - /tmp/pihole-syncthing-backup.installing
+      - /etc/ntfy/notify-api-key
+      - /etc/ntfy
+      - /var/log/pihole-FTL.log
+      - /var/log/pihole.log
+      - /var/log/pihole-syncthing-backup.log
+      - /etc/logrotate.d/weekly-updates
+      - /var/log/weekly-updates.log
+      - /etc/chrony/chrony.conf
+      - /etc/pihole.backup
+      - /etc/systemd/system/pihole-FTL.service
+      - /tmp/pi-hole-repo
   become: true
   # Syncthing-shared backup dir (dns_backup_dir) is left alone - it is
   # replicated user data, not role state (and lives on the optional drive,
@@ -271,8 +271,8 @@
     - /opt/pihole
     - /etc/systemd/system/pihole-FTL.service
     - /etc/chrony/chrony.conf
-    - /usr/local/bin/ntfy-notify.sh
-    - /usr/local/bin/reboot-notify.sh
+    - /usr/local/bin/ntfy-notify
+    - /usr/local/bin/reboot-notify
     - /etc/ntfy/notify-api-key
     - /etc/ntfy
   register: dns_teardown_verify

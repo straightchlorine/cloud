@@ -7,7 +7,7 @@
   # coreutils `install` below with guaranteed root:root + 0755.
   ansible.builtin.template:
     src: pihole-update.sh.j2
-    dest: /tmp/pihole-update.sh.installing
+    dest: /tmp/pihole-update.installing
     mode: '0755'
   become: true
 
@@ -21,14 +21,14 @@
       - root
       - -m
       - "0755"
-      - /tmp/pihole-update.sh.installing
-      - /usr/local/bin/pihole-update.sh
+      - /tmp/pihole-update.installing
+      - /usr/local/bin/pihole-update
   become: true
   changed_when: false
 
-- name: Remove the pihole-update.sh staging copy
+- name: Remove the pihole-update staging copy
   ansible.builtin.file:
-    path: /tmp/pihole-update.sh.installing
+    path: /tmp/pihole-update.installing
     state: absent
   become: true
 
@@ -38,7 +38,7 @@
     minute: "{{ dns_auto_update_time.split(':')[1] }}"
     hour: "{{ dns_auto_update_time.split(':')[0] }}"
     weekday: "{{ dns_auto_update_day[:3] | lower }}"
-    job: "/usr/local/bin/pihole-update.sh >> /var/log/weekly-updates.log 2>&1"
+    job: "/usr/local/bin/pihole-update >> /var/log/weekly-updates.log 2>&1"
     user: root
   become: true
 

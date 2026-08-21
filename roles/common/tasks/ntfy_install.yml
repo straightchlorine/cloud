@@ -1,6 +1,6 @@
 ---
 # Installs the shared ntfy CLI helper on every host, so scripts can just call
-# ntfy-notify.sh instead of embedding their own curl/API-key logic.
+# ntfy-notify (bare name) instead of embedding their own curl/API-key logic.
 
 - name: Ensure the ntfy config directory exists
   ansible.builtin.file:
@@ -27,8 +27,8 @@
   # must be rendered by the template module first; the coreutils `install`
   # below then places them with guaranteed owner/group/mode.
   ansible.builtin.template:
-    src: ntfy-notify.sh.j2
-    dest: /tmp/ntfy-notify.sh.installing
+    src: ntfy-notify.j2
+    dest: /tmp/ntfy-notify.installing
     mode: "0755"
   become: true
 
@@ -46,14 +46,14 @@
       - root
       - -m
       - "0755"
-      - /tmp/ntfy-notify.sh.installing
-      - /usr/local/bin/ntfy-notify.sh
+      - /tmp/ntfy-notify.installing
+      - /usr/local/bin/ntfy-notify
   become: true
   # Overwriting the same bytes+mode each run is an effective no-op.
   changed_when: false
 
-- name: Remove the ntfy-notify.sh staging copy
+- name: Remove the ntfy-notify staging copy
   ansible.builtin.file:
-    path: /tmp/ntfy-notify.sh.installing
+    path: /tmp/ntfy-notify.installing
     state: absent
   become: true

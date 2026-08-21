@@ -93,8 +93,8 @@
       ansible.builtin.assert:
         that:
           - "'molecule-test-ntfy-key' not in (common_ntfy_notify_rendered.content | b64decode)"
-        fail_msg: "ntfy-notify.sh.j2 still embeds vault_ntfy_api_key - key must live in a separate file"
-        success_msg: "[OK] ntfy-notify.sh.j2 does not embed the API key"
+        fail_msg: "ntfy-notify.j2 still embeds vault_ntfy_api_key - key must live in a separate file"
+        success_msg: "[OK] ntfy-notify.j2 does not embed the API key"
 
     - name: Read the rendered ntfy API key file
       ansible.builtin.slurp:
@@ -116,12 +116,12 @@
     - name: Assert reboot-notify calls the ntfy helper by bare name
       ansible.builtin.assert:
         that:
-          - "'ntfy-notify.sh' in (common_reboot_notify_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify.sh' not in (common_reboot_notify_rendered.content | b64decode)"
+          - "'ntfy-notify ' in (common_reboot_notify_rendered.content | b64decode)"
+          - "'/usr/local/bin/ntfy-notify' not in (common_reboot_notify_rendered.content | b64decode)"
         fail_msg: >-
-          reboot-notify.sh.j2 should call ntfy-notify.sh by bare name (relies
+          reboot-notify.j2 should call ntfy-notify by bare name (relies
           on the PATH cron entry in auto_updates.yml), not a hardcoded path.
-        success_msg: "[OK] reboot-notify.sh.j2 calls ntfy-notify.sh via PATH"
+        success_msg: "[OK] reboot-notify.j2 calls ntfy-notify via PATH"
 
     - name: Display verification results
       ansible.builtin.debug:

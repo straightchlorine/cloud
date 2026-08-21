@@ -30,7 +30,7 @@
     # notification instead of failing.
     - name: Render the ntfy notification helper
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/ntfy-notify.sh.j2"
+        src: "{{ playbook_dir }}/../../templates/ntfy-notify.j2"
         dest: /tmp/ntfy-notify.rendered.sh
         mode: "0755"
 
@@ -44,7 +44,7 @@
 
     - name: Render the reboot-pending notification script
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/reboot-notify.sh.j2"
+        src: "{{ playbook_dir }}/../../templates/reboot-notify.j2"
         dest: /tmp/reboot-notify.rendered.sh
         mode: "0755"
 

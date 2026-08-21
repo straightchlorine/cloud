@@ -199,9 +199,9 @@ for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
     note_left "cron missing: $cron_job"
   fi
 done
-# Reboot cron only exists on hosts that deploy reboot-notify.sh
+# Reboot cron only exists on hosts that deploy reboot-notify
 # (common_auto_updates_reboot_if_required: true).
-if [ -e /usr/local/bin/reboot-notify.sh ]; then
+if [ -e /usr/local/bin/reboot-notify ]; then
   if printf '%s\n' "$root_cron" | grep -qF -- "Reboot pending notification"; then
     note_ok "cron present: Reboot pending notification"
   else
@@ -209,9 +209,9 @@ if [ -e /usr/local/bin/reboot-notify.sh ]; then
   fi
 else
   if printf '%s\n' "$root_cron" | grep -qF -- "Reboot pending notification"; then
-    note_left "reboot-notify.sh absent but 'Reboot pending notification' cron present (stale)"
+    note_left "reboot-notify absent but 'Reboot pending notification' cron present (stale)"
   else
-    note_ok "no reboot cron (host has no reboot-notify.sh)"
+    note_ok "no reboot cron (host has no reboot-notify)"
   fi
 fi
 
@@ -219,26 +219,26 @@ check_script /usr/local/bin/pihole
 # Pi-hole v6 migrates setupVars.conf into pihole.toml at install; TOML is
 # the runtime config that must exist (setupVars.conf is transient).
 check_present /etc/pihole/pihole.toml
-check_script /usr/local/bin/pihole-update.sh 755
-# pihole-syncthing-backup.sh embeds the Pi-hole web password - must stay 0700
-# root-only, exactly like ntfy-notify.sh did before the key was split out.
-check_script /usr/local/bin/pihole-syncthing-backup.sh 700
+check_script /usr/local/bin/pihole-update 755
+# pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700
+# root-only, exactly like ntfy-notify did before the key was split out.
+check_script /usr/local/bin/pihole-syncthing-backup 700
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
 check_present /mnt/data/syncthing/backup
 
 echo "-- Notification helper + ntfy key (common role) --"
-check_script /usr/local/bin/ntfy-notify.sh 755
-# reboot-notify.sh is only deployed when common_auto_updates_reboot_if_required
+check_script /usr/local/bin/ntfy-notify 755
+# reboot-notify is only deployed when common_auto_updates_reboot_if_required
 # is true (it is on pi-dns-test / pi-dns). The config value isn't readable over
 # SSH, so absence is judged against this host's known deploy intent - the test
 # and prod dns hosts both set the flag true, so a missing script is a FAIL, not
 # an OK (previously the "false" note misled by inferring config from a file the
 # dns teardown had simply removed).
-if [ -e /usr/local/bin/reboot-notify.sh ]; then
-  check_script /usr/local/bin/reboot-notify.sh 755
+if [ -e /usr/local/bin/reboot-notify ]; then
+  check_script /usr/local/bin/reboot-notify 755
 else
-  note_left "reboot-notify.sh missing (common_auto_updates_reboot_if_required is true for dns hosts)"
+  note_left "reboot-notify missing (common_auto_updates_reboot_if_required is true for dns hosts)"
 fi
 check_present /etc/ntfy/notify-api-key
 if [ -e "/etc/ntfy/notify-api-key" ]; then

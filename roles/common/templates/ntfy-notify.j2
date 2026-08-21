@@ -2,18 +2,35 @@
 # Sends a notification to the fleet-wide ntfy topic (group_vars/all/all.yml).
 # Reads the API key from /etc/ntfy/notify-api-key (root:root 0600) so the
 # script itself can be world-executable without exposing secrets.
-# Usage: ntfy-notify.sh <title> <message> [priority] [tags]
+# Usage: ntfy-notify <title> <message> [priority] [tags]
 #   priority: default "default"; tags: ntfy emoji, e.g. "rotating_light"
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: ntfy-notify <title> <message> [priority] [tags]"
+  echo ""
+  echo "Send a notification to the fleet-wide ntfy topic."
+  echo ""
+  echo "Arguments:"
+  echo "  title     Notification title (required)"
+  echo "  message   Notification body (required)"
+  echo "  priority  Priority: default, low, high, urgent (default: default)"
+  echo "  tags      Comma-separated ntfy emoji tags, e.g. rotating_light,white_check_mark"
+  echo ""
+  echo "Examples:"
+  echo "  ntfy-notify 'Backup complete' 'Syncthing backup finished successfully' default white_check_mark"
+  echo "  ntfy-notify 'Disk Alert' '/dev/sda usage > 90%' high warning"
+  exit 0
+fi
 
 API_KEY_FILE="/etc/ntfy/notify-api-key"
 
 # Fail silently when no API key is configured: the notification helpers
-# (pihole-update.sh, reboot-notify.sh, etc.) call us unconditionally as a
+# (pihole-update, reboot-notify, etc.) call us unconditionally as a
 # one-liner; if they were to exit with set -e they'd abort the whole task.
 # Exit 0 so notifications are simply no-ops on hosts without a configured
 # key. Uncomment the next two lines for diagnostics while debugging.
 if [ ! -r "$API_KEY_FILE" ]; then
-  # echo "ntfy-notify.sh: cannot read API key file at $API_KEY_FILE" >&2
+    # echo "ntfy-notify: cannot read API key file at $API_KEY_FILE" >&2
   exit 0
 fi
 

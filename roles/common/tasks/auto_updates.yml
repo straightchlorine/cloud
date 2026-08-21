@@ -4,7 +4,7 @@
 
 - name: Set PATH for root's crontab
   # Cron's default PATH often excludes /usr/local/bin, where this repo's
-  # cron-invoked scripts (and their commands like pihole, ntfy-notify.sh)
+  # cron-invoked scripts (and their commands like pihole, ntfy-notify)
   # live. Set once, applies to every job in root's crontab.
   ansible.builtin.cron:
     name: PATH
@@ -46,15 +46,15 @@
 
 - name: Create reboot-pending notification script
   # Jinja template -> render to staging, then placed by coreutils `install`
-  # (0755 root:root, no secret embedded - calls the installed ntfy-notify.sh).
+  # (0755 root:root, no secret embedded - calls the installed ntfy-notify).
   ansible.builtin.template:
-    src: reboot-notify.sh.j2
-    dest: /tmp/reboot-notify.sh.installing
+    src: reboot-notify.j2
+    dest: /tmp/reboot-notify.installing
     mode: '0755'
   become: true
   when: common_auto_updates_reboot_if_required
 
-- name: Install reboot-notify.sh with coreutils install
+- name: Install reboot-notify with coreutils install
   ansible.builtin.command:
     argv:
       - install
@@ -64,15 +64,15 @@
       - root
       - -m
       - "0755"
-      - /tmp/reboot-notify.sh.installing
-      - /usr/local/bin/reboot-notify.sh
+      - /tmp/reboot-notify.installing
+      - /usr/local/bin/reboot-notify
   become: true
   changed_when: false
   when: common_auto_updates_reboot_if_required
 
-- name: Remove the reboot-notify.sh staging copy
+- name: Remove the reboot-notify staging copy
   ansible.builtin.file:
-    path: /tmp/reboot-notify.sh.installing
+    path: /tmp/reboot-notify.installing
     state: absent
   become: true
   when: common_auto_updates_reboot_if_required
@@ -82,7 +82,7 @@
     name: "Reboot pending notification"
     minute: "{{ common_reboot_notify_total_minutes | int % 60 }}"
     hour: "{{ common_reboot_notify_total_minutes | int // 60 }}"
-    job: "/usr/local/bin/reboot-notify.sh"
+    job: "/usr/local/bin/reboot-notify"
     user: root
   become: true
   when: common_auto_updates_reboot_if_required

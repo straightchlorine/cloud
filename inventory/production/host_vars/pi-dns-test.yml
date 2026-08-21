@@ -19,7 +19,7 @@ dns_pihole_packages:
 # dns_auto_updates gates only the Pi-hole weekly cron; Debian updates + reboot
 # are fleet-wide via the common role.
 dns_auto_updates_enabled: true
-# Notifications: keep TRUE so the dns role re-applies reboot-notify.sh on every
+# Notifications: keep TRUE so the dns role re-applies reboot-notify on every
 # dns-only redeploy (the shared ntfy helper is installed fleet-wide).
 common_auto_updates_reboot_if_required: true
 

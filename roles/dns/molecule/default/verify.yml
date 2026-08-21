@@ -58,29 +58,29 @@
     - name: Assert the update script calls the shared ntfy helper by bare name
       ansible.builtin.assert:
         that:
-          - "'ntfy-notify.sh' in (dns_update_script_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify.sh' not in (dns_update_script_rendered.content | b64decode)"
+          - "'ntfy-notify ' in (dns_update_script_rendered.content | b64decode)"
+          - "'/usr/local/bin/ntfy-notify' not in (dns_update_script_rendered.content | b64decode)"
           - "'molecule-test-ntfy-key' not in (dns_update_script_rendered.content | b64decode)"
         fail_msg: >-
-          pihole-update.sh.j2 should call the shared ntfy-notify.sh by bare
+          pihole-update.sh.j2 should call the shared ntfy-notify by bare
           name (relies on common's PATH cron entry), not a hardcoded path,
           and must not embed vault_ntfy_api_key itself.
-        success_msg: "[OK] Update script calls ntfy-notify.sh via PATH without embedding the API key"
+        success_msg: "[OK] Update script calls ntfy-notify via PATH without embedding the API key"
 
     - name: Read the rendered Pi-hole Syncthing backup script
       ansible.builtin.slurp:
         src: /tmp/pihole-syncthing-backup.rendered.sh
       register: dns_backup_script_rendered
 
-    - name: Assert the backup script rendered its dir/retention and calls ntfy-notify.sh by bare name
+    - name: Assert the backup script rendered its dir/retention and calls ntfy-notify by bare name
       ansible.builtin.assert:
         that:
           - "'DEST=\"/tmp/molecule-syncthing-backup\"' in (dns_backup_script_rendered.content | b64decode)"
           - "'RETENTION=\"14\"' in (dns_backup_script_rendered.content | b64decode)"
-          - "'ntfy-notify.sh' in (dns_backup_script_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify.sh' not in (dns_backup_script_rendered.content | b64decode)"
+          - "'ntfy-notify ' in (dns_backup_script_rendered.content | b64decode)"
+          - "'/usr/local/bin/ntfy-notify' not in (dns_backup_script_rendered.content | b64decode)"
           - "'molecule-test-ntfy-key' not in (dns_backup_script_rendered.content | b64decode)"
         fail_msg: >-
           pihole-syncthing-backup.sh.j2 did not render dns_backup_dir/dns_backup_retention,
-          or does not call the shared ntfy-notify.sh by bare name without embedding the API key.
-        success_msg: "[OK] Syncthing backup script renders backup config and calls ntfy-notify.sh via PATH"
+          or does not call the shared ntfy-notify by bare name without embedding the API key.
+        success_msg: "[OK] Syncthing backup script renders backup config and calls ntfy-notify via PATH"

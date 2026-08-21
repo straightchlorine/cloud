@@ -2,6 +2,14 @@
 # No `apt upgrade` here: unattended-upgrades (common role) does that daily,
 # fleet-wide - we'd just race it for the apt lock.
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: pihole-update"
+  echo ""
+  echo "Run weekly Pi-hole updates (pihole -up/-g). Called by cron."
+  echo "Sends ntfy notification on success or failure."
+  exit 0
+fi
+
 LOG_FILE="/var/log/weekly-updates.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
 FAILED=0
@@ -27,9 +35,9 @@ echo "[$DATE] Pi-hole update completed" >> $LOG_FILE
 echo "----------------------------------------" >> $LOG_FILE
 
 if [ "$FAILED" -eq 1 ]; then
-  ntfy-notify.sh "Pi-hole update failed: {{ inventory_hostname }}" \
-    "pihole -up or -g reported errors - see /var/log/weekly-updates.log" high rotating_light
+  ntfy-notify "$(hostname): Pi-hole update failed" \
+    "pihole -up or -g reported errors - see /var/log/weekly-updates.log" high rotating_light,error
 else
-  ntfy-notify.sh "Pi-hole update OK: {{ inventory_hostname }}" \
-    "Weekly pihole -up/-g completed successfully." default
+  ntfy-notify "$(hostname): Pi-hole update successful" \
+    "Weekly pihole -up/-g completed successfully." default white_check_mark
 fi

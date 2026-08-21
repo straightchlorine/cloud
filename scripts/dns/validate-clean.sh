@@ -38,8 +38,8 @@ check_absent /etc/pihole
 check_absent /etc/.pihole
 check_absent /opt/pihole
 check_absent /etc/systemd/system/pihole-FTL.service
-check_absent /usr/local/bin/pihole-update.sh
-check_absent /usr/local/bin/pihole-syncthing-backup.sh
+check_absent /usr/local/bin/pihole-update
+check_absent /usr/local/bin/pihole-syncthing-backup
 check_absent /etc/logrotate.d/weekly-updates
 check_absent /var/log/weekly-updates.log
 check_absent /var/log/pihole-syncthing-backup.log
@@ -47,10 +47,10 @@ check_absent /etc/pihole.backup
 check_absent /tmp/pi-hole-repo
 
 echo "-- Notification scripts + ntfy key (should be torn down with the role) --"
-# ntfy-notify.sh and reboot-notify.sh are common-role helpers the dns teardown
+# ntfy-notify and reboot-notify are common-role helpers the dns teardown
 # removes; the API key must not survive in /etc/ntfy either.
-check_absent /usr/local/bin/ntfy-notify.sh
-check_absent /usr/local/bin/reboot-notify.sh
+check_absent /usr/local/bin/ntfy-notify
+check_absent /usr/local/bin/reboot-notify
 check_absent /etc/ntfy/notify-api-key
 check_absent /etc/ntfy
 
@@ -207,8 +207,8 @@ fi
 
 echo "-- /tmp leftovers --"
 for leftover in /tmp/pihole_exporter_checksum.txt /tmp/node_exporter_checksums.txt /tmp/node_exporter-*.tar.gz /tmp/node_exporter-*.linux-* \
-  /tmp/ntfy-notify.sh.installing /tmp/reboot-notify.sh.installing \
-  /tmp/pihole-update.sh.installing /tmp/pihole-syncthing-backup.sh.installing; do
+  /tmp/ntfy-notify.installing /tmp/reboot-notify.installing \
+    /tmp/pihole-update.installing /tmp/pihole-syncthing-backup.installing; do
   if [ -e "$leftover" ]; then
     note_left "leftover in /tmp: $leftover"
   fi
