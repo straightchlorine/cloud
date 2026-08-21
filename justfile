@@ -22,14 +22,20 @@ setup: _setup-venv _setup-deps _setup-collections _setup-hooks _setup-git-config
 [private]
 _setup-venv:
     @echo "{{ _run }} Creating virtual environment"
+    # Standard `python3 -m venv` bundles pip via ensurepip; if an existing venv
+    # lacks a pip console script (e.g. one created by uv with --no-pip), ensure
+    # pip is present so the later _setup-deps recipe works regardless.
     @test -d .venv || python3 -m venv .venv
+    @.venv/bin/python -m ensurepip --upgrade -q 2>/dev/null || true
     @echo "{{ _ok }} Virtual environment ready"
 
 [private]
 _setup-deps:
     @echo "{{ _run }} Installing Python dependencies"
-    @.venv/bin/pip install --upgrade pip wheel setuptools -q
-    @.venv/bin/pip install -r requirements.txt -q
+    # Use `python -m pip` rather than `.venv/bin/pip`: uv-created venvs may not
+    # have the unversioned `pip` console script, but `python -m pip` always works.
+    @.venv/bin/python -m pip install --upgrade pip wheel setuptools -q
+    @.venv/bin/python -m pip install -r requirements.txt -q
     @echo "{{ _ok }} Python dependencies installed"
 
 [private]

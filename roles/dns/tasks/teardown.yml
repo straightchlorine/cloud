@@ -79,6 +79,10 @@
     - /usr/local/bin/pihole-syncthing-backup.sh
     - /usr/local/bin/ntfy-notify.sh
     - /usr/local/bin/reboot-notify.sh
+    - /tmp/ntfy-notify.sh.installing
+    - /tmp/reboot-notify.sh.installing
+    - /tmp/pihole-update.sh.installing
+    - /tmp/pihole-syncthing-backup.sh.installing
     - /etc/ntfy/notify-api-key
     - /etc/ntfy
     - /var/log/pihole-FTL.log

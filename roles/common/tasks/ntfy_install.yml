@@ -22,11 +22,38 @@
   become: true
   when: vault_ntfy_api_key is defined
 
-- name: Install the ntfy notification helper
+- name: Render the ntfy notification helper to staging
+  # Scripts are Jinja templates (server/topic/bare-name references), so they
+  # must be rendered by the template module first; the coreutils `install`
+  # below then places them with guaranteed owner/group/mode.
   ansible.builtin.template:
     src: ntfy-notify.sh.j2
-    dest: /usr/local/bin/ntfy-notify.sh
-    owner: root
-    group: root
-    mode: "0755"  # no secret embedded - reads key from /etc/ntfy/notify-api-key
+    dest: /tmp/ntfy-notify.sh.installing
+    mode: "0755"
+  become: true
+
+- name: Install the ntfy notification helper with coreutils install
+  # `install` (GNU coreutils, Essential on Debian) atomically copies the
+  # rendered script and applies ownership/mode - a single reliable step that
+  # the deploy validation's stat-based checks can trust. 0755 because the
+  # script reads the API key from /etc/ntfy/notify-api-key (no secret embedded).
+  ansible.builtin.command:
+    argv:
+      - install
+      - -o
+      - root
+      - -g
+      - root
+      - -m
+      - "0755"
+      - /tmp/ntfy-notify.sh.installing
+      - /usr/local/bin/ntfy-notify.sh
+  become: true
+  # Overwriting the same bytes+mode each run is an effective no-op.
+  changed_when: false
+
+- name: Remove the ntfy-notify.sh staging copy
+  ansible.builtin.file:
+    path: /tmp/ntfy-notify.sh.installing
+    state: absent
   become: true

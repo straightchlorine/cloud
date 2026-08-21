@@ -206,7 +206,9 @@ else
 fi
 
 echo "-- /tmp leftovers --"
-for leftover in /tmp/pihole_exporter_checksum.txt /tmp/node_exporter_checksums.txt /tmp/node_exporter-*.tar.gz /tmp/node_exporter-*.linux-*; do
+for leftover in /tmp/pihole_exporter_checksum.txt /tmp/node_exporter_checksums.txt /tmp/node_exporter-*.tar.gz /tmp/node_exporter-*.linux-* \
+  /tmp/ntfy-notify.sh.installing /tmp/reboot-notify.sh.installing \
+  /tmp/pihole-update.sh.installing /tmp/pihole-syncthing-backup.sh.installing; do
   if [ -e "$leftover" ]; then
     note_left "leftover in /tmp: $leftover"
   fi
