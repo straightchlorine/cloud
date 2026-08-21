@@ -13,7 +13,6 @@ makestep 1.0 3
 rtcsync
 
 {% if dns_ntp_server_enabled %}
-# Allow NTP client access from these networks
 {% for network in dns_ntp_allowed_networks %}
 allow {{ network }}
 {% endfor %}

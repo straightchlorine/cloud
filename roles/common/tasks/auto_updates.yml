@@ -45,35 +45,12 @@
   when: common_auto_updates_reboot_if_required
 
 - name: Create reboot-pending notification script
-  # Jinja template -> render to staging, then placed by coreutils `install`
-  # (0755 root:root, no secret embedded - calls the installed ntfy-notify).
   ansible.builtin.template:
     src: reboot-notify.j2
-    dest: /tmp/reboot-notify.installing
+    dest: /usr/local/bin/reboot-notify
+    owner: root
+    group: root
     mode: '0755'
-  become: true
-  when: common_auto_updates_reboot_if_required
-
-- name: Install reboot-notify with coreutils install
-  ansible.builtin.command:
-    argv:
-      - install
-      - -o
-      - root
-      - -g
-      - root
-      - -m
-      - "0755"
-      - /tmp/reboot-notify.installing
-      - /usr/local/bin/reboot-notify
-  become: true
-  changed_when: false
-  when: common_auto_updates_reboot_if_required
-
-- name: Remove the reboot-notify staging copy
-  ansible.builtin.file:
-    path: /tmp/reboot-notify.installing
-    state: absent
   become: true
   when: common_auto_updates_reboot_if_required
 

@@ -50,7 +50,7 @@ prometheus_exporters_pi_hardware_metrics_interval: 30 # seconds
 
 # Pi-hole Exporter configuration
 prometheus_exporters_pihole_exporter_enabled: false # Enable only on DNS hosts
-pihole_exporter_version: "v1.2.0"
+prometheus_exporters_pihole_exporter_version: "v1.2.0"
 prometheus_exporters_pihole_exporter_port: 9617
 
 # eko/pihole-exporter publishes only a single "linux-arm" binary for every ARM
@@ -63,13 +63,13 @@ prometheus_exporters_pihole_arch_map:
   armv7l: "arm"
   aarch64: "arm"
 
-pihole_exporter_binary_url: >-
+prometheus_exporters_pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{
-  pihole_exporter_version }}/pihole_exporter-linux-{{
+  prometheus_exporters_pihole_exporter_version }}/pihole_exporter-linux-{{
   prometheus_exporters_pihole_arch_map[ansible_architecture] }}
-pihole_exporter_checksum_url: >-
+prometheus_exporters_pihole_exporter_checksum_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{
-  pihole_exporter_version }}/pihole_exporter-linux-{{
+  prometheus_exporters_pihole_exporter_version }}/pihole_exporter-linux-{{
   prometheus_exporters_pihole_arch_map[ansible_architecture] }}.sha256.txt
 # prometheus_exporters_pihole_exporter_target_host: must be set in host_vars - no default
 prometheus_exporters_pihole_exporter_target_port: 80

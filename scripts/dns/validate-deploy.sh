@@ -220,8 +220,7 @@ check_script /usr/local/bin/pihole
 # the runtime config that must exist (setupVars.conf is transient).
 check_present /etc/pihole/pihole.toml
 check_script /usr/local/bin/pihole-update 755
-# pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700
-# root-only, exactly like ntfy-notify did before the key was split out.
+# pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700 root-only.
 check_script /usr/local/bin/pihole-syncthing-backup 700
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
@@ -230,11 +229,8 @@ check_present /mnt/data/syncthing/backup
 echo "-- Notification helper + ntfy key (common role) --"
 check_script /usr/local/bin/ntfy-notify 755
 # reboot-notify is only deployed when common_auto_updates_reboot_if_required
-# is true (it is on pi-dns-test / pi-dns). The config value isn't readable over
-# SSH, so absence is judged against this host's known deploy intent - the test
-# and prod dns hosts both set the flag true, so a missing script is a FAIL, not
-# an OK (previously the "false" note misled by inferring config from a file the
-# dns teardown had simply removed).
+# is true (both dns hosts set it). The config value isn't readable over SSH,
+# so absence is judged against that known deploy intent: missing = FAIL.
 if [ -e /usr/local/bin/reboot-notify ]; then
   check_script /usr/local/bin/reboot-notify 755
 else

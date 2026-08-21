@@ -1,6 +1,7 @@
 ---
-- name: Verify prometheus-exporters role
+- name: Verify the prometheus-exporters role's deployed state
   hosts: all
+  become: true
   vars:
     prometheus_exporters_user: "prometheus"
     prometheus_exporters_group: "prometheus"
@@ -8,36 +9,27 @@
     prometheus_exporters_config_dir: "/etc/prometheus/exporters"
     prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
   tasks:
-    - name: Check if prometheus user exists
+    - name: Look up the prometheus user and group
       ansible.builtin.getent:
-        database: passwd
-        key: "{{ prometheus_exporters_user }}"
-      register: prometheus_user_check
+        database: "{{ item.database }}"
+        key: "{{ item.key }}"
+      loop:
+        - { database: passwd, key: "{{ prometheus_exporters_user }}" }
+        - { database: group, key: "{{ prometheus_exporters_group }}" }
+      register: prom_exp_accounts
 
-    - name: Assert prometheus user exists and is a system user
+    - name: Assert the prometheus user and group exist
       ansible.builtin.assert:
         that:
-          - prometheus_user_check.ansible_facts.getent_passwd['prometheus'] is defined
-        fail_msg: "Prometheus user does not exist"
-        success_msg: "[OK] Prometheus user exists"
+          - prom_exp_accounts.results[0].ansible_facts.getent_passwd[prometheus_exporters_user] is defined
+          - prom_exp_accounts.results[0].ansible_facts.getent_passwd[prometheus_exporters_user][1] | int < 1000
+          - prom_exp_accounts.results[1].ansible_facts.getent_group[prometheus_exporters_group] is defined
+        fail_msg: "prometheus user/group missing or not a system account"
+        success_msg: "[OK] prometheus system user and group exist"
 
-    - name: Check if prometheus group exists
-      ansible.builtin.getent:
-        database: group
-        key: "{{ prometheus_exporters_group }}"
-      register: prometheus_group_check
-
-    - name: Assert prometheus group exists
-      ansible.builtin.assert:
-        that:
-          - prometheus_group_check.ansible_facts.getent_group['prometheus'] is defined
-        fail_msg: "Prometheus group does not exist"
-        success_msg: "[OK] Prometheus group exists"
-
-    - name: Verify prometheus-exporters directories exist
+    - name: Stat the directories common_setup created
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: dir_stat
       loop:
         - "{{ prometheus_exporters_base_dir }}"
         - "{{ prometheus_exporters_base_dir }}/bin"
@@ -45,67 +37,65 @@
         - "{{ prometheus_exporters_base_dir }}/logs"
         - "{{ prometheus_exporters_config_dir }}"
         - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
+        - /etc/logrotate.d/prometheus-exporters
+      register: prom_exp_dirs
 
-    - name: Assert all directories exist
+    - name: Assert the directories exist with ownership and mode
       ansible.builtin.assert:
         that:
           - item.stat.exists
           - item.stat.isdir
-        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
-        success_msg: "[OK] Directory verified: {{ item.item }}"
-      loop: "{{ dir_stat.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Verify directory ownership
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: ownership_stat
-      loop:
-        - "{{ prometheus_exporters_base_dir }}"
-        - "{{ prometheus_exporters_config_dir }}"
-        - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
-
-    - name: Assert directories are owned by prometheus user
-      ansible.builtin.assert:
-        that:
           - item.stat.pw_name == prometheus_exporters_user
           - item.stat.gr_name == prometheus_exporters_group
           - item.stat.mode == '0755'
-        fail_msg: |
-          Directory {{ item.item }} ownership/permissions incorrect
-          Owner: {{ item.stat.pw_name }} (expected {{ prometheus_exporters_user }})
-          Group: {{ item.stat.gr_name }} (expected {{ prometheus_exporters_group }})
-          Mode: {{ item.stat.mode }} (expected 0755)
-        success_msg: "[OK] Ownership correct: {{ item.item }}"
-      loop: "{{ ownership_stat.results }}"
+        fail_msg: >-
+          {{ item.item }} wrong: exists={{ item.stat.exists }},
+          owner={{ item.stat.pw_name | default('?') }}:{{ item.stat.gr_name | default('?') }},
+          mode={{ item.stat.mode | default('?') }}
+        success_msg: "[OK] {{ item.item }} 0755 {{ prometheus_exporters_user }}:{{ prometheus_exporters_group }}"
+      loop: "{{ prom_exp_dirs.results[0:6] }}"
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Verify node exporter config exists
-      ansible.builtin.stat:
-        path: "{{ prometheus_exporters_config_dir }}/node_exporter.conf"
-      register: node_exporter_config_stat
+    - name: Read the logrotate config
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/prometheus-exporters
+      register: prom_exp_logrotate_conf
 
-    - name: Assert node exporter config exists
+    - name: Assert the logrotate config covers the exporter logs
+      vars:
+        logrotate_conf: "{{ prom_exp_logrotate_conf.content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - node_exporter_config_stat.stat.exists
-          - node_exporter_config_stat.stat.mode == '0644'
-        fail_msg: "Node exporter config does not exist or has wrong permissions"
-        success_msg: "[OK] Node exporter config file exists with correct permissions"
+          - "prometheus_exporters_base_dir ~ '/logs/*.log' in logrotate_conf"
+          - "'rotate 14' in logrotate_conf"
+        fail_msg: "logrotate config wrong: {{ logrotate_conf }}"
+        success_msg: "[OK] exporter log rotation configured"
 
-    # Fake pihole_exporter artifacts from converge.yml should be gone.
-    - name: Check Pi-hole Exporter artifacts removed by teardown
+    - name: Collect package facts
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Assert the exporter runtime packages are installed
+      ansible.builtin.assert:
+        that:
+          - "'curl' in ansible_facts.packages"
+          - "'jq' in ansible_facts.packages"
+          - "'bc' in ansible_facts.packages"
+        fail_msg: "common_setup packages missing"
+        success_msg: "[OK] exporter runtime packages installed"
+
+    - name: Stat the Pi-hole Exporter artifacts the teardown must remove
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: prom_exp_teardown_check
       loop:
         - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
         - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
         - /etc/systemd/system/pihole-exporter.service
+        - /tmp/pihole_exporter_checksum.txt
+      register: prom_exp_teardown_check
 
-    - name: Assert Pi-hole Exporter artifacts no longer exist
+    - name: Assert the teardown removed every Pi-hole Exporter artifact
       ansible.builtin.assert:
         that:
           - not item.stat.exists
@@ -114,30 +104,3 @@
       loop: "{{ prom_exp_teardown_check.results }}"
       loop_control:
         label: "{{ item.item }}"
-
-    - name: Display prometheus-exporters role verification results
-      ansible.builtin.debug:
-        msg: |
-          [OK] Prometheus Exporters Role Verification Complete
-
-          User Configuration Verified:
-          - User: prometheus - EXISTS
-          - Group: prometheus - EXISTS
-
-          Directory Structure Verified:
-          - Base dir: {{ prometheus_exporters_base_dir }} - EXISTS
-          - Bin dir: {{ prometheus_exporters_base_dir }}/bin - EXISTS
-          - Scripts dir: {{ prometheus_exporters_base_dir }}/scripts - EXISTS
-          - Logs dir: {{ prometheus_exporters_base_dir }}/logs - EXISTS
-          - Config dir: {{ prometheus_exporters_config_dir }} - EXISTS
-          - Textfiles dir: {{ prometheus_exporters_node_exporter_textfile_dir }} - EXISTS
-
-          Ownership Verified:
-          - All directories owned by prometheus:prometheus
-          - All directories have mode 0755
-
-          Configuration Files Verified:
-          - node_exporter.conf - EXISTS
-
-          Note: Binary downloads and service startup skipped in container test
-          This validates core role logic without network dependencies

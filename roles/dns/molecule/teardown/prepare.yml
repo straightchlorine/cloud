@@ -1,0 +1,19 @@
+---
+- name: Prepare - platform prerequisites the role assumes
+  hosts: all
+  become: true
+  tasks:
+    - name: Install cron and iproute2
+      # The cron module needs the crontab binary (cron package); the
+      # teardown's listener checks need ss (iproute2).
+      ansible.builtin.apt:
+        name:
+          - cron
+          - iproute2
+        state: present
+        update_cache: true
+
+    - name: Create the backup owner user
+      ansible.builtin.user:
+        name: molecule
+        system: true

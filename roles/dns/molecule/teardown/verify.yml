@@ -1,0 +1,94 @@
+---
+- name: Verify the teardown left a clean, still-resolving host
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat everything the teardown should have removed
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/pihole
+        - /usr/local/bin/pihole-update
+        - /usr/local/bin/pihole-syncthing-backup
+        - /usr/local/bin/ntfy-notify
+        - /usr/local/bin/reboot-notify
+        - /etc/pihole
+        - /etc/.pihole
+        - /opt/pihole
+        - /etc/ntfy
+        - /etc/chrony/chrony.conf
+        - /etc/logrotate.d/weekly-updates
+        - /etc/systemd/system/pihole-FTL.service
+      register: dns_teardown_leftovers
+
+    - name: Assert no role artifact survives the teardown
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} still exists after teardown"
+        success_msg: "[OK] {{ item.item }} removed"
+      loop: "{{ dns_teardown_leftovers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Check the pihole user is gone
+      ansible.builtin.command: getent passwd pihole
+      changed_when: false
+      failed_when: false
+      register: dns_teardown_pihole_user
+
+    - name: Assert the pihole user is gone
+      ansible.builtin.assert:
+        that:
+          - dns_teardown_pihole_user.rc != 0
+        fail_msg: "the pihole user still exists after teardown"
+        success_msg: "[OK] pihole user removed"
+
+    - name: Collect package facts
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Assert chrony was purged
+      ansible.builtin.assert:
+        that:
+          - "'chrony' not in ansible_facts.packages"
+        fail_msg: "chrony package still installed after teardown"
+        success_msg: "[OK] chrony purged"
+
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      changed_when: false
+      register: dns_teardown_crontab
+
+    - name: Assert the role's cron jobs are gone
+      ansible.builtin.assert:
+        that:
+          - "'pihole-update' not in dns_teardown_crontab.stdout"
+          - "'pihole-syncthing-backup' not in dns_teardown_crontab.stdout"
+          - "'Reboot pending notification' not in dns_teardown_crontab.stdout"
+        fail_msg: "Cron jobs survived the teardown: {{ dns_teardown_crontab.stdout }}"
+        success_msg: "[OK] update, backup and reboot-notification cron jobs removed"
+
+    - name: Verify the host still resolves DNS
+      # The teardown restored the resolver; a broken resolv.conf here means
+      # the restore path failed even though the removals succeeded.
+      ansible.builtin.command: getent hosts github.com
+      changed_when: false
+      register: dns_teardown_resolve
+      retries: 3
+      delay: 2
+      until: dns_teardown_resolve.rc == 0
+
+    - name: Assert no Pi-hole ports are still listening
+      ansible.builtin.shell: |
+        set -o pipefail
+        { ss -H -ltn; ss -H -lun; } | grep -E ':(53|80) ' || true
+      register: dns_teardown_listeners
+      changed_when: false
+
+    - name: Assert nothing listens on 53/80
+      ansible.builtin.assert:
+        that:
+          - dns_teardown_listeners.stdout | trim | length == 0
+        fail_msg: "Still listening on 53/80 after teardown: {{ dns_teardown_listeners.stdout }}"
+        success_msg: "[OK] no listeners left on the Pi-hole ports"

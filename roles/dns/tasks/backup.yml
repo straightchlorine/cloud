@@ -21,34 +21,14 @@
     mode: "0750"
   become: true
 
-- name: Render the Pi-hole Syncthing backup script to staging
-  # Jinja template (embeds web password) rendered first, then installed by
-  # coreutils `install` below with root:root + 0700.
+- name: Install the Pi-hole Syncthing backup script
+  # 0700: the rendered script embeds the Pi-hole web password.
   ansible.builtin.template:
     src: pihole-syncthing-backup.sh.j2
-    dest: /tmp/pihole-syncthing-backup.installing
-    mode: "0700"
-  become: true
-
-- name: Install the Pi-hole Syncthing backup script with coreutils install
-  ansible.builtin.command:
-    argv:
-      - install
-      - -o
-      - root
-      - -g
-      - root
-      - -m
-      - "0700"
-      - /tmp/pihole-syncthing-backup.installing
-      - /usr/local/bin/pihole-syncthing-backup
-  become: true
-  changed_when: false
-
-- name: Remove the pihole-syncthing-backup staging copy
-  ansible.builtin.file:
-    path: /tmp/pihole-syncthing-backup.installing
-    state: absent
+    dest: /usr/local/bin/pihole-syncthing-backup
+    owner: root
+    group: root
+    mode: '0700'
   become: true
 
 - name: Schedule the Pi-hole Syncthing backup

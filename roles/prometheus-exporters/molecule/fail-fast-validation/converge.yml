@@ -1,23 +1,42 @@
 ---
 - name: Converge - Fail-Fast Validation
   hosts: all
-    # Intentionally omit ALL required variables to test fail-fast behavior:
-    # prometheus_exporters_enabled, base_dir, node_exporter_enabled,
-    # prometheus_environment, prometheus_role, device_type
+  # Intentionally omit ALL required variables to test fail-fast behavior:
+  # prometheus_exporters_enabled, base_dir, node_exporter_enabled,
+  # prometheus_environment, prometheus_role, device_type
   tasks:
-    - name: Include prometheus-exporters validation (expect to fail)
+    - name: Include the real validate.yml (expect it to fail)
       block:
-        - name: Try to include prometheus-exporters validation without required variables
+        - name: Run validate.yml without the required variables
           ansible.builtin.include_tasks: ../../tasks/validate.yml
-      rescue:
-        - name: Capture expected validation failure
-          ansible.builtin.set_fact:
-            prom_exp_validation_failed: true
-            prom_exp_validation_error: >-
-              {{ ansible_failed_result.msg | default('Unknown error') }}
 
-        - name: Display validation failure message
-          ansible.builtin.debug:
-            msg: |
-              [OK] Validation correctly failed (expected behavior)
-              Error: {{ prom_exp_validation_error }}
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on the missing required variables"
+      rescue:
+        - name: Assert the failure is the validation failure, not an include error
+          # A looped fail task's top-level msg is the generic "One or more
+          # items failed" - the per-item detail lives in .results. Without
+          # this check, any error (e.g. an unresolved include_role) would
+          # count as a pass.
+          vars:
+            failed_items: "{{ ansible_failed_result.results | default([]) | selectattr('failed') | list }}"
+          ansible.builtin.assert:
+            that:
+              - failed_items | length == 6
+              - "'prometheus_exporters_enabled' in failed_items[0].msg"
+              - "'is not defined or empty' in failed_items[0].msg"
+            fail_msg: >-
+              validate.yml failed for an unexpected reason:
+              {{ ansible_failed_result.msg | default(ansible_failed_result) }}
+            success_msg: "[OK] validate.yml failed on all six missing required variables"
+
+        - name: Record the case as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-promexp-validation.passed
+            force: false
+            mode: "0644"

@@ -1,38 +1,31 @@
 ---
 - name: Verify DNS fail-fast validation
   hosts: all
+  become: true
   tasks:
-    - name: Assert case 1 (missing required variable) failed as expected
-      ansible.builtin.assert:
-        that:
-          - dns_case1_missing_variable_failed is defined
-          - dns_case1_missing_variable_failed | bool
-        fail_msg: >-
-          Case 1 did not complete: unified_validation should have failed fast
-          on the missing dns_pihole_interface variable.
-        success_msg: "[OK] unified_validation fails fast on a missing required DNS variable"
+    - name: Stat the per-case marker files converge wrote
+      # Converge and verify run as separate processes, so each case drops a
+      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
+      register: dns_failfast_markers
 
-    - name: Assert case 2 (placeholder vault secret) failed as expected
+    - name: Assert all four fail-fast cases completed
       ansible.builtin.assert:
         that:
-          - dns_case2_vault_placeholder_failed is defined
-          - dns_case2_vault_placeholder_failed | bool
+          - item.stat.exists
         fail_msg: >-
-          Case 2 did not complete: unified_validation should have failed fast
-          on the placeholder vault_pihole_webpassword value.
-        success_msg: "[OK] unified_validation fails fast on a placeholder vault secret"
-
-    - name: Assert case 3 (NTP guard) failed as expected
-      ansible.builtin.assert:
-        that:
-          - dns_case3_ntp_guard_failed is defined
-          - dns_case3_ntp_guard_failed | bool
-        fail_msg: >-
-          Case 3 did not complete: the NTP-allowed-networks guard reproduction
-          should have failed on an empty dns_ntp_allowed_networks. Note this
-          is a reproduction of roles/dns/tasks/validate.yml's guard, not the
-          real file - see the comment in converge.yml for why.
-        success_msg: "[OK] the NTP-allowed-networks guard (reproduced from validate.yml) fails as expected"
+          {{ item.item }} missing - the corresponding case in converge.yml
+          either did not fail or failed for an unexpected reason.
+        success_msg: "[OK] {{ item.item }} recorded"
+      loop: "{{ dns_failfast_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Display fail-fast validation summary
       ansible.builtin.debug:
@@ -41,8 +34,8 @@
 
           Case 1 - missing required variable (dns_pihole_interface): FAILED as expected
           Case 2 - placeholder vault secret (vault_pihole_webpassword): FAILED as expected
-          Case 3 - NTP guard, empty dns_ntp_allowed_networks (reproduction): FAILED as expected
+          Case 3 - NTP guard, empty dns_ntp_allowed_networks: FAILED as expected
+          Case 4 - non-existent dns_pihole_interface: FAILED as expected
 
-          All three exercise the real framework (roles/common/tasks/unified_validation.yml,
-          included by relative path) or a byte-for-byte reproduction of the guard in
-          roles/dns/tasks/validate.yml where the real file cannot be included in this sandbox.
+          All four cases ran the real roles/dns/tasks/validate.yml end to end -
+          no hand-copied guards anywhere in this scenario.

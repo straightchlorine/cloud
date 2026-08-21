@@ -1,7 +1,7 @@
 ---
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
 dns_pihole_version: "v6.4.3"  # Pin to verified release; override per host in host_vars.
-# pihole_webpassword: MUST be set in vault/host_vars - no default.
+# vault_pihole_webpassword: MUST be set in vault/host_vars - no default.
 dns_pihole_interface: "{{ primary_interface }}"
 dns_pihole_dns_servers:
   - 9.9.9.9
@@ -33,7 +33,6 @@ dns_backup_schedule_minute: "30"
 dns_ntp_server_enabled: false
 dns_ntp_allowed_networks: []
 
-# Metrics are exported by prometheus-exporters, not this role.
 # Optional attached drive - opt in per host; no-op if none is found (see storage.yml).
 dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"

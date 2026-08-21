@@ -1,45 +1,34 @@
 ---
 - name: Converge - DNS Fail-Fast Validation
   hosts: all
+  vars:
+    # Every required variable except dns_pihole_interface, so Case 1 leaves
+    # it genuinely undefined. Each case below then includes the REAL
+    # roles/dns/tasks/validate.yml with per-case vars - no hand-copied
+    # guards to keep in sync.
+    vault_pihole_webpassword: molecule-test-password
+    dns_pihole_dns_servers:
+      - "9.9.9.9"
+    dns_ntp_server_enabled: false
+    dns_ntp_upstream_server: pool.ntp.org
+    dns_ntp_allowed_networks: []
   tasks:
-    # roles/dns/tasks/validate.yml's first task is
-    # `include_role: name: common, tasks_from: unified_validation`. Like every
-    # other cross-role include in this repo's molecule scenarios, `include_role:
-    # name: common` does not resolve inside the dns role's molecule sandbox
-    # (no cross-role roles_path configured - see the molecule.yml in this
-    # scenario). So we include_tasks the common role's unified_validation.yml
-    # directly by relative path, and drive it with the dns role's real
-    # required_variables/vault_placeholders (kept in sync with
-    # roles/dns/tasks/validate.yml by hand - there is no way to include that
-    # file wholesale, see the comment on Case 3).
+    # The container's interface name varies by driver/network; cases 2 and 3
+    # need a real one so they fail for the reason under test, not the
+    # interface check.
+    - name: Detect the container's primary interface
+      ansible.builtin.set_fact:
+        molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | first }}"
 
     # Case 1: a required DNS variable is missing.
-    - name: "Case 1: unified_validation fails when a required DNS variable is missing"
-      vars:
-        validation_context: "DNS services"
-        validation_type: "full"
-        validation_role: "dns"
-        # Mirrors roles/dns/tasks/validate.yml's required_variables list, with
-        # dns_pihole_interface deliberately left unset so the loop fails on it
-        # specifically.
-        required_variables:
-          - vault_pihole_webpassword
-          - dns_pihole_interface
-          - dns_pihole_dns_servers
-          - dns_ntp_server_enabled
-          - dns_ntp_upstream_server
-        vault_pihole_webpassword: "molecule-test-password"
-        dns_pihole_dns_servers:
-          - "9.9.9.9"
-        dns_ntp_server_enabled: true
-        dns_ntp_upstream_server: "pool.ntp.org"
+    - name: "Case 1: validate.yml fails when a required DNS variable is missing"
       block:
-        - name: Run unified_validation with dns_pihole_interface undefined
-          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/tasks/unified_validation.yml"
+        - name: Run the real validate.yml with dns_pihole_interface undefined
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
 
-        - name: Fail the test - unified_validation should have refused to run
+        - name: Fail the test - validate.yml should have refused to run
           ansible.builtin.fail:
-            msg: "unified_validation did not fail fast on a missing required DNS variable"
+            msg: "validate.yml did not fail fast on a missing required DNS variable"
       rescue:
         - name: Assert the failure was for the missing dns_pihole_interface variable specifically
           # A looped fail task's own top-level msg is the generic "One or more
@@ -51,32 +40,32 @@
               - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
                 ['dns_pihole_interface']
             fail_msg: >-
-              unified_validation failed, but not for the expected reason
+              validate.yml failed, but not for the expected reason
               (missing dns_pihole_interface): {{ ansible_failed_result }}
-            success_msg: "[OK] unified_validation correctly failed on the missing dns_pihole_interface variable"
+            success_msg: "[OK] validate.yml correctly failed on the missing dns_pihole_interface variable"
 
         - name: Record case 1 as passed for verify.yml
-          ansible.builtin.set_fact:
-            dns_case1_missing_variable_failed: true
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
 
     # Case 2: a vault secret still holds its documented placeholder value.
-    - name: "Case 2: unified_validation fails when vault_pihole_webpassword still has its placeholder value"
-      vars:
-        validation_context: "DNS services"
-        validation_type: "full"
-        validation_role: "dns"
-        # Deliberately omit required_variables so only the vault check runs
-        # (it is gated on `required_variables is defined`), isolating this case.
-        vault_placeholders:
-          - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
-        vault_pihole_webpassword: "your-secure-web-password"
+    - name: "Case 2: validate.yml fails when vault_pihole_webpassword still has its placeholder value"
       block:
-        - name: Run unified_validation with vault_pihole_webpassword left at its placeholder value
-          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/tasks/unified_validation.yml"
+        - name: Run the real validate.yml with vault_pihole_webpassword left at its placeholder value
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            dns_pihole_interface: "{{ molecule_primary_interface }}"
+            vault_pihole_webpassword: "your-secure-web-password"
 
-        - name: Fail the test - unified_validation should have refused to run
+        - name: Fail the test - validate.yml should have refused to run
           ansible.builtin.fail:
-            msg: "unified_validation did not fail fast on a placeholder vault_pihole_webpassword"
+            msg: "validate.yml did not fail fast on a placeholder vault_pihole_webpassword"
       rescue:
         - name: Assert the failure was for the placeholder vault_pihole_webpassword specifically
           ansible.builtin.assert:
@@ -87,39 +76,33 @@
               - (ansible_failed_result.results | selectattr('failed') | list | first).msg is
                 search('placeholder value')
             fail_msg: >-
-              unified_validation failed, but not for the expected reason
+              validate.yml failed, but not for the expected reason
               (placeholder vault_pihole_webpassword): {{ ansible_failed_result }}
-            success_msg: "[OK] unified_validation correctly failed on the placeholder vault_pihole_webpassword"
+            success_msg: "[OK] validate.yml correctly failed on the placeholder vault_pihole_webpassword"
 
         - name: Record case 2 as passed for verify.yml
-          ansible.builtin.set_fact:
-            dns_case2_vault_placeholder_failed: true
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
 
-    # Case 3: the dns role's own NTP-allowed-networks guard in validate.yml.
-    #
-    # Unlike Cases 1 and 2, this guard is NOT in a common-role file we can
-    # include_tasks by relative path - it lives inline in validate.yml, whose
-    # very first task is the include_role: name: common call explained above.
-    # That means the real validate.yml cannot be included wholesale here
-    # either (it would abort at task 1), so this is a byte-for-byte copy of
-    # the guard task (keep it in sync by hand if that file changes) - we are
-    # at least exercising the guard's own name/msg/when rather than an
-    # assertion that just restates the condition and proves nothing.
-    - name: "Case 3: reproduce the dns role's NTP-allowed-networks guard (see comment above)"
-      vars:
-        dns_ntp_server_enabled: true
-        dns_ntp_allowed_networks: []
+    # Case 3: the NTP-allowed-networks guard, driven through the real
+    # validate.yml (not a hand-copied reproduction).
+    - name: "Case 3: validate.yml fails when NTP serving is enabled without allowed networks"
       block:
-        - name: Validate NTP allowed networks are set when serving NTP to the VLAN
-          ansible.builtin.fail:
-            msg: "dns_ntp_allowed_networks must be non-empty when dns_ntp_server_enabled is true"
-          when:
-            - dns_ntp_server_enabled
-            - dns_ntp_allowed_networks | length == 0
+        - name: Run the real validate.yml with an empty dns_ntp_allowed_networks
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            dns_pihole_interface: "{{ molecule_primary_interface }}"
+            dns_ntp_server_enabled: true
 
         - name: Fail the test - the NTP guard should have refused an empty allow-list
           ansible.builtin.fail:
-            msg: "NTP guard reproduction did not fail on an empty dns_ntp_allowed_networks"
+            msg: "validate.yml did not fail on an empty dns_ntp_allowed_networks"
       rescue:
         - name: Assert the failure was the NTP guard, for the right reason
           ansible.builtin.assert:
@@ -127,10 +110,48 @@
               - "'dns_ntp_allowed_networks' in ansible_failed_result.msg"
               - "'must be non-empty' in ansible_failed_result.msg"
             fail_msg: >-
-              NTP guard reproduction failed, but not for the expected reason:
+              validate.yml failed, but not for the expected reason:
               {{ ansible_failed_result.msg | default('') }}
-            success_msg: "[OK] NTP guard reproduction correctly failed on an empty dns_ntp_allowed_networks"
+            success_msg: "[OK] validate.yml's NTP guard correctly failed on an empty dns_ntp_allowed_networks"
 
         - name: Record case 3 as passed for verify.yml
-          ansible.builtin.set_fact:
-            dns_case3_ntp_guard_failed: true
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"
+
+    # Case 4: the interface-existence guard.
+    - name: "Case 4: validate.yml fails when the configured interface does not exist"
+      block:
+        - name: Run the real validate.yml with a non-existent dns_pihole_interface
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            dns_pihole_interface: doesnotexist0
+
+        - name: Fail the test - the interface guard should have refused the bogus interface
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on a non-existent dns_pihole_interface"
+      rescue:
+        - name: Assert the failure was the interface guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'doesnotexist0' in ansible_failed_result.msg"
+              - "'does not exist' in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's interface guard correctly failed on a non-existent interface"
+
+        - name: Record case 4 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"

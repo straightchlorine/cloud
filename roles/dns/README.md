@@ -137,7 +137,7 @@ Pi-hole as DNS server.
 
 ### Upstream DNS
 
-Pi-hole forwards to firewall/router DNS by default. Modify `pihole_dns_servers` in
+Pi-hole forwards to firewall/router DNS by default. Modify `dns_pihole_dns_servers` in
 host_vars to change upstream servers.
 
 ## Teardown & Re-test

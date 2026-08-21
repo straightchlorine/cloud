@@ -9,8 +9,11 @@
 #   2. Set the shared fact teardown_confirmed: true.
 #   3. Run the teardown manifest below - every included teardown task file
 #      checks teardown_confirmed, so nothing can run outside a confirmed
-#      teardown. Future playbooks (media-teardown.yml, automation-teardown.yml)
-#      follow the same shape with their own confirm flag.
+#      teardown.
+#
+# The feature-flag gates below use | default(false) because this playbook never
+# loads the owning roles' defaults (acceptable cross-role flag default per
+# CLAUDE.md).
 - name: Tear down the DNS role for repeatable testing
   hosts: dns
   become: true

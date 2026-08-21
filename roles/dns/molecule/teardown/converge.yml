@@ -1,0 +1,113 @@
+---
+- name: Converge - deploy what a container allows, then run the real teardown
+  hosts: all
+  become: true
+  vars:
+    vault_pihole_webpassword: molecule-test-password
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: "molecule-test"
+    # Public resolver: the teardown restores a plain resolv.conf from these
+    # servers and then verifies resolution - a LAN address would never
+    # resolve from CI.
+    dns_pihole_dns_servers:
+      - 9.9.9.9
+    dns_ntp_upstream_server: pool.ntp.org
+    dns_ntp_server_enabled: false
+    dns_ntp_allowed_networks: []
+    dns_backup_enabled: true
+    dns_backup_dir: /tmp/molecule-syncthing-backup
+    dns_backup_retention: 14
+    dns_backup_owner: molecule
+    common_auto_updates_reboot_if_required: true
+  tasks:
+    # Deploy side: the container-safe parts of a real dns deploy, plus the
+    # common helpers the role re-applies after a teardown (so the teardown
+    # has the real things to remove - real scripts, real cron entries).
+    - name: Deploy the real chrony setup
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: chrony_sync
+
+    - name: Deploy the real auto-update script and cron
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: auto_updates
+
+    - name: Deploy the real Syncthing backup script and cron
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: backup
+
+    - name: Deploy the real ntfy notification helper
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ntfy_install
+
+    - name: Deploy the real unattended-upgrades + reboot notification
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: auto_updates
+
+    # Run the deploy-phase handlers (e.g. Restart chrony) now, while their
+    # services still exist. On a real host deploy and teardown are separate
+    # playbook runs; in this scenario they share one play, and a handler
+    # left pending here would fire after the teardown purged chrony.
+    - name: Flush deploy-phase handlers
+      ansible.builtin.meta: flush_handlers
+
+    # Fixture side: minimal stand-ins for what the Pi-hole installer would
+    # have created (basic-install.sh cannot run in a container). One-shot,
+    # hence molecule-idempotence-notest.
+    - name: Create the fake Pi-hole config directory
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        mode: "0755"
+      tags: [molecule-idempotence-notest]
+
+    - name: Create the fake Pi-hole config files
+      ansible.builtin.copy:
+        content: "molecule fixture\n"
+        dest: "{{ item }}"
+        mode: "0644"
+      loop:
+        - /etc/pihole/setupVars.conf
+        - /etc/pihole/adlists.list
+        - /etc/pihole/gravity.db
+      tags: [molecule-idempotence-notest]
+
+    - name: Create the fake pihole binary
+      # A no-op stub: the teardown runs `yes | pihole uninstall` through it.
+      ansible.builtin.copy:
+        content: "#!/bin/sh\nexit 0\n"
+        dest: /usr/local/bin/pihole
+        mode: "0755"
+      tags: [molecule-idempotence-notest]
+
+    - name: Create the fake pihole-FTL service unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Pi-hole FTL (molecule fixture)
+          [Service]
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/pihole-FTL.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
+    - name: Create the fake pihole user
+      ansible.builtin.user:
+        name: pihole
+        system: true
+      tags: [molecule-idempotence-notest]
+
+    # The real teardown, exactly as playbooks/dns-teardown.yml would run it
+    # after setting teardown_confirmed. Its own trailing self-verification
+    # (artifacts gone, no listeners on 53/80) runs as part of this include.
+    - name: Run the real dns role teardown
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: teardown

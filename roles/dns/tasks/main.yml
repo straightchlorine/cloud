@@ -1,8 +1,7 @@
 ---
 
-# DNS / Pi-hole host provisioning. The os role publishes os_* facts
-# (incl. os_arch_download) that this role's validation and arch-specific
-# downloads rely on.
+# The os role must run first: validate.yml asserts on its facts (os_family,
+# os_arch_download) and the installer downloads arch-specific binaries.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -190,12 +189,16 @@
   when: dns_backup_enabled
 
 - name: Install Syncthing (common role, optional)
+  # Undefined under `--tags dns` (the fleet play that loads the common role's
+  # defaults is skipped) - acceptable cross-role flag default per CLAUDE.md.
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
 
 - name: Ensure Syncthing backup folder is configured
+  # Best-effort registration for Syncthing replication: the backup script
+  # creates its destination itself, so a failure here must not fail the deploy.
   ansible.builtin.command: >
     syncthing cli config folders list | grep -q "backup" || \
     syncthing cli config folders add --id "backup" --label "backup" --path "{{ dns_backup_dir }}"
@@ -226,24 +229,21 @@
   when: dns_ntp_server_enabled
 
 - name: Re-apply fleet notification helpers (ntfy + reboot)
-  # The dns teardown removes the shared common-role notification helpers
-  # (ntfy-notify, reboot-notify, /etc/ntfy) so a fresh test starts clean.
-  # A later dns-only redeploy is `--tags dns`, which does NOT run the common
-  # role's own play (#2) - so this duck re-installs them here, gated on the same
-  # host config the common role uses. Without this, a dns-only deploy after a
-  # teardown silently ships without notifications even though the ntfy API key
-  # is configured. Tagged [dns,...] so the includes run under `--tags dns`
-  # (same tag-propagation fix as the exporters' pi_hardware_metrics include).
+  # The dns teardown removes the common-role notification helpers (ntfy-notify,
+  # reboot-notify, /etc/ntfy) so a fresh test starts clean, and a dns-only
+  # redeploy (`--tags dns`) skips the fleet play that would re-install them -
+  # so this role re-applies them itself. Tagged [dns] so the includes run
+  # under `--tags dns`.
   ansible.builtin.include_role:
     name: common
     tasks_from: ntfy_install
   tags: [dns, common, base]
 
 - name: Re-apply unattended-reboot notification (common)
-  # Reinstalls reboot-notify + its cron when common_auto_updates_reboot_if_required
-  # is true (pi-dns-test / pi-dns). Idempotent - on a full site.yml deploy the
-  # common role already ran these, so this is a no-op that keeps a dns-only
-  # redeploy consistent.
+  # Same rationale as the ntfy helpers above: reboot-notify and its cron install
+  # only when common_auto_updates_reboot_if_required is true. A no-op on a full
+  # site.yml run (the common role already did it); keeps a dns-only redeploy
+  # consistent.
   ansible.builtin.include_role:
     name: common
     tasks_from: auto_updates

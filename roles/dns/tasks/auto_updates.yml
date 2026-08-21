@@ -2,34 +2,13 @@
 # Weekly Pi-hole update (pihole -up/-g). Debian package updates are handled
 # fleet-wide by the common role (roles/common/tasks/auto_updates.yml).
 
-- name: Render the Pi-hole update script to staging
-  # Jinja template (notify title/hostname) rendered first, then placed by
-  # coreutils `install` below with guaranteed root:root + 0755.
+- name: Install the Pi-hole update script
   ansible.builtin.template:
     src: pihole-update.sh.j2
-    dest: /tmp/pihole-update.installing
+    dest: /usr/local/bin/pihole-update
+    owner: root
+    group: root
     mode: '0755'
-  become: true
-
-- name: Install the Pi-hole update script with coreutils install
-  ansible.builtin.command:
-    argv:
-      - install
-      - -o
-      - root
-      - -g
-      - root
-      - -m
-      - "0755"
-      - /tmp/pihole-update.installing
-      - /usr/local/bin/pihole-update
-  become: true
-  changed_when: false
-
-- name: Remove the pihole-update staging copy
-  ansible.builtin.file:
-    path: /tmp/pihole-update.installing
-    state: absent
   become: true
 
 - name: Create weekly update cron job

@@ -1,52 +1,64 @@
 ---
-- name: Converge - DNS role
+- name: Converge - the dns role's container-testable task files
   hosts: all
+  become: true
   vars:
-    # Representative host_vars so the role's Pi-hole config template renders.
-    dns_pihole_interface: eth0
+    # Mirrors the pi-dns-test host_vars, with public resolvers so the
+    # container's own resolver checks can actually resolve.
+    vault_pihole_webpassword: molecule-test-password
     dns_pihole_dns_servers:
       - 9.9.9.9
       - 149.112.112.112
-    vault_pihole_webpassword: molecule-test-password
-    vault_ntfy_api_key: molecule-test-ntfy-key
-    ntfy_server_url: "https://ntfy.example.test"
-    ntfy_topic: "molecule-test"
-    dns_ntp_upstream_server: "pool.ntp.org"
+    dns_ntp_upstream_server: pool.ntp.org
     dns_ntp_server_enabled: true
     dns_ntp_allowed_networks:
-      - "192.168.1.0/24"
-    primary_network_cidr: "192.168.1.0/24"
-    dns_backup_dir: "/tmp/molecule-syncthing-backup"
+      - 192.168.1.0/24
+    dns_backup_enabled: true
+    dns_backup_dir: /tmp/molecule-syncthing-backup
     dns_backup_retention: 14
-    dns_backup_owner: "molecule"
+    dns_backup_owner: molecule
   tasks:
-    # Pi-hole's basic-install.sh cannot run in a container, so we exercise the
-    # part that IS container-testable and has historically broken: rendering
-    # the setupVars.conf template. Catches undefined/misnamed template vars
-    # that would silently write a blank value onto a real Pi.
-    - name: Render Pi-hole setupVars from the role template
+    # The container's interface name varies by driver/network (eth0, br0,
+    # ...), and validate.yml checks it really exists - so discover it like
+    # the role would on a real host instead of hardcoding one.
+    - name: Detect the container's primary interface
+      ansible.builtin.set_fact:
+        dns_pihole_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | first }}"
+
+    # main.yml's task files that are container-safe, in the same order the
+    # role runs them. include_role tasks_from runs the real task file with
+    # the role's defaults loaded. NOT included, deliberately:
+    #   - the Pi-hole install block (basic-install.sh needs a real host -
+    #     covered on the staging Pi by scripts/dns/validate-deploy.sh)
+    #   - storage.yml (detect_optional_drive would see and could format the
+    #     host's real block devices through the container's /sys)
+    #   - post_deploy_validate.yml (needs a running Pi-hole)
+    #   - the firewall includes (ufw cannot bind rules in a container)
+    - name: Run the real pre-deployment validation
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: validate
+
+    - name: Run the real chrony setup and sync
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: chrony_sync
+
+    - name: Run the real auto-update script and cron deployment
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: auto_updates
+
+    - name: Run the real Syncthing backup deployment
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: backup
+
+    # setupVars.conf.j2 is only deployed inside the container-incompatible
+    # install block above - render it here so a broken template variable
+    # still fails CI instead of silently writing a blank value on a real Pi.
+    - name: Render the Pi-hole setup vars template
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"
         dest: /tmp/setupVars.rendered
         mode: "0600"
-
-    - name: Render chrony.conf from the role template
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/chrony.conf.j2"
-        dest: /tmp/chrony.conf.rendered
-        mode: "0644"
-
-    # Catches misnamed/undefined template vars in the two cron-invoked
-    # scripts that stay dns-specific (pihole -up/-g and the Teleporter
-    # export - unattended-upgrades/reboot-notify moved to common).
-    - name: Render the Pi-hole update script
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/pihole-update.sh.j2"
-        dest: /tmp/pihole-update.rendered.sh
-        mode: "0755"
-
-    - name: Render the Pi-hole Syncthing backup script
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/pihole-syncthing-backup.sh.j2"
-        dest: /tmp/pihole-syncthing-backup.rendered.sh
-        mode: "0700"

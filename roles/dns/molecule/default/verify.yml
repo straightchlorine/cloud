@@ -1,86 +1,150 @@
 ---
-- name: Verify DNS role
+- name: Verify the dns role's deployed state
   hosts: all
+  become: true
   tasks:
-    - name: Read the rendered Pi-hole setupVars
+    - name: Detect the container's primary interface
+      # Must match the converge discovery so the setupVars assertion can
+      # compare against the same interface the role was given.
+      ansible.builtin.set_fact:
+        molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | first }}"
+
+    - name: Read the deployed update and backup scripts
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/bin/pihole-update
+        - /usr/local/bin/pihole-syncthing-backup
+      register: dns_deployed_scripts
+
+    - name: Read the deployed chrony config
+      ansible.builtin.slurp:
+        src: /etc/chrony/chrony.conf
+      register: dns_deployed_chrony_conf
+
+    - name: Read the rendered setup vars
       ansible.builtin.slurp:
         src: /tmp/setupVars.rendered
-      register: dns_setupvars
+      register: dns_rendered_setupvars
 
-    - name: Decode rendered setupVars
-      ansible.builtin.set_fact:
-        dns_setupvars_content: "{{ dns_setupvars.content | b64decode }}"
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      changed_when: false
+      register: dns_root_crontab
 
-    - name: Assert Pi-hole setupVars rendered with populated values
-      ansible.builtin.assert:
-        that:
-          - "'PIHOLE_INTERFACE=eth0' in dns_setupvars_content"
-          - "'PIHOLE_DNS_1=9.9.9.9' in dns_setupvars_content"
-        fail_msg: "setupVars.conf did not render correctly:\n{{ dns_setupvars_content }}"
-        success_msg: "[OK] Pi-hole setupVars template renders with populated values"
-
-    - name: Read the rendered chrony.conf
-      ansible.builtin.slurp:
-        src: /tmp/chrony.conf.rendered
-      register: dns_chrony_conf
-
-    - name: Assert chrony.conf serves NTP when dns_ntp_server_enabled is true
-      ansible.builtin.assert:
-        that:
-          - "'allow 192.168.1.0/24' in (dns_chrony_conf.content | b64decode)"
-        fail_msg: "chrony.conf did not render the allow line for dns_ntp_allowed_networks"
-        success_msg: "[OK] chrony.conf renders NTP-server access rules"
-
-    - name: Verify the update/backup scripts rendered
+    - name: Stat the deployed files
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: dns_rendered_files
       loop:
-        - /tmp/pihole-update.rendered.sh
-        - /tmp/pihole-syncthing-backup.rendered.sh
+        - /usr/local/bin/pihole-update
+        - /usr/local/bin/pihole-syncthing-backup
+        - /etc/logrotate.d/weekly-updates
+        - /tmp/molecule-syncthing-backup
+      register: dns_deployed_files
 
-    - name: Assert update/backup scripts exist and are non-empty
+    - name: Assert file modes and the backup dir ownership
       ansible.builtin.assert:
         that:
-          - item.stat.exists
-          - item.stat.size > 0
-        fail_msg: "{{ item.item }} did not render"
-        success_msg: "[OK] {{ item.item }} rendered"
-      loop: "{{ dns_rendered_files.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Read the rendered Pi-hole update script
-      ansible.builtin.slurp:
-        src: /tmp/pihole-update.rendered.sh
-      register: dns_update_script_rendered
-
-    - name: Assert the update script calls the shared ntfy helper by bare name
-      ansible.builtin.assert:
-        that:
-          - "'ntfy-notify ' in (dns_update_script_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify' not in (dns_update_script_rendered.content | b64decode)"
-          - "'molecule-test-ntfy-key' not in (dns_update_script_rendered.content | b64decode)"
+          - dns_deployed_files.results[0].stat.mode == '0755'
+          - dns_deployed_files.results[0].stat.pw_name == 'root'
+          - dns_deployed_files.results[1].stat.mode == '0700'
+          - dns_deployed_files.results[1].stat.pw_name == 'root'
+          - dns_deployed_files.results[2].stat.mode == '0644'
+          - dns_deployed_files.results[3].stat.isdir
+          - dns_deployed_files.results[3].stat.mode == '0750'
+          - dns_deployed_files.results[3].stat.pw_name == 'molecule'
         fail_msg: >-
-          pihole-update.sh.j2 should call the shared ntfy-notify by bare
-          name (relies on common's PATH cron entry), not a hardcoded path,
-          and must not embed vault_ntfy_api_key itself.
-        success_msg: "[OK] Update script calls ntfy-notify via PATH without embedding the API key"
+          Deployed file modes/ownership wrong: update=
+          {{ dns_deployed_files.results[0].stat.mode }}/
+          {{ dns_deployed_files.results[0].stat.pw_name }},
+          backup={{ dns_deployed_files.results[1].stat.mode }}/
+          {{ dns_deployed_files.results[1].stat.pw_name }},
+          logrotate={{ dns_deployed_files.results[2].stat.mode }},
+          dir={{ dns_deployed_files.results[3].stat.mode }}/
+          {{ dns_deployed_files.results[3].stat.pw_name }}
+        success_msg: "[OK] Script modes (0755/0700 root:root) and backup dir (0750 molecule) correct"
 
-    - name: Read the rendered Pi-hole Syncthing backup script
-      ansible.builtin.slurp:
-        src: /tmp/pihole-syncthing-backup.rendered.sh
-      register: dns_backup_script_rendered
-
-    - name: Assert the backup script rendered its dir/retention and calls ntfy-notify by bare name
+    - name: Assert the update script content
+      vars:
+        update_script: "{{ dns_deployed_scripts.results[0].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - "'DEST=\"/tmp/molecule-syncthing-backup\"' in (dns_backup_script_rendered.content | b64decode)"
-          - "'RETENTION=\"14\"' in (dns_backup_script_rendered.content | b64decode)"
-          - "'ntfy-notify ' in (dns_backup_script_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify' not in (dns_backup_script_rendered.content | b64decode)"
-          - "'molecule-test-ntfy-key' not in (dns_backup_script_rendered.content | b64decode)"
-        fail_msg: >-
-          pihole-syncthing-backup.sh.j2 did not render dns_backup_dir/dns_backup_retention,
-          or does not call the shared ntfy-notify by bare name without embedding the API key.
-        success_msg: "[OK] Syncthing backup script renders backup config and calls ntfy-notify via PATH"
+          - "'pihole -up' in update_script"
+          - "'pihole -g' in update_script"
+          - "'/var/log/weekly-updates.log' in update_script"
+          - "'ntfy-notify ' in update_script"
+          - "'/usr/local/bin/ntfy-notify' not in update_script"
+          - "'molecule-test-password' not in update_script"
+        fail_msg: "pihole-update.sh rendered wrong: {{ update_script }}"
+        success_msg: "[OK] Update script runs pihole -up/-g, calls ntfy-notify by bare name, embeds no secret"
+
+    - name: Assert the backup script content
+      vars:
+        backup_script: "{{ dns_deployed_scripts.results[1].content | b64decode }}"
+        expected_dest: 'DEST="/tmp/molecule-syncthing-backup"'
+        expected_retention: 'RETENTION="14"'
+        expected_owner: 'OWNER="molecule"'
+      ansible.builtin.assert:
+        that:
+          - expected_dest in backup_script
+          - expected_retention in backup_script
+          - expected_owner in backup_script
+          - "'/api/teleporter' in backup_script"
+          - "'ntfy-notify ' in backup_script"
+          - "'/usr/local/bin/ntfy-notify' not in backup_script"
+        fail_msg: "pihole-syncthing-backup.sh rendered wrong: {{ backup_script }}"
+        success_msg: "[OK] Backup script embeds dir/retention/owner and the Teleporter flow"
+
+    - name: Assert the cron jobs were scheduled
+      ansible.builtin.assert:
+        that:
+          - "'/usr/local/bin/pihole-update' in dns_root_crontab.stdout"
+          - "'/usr/local/bin/pihole-syncthing-backup' in dns_root_crontab.stdout"
+        fail_msg: "Root crontab missing the update/backup jobs: {{ dns_root_crontab.stdout }}"
+        success_msg: "[OK] Weekly update and Syncthing backup cron jobs present"
+
+    - name: Read the logrotate config
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/weekly-updates
+      register: dns_logrotate_conf
+
+    - name: Assert the logrotate config rotates the update log
+      vars:
+        logrotate_conf: "{{ dns_logrotate_conf.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'/var/log/weekly-updates.log' in logrotate_conf"
+          - "'rotate 12' in logrotate_conf"
+        fail_msg: "logrotate config wrong: {{ logrotate_conf }}"
+        success_msg: "[OK] weekly-updates log rotation configured"
+
+    - name: Assert the chrony config
+      vars:
+        chrony_conf: "{{ dns_deployed_chrony_conf.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'server pool.ntp.org iburst prefer' in chrony_conf"
+          - "'allow 192.168.1.0/24' in chrony_conf"
+          - "'local stratum 8' in chrony_conf"
+        fail_msg: "chrony.conf rendered wrong: {{ chrony_conf }}"
+        success_msg: "[OK] chrony.conf has upstream, VLAN allow and local stratum"
+
+    - name: Assert the setup vars rendered correctly
+      vars:
+        setupvars: "{{ dns_rendered_setupvars.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'PIHOLE_INTERFACE=' ~ molecule_primary_interface in setupvars"
+          - "'PIHOLE_DNS_1=9.9.9.9' in setupvars"
+          - "'PIHOLE_DNS_2=149.112.112.112' in setupvars"
+        fail_msg: "setupVars.conf did not render correctly:\n{{ setupvars }}"
+        success_msg: "[OK] Pi-hole setupVars template renders with populated values"
+
+    - name: Assert chrony is enabled
+      # ActiveState is not asserted: containers lack CAP_SYS_TIME, so systemd
+      # skips the chrony unit (ConditionCapability) - it can never be active
+      # here, only on real hosts (see post_deploy_validate.yml for that).
+      ansible.builtin.systemd:
+        name: chrony
+      register: dns_chrony_state
+      failed_when: dns_chrony_state.status.UnitFileState != 'enabled'

@@ -1,30 +1,23 @@
 ---
 - name: Verify fail-fast validation worked
   hosts: all
+  become: true
   tasks:
-    - name: Confirm fail-fast-validation test completed
-      ansible.builtin.debug:
-        msg: |
-          [OK] Fail-fast validation scenario verified
+    - name: Stat the marker file converge wrote
+      # Converge and verify run as separate processes, so the case result is
+      # a file, not a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: /tmp/molecule-promexp-validation.passed
+      register: prom_exp_failfast_marker
 
-          Note: Validation correctly failed in converge step
-          when required variables were missing
-
-          This confirms the fail-fast principle works as designed
-
-    - name: Display fail-fast validation verification
-      ansible.builtin.debug:
-        msg: |
-          [OK] Fail-Fast Validation Test Complete
-
-          Test Scenario: Missing required variables
-          - prometheus_exporters_enabled: NOT SET (required)
-          - prometheus_exporters_base_dir: NOT SET (required)
-          - prometheus_exporters_node_exporter_enabled: NOT SET (required)
-          - prometheus_environment: NOT SET (required)
-          - prometheus_role: NOT SET (required)
-          - device_type: NOT SET (required)
-
-          Result: Role validation correctly failed in converge step
-          This confirms the "fail-fast" principle:
-          Role fails immediately with clear error when required variables missing
+    - name: Assert the expected validation failure was recorded
+      ansible.builtin.assert:
+        that:
+          - prom_exp_failfast_marker.stat.exists
+        fail_msg: >-
+          validate.yml should have failed fast on the missing required
+          variables (prometheus_exporters_enabled, base_dir,
+          node_exporter_enabled, prometheus_environment, prometheus_role,
+          device_type) - and converge should have proven the failure was
+          that validation, not an include error.
+        success_msg: "[OK] validate.yml fails fast on missing required variables"

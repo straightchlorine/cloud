@@ -255,6 +255,19 @@ when: not item.failed | default(false)
 When an Ansible task is skipped (via `when:`), its registered variable may not
 exist. These defaults handle that structural reality.
 
+### `| default(false)` on Cross-Role Feature Flags
+
+```yaml
+# [OK] - Flag owned by another role whose defaults aren't loaded here
+when: common_syncthing_enabled | default(false) | bool
+```
+
+Under tag-scoped runs (e.g. `--tags dns`) or standalone playbooks, the play
+that applies the owning role can be filtered out entirely, so its
+`defaults/main.yml` never loads and the flag is legitimately undefined. The
+default must mirror the flag's own default in the owning role -- never invent
+a value it wouldn't use.
+
 ---
 
 ## Docker Compose Patterns
@@ -482,8 +495,10 @@ Three pipelines:
 
 1. **lint.yaml** -- Fast feedback on every push: ansible-lint, yamllint,
    shellcheck, markdownlint
-2. **test.yaml** -- Matrix testing: 5 platforms x 9 roles via Molecule with
-   Podman (uses `vfs` storage driver in CI)
+2. **test.yaml** -- Molecule with Podman (vfs storage driver in CI), running
+   only the roles whose tests are rebuilt on the dns reference pattern
+   (currently `dns`; re-add roles to the matrix as their tests are rebuilt -
+   see docs/testing-best-practices.md)
 3. **deploy-validation.yaml** -- Pre-production: comprehensive molecule tests
    and infrastructure validation on tag/deploy events
 

@@ -50,6 +50,8 @@
     - /opt/pihole
   become: true
 
+# unattended-upgrades itself (apt config + reboot cron) is fleet-wide common
+# state, but its reboot-notify helper + cron are cleanly removable too.
 - name: Remove Pi-hole and notification cron jobs
   ansible.builtin.cron:
     name: "{{ item }}"
@@ -60,8 +62,6 @@
     - "Pi-hole Syncthing local backup"
     - "Reboot pending notification"
   become: true
-  # unattended-upgrades itself (apt config + reboot cron) is fleet-wide common
-  # state, but its reboot-notify helper + cron are cleanly removable too.
 
 - name: Remove DNS role file artifacts
   # Includes the pihole binary and pihole-FTL unit so a retry after a
@@ -73,27 +73,23 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
-    loop:
-      - /usr/local/bin/pihole
-      - /usr/local/bin/pihole-update
-      - /usr/local/bin/pihole-syncthing-backup
-      - /usr/local/bin/ntfy-notify
-      - /usr/local/bin/reboot-notify
-      - /tmp/ntfy-notify.installing
-      - /tmp/reboot-notify.installing
-      - /tmp/pihole-update.installing
-      - /tmp/pihole-syncthing-backup.installing
-      - /etc/ntfy/notify-api-key
-      - /etc/ntfy
-      - /var/log/pihole-FTL.log
-      - /var/log/pihole.log
-      - /var/log/pihole-syncthing-backup.log
-      - /etc/logrotate.d/weekly-updates
-      - /var/log/weekly-updates.log
-      - /etc/chrony/chrony.conf
-      - /etc/pihole.backup
-      - /etc/systemd/system/pihole-FTL.service
-      - /tmp/pi-hole-repo
+  loop:
+    - /usr/local/bin/pihole
+    - /usr/local/bin/pihole-update
+    - /usr/local/bin/pihole-syncthing-backup
+    - /usr/local/bin/ntfy-notify
+    - /usr/local/bin/reboot-notify
+    - /etc/ntfy/notify-api-key
+    - /etc/ntfy
+    - /var/log/pihole-FTL.log
+    - /var/log/pihole.log
+    - /var/log/pihole-syncthing-backup.log
+    - /etc/logrotate.d/weekly-updates
+    - /var/log/weekly-updates.log
+    - /etc/chrony/chrony.conf
+    - /etc/pihole.backup
+    - /etc/systemd/system/pihole-FTL.service
+    - /tmp/pi-hole-repo
   become: true
   # Syncthing-shared backup dir (dns_backup_dir) is left alone - it is
   # replicated user data, not role state (and lives on the optional drive,
@@ -183,6 +179,8 @@
             force: true
 
     - name: Write a plain resolv.conf when systemd-resolved is not installed
+      # molecule-notest: a container's /etc/resolv.conf is a host bind-mount
+      # and cannot be replaced (EBUSY); on a real host it is a plain file.
       when: "'systemd-resolved.service' not in ansible_facts.services"
       ansible.builtin.copy:
         dest: /etc/resolv.conf
@@ -192,6 +190,7 @@
           {% endfor %}
         mode: "0644"
         force: true
+      tags: [molecule-notest]
 
     - name: Verify the host resolves DNS after teardown
       ansible.builtin.command: getent hosts github.com
