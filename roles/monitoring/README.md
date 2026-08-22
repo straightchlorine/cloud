@@ -304,4 +304,4 @@ sudo chown -R root:root /etc/grafana /etc/prometheus /etc/loki
 
 ## Advanced Topics
 
-See [Monitoring Stack](../../docs/monitoring-stack.md).
+See [Monitoring Stack](../../docs/monitoring/index.md).

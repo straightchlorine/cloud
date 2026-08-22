@@ -245,7 +245,7 @@ sudo -u backup RESTIC_REPOSITORY="sftp:..." RESTIC_PASSWORD="..." \
 
 This role provides foundational backup infrastructure. Planned enhancements are
 documented in
-[Backup System Improvement Roadmap](../../docs/backup-improvement-roadmap.md).
+[Backup System Improvement Roadmap](../../docs/backup/improvement-roadmap.md).
 
 ## Files and Directories
 
