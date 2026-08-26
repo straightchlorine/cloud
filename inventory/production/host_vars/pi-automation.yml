@@ -10,8 +10,9 @@ device_specs:
   architecture: "aarch64"
 
 ssd_device: "/dev/sda1"
+# automation_data_path: SSD mount; docker data-root + journald live here too.
 automation_data_path: "/mnt/automation-data"
-automation_stack_home: "/home/automation/automation-stack"
+# automation_stack_home derives from ansible_user (=> /home/automation here).
 # D5 SD-card protection: Docker's data-root lives on the SSD too.
 common_docker_data_root: "/mnt/automation-data/docker"
 
@@ -53,8 +54,7 @@ backup_exclude_patterns:
 common_backup_service_name: "automation"
 
 # Secondary local backup: Syncthing replicates automation_backup_dir.
-# automation_backup_owner must be the Syncthing user (the stack user).
+# automation_backup_owner derives from ansible_user (the stack/Syncthing user).
 common_syncthing_enabled: true
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/automation-data/syncthing/backup"
-automation_backup_owner: "automation"

@@ -51,17 +51,27 @@ vault_watchtower_api_token: "openssl rand -base64 32"
 
 ### Host Variables (host_vars/pi-automation.yml)
 
+`automation_stack_home` and `automation_backup_owner` are **derived from the
+inventory's `ansible_user`** (role defaults: `{{ ansible_user_dir }}/automation-stack`
+and `{{ ansible_user_id }}`). Set the SSH/stack user once in `hosts.yml` and both
+follow automatically - this is why the test host (`ansible`) lands on
+`/home/ansible/automation-stack` while production (`automation`) uses
+`/home/automation/automation-stack`.
+
+Example for production:
+
 ```yaml
 device_type: rpi4b
 ssd_device: "/dev/sda1"
 automation_data_path: "/mnt/automation-data"   # SSD mount; docker data-root + journald live here too
-automation_stack_home: "/home/automation/automation-stack"
+# automation_stack_home derives from ansible_user (=> /home/automation here).
+# Override only to pin a dedicated stack account.
 automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
 
 # Secondary local backup (mariadb dump + vaultwarden snapshot) into Syncthing
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/automation-data/syncthing/backup"
-automation_backup_owner: "automation"
+# automation_backup_owner derives from ansible_user (the stack/Syncthing user).
 common_syncthing_enabled: true
 
 # Off-site restic backup (primary)

@@ -21,8 +21,11 @@ common_firewall_ports:
 # moves off the SD card. common_ssd_format stays false (common default) - the
 # staging drive is pre-formatted; set it true per host only for a blank disk.
 ssd_device: "/dev/sda1"
+# automation_data_path: SSD mount; docker data-root + journald live here too.
 automation_data_path: "/mnt/automation-data"
-automation_stack_home: "/home/automation/automation-stack"
+# automation_stack_home derives from ansible_user (inventory pins
+# ansible_user: ansible) => /home/ansible/automation-stack, whose parent is the
+# ansible user's own home - so it always exists on this host.
 common_docker_data_root: "/mnt/automation-data/docker"
 
 # Start the compose stack as part of the deploy.
@@ -38,7 +41,7 @@ prometheus_role: "automation"
 common_syncthing_enabled: true
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/automation-data/syncthing/backup"
-automation_backup_owner: "automation"
+# automation_backup_owner derives from ansible_user (=> ansible on this host).
 
 # DESTRUCTIVE, host-scoped on purpose - NOT a role default.
 # Off-site restic backup disabled with a placeholder repo - never write into

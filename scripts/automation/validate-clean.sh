@@ -37,7 +37,8 @@ check_absent /usr/local/bin/automation-syncthing-backup
 check_absent /usr/local/bin/manage-automation
 check_absent /etc/systemd/system/automation-stack.service
 check_absent /var/log/automation-syncthing-backup.log
-check_absent /home/automation/automation-stack
+# Stack home follows the SSH user's home (automation_stack_home derives from ansible_user).
+check_absent "$HOME/automation-stack"
 
 if systemctl is-active --quiet automation-stack 2>/dev/null; then
   note_left "automation-stack service still active"

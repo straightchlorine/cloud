@@ -6,6 +6,15 @@
 # compose file refers to ${VAR} and is interpolated from the generated .env
 # (0600) at deploy time.
 
+# Deployment identity derives from the inventory's ansible_user (via the
+# setup facts ansible_user_dir / ansible_user_id), so a host only pins the
+# user once in hosts.yml and the stack home + ownership follow it:
+#   pi-automation  (ansible_user=automation) -> /home/automation/automation-stack
+#   pi-test-automation (ansible_user=ansible) -> /home/ansible/automation-stack
+# Host_vars may still override these to pin a dedicated stack account.
+automation_stack_home: "{{ ansible_user_dir }}/automation-stack"
+automation_backup_owner: "{{ ansible_user_id }}"
+
 automation_specific_packages:
   - ncdu
   - tree

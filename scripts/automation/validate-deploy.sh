@@ -87,7 +87,9 @@ else
   note_left "/var/log/journal not a separate mount"
 fi
 
-STACK_HOME="/home/automation/automation-stack"
+# STACK_HOME follows the SSH user's home, mirroring the role's derived
+# automation_stack_home (ansible_user_dir/automation-stack).
+STACK_HOME="${HOME}/automation-stack"
 DATA="/mnt/automation-data"
 
 echo "-- Compose file + secrets --"
@@ -96,7 +98,7 @@ check_present "$STACK_HOME/.env"
 if [ -f "$STACK_HOME/.env" ]; then
   env_mode="$(stat -c '%a' "$STACK_HOME/.env")"
   env_owner="$(stat -c '%U' "$STACK_HOME/.env")"
-  if [ "$env_mode" = "600" ] && { [ "$env_owner" = "automation" ] || [ "$env_owner" = "root" ]; }; then
+  if [ "$env_mode" = "600" ] && { [ "$env_owner" = "$(id -un)" ] || [ "$env_owner" = "root" ]; }; then
     note_ok ".env is 0600 and not world-readable"
   else
     note_left ".env perms/owner wrong (mode=$env_mode owner=$env_owner)"
