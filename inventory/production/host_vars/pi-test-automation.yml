@@ -16,17 +16,16 @@ common_firewall_ports:
   - {port: 8081, comment: "Vaultwarden"}
   - {port: 8082, comment: "Firefly III"}
 
-# The automation role's full storage package applies here: the SSD mounts
-# at automation_data_path, journald relocates onto it and Docker's data-root
-# moves off the SD card. common_ssd_format stays false (common default) - the
-# staging drive is pre-formatted; set it true per host only for a blank disk.
-ssd_device: "/dev/sda1"
-# automation_data_path: SSD mount; docker data-root + journald live here too.
+# The automation role's optional SSD (mirrors DNS): when an unused drive is
+# attached (or already mounted at automation_data_path) the stack data, journald
+# and Docker's data-root live on it; otherwise everything stays on the SD card.
+# TEST HOST: opt in to a full format + mount of the attached drive on first
+# deploy (DESTRUCTIVE) - this is a disposable test box, so wiping is intended.
+automation_ssd_format: true
 automation_data_path: "/mnt/automation-data"
 # automation_stack_home derives from ansible_user (inventory pins
 # ansible_user: ansible) => /home/ansible/automation-stack, whose parent is the
 # ansible user's own home - so it always exists on this host.
-common_docker_data_root: "/mnt/automation-data/docker"
 
 # Start the compose stack as part of the deploy.
 common_start_stack: true

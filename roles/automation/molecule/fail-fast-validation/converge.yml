@@ -34,8 +34,6 @@
       block:
         - name: Run the real validate.yml with automation_trusted_proxies undefined
           ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
-          vars:
-            ssd_device: /dev/vdb
 
         - name: Fail the test - validate.yml should have refused to run
           ansible.builtin.fail:
@@ -72,7 +70,6 @@
           ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
           vars:
             automation_trusted_proxies: "100.64.0.0/10"
-            ssd_device: /dev/vdb
             vault_firefly_app_key: "your-firefly-app-key"
 
         - name: Fail the test - validate.yml should have refused to run
@@ -108,7 +105,6 @@
           ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
           vars:
             automation_trusted_proxies: "**"
-            ssd_device: /dev/vdb
 
         - name: Fail the test - the catch-all guard should have refused '**'
           ansible.builtin.fail:
@@ -128,36 +124,5 @@
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case3.passed
-            force: false
-            mode: "0644"
-
-    # Case 4: the mandatory-SSD guard (ssd_device drives the whole storage
-    # package, so it must be explicitly set - no silent default).
-    - name: "Case 4: validate.yml fails when ssd_device is missing"
-      block:
-        - name: Run the real validate.yml with ssd_device undefined
-          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
-          vars:
-            automation_trusted_proxies: "100.64.0.0/10"
-
-        - name: Fail the test - validate.yml should have refused to run
-          ansible.builtin.fail:
-            msg: "validate.yml did not fail fast on a missing ssd_device"
-      rescue:
-        - name: Assert the failure was for the missing ssd_device specifically
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.results is defined
-              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
-                ['ssd_device']
-            fail_msg: >-
-              validate.yml failed, but not for the expected reason
-              (missing ssd_device): {{ ansible_failed_result }}
-            success_msg: "[OK] validate.yml correctly failed on the missing ssd_device variable"
-
-        - name: Record case 4 as passed for verify.yml
-          ansible.builtin.copy:
-            content: ""
-            dest: /tmp/molecule-case4.passed
             force: false
             mode: "0644"

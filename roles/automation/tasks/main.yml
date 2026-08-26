@@ -29,7 +29,7 @@
     role_specific_packages: "{{ automation_specific_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
-- name: Include storage setup (mandatory SSD mount + journald relocation)
+- name: Include storage setup (optional SSD mount + journald + docker data-root)
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
 

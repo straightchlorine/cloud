@@ -20,7 +20,6 @@
     automation_backup_dir: /tmp/molecule-automation-backup
     automation_backup_owner: molecule
     restic_enabled: false
-    ssd_device: /dev/vdb
     common_start_stack: false
   pre_tasks:
     - name: Create the stack-home parent (validate.yml asserts it exists)

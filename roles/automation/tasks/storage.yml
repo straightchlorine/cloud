@@ -1,17 +1,145 @@
 ---
-# Mandatory SSD mount: every service data dir, journald and Docker's
-# data-root live on this mount - nothing may touch the SD card.
+# Optional dedicated SSD for stack data - mirrors the dns role's optional-drive
+# pattern. When a drive is present (auto-detected, or already mounted at
+# automation_data_path from a previous deploy) the stack's data path, journald
+# and Docker's data-root ride on it; with no drive the stack simply runs on the
+# SD card. Wiping an unprepared drive is opt-in via automation_ssd_format.
 
-- name: Mount the mandatory SSD at the data path
+- name: Record whether a drive is already mounted at the data path
+  ansible.builtin.set_fact:
+    automation_ssd_mounted: >-
+      {{ (ansible_mounts | selectattr('mount', 'equalto', automation_data_path)
+      | list | length) > 0 }}
+
+- name: Detect an unattached, unused SSD drive (skipped when one is already mounted)
   ansible.builtin.include_role:
     name: common
-    tasks_from: storage
-  vars:  # noqa: var-naming[no-role-prefix]
-    mount_path: "{{ automation_data_path }}"
+    tasks_from: detect_optional_drive
+  when: not automation_ssd_mounted
 
-- name: Relocate systemd-journald onto the SSD
+- name: Resolve whether the stack data ride on a dedicated drive
+  ansible.builtin.set_fact:
+    automation_ssd_present: >-
+      {{ automation_ssd_mounted or (common_optional_drive_present | default(false)) }}
+
+- name: No dedicated SSD - the stack runs on the SD card
+  ansible.builtin.debug:
+    msg: >-
+      No unused dedicated SSD detected; the automation stack runs on the SD card
+      (automation_data_path: {{ automation_data_path }}, docker data-root: default).
+  when: not automation_ssd_present
+
+# Only a freshly-detected (not yet mounted) drive is prepared and mounted here;
+# an already-mounted data_path from a previous deploy is left untouched.
+- name: Prepare and mount the optional SSD
+  when:
+    - automation_ssd_present
+    - not automation_ssd_mounted
+  block:
+    - name: Determine whether the drive needs formatting
+      # "Has a filesystem" isn't enough - a foreign one we don't want (e.g. a
+      # leftover installer USB stick) would be reused as-is.
+      ansible.builtin.set_fact:
+        automation_ssd_needs_format: >-
+          {{ common_optional_drive_fstype != automation_ssd_filesystem }}
+
+    - name: Refuse to use an unformatted/foreign drive unless explicitly allowed
+      ansible.builtin.fail:
+        msg: >-
+          {{ common_optional_drive_device }} {{ 'has no usable filesystem'
+          if not common_optional_drive_has_filesystem else
+          "has '" + common_optional_drive_fstype + "', not '" + automation_ssd_filesystem + "'" }}.
+          Format it yourself, or set automation_ssd_format: true in host_vars to let
+          this role wipe {{ common_optional_drive_device }} and format it as
+          {{ automation_ssd_filesystem }} (DESTRUCTIVE).
+      when:
+        - automation_ssd_needs_format
+        - not automation_ssd_format | bool
+
+    - name: Wipe any existing partition table before repartitioning
+      ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
+      become: true
+      changed_when: true
+      when:
+        - automation_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Create a single partition spanning the whole disk
+      ansible.builtin.command:
+        cmd: "sfdisk {{ common_optional_drive_device }}"
+        stdin: "type=L"
+      become: true
+      changed_when: true
+      when:
+        - automation_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Force the kernel to re-read the partition table
+      ansible.builtin.command: "partprobe {{ common_optional_drive_device }}"
+      become: true
+      changed_when: false
+      when:
+        - automation_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Wait for the partition device to appear
+      ansible.builtin.stat:
+        path: "{{ common_optional_drive_device }}1"
+      register: automation_ssd_new_partition
+      until: automation_ssd_new_partition.stat.exists
+      retries: 10
+      delay: 1
+      when:
+        - automation_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Determine the partition to format and mount
+      # A '1' suffix only applies to a partition we just created. A whole disk
+      # that already matches our filesystem was formatted bare (no partition
+      # table), so the target there is the device itself.
+      ansible.builtin.set_fact:
+        automation_ssd_target: >-
+          {{ (common_optional_drive_device ~ '1')
+          if (common_optional_drive_is_whole_disk and automation_ssd_needs_format)
+          else common_optional_drive_device }}
+
+    - name: Format the optional SSD (only runs when explicitly allowed above)
+      community.general.filesystem:
+        fstype: "{{ automation_ssd_filesystem }}"
+        dev: "{{ automation_ssd_target }}"
+        force: "{{ automation_ssd_needs_format and not common_optional_drive_is_whole_disk }}"
+      become: true
+      when: automation_ssd_needs_format
+
+    - name: Create the mount directory
+      ansible.builtin.file:
+        path: "{{ automation_data_path }}"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Mount the optional SSD at the data path
+      ansible.posix.mount:
+        path: "{{ automation_data_path }}"
+        src: "{{ automation_ssd_target }}"
+        fstype: "{{ automation_ssd_filesystem }}"
+        opts: "{{ automation_ssd_mount_options }}"
+        state: mounted
+      become: true
+
+- name: Relocate systemd-journald storage onto the SSD
   ansible.builtin.include_role:
     name: common
     tasks_from: journald_relocate
   vars:  # noqa: var-naming[no-role-prefix]
     common_journald_path: "{{ automation_data_path }}/journal"
+  when:
+    - automation_ssd_present
+    - automation_ssd_journald_enabled | bool
+
+- name: Move Docker's data-root onto the SSD
+  # common/docker.yml only adds data-root when this fact is defined, so on an
+  # SD-only run Docker keeps its default /var/lib/docker.
+  ansible.builtin.set_fact:
+    common_docker_data_root: "{{ automation_data_path }}/docker"
+  when: automation_ssd_present

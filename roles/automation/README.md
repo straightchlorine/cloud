@@ -20,7 +20,8 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 
 ### Prerequisites
 
-- Raspberry Pi 4B (production) with an SSD attached (`ssd_device`)
+- Raspberry Pi 4B (production) with an optional SSD (auto-detected if attached — the
+  stack runs on the SD card without one; see "Storage" below)
 - Reverse proxy in place fronting `vault.*` / `firefly.*` over the tailnet
 
 ### Deploy
@@ -62,10 +63,11 @@ Example for production:
 
 ```yaml
 device_type: rpi4b
-ssd_device: "/dev/sda1"
-automation_data_path: "/mnt/automation-data"   # SSD mount; docker data-root + journald live here too
+automation_data_path: "/mnt/automation-data"   # stack data path (on the optional SSD when present)
 # automation_stack_home derives from ansible_user (=> /home/automation here).
 # Override only to pin a dedicated stack account.
+# Optional SSD (mirrors DNS): auto-detected if attached; wipe/format it here.
+# Only set automation_ssd_format: true for a blank disk (DESTRUCTIVE).
 automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
 
 # Secondary local backup (mariadb dump + vaultwarden snapshot) into Syncthing
@@ -91,8 +93,12 @@ restic_password: "{{ vault_restic_automation_password }}"
   MariaDB is pinned and unlabelled — DB upgrades are never automatic
 - **Ports**: service ports bound to `primary_ip` (tailnet-reachable), Watchtower
   metrics API on `127.0.0.1` only
-- **Storage**: SSD is mandatory — service data, docker `data-root` and journald
-  all relocate off the SD card; no named volumes, bind mounts only
+- **Storage**: a dedicated SSD is optional, mirroring the dns role. When a drive
+  is present (auto-detected, or already mounted at `automation_data_path`) the
+  stack data, Docker's `data-root` and journald all live on it — off the SD card;
+  with no drive the stack runs from the SD card. No named volumes, bind mounts
+  only. The drive is never wiped unless you set `automation_ssd_format: true`
+  (opt-in, DESTRUCTIVE).
 
 ## Tag policy
 

@@ -34,6 +34,17 @@ automation_subdomain_firefly: "firefly"
 # scoped to the tailnet/LAN, never '**'.
 # automation_trusted_proxies: REQUIRED in host_vars - no default.
 
+# Optional stack SSD, mirroring the dns role's optional-drive pattern. Stack
+# data (the bind mounts under automation_data_path), journald and Docker's
+# data-root ride a dedicated drive when one is present - auto-detected, or
+# already mounted at automation_data_path from a prior deploy - and with no
+# drive the stack simply runs on the SD card. Wiping a drive is opt-in per
+# host and DESTRUCTIVE:
+automation_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
+automation_ssd_filesystem: "ext4"
+automation_ssd_mount_options: "defaults,noatime,errors=remount-ro"
+automation_ssd_journald_enabled: true
+
 # Watchtower update policy: opt-in per container via labels, nightly
 # sweep, notification through vault's ntfy topic. No default tag pins for
 # application images (floating latest is the documented exception); mariadb

@@ -9,12 +9,11 @@ device_specs:
   memory: "2GB"
   architecture: "aarch64"
 
-ssd_device: "/dev/sda1"
-# automation_data_path: SSD mount; docker data-root + journald live here too.
+# automation_data_path: SSD mount when a drive is present; Docker's data-root and
+# journald live under it too (all optional/auto-detected, mirroring DNS).
 automation_data_path: "/mnt/automation-data"
 # automation_stack_home derives from ansible_user (=> /home/automation here).
-# D5 SD-card protection: Docker's data-root lives on the SSD too.
-common_docker_data_root: "/mnt/automation-data/docker"
+# Docker's data-root + journald ride the auto-detected SSD when one is present.
 
 # Subdomains served by the central reverse proxy (reached over the tailnet).
 automation_subdomain_vaultwarden: "vault"

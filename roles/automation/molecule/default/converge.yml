@@ -24,7 +24,6 @@
     restic_enabled: false
     restic_repository: /tmp/test-restic
     restic_password: molecule-test-restic-password
-    ssd_device: /dev/vdb
     common_start_stack: false
   pre_tasks:
     - name: Create the stack-home parent (validate.yml asserts it exists)
@@ -39,8 +38,8 @@
     # the role's defaults loaded. NOT included, deliberately:
     #   - packages.yml include (apt installs the whole common list - slow,
     #     covered on the staging Pi by scripts/automation/validate-deploy.sh)
-    #   - storage.yml (mounts the real ssd_device and rewrites /etc/fstab -
-    #     containers must not touch the host's block devices)
+    #   - storage.yml (prepares/mounts the optional SSD - containers must
+    #     not touch the host's block devices)
     #   - docker.yml (installs the Docker daemon; no docker-in-docker here -
     #     start_stack is false so compose up is skipped too)
     #   - docker_stack_service (the unit Requires=docker.service, which a

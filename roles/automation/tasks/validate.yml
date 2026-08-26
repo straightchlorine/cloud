@@ -23,7 +23,6 @@
       - automation_data_path
       - automation_stack_home
       - automation_trusted_proxies
-      - ssd_device
       - restic_enabled
       - restic_repository
       - restic_password
