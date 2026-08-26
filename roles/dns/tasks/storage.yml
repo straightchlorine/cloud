@@ -121,41 +121,9 @@
       become: true
 
     - name: Relocate systemd-journald storage onto the drive
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: journald_relocate
       when: dns_optional_drive_journald_enabled
-      block:
-        - name: Create the journal directory on the drive
-          ansible.builtin.file:
-            path: "{{ dns_optional_drive_mount_path }}/journal"
-            state: directory
-            owner: root
-            group: systemd-journal
-            mode: "2755"
-          become: true
-
-        - name: Stop systemd-journald before relocating storage
-          ansible.builtin.systemd:
-            name: systemd-journald
-            state: stopped
-          become: true
-
-        - name: Bind-mount the drive's journal directory over /var/log/journal
-          ansible.posix.mount:
-            path: /var/log/journal
-            src: "{{ dns_optional_drive_mount_path }}/journal"
-            fstype: none
-            opts: bind
-            state: mounted
-          become: true
-
-        - name: Ensure journald is configured for persistent storage
-          ansible.builtin.lineinfile:
-            path: /etc/systemd/journald.conf
-            regexp: '^#?Storage='
-            line: "Storage=persistent"
-          become: true
-
-        - name: Start systemd-journald
-          ansible.builtin.systemd:
-            name: systemd-journald
-            state: started
-          become: true
+      vars:  # noqa: var-naming[no-role-prefix]
+        common_journald_path: "{{ dns_optional_drive_mount_path }}/journal"

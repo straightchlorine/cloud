@@ -13,6 +13,11 @@ platforms:
 
 provisioner:
   name: ansible
+  env:
+    # CI/local both run `cd roles/<role> && molecule test`, so
+    # MOLECULE_PROJECT_DIRECTORY is roles/automation - one level up is roles/,
+    # letting `include_role: name: <any role>` resolve by name.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 
 verifier:
   name: ansible

@@ -5,7 +5,11 @@
 {% if service_ports is defined %}
     ports:
 {% for port in service_ports %}
-{% if port.bind_to_localhost is defined and port.bind_to_localhost %}
+{% if port is string %}
+      - "{{ port }}"
+{% elif port.bind_ip is defined and port.bind_ip | length > 0 %}
+      - "{{ port.bind_ip }}:{{ port.host }}:{{ port.container }}"
+{% elif port.bind_to_localhost is defined and port.bind_to_localhost %}
       - "127.0.0.1:{{ port.host }}:{{ port.container }}"
 {% else %}
       - "{{ port.host }}:{{ port.container }}"
@@ -17,6 +21,9 @@
 {% endif %}
 {% if service_user is defined %}
     user: "{{ service_user }}"
+{% endif %}
+{% if service_env_file is defined %}
+    env_file: {{ service_env_file }}
 {% endif %}
 {% if service_environment is defined %}
     environment:
@@ -36,6 +43,12 @@
       - {{ network }}
 {% endfor %}
 {% endif %}
+{% if service_profiles is defined %}
+    profiles:
+{% for profile in service_profiles %}
+      - {{ profile }}
+{% endfor %}
+{% endif %}
 {% if service_labels is defined %}
     labels:
 {% for label in service_labels %}
@@ -45,7 +58,12 @@
 {% if service_depends_on is defined %}
     depends_on:
 {% for dependency in service_depends_on %}
+{% if dependency is string %}
       - {{ dependency }}
+{% else %}
+      {{ dependency.service }}:
+        condition: {{ dependency.condition }}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% if service_healthcheck is defined %}
@@ -56,11 +74,13 @@
       retries: {{ service_healthcheck.retries | default('3') }}
       start_period: {{ service_healthcheck.start_period | default('40s') }}
 {% endif %}
+{% if service_resources is defined %}
     deploy:
       resources:
         limits:
-          memory: {{ service_memory_limit }}
-          cpus: '{{ service_cpu_limit }}'
+          memory: {{ service_resources.limits.memory }}
+          cpus: "{{ service_resources.limits.cpus }}"
         reservations:
-          memory: {{ service_memory_reservation }}
-          cpus: '{{ service_cpu_reservation }}'
+          memory: {{ service_resources.reservations.memory }}
+          cpus: "{{ service_resources.reservations.cpus }}"
+{% endif %}

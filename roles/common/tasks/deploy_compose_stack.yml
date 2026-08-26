@@ -1,0 +1,59 @@
+---
+# One-shot "install a compose stack": render compose + .env, bring it up when
+# start_stack is true, and poll the critical services until they run. Callers
+# pass the whole compose contract (see roles/automation/tasks/stack.yml for the
+# canonical call site) - nothing docker-specific leaks into role code.
+#
+# The compose up/poll tasks need a Docker daemon, so molecule scenarios run
+# this with start_stack: false - only the rendering half executes there.
+
+- name: Render the compose file and environment
+  ansible.builtin.include_tasks: build_docker_compose.yml
+  vars:
+    # build_docker_compose's contract (owner/group of the compose file and
+    # its .env); the stack owner's primary group carries its login name here.
+    compose_file_owner: "{{ compose_owner }}"
+    compose_file_group: "{{ compose_owner }}"
+
+- name: Bring up the compose stack
+  block:
+    - name: Run docker compose up -d
+      community.docker.docker_compose_v2:
+        project_src: "{{ compose_file_path | dirname }}"
+        state: present
+      become: true
+      become_user: "{{ compose_owner }}"
+      when: start_stack
+
+    - name: Wait for critical compose services to report running
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker compose -f {{ compose_file_path }} ps --format json
+      become: true
+      become_user: "{{ compose_owner }}"
+      args:
+        executable: /bin/bash
+      register: common_compose_ps_poll
+      changed_when: false
+      until: >-
+        (common_compose_ps_poll.stdout_lines | map('from_json') | list |
+        selectattr('Service', 'in', compose_critical_services) |
+        selectattr('State', 'equalto', 'running') | list | length) ==
+        (compose_critical_services | length)
+      retries: 30
+      delay: 5
+      when: start_stack
+  rescue:
+    - name: Notify ntfy of the failed stack startup
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ntfy_notify
+      vars:
+        common_ntfy_title: "{{ stack_name }} stack failed to start: {{ inventory_hostname }}"
+        common_ntfy_message: "docker compose up or the critical-service poll failed. Check ansible-playbook output."
+        common_ntfy_priority: "high"
+        common_ntfy_tags: "rotating_light"
+
+    - name: Fail with the stack startup error
+      ansible.builtin.fail:
+        msg: "{{ stack_name }} stack failed to start. See the errors above."

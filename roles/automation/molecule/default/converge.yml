@@ -1,187 +1,102 @@
 ---
-- name: Converge - Default (Core Role Logic)
+- name: Converge - the automation role's container-testable task files
   hosts: all
+  become: true
   vars:
+    # Mirrors host_vars/pi-automation.yml with fake secrets. ansible_user is
+    # pinned because the role's ownership/become wiring reads it directly.
+    ansible_user: root
     timezone: UTC
-    # Domain configuration
-    domain_name: "example.local"
-    vault_domain_name: "example.local"
-    vault_letsencrypt_email: "test@example.local"
-
-    # Paths
+    domain_name: example.test
+    vault_domain_name: example.test
+    vault_letsencrypt_email: test@example.test
+    vault_firefly_app_key: molecule-test-app-key
+    vault_firefly_static_cron_token: molecule-test-cron-token
+    vault_firefly_db_password: molecule-test-db-password
+    vault_vaultwarden_admin_token: molecule-test-admin-token
+    vault_watchtower_api_token: molecule-test-watchtower-token
+    automation_trusted_proxies: "100.64.0.0/10"
     automation_data_path: /mnt/automation-data
     automation_stack_home: /home/automation/automation-stack
-
-    # User
-    automation_user: automation
-    automation_uid: 2000
-    automation_gid: 2000
-
-    # Authentication (dummy values for test)
-    vault_traefik_basic_auth: "admin:$2y$10$testhashedpassword"
-    vault_cloudflare_api_token: "test-token-for-molecule"
-    vault_influxdb3_session_secret_key: "test-session-secret-key-32-chars-long"
-    vault_watchtower_api_token: "test-watchtower-token"
-
-    # Services
-    automation_services_enabled:
-      traefik: true
-      vaultwarden: true
-
-    # Backup (minimal, disabled)
+    automation_backup_enabled: true
+    automation_backup_dir: /tmp/molecule-automation-backup
+    automation_backup_owner: molecule
     restic_enabled: false
     restic_repository: /tmp/test-restic
-    restic_password: test-password-12345678901234567890
-    backup_ssh_host: localhost
-    backup_ssh_port: 22
-    backup_ssh_user: backup
-
-    # Ports
-    automation_traefik_web_port: 80
-    automation_traefik_websecure_port: 443
-    automation_traefik_dashboard_port: 8080
-
-    # Disable container startup (Docker-in-Docker limitation)
-    start_stack: false
-
-    # SSL staging mode
-    automation_letsencrypt_staging: true
-    letsencrypt_email: "test@example.local"
-    letsencrypt_staging: true
-
-    # Subdomains
-    automation_subdomain_traefik: "traefik"
-    automation_subdomain_dozzle: "dozzle"
-    automation_subdomain_portainer: "portainer"
-    automation_subdomain_influxdb: "influxdb"
-    automation_subdomain_explorer: "explorer"
-    automation_subdomain_vaultwarden: "vault"
-    automation_domain_name: "example.local"
-
+    restic_password: molecule-test-restic-password
+    ssd_device: /dev/vdb
+    common_start_stack: false
   pre_tasks:
-    - name: Create parent directories
+    - name: Create the stack-home parent (validate.yml asserts it exists)
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ automation_stack_home | dirname }}"
         state: directory
-        mode: '0755'
-      become: true
-      loop:
-        - "{{ automation_data_path | dirname }}"
-        - "{{ automation_stack_home | dirname }}"
-
-    - name: Gather facts (replaces network facts for testing)
-      ansible.builtin.setup:
-        gather_subset: network
+        mode: "0755"
 
   tasks:
-    - name: Note about molecule test limitations
-      ansible.builtin.debug:
-        msg: |
-          Running simplified test of automation role core logic
-          Note: Common role dependencies not available in molecule
-          Testing only: user creation, directory structure, file permissions, templates
+    # main.yml's task files that are container-safe, in the same order the
+    # role runs them. include_role tasks_from runs the real task file with
+    # the role's defaults loaded. NOT included, deliberately:
+    #   - packages.yml include (apt installs the whole common list - slow,
+    #     covered on the staging Pi by scripts/automation/validate-deploy.sh)
+    #   - storage.yml (mounts the real ssd_device and rewrites /etc/fstab -
+    #     containers must not touch the host's block devices)
+    #   - docker.yml (installs the Docker daemon; no docker-in-docker here -
+    #     start_stack is false so compose up is skipped too)
+    #   - docker_stack_service (the unit Requires=docker.service, which a
+    #     container lacks; the unit template is rendered standalone below)
+    #   - firewall (ufw cannot bind rules in a container)
+    #   - post_deploy_validate.yml (needs a running compose stack)
+    - name: Gather network facts for dynamic configuration
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
 
-    - name: Create automation group
-      ansible.builtin.group:
-        name: "{{ automation_user }}"
-        gid: "{{ automation_gid }}"
-        state: present
-      become: true
+    - name: Run the real pre-deployment validation
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: validate
 
-    - name: Create automation user
-      ansible.builtin.user:
-        name: "{{ automation_user }}"
-        uid: "{{ automation_uid }}"
-        group: "{{ automation_user }}"
-        shell: /bin/bash
-        home: "/home/{{ automation_user }}"
-        createhome: true
-      become: true
+    - name: Run the real stack deployment (compose + .env + manage script)
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: stack
 
-    - name: Create automation directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: "0755"
-      become: true
-      loop:
-        - "{{ automation_data_path }}"
-        - "{{ automation_stack_home }}"
-        - "{{ automation_stack_home }}/config"
-        - "{{ automation_stack_home }}/config/traefik"
-        - "{{ automation_stack_home }}/scripts"
-        - "{{ automation_data_path }}/traefik"
-        - "{{ automation_data_path }}/influxdb3"
-        - "{{ automation_data_path }}/influxdb3/data"
-        - "{{ automation_data_path }}/influxdb3/plugins"
-        - "{{ automation_data_path }}/influxdb3-explorer"
-        - "{{ automation_data_path }}/vaultwarden"
-        - "{{ automation_data_path }}/portainer"
-        - "{{ automation_data_path }}/dozzle"
+    - name: Run the real backup deployment (script + cron, syncthing off)
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: backup
 
-    - name: Create acme.json with secure permissions
-      ansible.builtin.copy:
-        content: |
-          {}
-        dest: "{{ automation_data_path }}/traefik/acme.json"
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: '0600'
-      become: true
-
-    - name: Create Traefik static configuration (test placeholder)
-      ansible.builtin.copy:
-        content: |
-          # Test placeholder for traefik.yml
-          # Full template requires common role dependencies
-          global:
-            checkNewVersion: false
-        dest: "{{ automation_stack_home }}/config/traefik/traefik.yml"
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: '0644'
-      become: true
-
-    - name: Create Traefik dynamic configuration (test placeholder)
-      ansible.builtin.copy:
-        content: |
-          # Test placeholder for dynamic.yml
-          # Full template requires common role dependencies
-          http:
-            routers: {}
-        dest: "{{ automation_stack_home }}/config/traefik/dynamic.yml"
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: '0644'
-      become: true
-
-    - name: Create docker-compose.yml for testing
-      ansible.builtin.copy:
-        content: |
-          version: "3.9"
-          services:
-            traefik:
-              image: "traefik:v3.0"
-          networks:
-            traefik-network:
-              driver: bridge
-        dest: "{{ automation_stack_home }}/docker-compose.yml"
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: '0644'
-      become: true
-
-    - name: Create management script (test placeholder)
-      ansible.builtin.copy:
-        content: |
-          #!/bin/bash
-          # Management script placeholder
-          # Test that script exists and is executable
-          echo "Automation stack management script"
-        dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-        owner: "{{ automation_uid }}"
-        group: "{{ automation_gid }}"
-        mode: "0755"
-      become: true
+    - name: Render the automation-stack systemd unit
+      # docker_stack_service itself needs docker.service (excluded above) -
+      # render the unit here so a broken template variable still fails CI
+      # instead of silently writing a broken unit on a real Pi.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
+        dest: /tmp/automation-stack.service.rendered
+        mode: "0644"
+      vars:
+        service_description: "Automation Stack (molecule render)"
+        service_requires: ["docker.service"]
+        service_after: ["docker.service", "network-online.target"]
+        common_service_wants: ["network.target"]
+        service_type: "oneshot"
+        common_remain_after_exit: "true"
+        common_working_directory: "{{ automation_stack_home }}"
+        service_user: "{{ ansible_user }}"
+        service_group: "{{ ansible_user }}"
+        service_environment:
+          - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
+        exec_start: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml up -d"
+        exec_stop: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml down"
+        exec_reload: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml restart"
+        syslog_identifier: "automation-stack"
+        common_timeout_start_sec: "0"
+        kill_mode: "none"
+        common_standard_output: "journal"
+        common_standard_error: "journal"
+        common_restart_policy: "on-failure"
+        common_restart_sec: "5"
+        common_wanted_by: "multi-user.target"
+        common_enable_security_hardening: true
+        common_no_new_privileges: "true"

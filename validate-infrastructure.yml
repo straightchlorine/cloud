@@ -9,7 +9,9 @@
 #   Pre-deployment: ansible-playbook validate-infrastructure.yml -e "validation_type=pre_deployment"
 #   Post-deployment: ansible-playbook validate-infrastructure.yml -e "validation_type=post_deployment"
 #   Service startup: ansible-playbook validate-infrastructure.yml -e "validation_type=service_startup"
-#   SSL/Domain: ansible-playbook validate-infrastructure.yml -e "validation_type=ssl_domain"
+#
+# TLS terminates at the central reverse proxy; these hosts publish plain
+# HTTP over the tailnet, so there is no TLS/domain validation at this layer.
 #
 # This follows the "No Redundancy" principle by centralizing all validation logic
 
@@ -28,7 +30,7 @@
       ansible.builtin.fail:
         msg: >-
           validation_type must be explicitly set via -e validation_type=<type>.
-          Valid types: full, backup, vault, pre_deployment, post_deployment, service_startup, ssl_domain
+          Valid types: full, backup, vault, pre_deployment, post_deployment, service_startup
       when: validation_type is not defined
 
     - name: Set validation scope based on type
@@ -38,7 +40,6 @@
         run_pre_deployment_validation: "{{ validation_type in ['full', 'pre_deployment'] }}"
         run_post_deployment_validation: "{{ validation_type in ['full', 'post_deployment'] }}"
         run_service_startup_validation: "{{ validation_type in ['full', 'service_startup'] }}"
-        run_ssl_domain_validation: "{{ validation_type in ['full', 'ssl_domain'] }}"
 
     - name: Display validation start message
       ansible.builtin.debug:
@@ -112,27 +113,6 @@
             - music-stack
           when: "item.replace('-', '_') in group_names"
       when: run_backup_validation
-
-    # === SSL/DOMAIN VALIDATION (automation hosts only) ===
-    - name: SSL and domain validation
-      block:
-        - name: Validate domain resolution and SSL prerequisites
-          ansible.builtin.include_role:
-            name: automation
-            tasks_from: ssl_domain_validate
-
-        - name: Validate Traefik routing configuration
-          ansible.builtin.include_role:
-            name: automation
-            tasks_from: traefik_routing_validate
-
-        - name: Validate DNS01 challenge prerequisites
-          ansible.builtin.include_role:
-            name: automation
-            tasks_from: dns01_prerequisites
-      when:
-        - run_ssl_domain_validation
-        - "'automation' in group_names"
 
     # === POST-DEPLOYMENT VALIDATION ===
     - name: Post-deployment service validation
@@ -227,13 +207,6 @@
           Service Startup:
           [OK] Service dependencies validated
           [OK] Startup order verified
-          {% endif %}
-
-          {% if run_ssl_domain_validation and 'automation' in group_names %}
-          SSL/Domain:
-          [OK] Domain resolution verified
-          [OK] Cloudflare API access confirmed
-          [OK] SSL prerequisites met
           {% endif %}
 
           {% if run_post_deployment_validation %}

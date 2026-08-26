@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Local automation-stack -> Syncthing backup: consistent Firefly DB dump,
+# Vaultwarden sqlite snapshot + attachments, and the generated .env.
+# Primary/off-site backup is restic (see restic_backup.yml). Managed by Ansible.
+#
+# The script embeds NO secrets: database credentials are read from the
+# container's own environment (compose project), and the generated .env file is
+# copied as-is because it is already the secret carrier.
+set -euo pipefail
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: automation-syncthing-backup"
+  echo ""
+  echo "Back up the automation stack (mariadb dump, vaultwarden db + attachment,"
+  echo ".env) to the Syncthing-shared folder. Sends ntfy on success or failure."
+  exit 0
+fi
+
+trap 'ntfy-notify "$(hostname): automation stack backup failed" \
+  "Unexpected error at line $LINENO. Check /var/log/automation-syncthing-backup.log." high rotating_light,error' ERR
+
+STACK_HOME="{{ automation_stack_home }}"
+DEST="{{ automation_backup_dir }}"
+RETENTION="{{ automation_backup_retention }}"
+OWNER="{{ automation_backup_owner }}"
+VAULT_DATA="{{ automation_data_path }}/vaultwarden"
+STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
+
+mkdir -p "$DEST/$STAMP"
+cd "$STACK_HOME"
+
+# 1. Consistent MariaDB dump, piped from the container so the credentials only
+#    ever exist inside compose's network, never on the host.
+docker compose exec -T mariadb sh -c \
+  'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction -u "$MARIADB_USER" "$MARIADB_DATABASE"' \
+  | gzip > "$DEST/$STAMP/firefly.sql.gz"
+
+# 2. Vaultwarden database snapshot. VACUUM INTO takes a consistent copy of the
+#    live database even while the server is writing to it.
+sqlite3 "$VAULT_DATA/db.sqlite3" \
+  "VACUUM INTO '$DEST/$STAMP/vaultwarden.db'"
+
+# 3. Vaultwarden attachments (may not exist if the folder was never populated).
+if [ -d "$VAULT_DATA/attachments" ]; then
+  tar -C "$VAULT_DATA" -czf "$DEST/$STAMP/attachments.tar.gz" attachments
+fi
+
+# 4. Generated .env (the stack's only secret carrier, restored for disaster
+#    recovery together with the compose file).
+cp "$STACK_HOME/.env" "$DEST/$STAMP/automation.env"
+
+# Retention: keep the newest $RETENTION snapshot directories; wipe the rest.
+ls -1dt "$DEST"/20* "$DEST"/19* 2>/dev/null \
+  | tail -n +"$((RETENTION + 1))" \
+  | xargs -r rm -rf
+
+# Hand ownership to the Syncthing user so the mesh can replicate the files.
+chown -R "$OWNER" "$DEST"
+
+ntfy-notify "$(hostname): automation stack backup successful" \
+  "MariaDB dump, Vaultwarden snapshot and stack env replicated to $DEST." default white_check_mark

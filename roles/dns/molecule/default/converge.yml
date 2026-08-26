@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    # Mirrors the pi-dns-test host_vars, with public resolvers so the
+    # Mirrors the pi-dns host_vars, with public resolvers so the
     # container's own resolver checks can actually resolve.
     vault_pihole_webpassword: molecule-test-password
     dns_pihole_dns_servers:

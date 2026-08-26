@@ -89,7 +89,7 @@
   gather_facts: true
   roles:
     - role: automation
-      tags: [automation, traefik]
+      tags: [automation, services]
 
 - name: Configure monitoring infrastructure
   hosts: monitoring

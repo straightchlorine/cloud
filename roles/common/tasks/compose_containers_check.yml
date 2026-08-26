@@ -1,0 +1,31 @@
+---
+# Hard-fail on any critical compose service that is not running. Callers pass
+# compose_file_path, compose_owner and compose_critical_services. Needs a live
+# Docker daemon - only used from post-deploy validation, never in molecule.
+
+- name: Get the compose container states
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker compose -f {{ compose_file_path }} ps --format json
+  become: true
+  become_user: "{{ compose_owner }}"
+  changed_when: false
+  register: common_compose_ps
+  args:
+    executable: /bin/bash
+
+- name: Parse the container states
+  ansible.builtin.set_fact:
+    common_compose_containers: "{{ common_compose_ps.stdout_lines | map('from_json') | list }}"
+
+- name: Fail on non-running critical services
+  ansible.builtin.fail:
+    msg: >-
+      Container {{ item.Service }} is not running (State: {{ item.State }},
+      Health: {{ item.Health | default('n/a') }})
+  when:
+    - item.Service in compose_critical_services
+    - item.State != "running"
+  loop: "{{ common_compose_containers }}"
+  loop_control:
+    label: "{{ item.Service }}"

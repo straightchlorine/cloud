@@ -1,38 +1,40 @@
-# Automation Stack Role
+# Automation Role
 
-Traefik reverse proxy with SSL automation and complementary services for
-infrastructure management.
+Docker compose stack for personal automation services on a Raspberry Pi:
+Vaultwarden (passwords), Firefly III (finance, + MariaDB and its cron sidecar)
+and Watchtower (container updates). TLS terminates at the central reverse
+proxy (moving onto the Kubernetes cluster on a separate node) — this role
+publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 
 ## Services
 
-- **Traefik** (80/443): Reverse proxy with Let's Encrypt SSL automation
-- **InfluxDB 3.0 Core** (:8181): Time-series database
-- **InfluxDB Explorer UI** (:8888): Web UI for InfluxDB
-- **Vaultwarden** (Bitwarden): Password manager server
-- **Portainer** (:9000): Docker management interface
-- **Dozzle** (:8080): Docker logs viewer
+- **Vaultwarden** (`:8081` on `primary_ip`): password manager (tailnet-only)
+- **Firefly III** (`:8082` on `primary_ip`): finance manager (tailnet-only)
+- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.4`
+- **firefly-cron** (compose-internal): drives Firefly's recurring transactions
+- **Watchtower** (`127.0.0.1:8084`): nightly container updates, label-gated
+- **Monitoring**: Node/Docker exporters, deployed by the `prometheus-exporters`
+  role (not by this one)
 
 ## Deployment
 
 ### Prerequisites
 
-- Raspberry Pi 4B or better
-- SSD mounted at `/mnt/automation-data`
-- Domain configured at registrar
-- Cloudflare API token for DNS-01 challenge
+- Raspberry Pi 4B (production) with an SSD attached (`ssd_device`)
+- Reverse proxy in place fronting `vault.*` / `firefly.*` over the tailnet
 
 ### Deploy
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/automation-stack.yml --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  --limit automation --ask-vault-pass
 ```
 
-Or via main playbook:
+### Validation Only
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit \
-  automation --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml \
+  playbooks/site.yml --limit automation --tags validation --ask-vault-pass
 ```
 
 ## Configuration
@@ -40,263 +42,93 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit \
 ### Required Variables (vault.yml)
 
 ```yaml
-
-# Domain and SSL (required)
-vault_domain_name: "yourdomain.com"
-vault_letsencrypt_email: "your@email.com"
-
-# Traefik authentication
-vault_traefik_basic_auth: "admin:$2y$10$hashedpassword"
-# Generate: htpasswd -nbB admin your-password
-
-# Cloudflare API for DNS-01 challenges
-vault_cloudflare_api_token: "your_cloudflare_api_token"
-# Required permissions: Zone:Read, DNS:Edit
-
-
-# InfluxDB session secret
-vault_influxdb3_session_secret_key: >
-  "your-session-secret-32-chars-min"
-# Generate: openssl rand -base64 32
-
-# Backup configuration
-vault_restic_automation_password: "32_character_secure_password"
-vault_backup_repository_base: "sftp:user@backup-server:/backups"
-
-# Optional: Watchtower API token
-vault_watchtower_api_token: "watchtower_api_token"
+vault_vaultwarden_admin_token: "openssl rand -base64 32"
+vault_firefly_app_key: "openssl rand -base64 32"
+vault_firefly_static_cron_token: "openssl rand -hex 16"
+vault_firefly_db_password: "openssl rand -base64 32"
+vault_watchtower_api_token: "openssl rand -base64 32"
 ```
 
 ### Host Variables (host_vars/pi-automation.yml)
 
 ```yaml
-# Device configuration
 device_type: rpi4b
-automation_stack_home: "/home/automation/automation-stack"
-
-# Storage configuration
 ssd_device: "/dev/sda1"
-automation_data_path: "/mnt/automation-data"
+automation_data_path: "/mnt/automation-data"   # SSD mount; docker data-root + journald live here too
+automation_stack_home: "/home/automation/automation-stack"
+automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
 
-# Service configuration
-services_enabled:
-  traefik: true
+# Secondary local backup (mariadb dump + vaultwarden snapshot) into Syncthing
+automation_backup_enabled: true
+automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_owner: "automation"
+common_syncthing_enabled: true
 
-# Ports
-traefik_web_port: 80
-traefik_websecure_port: 443
-traefik_dashboard_port: 8080
-
-# User configuration
-automation_user: automation
-automation_uid: 1000
-automation_gid: 1000
-
-# Subdomains
-subdomain_traefik: "traefik"
-subdomain_influxdb: "influxdb"
-subdomain_explorer: "influxdb-ui"
-subdomain_dozzle: "dozzle"
-subdomain_portainer: "portainer"
-subdomain_vaultwarden: "vault"
-
-# Backup configuration
+# Off-site restic backup (primary)
 restic_enabled: true
-restic_repository: "{{ vault_backup_repository_base }}/automation"
+restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
 restic_password: "{{ vault_restic_automation_password }}"
-backup_directories:
-  - "{{ automation_stack_home }}"
-  - "{{ automation_data_path }}"
-  - "/var/lib/docker/volumes"
 ```
 
-## Directory Structure
+## Security
 
-### Stack Home (`/home/automation/automation-stack/`)
+- **Secrets**: only in vault; rendered to a 0600 `.env` next to the compose
+  file and interpolated via `${VAR}` — the compose file itself stays secretless
+- **Signup hardening**: `SIGNUPS_ALLOWED=false`, `INVITATIONS_ALLOWED=false`,
+  `SHOW_PASSWORD_HINT=false` on Vaultwarden
+- **TRUSTED_PROXIES**: scoped to the tailnet CIDR (validate.yml refuses `**`)
+- **Watchtower**: opt-in per container (`com.centurylinklabs.watchtower.enable=true`);
+  MariaDB is pinned and unlabelled — DB upgrades are never automatic
+- **Ports**: service ports bound to `primary_ip` (tailnet-reachable), Watchtower
+  metrics API on `127.0.0.1` only
+- **Storage**: SSD is mandatory — service data, docker `data-root` and journald
+  all relocate off the SD card; no named volumes, bind mounts only
 
-```
-/home/automation/automation-stack/
-├── docker-compose.yml              # Generated Docker Compose file
-├── config/
-│   ├── traefik/
-│   │   ├── traefik.yml            # Static configuration
-│   │   └── dynamic.yml            # Dynamic routing rules
-│   ├── dozzle/                    # Dozzle configuration
-│   └── influxdb3-explorer/        # InfluxDB UI config
-├── scripts/
-│   └── manage-automation.sh       # Stack management script
-└── logs/                          # Stack logs
-```
+## Tag policy
 
-### Data Path (`/mnt/automation-data/`)
+Application images float (`latest`) — that is what Watchtower updates. The
+known exception: `mariadb:11.4` and the `alpine:3.20` cron sidecar are
+minor-pinned and excluded from auto-update; bump them deliberately.
 
-```
-/mnt/automation-data/
-├── traefik/                       # Traefik data (ACME certificates)
-├── influxdb3/
-│   ├── data/                      # InfluxDB data files
-│   └── plugins/                   # InfluxDB plugins
-├── influxdb3-explorer/            # UI database
-├── vaultwarden/                   # Vaultwarden data
-├── portainer/                     # Portainer data
-└── backups/                       # Service backups
-```
+## Teardown & Re-test
 
-## Operations
-
-### Stack Management
+The role ships a repeatable teardown for disposable test hosts (e.g.
+`pi-test-automation`), so the same box can be re-deployed and re-tested
+end-to-end:
 
 ```bash
-# System shortcuts (created by deployment)
-manage-automation start
-manage-automation stop
-manage-automation restart
-manage-automation status
-manage-automation logs
+# 1. Tear down the automation role on the test host
+ansible-playbook -i inventory/production playbooks/automation-teardown.yml \
+  --limit pi-test-automation -e automation_teardown_confirm=true
 
-# Direct management
-cd /home/automation/automation-stack
-docker compose up -d
-docker compose down
-docker compose restart
-docker compose logs -f
+# 2. Verify the box is clean enough for a fresh test
+./scripts/automation/validate-clean.sh pi-test-automation
+
+# 3. Re-deploy, then verify the box is actually healthy end-to-end
+ansible-playbook -i inventory/production playbooks/site.yml \
+  --limit pi-test-automation --tags automation --ask-vault-pass
+./scripts/automation/validate-deploy.sh pi-test-automation
 ```
 
-### SSL Certificate Management
+The teardown playbook refuses to run without
+`automation_teardown_confirm=true` and hard-refuses the production host
+(`pi-automation` / `192.168.20.20`). It stops and removes the systemd unit,
+the compose project (when a Docker daemon answers), the management script, the
+backup script + cron and Syncthing, and ends with a self-check that fails if
+any role artifact survives. `automation_data_path` (user data) intentionally
+stays.
 
-```bash
-# Check certificate status
-docker compose exec traefik cat /data/acme.json | jq
+## Validation
 
-# Force certificate renewal
-docker compose restart traefik
+Pre-deployment (`validate.yml`) checks that:
 
-# View Traefik logs for certificate issues
-docker compose logs traefik -f
-```
+- Required variables are defined and contain no vault placeholder values
+- The host runs a Debian-family OS
+- The parent directories of the stack paths exist
+- `automation_trusted_proxies` is not the `**` catch-all
 
-### Service Access
+Post-deployment (`post_deploy_validate.yml`) checks that:
 
-```bash
-# Local dashboard access (localhost only)
-curl http://localhost:8080/api/version
-
-# Public service access (requires domain DNS)
-curl https://traefik.yourdomain.com
-curl https://influxdb.yourdomain.com/health
-curl https://vault.yourdomain.com
-```
-
-## Traefik Configuration
-
-### SSL and Domain Setup
-
-Traefik automatically configures SSL via:
-
-- **DNS Provider**: Cloudflare (DNS-01 challenge)
-- **ACME Provider**: Let's Encrypt
-- **Certificate Storage**: `/mnt/automation-data/traefik/acme.json`
-
-Configuration requires:
-
-1. Domain DNS pointing to pi-automation IP
-1. Cloudflare API token with Zone:Read and DNS:Edit permissions
-1. Let's Encrypt email for certificate notices
-
-### Service Routing
-
-Services automatically routed via subdomains:
-
-```
-traefik.yourdomain.com     → Traefik Dashboard (localhost:8080)
-influxdb.yourdomain.com    → InfluxDB API (:8181)
-influxdb-ui.yourdomain.com → InfluxDB Explorer (:8888)
-vault.yourdomain.com       → Vaultwarden (:80)
-portainer.yourdomain.com   → Portainer (:9000)
-dozzle.yourdomain.com      → Dozzle (:8080)
-```
-
-### Adding New Services
-
-1. Update `config/traefik/dynamic.yml` with service routing
-1. Add service container to `docker-compose.yml`
-1. Restart Traefik: `docker compose restart traefik`
-
-## Monitoring
-
-### Service Health
-
-```bash
-# Check all services
-docker compose ps
-
-# Individual service health
-curl https://influxdb.yourdomain.com/health
-docker compose exec vaultwarden curl http://localhost/alive
-
-# Check certificate status
-curl https://traefik.yourdomain.com -v | grep -A2 "SSL certificate"
-```
-
-### Performance
-
-```bash
-# Monitor resource usage
-docker stats
-
-# Check disk usage
-du -sh /mnt/automation-data/*
-
-# View service logs
-docker compose logs -f [service]
-```
-
-## Backup
-
-### Automatic Backup
-
-- **Schedule**: Configured via `restic_enabled: true`
-- **Repository**: `{{ vault_backup_repository_base }}/automation`
-- **Paths**: Stack configuration, database data, Vaultwarden data
-
-### Manual Backup
-
-```bash
-# Create backup
-sudo -u backup /opt/backup/scripts/backup-automation.sh
-
-# List snapshots
-sudo -u backup restic snapshots \
-  --password-file /opt/backup/keys/automation-password --repository [repo]
-
-# Restore Traefik certificates
-sudo -u backup restic restore latest --target /tmp/restore \
-  --password-file /opt/backup/keys/automation-password \
-  --repository [repo] --include /mnt/automation-data/traefik
-```
-
-## Troubleshooting
-
-### SSL Certificate Issues
-
-```bash
-# Check Traefik logs for certificate errors
-docker compose logs traefik -f
-
-# Verify DNS resolution
-dig yourdomain.com
-dig traefik.yourdomain.com
-
-# Test Cloudflare connectivity
-curl -H "Authorization: Bearer $token" \
-  https://api.cloudflare.com/client/v4/user/tokens/verify
-
-# Check certificate file
-docker compose exec traefik cat /data/acme.json | jq .
-```
-
-## SSL Certificates
-
-- Automatic renewal via Let's Encrypt
-- Cloudflare DNS-01 challenge (no firewall port exposure)
-- Certificate stored in encrypted acme.json
+- All five critical compose containers report running
+- Vaultwarden answers `/alive` and Firefly serves its frontend on `primary_ip`
+- MariaDB answers `mariadb-admin ping`

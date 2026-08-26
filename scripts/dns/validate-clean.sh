@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Post-teardown check for a disposable DNS test host (default pi-dns-test).
+# Post-teardown check for a disposable DNS test host (default pi-dns-test -
+# not in the inventory while the spare Pi stages automation as pi-test-automation;
+# move the host back into the dns group to run the DNS cycle).
 # Run after playbooks/dns-teardown.yml to confirm the box is clean enough for
 # a fresh dns-role test. Pairs with validate-deploy.sh (deployed host check).
 # Usage: ./scripts/dns/validate-clean.sh [ansible-host-alias]

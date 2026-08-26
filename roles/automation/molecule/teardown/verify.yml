@@ -1,0 +1,46 @@
+---
+- name: Verify the teardown left a clean host
+  hosts: all
+  become: true
+  vars:
+    automation_stack_home: /home/automation/automation-stack
+  tasks:
+    - name: Stat everything the teardown should have removed
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/automation-syncthing-backup
+        - /usr/local/bin/manage-automation
+        - /etc/systemd/system/automation-stack.service
+        - /var/log/automation-syncthing-backup.log
+        - "{{ automation_stack_home }}"
+      register: automation_teardown_leftovers
+
+    - name: Assert no role artifact survives the teardown
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} still exists after teardown"
+        success_msg: "[OK] {{ item.item }} removed"
+      loop: "{{ automation_teardown_leftovers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      changed_when: false
+      failed_when: false
+      register: automation_teardown_crontab
+
+    - name: Assert the role's cron job is gone
+      ansible.builtin.assert:
+        that:
+          - "'Automation Syncthing local backup' not in (automation_teardown_crontab.stdout | default(''))"
+        fail_msg: "Cron job survived the teardown: {{ automation_teardown_crontab.stdout | default('') }}"
+        success_msg: "[OK] automation backup cron job removed"
+
+    - name: Assert the automation-stack service is not active
+      ansible.builtin.systemd:
+        name: automation-stack
+      register: automation_teardown_unit
+      failed_when: automation_teardown_unit.status.ActiveState == 'active'

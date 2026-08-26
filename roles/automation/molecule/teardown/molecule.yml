@@ -16,7 +16,7 @@ provisioner:
   env:
     # CI/local both run `cd roles/<role> && molecule test`, so
     # MOLECULE_PROJECT_DIRECTORY is roles/automation - one level up is roles/,
-    # letting the role's include_role calls (os, common) resolve by name.
+    # letting the role's include_role calls (common) resolve by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 
 verifier:

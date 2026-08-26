@@ -100,7 +100,9 @@
       else {})
       | combine({"userns-remap": "default",
       "log-driver": "json-file",
-      "log-opts": {"max-size": "10m", "max-file": "3"}}) | to_nice_json }}
+      "log-opts": {"max-size": "10m", "max-file": "3"}})
+      | combine(common_docker_data_root is defined
+      | ternary({"data-root": common_docker_data_root}, {})) | to_nice_json }}
     dest: /etc/docker/daemon.json
     owner: root
     group: root

@@ -153,7 +153,7 @@ deploy-service playbook:
 
 # ---------- validate ----------
 
-# Validate infrastructure (type: full, backup, vault, pre_deployment, post_deployment, service_startup, ssl_domain)
+# Validate infrastructure (type: full, backup, vault, pre_deployment, post_deployment, service_startup)
 [group: 'validate']
 validate type:
     ansible-playbook validate-infrastructure.yml -e validation_type={{ type }} --ask-vault-pass

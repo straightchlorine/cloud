@@ -1,126 +1,22 @@
 ---
-# Post-deployment validation for automation stack
-# Verifies all automation_containers are running and services are accessible
+# Proves the running stack, never side effects: container states first, then
+# real endpoint/business checks over the same paths gatus uses.
 
-- name: Wait for Docker compose stack to be ready
-  ansible.builtin.pause:
-    seconds: 30
-    prompt: "Waiting for automation stack automation_containers to start..."
+- name: Verify the critical compose containers are running
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: compose_containers_check
+  vars:  # noqa: var-naming[no-role-prefix]
+    compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_critical_services:
+      - vaultwarden
+      - firefly
+      - firefly-cron
+      - mariadb
+      - watchtower
   tags: [post_validation]
 
-- name: Check Docker automation_containers are running
-  ansible.builtin.shell: |
-    cd "{{ automation_stack_home }}"
-    docker compose ps --format json
-  register: automation_container_status
-  become: true
-  become_user: "{{ automation_user }}"
-  changed_when: false
-  tags: [post_validation]
-
-- name: Parse container status
-  ansible.builtin.set_fact:
-    automation_containers: "{{ automation_container_status.stdout_lines | map('from_json') | list }}"
-  tags: [post_validation]
-
-- name: Verify critical automation_containers are running
-  ansible.builtin.fail:
-    msg: "Container {{ item.Service }} is not running (State: {{ item.State }})"
-  when:
-    - item.State != "running"
-    - item.Service in critical_services
-  loop: "{{ automation_containers }}"
-  loop_control:
-    label: "{{ item.Service }}"
-  vars:
-    critical_services: ["traefik", "vaultwarden", "influxdb3-core"]
-  tags: [post_validation]
-
-- name: Test Traefik dashboard accessibility
-  ansible.builtin.uri:
-    url: "http://localhost:{{ automation_traefik_dashboard_port }}"
-    method: GET
-    timeout: 10
-  register: automation_traefik_dashboard
-  tags: [post_validation]
-
-- name: Test Traefik web port
-  ansible.builtin.wait_for:
-    port: "{{ automation_traefik_web_port }}"
-    timeout: 30
-  tags: [post_validation]
-
-- name: Test HTTPS port
-  ansible.builtin.wait_for:
-    port: "{{ automation_traefik_websecure_port }}"
-    timeout: 30
-  tags: [post_validation]
-
-- name: Test Vaultwarden accessibility (if enabled)
-  ansible.builtin.uri:
-    url: "https://{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
-    method: GET
-    timeout: 10
-    validate_certs: false
-  register: automation_vaultwarden_test
-  failed_when: false
-  when: automation_services_enabled.vaultwarden
-  tags: [post_validation]
-
-- name: Test InfluxDB accessibility
-  ansible.builtin.uri:
-    url: "http://localhost:8086/health"
-    method: GET
-    timeout: 10
-  register: automation_influxdb_health
-  failed_when: false
-  tags: [post_validation]
-
-- name: Check container health status
-  ansible.builtin.shell: |
-    cd "{{ automation_stack_home }}"
-    docker compose ps --format "table {{.Service}}\t{{.State}}\t{{.Health}}"
-  register: automation_health_status
-  become: true
-  become_user: "{{ automation_user }}"
-  changed_when: false
-  tags: [post_validation]
-
-- name: Run SSL/Domain validation for DNS01 setup
-  ansible.builtin.include_tasks: ssl_domain_validate.yml
-  tags: [post_validation, ssl_validation]
-
-- name: Run Traefik routing validation
-  ansible.builtin.include_tasks: traefik_routing_validate.yml
-  tags: [post_validation, routing_validation]
-
-- name: Run DNS01 prerequisites validation
-  ansible.builtin.include_tasks: dns01_prerequisites.yml
-  tags: [post_validation, dns01_validation]
-
-- name: Display automation stack validation results
-  ansible.builtin.debug:
-    msg: |
-      [OK] Automation Stack Post-Deployment Validation Results:
-
-      Container Status:
-      {{ automation_health_status.stdout }}
-
-      Service Health:
-      Traefik Dashboard: {{ 'Accessible' if automation_traefik_dashboard.status == 200 else 'Failed' }}
-      HTTP Port ({{ automation_traefik_web_port }}): Listening
-      HTTPS Port ({{ automation_traefik_websecure_port }}): Listening
-      InfluxDB Health: {{ 'Healthy' if automation_influxdb_health.status == 200 else 'Check Required' }}
-      Vaultwarden: {{
-          'Accessible' if (automation_vaultwarden_test.status | default(0)) == 200
-          else 'Not tested or failed' }}
-
-      🔒 SSL/Domain Configuration:
-      [OK] DNS01 challenge prerequisites validated
-      [OK] Domain resolution verified from multiple resolvers
-      [OK] Cloudflare API connectivity confirmed
-      [OK] Traefik routing configuration validated
-      [OK] SSL certificate management ready
-
-      [OK] All critical services and SSL configuration validated successfully!
+- name: Verify the reachable services answer
+  ansible.builtin.include_tasks: post_deploy_apps.yml
   tags: [post_validation]

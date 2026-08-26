@@ -1,36 +1,41 @@
 ---
-- name: Verify fail-fast validation worked
+- name: Verify automation fail-fast validation
   hosts: all
+  become: true
   tasks:
-    - name: Confirm fail-fast-validation test completed
+    - name: Stat the per-case marker files converge wrote
+      # Converge and verify run as separate processes, so each case drops a
+      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
+      register: automation_failfast_markers
+
+    - name: Assert all four fail-fast cases completed
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing - the corresponding case in converge.yml
+          either did not fail or failed for an unexpected reason.
+        success_msg: "[OK] {{ item.item }} recorded"
+      loop: "{{ automation_failfast_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Display fail-fast validation summary
       ansible.builtin.debug:
         msg: |
-          [OK] Fail-fast validation scenario verified
+          [OK] Automation Fail-Fast Validation Test Complete
 
-          Note: Validation correctly failed in converge step
-          when required variables were missing
+          Case 1 - missing required variable (automation_trusted_proxies): FAILED as expected
+          Case 2 - placeholder vault secret (vault_firefly_app_key): FAILED as expected
+          Case 3 - TRUSTED_PROXIES catch-all ('**'): FAILED as expected
+          Case 4 - missing ssd_device: FAILED as expected
 
-          This confirms the fail-fast principle works as designed
-
-    - name: Display fail-fast validation verification
-      ansible.builtin.debug:
-        msg: |
-          [OK] Fail-Fast Validation Test Complete
-
-          Test Scenario: Missing required variables
-          - domain_name: NOT SET (required)
-          - vault_domain_name: NOT SET (required)
-          - vault_letsencrypt_email: NOT SET (required)
-          - automation_data_path: NOT SET (required)
-          - automation_stack_home: NOT SET (required)
-          - automation_user: NOT SET (required)
-          - automation_uid: NOT SET (required)
-          - automation_gid: NOT SET (required)
-          - vault_traefik_basic_auth: NOT SET (required)
-          - vault_cloudflare_api_token: NOT SET (required)
-          - automation_services_enabled: NOT SET (required)
-          - restic_enabled: NOT SET (required)
-
-          Result: Role validation correctly failed in converge step
-          This confirms the "fail-fast" principle:
-          Role fails immediately with clear error when required variables missing
+          All four cases ran the real roles/automation/tasks/validate.yml end to end -
+          no hand-copied guards anywhere in this scenario.

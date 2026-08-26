@@ -1,0 +1,84 @@
+---
+- name: Converge - deploy what a container allows, then run the real teardown
+  hosts: all
+  become: true
+  vars:
+    ansible_user: root
+    timezone: UTC
+    domain_name: example.test
+    vault_domain_name: example.test
+    vault_letsencrypt_email: test@example.test
+    vault_firefly_app_key: molecule-test-app-key
+    vault_firefly_static_cron_token: molecule-test-cron-token
+    vault_firefly_db_password: molecule-test-db-password
+    vault_vaultwarden_admin_token: molecule-test-admin-token
+    vault_watchtower_api_token: molecule-test-watchtower-token
+    automation_trusted_proxies: "100.64.0.0/10"
+    automation_data_path: /mnt/automation-data
+    automation_stack_home: /home/automation/automation-stack
+    automation_backup_enabled: true
+    automation_backup_dir: /tmp/molecule-automation-backup
+    automation_backup_owner: molecule
+    restic_enabled: false
+    ssd_device: /dev/vdb
+    common_start_stack: false
+  pre_tasks:
+    - name: Create the stack-home parent (validate.yml asserts it exists)
+      ansible.builtin.file:
+        path: "{{ automation_stack_home | dirname }}"
+        state: directory
+        mode: "0755"
+
+  tasks:
+    # Deploy side: the container-safe parts of a real automation deploy (the
+    # compose render, .env generation, manage script, backup script + cron) so
+    # the teardown has real things to remove. All tagged
+    # molecule-idempotence-notest: this is the scenario's ARRANGE phase - the
+    # teardown below removes everything it creates, so the idempotence rerun
+    # must skip it; the system under test is the teardown, which must converge.
+    - name: Gather network facts for dynamic configuration
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+      tags: [molecule-idempotence-notest]
+
+    - name: Run the real stack deployment
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: stack
+      tags: [molecule-idempotence-notest]
+
+    - name: Run the real backup deployment
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: backup
+      tags: [molecule-idempotence-notest]
+
+    # Fixture: what docker_stack_service would have created on a real host (a
+    # container has no docker.service, so the unit is faked here only to give
+    # the teardown a real unit file to stop and remove).
+    - name: Create the fake automation-stack service unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Automation Stack (molecule fixture)
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/automation-stack.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
+    # The real teardown, exactly as playbooks/automation-teardown.yml would
+    # run it after setting teardown_confirmed. Its own trailing
+    # self-verification (artifacts gone, cron gone) runs as part of this
+    # include. docker compose down is skipped by its docker-info guard (no
+    # daemon in the container).
+    - name: Run the real automation role teardown
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: teardown
+      vars:
+        teardown_confirmed: true

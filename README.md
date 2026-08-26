@@ -16,7 +16,7 @@ graph TB
         direction LR
         dns["<b>pi-dns</b><br/>Pi-hole + NTP"]
         music["<b>pi-music</b><br/>Navidrome + yt-dlp + Beets"]
-        automation["<b>pi-automation</b><br/>Traefik + Vaultwarden<br/> + Portainer"]
+        automation["<b>pi-automation</b><br/>Vaultwarden + Firefly III<br/> + MariaDB + Watchtower"]
         monitoring["<b>debian-monitoring</b><br/>Grafana + Prometheus<br/>Loki + Alertmanager"]
     end
     backup["Backup Coordinator<br/>(Restic -> Hetzner)"]
@@ -60,7 +60,7 @@ roles/
 ├── common/              # Docker, packages, network facts, backup
 ├── dns/                 # Pi-hole DNS + Chrony NTP
 ├── music-stack/         # Navidrome + yt-dlp + Beets
-├── automation/          # Traefik + Vaultwarden + InfluxDB + Portainer
+├── automation/          # Vaultwarden + Firefly III + MariaDB + Watchtower
 ├── monitoring/          # Grafana + Prometheus + Loki + Alertmanager
 ├── backup/              # Restic multi-tier backup (standalone + coordinator)
 ├── backup-system/       # Enterprise backup coordinator

@@ -1,5 +1,7 @@
 ---
-# Raspberry Pi 4 specific configuration
+# Raspberry Pi 4 (production automation host): vaultwarden, firefly + mariadb,
+# watchtower. TLS terminates at the central reverse proxy; services publish
+# plain HTTP on the host IP.
 
 device_type: rpi4b
 device_specs:
@@ -8,64 +10,51 @@ device_specs:
   architecture: "aarch64"
 
 ssd_device: "/dev/sda1"
-# SSD configuration inherited from group_vars/services.yml common_ssd_config
 automation_data_path: "/mnt/automation-data"
-
-# Subdomains for automation services
-automation_subdomain_traefik: "traefik"
-automation_subdomain_influxdb: "influxdb"
-automation_subdomain_explorer: "influxdb-ui"
-automation_subdomain_dozzle: "dozzle"
-automation_subdomain_portainer: "portainer"
-automation_subdomain_vaultwarden: "vault"
-
-# Automation stack configuration
 automation_stack_home: "/home/automation/automation-stack"
+# D5 SD-card protection: Docker's data-root lives on the SSD too.
+common_docker_data_root: "/mnt/automation-data/docker"
 
-# Firewall configuration
+# Subdomains served by the central reverse proxy (reached over the tailnet).
+automation_subdomain_vaultwarden: "vault"
+automation_subdomain_firefly: "firefly"
+
+# Firefly trusts only the reverse-proxy/tailnet CIDR(s) that send it requests -
+# never '*'. Adjust the prefix to your real tailnet.
+automation_trusted_proxies: "100.64.0.0/10"
+
+# Firewall: SSH + the two tailnet-reachable service ports. Watchtower metrics
+# API is bound to 127.0.0.1, so it needs no rule.
 common_firewall_ports:
   - {port: 22, comment: "SSH"}
-  - {port: 80, comment: "HTTP"}
-  - {port: 443, comment: "HTTPS"}
+  - {port: 8081, comment: "Vaultwarden"}
+  - {port: 8082, comment: "Firefly III"}
 
-# Service enablement
-automation_services_enabled:
-  traefik: true
-
-# Stack management
-restic_enabled: true
+# Stack-level
 common_start_stack: true
 
-# Traefik ports
-automation_traefik_web_port: 80
-automation_traefik_websecure_port: 443
-automation_traefik_dashboard_port: 8080
-
-automation_user: automation
-automation_uid: 1000
-automation_gid: 1000
-
-# Prometheus exporters configuration
+# Prometheus exporters (docker metrics for the stack)
 prometheus_exporters_docker_exporter_enabled: true
 prometheus_role: "automation"
 
-# Enterprise backup configuration
+# Primary/off-site backup - restic.
+restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
 restic_password: "{{ vault_restic_automation_password }}"
 common_backup_directories:
   - "{{ automation_stack_home }}"
   - "{{ automation_data_path }}"
-  - "/var/lib/docker/volumes"
+  - "/var/lib/docker"
   - "/etc/docker"
 backup_exclude_patterns:
   - "*.tmp"
   - "*.log.1*"
   - "**/logs/*"
-  - "docker/overlay2/*"
-
-# Systemd and backup configuration inherited from group_vars/services.yml
-# common_systemd_config and common_backup_config
 common_backup_service_name: "automation"
 
-# Vault variables that must be defined
-vault_watchtower_api_token: "{{ vault_watchtower_api_token }}"
+# Secondary local backup: Syncthing replicates automation_backup_dir.
+# automation_backup_owner must be the Syncthing user (the stack user).
+common_syncthing_enabled: true
+automation_backup_enabled: true
+automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_owner: "automation"

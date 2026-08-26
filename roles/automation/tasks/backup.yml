@@ -1,0 +1,99 @@
+---
+# Backup: restic owns off-site (restic_backup.yml); the secondary LOCAL
+# Syncthing backup below replicates a MariaDB dump and a Vaultwarden snapshot
+# off-box.
+
+- name: Validate local backup configuration
+  ansible.builtin.assert:
+    that:
+      - automation_backup_dir is defined
+      - automation_backup_owner is defined
+    fail_msg: >-
+      automation_backup_dir (the Syncthing-shared folder, on the SSD) and
+      automation_backup_owner (the user that runs Syncthing) must be set in
+      host_vars when automation_backup_enabled is true.
+    quiet: true
+  when: automation_backup_enabled
+
+- name: Ensure the Syncthing backup directory exists
+  ansible.builtin.file:
+    path: "{{ automation_backup_dir }}"
+    state: directory
+    owner: "{{ automation_backup_owner }}"
+    mode: "0750"
+  become: true
+  when: automation_backup_enabled
+
+- name: Install the automation Syncthing backup script
+  ansible.builtin.template:
+    src: automation-syncthing-backup.sh.j2
+    dest: /usr/local/bin/automation-syncthing-backup
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: automation_backup_enabled
+
+- name: Schedule the automation Syncthing backup
+  ansible.builtin.cron:
+    name: "Automation Syncthing local backup"
+    minute: "{{ automation_backup_schedule_minute }}"
+    hour: "{{ automation_backup_schedule_hour }}"
+    job: "/usr/local/bin/automation-syncthing-backup >> /var/log/automation-syncthing-backup.log 2>&1"
+    user: root
+  become: true
+  when: automation_backup_enabled
+
+- name: Install Syncthing (common role, optional)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing
+  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
+
+- name: Gather service facts for the Syncthing folder registration
+  # The registration condition below reads ansible_facts.services - gather it
+  # here so the condition is safe even when nothing else ran service_facts.
+  ansible.builtin.service_facts:
+  when: automation_backup_enabled
+
+- name: Ensure Syncthing backup folder is configured
+  # Best-effort registration for Syncthing replication: the backup script
+  # creates its destination itself, so a failure here must not fail the deploy.
+  ansible.builtin.command: >-
+    syncthing cli config folders list | grep -q "automation-backup" || syncthing cli config folders add
+    --id "automation-backup" --label "automation-backup" --path "{{ automation_backup_dir }}"
+  when: >-
+    common_syncthing_enabled | default(false) | bool
+    and automation_backup_enabled
+    and (ansible_facts['services']['syncthing-user'] is defined
+         and ansible_facts['services']['syncthing-user']['state'] == 'running')
+  changed_when: false
+  ignore_errors: true
+
+- name: Configure unified restic backup  # noqa: var-naming[no-role-prefix]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: restic_backup
+  vars:
+    common_backup_service_name: "automation"
+    common_backup_paths:
+      - "{{ automation_stack_home }}"
+      - "{{ automation_data_path }}"
+    backup_schedule: "0 3 * * *"
+    backup_excludes:
+      - "*.log"
+      - "tmp/*"
+      - "cache/*"
+    pre_backup_commands:
+      - >-
+        docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
+    post_backup_commands:
+      - >-
+        docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
+    backup_ssh_config:
+      host: "{{ backup_ssh_host }}"
+      port: "{{ backup_ssh_port }}"
+      user: "{{ backup_ssh_user }}"
+      remote_path: "/backups"
+  when: restic_enabled
+  tags: [backup]

@@ -203,11 +203,15 @@
 # Reverse storage.yml's journald relocation (real role state that would
 # confuse a retest, unlike the firewall rules which are left alone below).
 - name: Stop systemd-journald before reverting storage relocation
+  # molecule-idempotence-notest: journald is socket-activated - it restarts
+  # whenever anything logs, so state=stopped can never converge on a rerun
+  # (same reasoning as the chrony unit in chrony_sync.yml).
   ansible.builtin.systemd:
     name: systemd-journald
     state: stopped
   become: true
   failed_when: false
+  tags: [molecule-idempotence-notest]
 
 - name: Unmount the journal bind mount if present
   ansible.posix.mount:

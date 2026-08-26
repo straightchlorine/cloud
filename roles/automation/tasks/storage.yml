@@ -1,9 +1,17 @@
 ---
-# Storage setup for automation stack - using common storage logic
+# Mandatory SSD mount: every service data dir, journald and Docker's
+# data-root live on this mount - nothing may touch the SD card.
 
-- name: Include common storage setup  # noqa: var-naming[no-role-prefix]
+- name: Mount the mandatory SSD at the data path
   ansible.builtin.include_role:
     name: common
     tasks_from: storage
-  vars:
+  vars:  # noqa: var-naming[no-role-prefix]
     mount_path: "{{ automation_data_path }}"
+
+- name: Relocate systemd-journald onto the SSD
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: journald_relocate
+  vars:  # noqa: var-naming[no-role-prefix]
+    common_journald_path: "{{ automation_data_path }}/journal"

@@ -1,12 +1,18 @@
 ---
-# Automation stack deployment validation
-# Uses unified validation framework to eliminate redundancy
+# Fail-fast pre-deployment validation for the automation stack.
+# Also included directly by site.yml's pre-validation (not via main.yml), so it
+# re-runs os discovery itself - cheap and idempotent.
 
-- name: Run automation stack comprehensive validation  # noqa: var-naming[no-role-prefix]
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run automation stack comprehensive validation
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
-  vars:
+  vars:  # noqa: var-naming[no-role-prefix]
     validation_context: "automation stack"
     validation_type: "full"
     validation_role: "automation"
@@ -16,35 +22,33 @@
       - vault_letsencrypt_email
       - automation_data_path
       - automation_stack_home
-      - automation_user
-      - automation_uid
-      - automation_gid
-      - vault_traefik_basic_auth
-      - vault_cloudflare_api_token
-      - automation_services_enabled
+      - automation_trusted_proxies
+      - ssd_device
       - restic_enabled
       - restic_repository
       - restic_password
-      - backup_ssh_host
-      - backup_ssh_port
-      - backup_ssh_user
-      - start_stack
-      - automation_traefik_web_port
-      - automation_traefik_websecure_port
-      - automation_traefik_dashboard_port
-      - automation_letsencrypt_staging
     vault_placeholders:
-      - { var: "vault_cloudflare_api_token", value: "your-cloudflare-api-token-here" }
-      - { var: "vault_restic_automation_password", value: "your-32-character-secure-restic-password" }
-      - { var: "vault_influxdb3_session_secret_key", value: "example-session-secret-key" }
-    common_backup_directories:
-      - "{{ automation_stack_home }}"
-      - "{{ automation_data_path }}"
-    critical_backup_paths:
-      - "{{ automation_stack_home }}"
+      - { var: "vault_firefly_app_key", value: "your-firefly-app-key" }
+      - { var: "vault_firefly_static_cron_token", value: "your-firefly-static-cron-token" }
+      - { var: "vault_firefly_db_password", value: "your-firefly-db-password" }
+      - { var: "vault_vaultwarden_admin_token", value: "your-vaultwarden-admin-token" }
+      - { var: "vault_watchtower_api_token", value: "your-watchtower-api-token" }
   tags: [validation]
 
-- name: Validate automation parent directories exist
+- name: Confirm the host OS and architecture are supported
+  ansible.builtin.assert:
+    that:
+      - os_family == "Debian"
+    fail_msg: >-
+      automation requires a Debian-family OS; got
+      {{ os_family | default('unknown') }}
+      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
+    success_msg: >
+      [OK] Supported OS: {{ os_name }} {{ os_version }}
+      ({{ os_family }}).
+  tags: [validation]
+
+- name: Validate the parent directories of the stack paths exist
   ansible.builtin.stat:
     path: "{{ item | dirname }}"
   register: automation_parent_path_check
@@ -52,107 +56,13 @@
   loop:
     - "{{ automation_data_path }}"
     - "{{ automation_stack_home }}"
+  tags: [validation]
 
-- name: Check if automation directories exist
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: automation_dir_check
-  loop:
-    - "{{ automation_data_path }}"
-    - "{{ automation_stack_home }}"
-
-- name: Create automation directories if they don't exist
-  ansible.builtin.file:
-    path: "{{ item.item }}"
-    state: directory
-    owner: "{{ automation_user }}"
-    group: "{{ automation_user }}"
-    mode: "0755"
-  when: not item.stat.exists
-  loop: "{{ automation_dir_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  become: true
-
-- name: Check if automation user exists
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ automation_user }}"
-  register: automation_user_check
-  failed_when: false
-
-- name: Validate UID/GID are numeric
+- name: Refuse the Firefly TRUSTED_PROXIES catch-all
   ansible.builtin.fail:
-    msg: "automation_uid and automation_gid must be numeric values"
-  when: >-
-    not (automation_uid | string | regex_search('^[0-9]+$')) or
-    not (automation_gid | string | regex_search('^[0-9]+$'))
-
-- name: Check required ports are available
-  ansible.builtin.wait_for:
-    port: "{{ item }}"
-    timeout: 1
-  register: automation_port_check
-  failed_when: false
-  loop:
-    - "{{ automation_traefik_web_port }}"
-    - "{{ automation_traefik_websecure_port }}"
-    - "{{ automation_traefik_dashboard_port }}"
-
-- name: Fail if critical ports are in use
-  ansible.builtin.fail:
-    msg: "Port {{ item.item }} is already in use"
-  when: item.elapsed is defined and item.elapsed < 1
-  loop: "{{ automation_port_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Verify Docker is installed and running
-  ansible.builtin.systemd:
-    name: docker
-  register: automation_docker_status
-
-- name: Fail if Docker is not active
-  ansible.builtin.fail:
-    msg: "Docker service is not running. Install and start Docker before deploying automation stack."
-  when: automation_docker_status.status.ActiveState != "active"
-
-- name: Check Docker Compose is available
-  ansible.builtin.command: docker compose version
-  register: automation_compose_check
-  failed_when: automation_compose_check.rc != 0
-  changed_when: false
-
-- name: Verify internet connectivity for container pulls
-  ansible.builtin.uri:
-    url: https://hub.docker.com
-    method: HEAD
-    timeout: 10
-
-- name: Check available disk space for containers
-  ansible.builtin.shell: df {{ automation_data_path | dirname }} | tail -1 | awk '{print $4}'
-  register: automation_disk_space
-  changed_when: false
-
-- name: Fail if insufficient disk space
-  ansible.builtin.fail:
-    msg: >-
-      Insufficient disk space. Available: {{ (automation_disk_space.stdout | int / 1024 / 1024) | round(2) }}GB.
-      Required: 5GB minimum
-  when: (automation_disk_space.stdout | int) < 5242880
-
-- name: Validate domain name format
-  ansible.builtin.fail:
-    msg: "domain_name must be a valid domain format"
-  when: not (domain_name | regex_search('^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}$'))
-
-- name: Test DNS resolution for domain
-  ansible.builtin.command: nslookup {{ automation_domain_name }}
-  register: automation_domain_dns_check
-  failed_when: false
-  changed_when: false
-
-- name: Warn if domain DNS not configured
-  ansible.builtin.debug:
-    msg: "WARNING: Domain {{ automation_domain_name }} does not resolve. SSL certificates may fail."
-  when: automation_domain_dns_check.rc != 0
+    msg: >
+      automation_trusted_proxies set to '**', which makes Firefly trust
+      any reverse proxy on the stack network. Scope it to the reverse-
+      proxy/tailnet CIDRs.
+  when: "'**' in automation_trusted_proxies"
+  tags: [validation]

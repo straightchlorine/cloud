@@ -1,151 +1,86 @@
 ---
-- name: Create standardized Docker Compose file  # noqa: var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: build_docker_compose
-  vars:
-    compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
-    compose_file_owner: "{{ ansible_user }}"
-    compose_file_group: "{{ ansible_user }}"
-    stack_name: "automation"
-    compose_services: "{{ automation_compose_services }}"
-    compose_networks: "{{ automation_compose_networks }}"
-    compose_volumes: "{{ automation_compose_volumes }}"
-  notify: Restart automation stack
+# Compose contract: secrets live ONLY in the vault env dict below, rendered by
+# common's build_docker_compose as a 0600 .env next to docker-compose.yml and
+# interpolated by compose via ${VAR} - the compose file never carries a secret.
 
-- name: Create InfluxDB3 data directories
+- name: Create the stack data directories on the SSD
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
-  loop:
-    - influxdb3/data
-    - influxdb3/plugins
-    - influxdb3-explorer
-    - vaultwarden
-    - portainer
   become: true
-
-- name: Create config directories
-  ansible.builtin.file:
-    path: "{{ automation_stack_home }}/config/{{ item }}"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
   loop:
-    - dozzle
-    - influxdb3-explorer
+    - vaultwarden
+    - firefly
+    - firefly/upload
+    - mariadb
 
-- name: Create scripts directory
+- name: Create the stack home directory
   ansible.builtin.file:
-    path: "{{ automation_stack_home }}/scripts"
+    path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
+  become: true
+  loop:
+    - "{{ automation_stack_home }}"
+    - "{{ automation_stack_home }}/scripts"
 
-- name: Create stack management script
+- name: Render compose + .env and bring up the stack
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: deploy_compose_stack
+  vars:  # noqa: var-naming[no-role-prefix]
+    stack_name: "automation"
+    compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_services: "{{ automation_compose_services }}"
+    compose_networks: "{{ automation_compose_networks }}"
+    compose_volumes: "{{ automation_compose_volumes }}"
+    compose_critical_services:
+      - vaultwarden
+      - firefly
+      - firefly-cron
+      - mariadb
+      - watchtower
+    # Vault glue - the only place real secret values exist in the role. The
+    # .env file also feeds Watchtower's ntfy notifications (group_vars/all).
+    compose_env_vars:
+      FIREFLY_APP_KEY: "{{ vault_firefly_app_key }}"
+      FIREFLY_STATIC_CRON_TOKEN: "{{ vault_firefly_static_cron_token }}"
+      FIREFLY_DB_PASSWORD: "{{ vault_firefly_db_password }}"
+      VAULTWARDEN_ADMIN_TOKEN: "{{ vault_vaultwarden_admin_token }}"
+      WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
+      # Watchtower notifications ride the shared ntfy topic when a key is
+      # configured (the key deploy is optional in common/ntfy_install.yml);
+      # an empty URL just leaves watchtower silent.
+      WATCHTOWER_NOTIFICATION_URL: >-
+        {{ 'ntfy://' ~ vault_ntfy_api_key ~ '@' ~
+        (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
+        if vault_ntfy_api_key is defined else '' }}
+    start_stack: "{{ common_start_stack }}"
+  # No notify: deploy_compose_stack's `docker compose up -d` already applies
+  # file changes by recreating containers - a restart handler would only
+  # double-restart the stack on every config change.
+
+- name: Install the stack management script
   ansible.builtin.template:
-    src: manage-automation.sh.j2
+    src: "{{ role_path }}/../common/templates/manage-stack.sh.j2"
     dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
-
-- name: Create stack backup script
-  ansible.builtin.template:
-    src: "{{ role_path }}/../common/templates/backup-script.sh.j2"
-    dest: "{{ automation_stack_home }}/scripts/backup-automation.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
   vars:
-    common_backup_service_name: "automation-stack"
-    common_backup_directories:
-      - "{{ automation_stack_home }}"
-      - "{{ automation_data_path }}"
+    manage_stack_home: "{{ automation_stack_home }}"
+    manage_stack_name: "automation"
 
-- name: Create Docker network for Traefik
-  community.docker.docker_network:
-    name: traefik-network
-    automation_driver: bridge
-    state: present
-    scope: local
-  become: true
-  become_user: "{{ ansible_user }}"
-  tags: [docker, network, traefik]
-
-- name: Start automation stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ automation_stack_home }}"
-    state: present
-  become_user: "{{ ansible_user }}"
-  when: start_stack
-
-- name: Verify Traefik is responding
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ automation_traefik_dashboard_port }}/api/rawdata"
-    method: GET
-  register: automation_traefik_health
-  until: automation_traefik_health.status == 200
-  retries: 30
-  delay: 2
-  when: start_stack
-
-- name: Verify InfluxDB3 is responding
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:8181/health"
-    method: GET
-  register: automation_influxdb_health
-  until: automation_influxdb_health.status == 200
-  retries: 30
-  delay: 2
-  when: start_stack
-  failed_when: false
-
-- name: Verify Vaultwarden is responding
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:80/alive"
-    method: GET
-  register: automation_vaultwarden_health
-  until: automation_vaultwarden_health.status == 200
-  retries: 30
-  delay: 2
-  when: start_stack
-  failed_when: false
-
-- name: Verify Portainer is responding
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:9000/api/status"
-    method: GET
-  register: automation_portainer_health
-  until: automation_portainer_health.status == 200
-  retries: 30
-  delay: 2
-  when: start_stack
-  failed_when: false
-
-- name: Create symlinks for management scripts
+- name: Symlink the management script into PATH
   ansible.builtin.file:
     src: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-    dest: "/usr/local/bin/manage-automation"
+    dest: /usr/local/bin/manage-automation
     state: link
+    force: true
   become: true
-
-- name: Display service information
-  ansible.builtin.debug:
-    msg: |
-      Automation Stack Deployment Complete!
-
-      Services:
-      - Traefik Dashboard: https://{{ automation_subdomain_traefik }}.{{ automation_domain_name }}
-
-      Management:
-      - Stack control: manage-automation {start|stop|restart|status|logs}
-      - Backup: {{ automation_stack_home }}/scripts/backup-automation.sh
-
-      Data locations:
-      - Traefik: {{ automation_data_path }}/traefik

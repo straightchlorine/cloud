@@ -1,28 +1,163 @@
 ---
-- name: Converge - Fail-Fast Validation
+- name: Converge - automation Fail-Fast Validation
   hosts: all
+  become: true
   vars:
-    timezone: UTC
-    # Intentionally omit ALL required variables:
-    # - domain_name, vault_domain_name, vault_letsencrypt_email
-    # - automation_data_path, automation_stack_home
-    # - automation_user, automation_uid, automation_gid
-    # - vault_traefik_basic_auth, vault_cloudflare_api_token
-    # - services_enabled, restic variables
-    # This tests that role fails gracefully with clear error messages
+    # Every required variable except automation_trusted_proxies, so Case 1
+    # leaves it genuinely undefined. Each case below then includes the REAL
+    # roles/automation/tasks/validate.yml with per-case vars - no hand-copied
+    # guards to keep in sync.
+    domain_name: example.test
+    vault_domain_name: example.test
+    vault_letsencrypt_email: test@example.test
+    vault_firefly_app_key: molecule-test-app-key
+    vault_firefly_static_cron_token: molecule-test-cron-token
+    vault_firefly_db_password: molecule-test-db-password
+    vault_vaultwarden_admin_token: molecule-test-admin-token
+    vault_watchtower_api_token: molecule-test-watchtower-token
+    automation_data_path: /mnt/automation-data
+    automation_stack_home: /home/automation/automation-stack
+    restic_enabled: false
+    restic_repository: /tmp/test-restic
+    restic_password: molecule-test-restic-password
+  pre_tasks:
+    - name: Create the stack-home parent (validate.yml asserts it exists)
+      # Cases 2 and 3 pass the required-variable check, so validate.yml must
+      # run past the parent-directory check and reach the guard under test.
+      ansible.builtin.file:
+        path: /home/automation
+        state: directory
+        mode: "0755"
   tasks:
-    - name: Include automation validation (expect to fail)
+    # Case 1: a required automation variable is missing.
+    - name: "Case 1: validate.yml fails when automation_trusted_proxies is missing"
       block:
-        - name: Try to include automation validation without required variables
-          ansible.builtin.include_tasks: ../../tasks/validate.yml
-      rescue:
-        - name: Capture expected validation failure
-          ansible.builtin.set_fact:
-            validation_failed: true
-            validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
+        - name: Run the real validate.yml with automation_trusted_proxies undefined
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            ssd_device: /dev/vdb
 
-        - name: Display validation failure message
-          ansible.builtin.debug:
-            msg: |
-              [OK] Validation correctly failed (expected behavior)
-              Error: {{ validation_error }}
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a missing automation_trusted_proxies"
+      rescue:
+        - name: Assert the failure was for the missing automation_trusted_proxies specifically
+          # A looped fail task's own top-level msg is the generic "One or more
+          # items failed" - the per-item detail lives in .results, so assert
+          # on that rather than on ansible_failed_result.msg directly.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['automation_trusted_proxies']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing automation_trusted_proxies): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing automation_trusted_proxies variable"
+
+        - name: Record case 1 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
+
+    # Case 2: a vault secret still holds its documented placeholder value.
+    - name: "Case 2: validate.yml fails when vault_firefly_app_key still has its placeholder value"
+      block:
+        - name: Run the real validate.yml with vault_firefly_app_key left at its placeholder value
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            automation_trusted_proxies: "100.64.0.0/10"
+            ssd_device: /dev/vdb
+            vault_firefly_app_key: "your-firefly-app-key"
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a placeholder vault_firefly_app_key"
+      rescue:
+        - name: Assert the failure was for the placeholder vault_firefly_app_key specifically
+          # The vault-placeholder guard is a looped fail, so like Case 1 the
+          # per-item reason lives in .results - assert on that.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - >-
+                (ansible_failed_result.results | selectattr('failed')
+                | map(attribute='msg') | select('search', 'vault_firefly_app_key')
+                | list | length) == 1
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the placeholder vault_firefly_app_key"
+
+        - name: Record case 2 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
+
+    # Case 3: the TRUSTED_PROXIES catch-all guard.
+    - name: "Case 3: validate.yml fails when TRUSTED_PROXIES is the catch-all '**'"
+      block:
+        - name: Run the real validate.yml with automation_trusted_proxies set to '**'
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            automation_trusted_proxies: "**"
+            ssd_device: /dev/vdb
+
+        - name: Fail the test - the catch-all guard should have refused '**'
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on TRUSTED_PROXIES='**'"
+      rescue:
+        - name: Assert the failure was the TRUSTED_PROXIES guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'automation_trusted_proxies' in ansible_failed_result.msg"
+              - "\"'**'\" in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's TRUSTED_PROXIES guard correctly refused '**'"
+
+        - name: Record case 3 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"
+
+    # Case 4: the mandatory-SSD guard (ssd_device drives the whole storage
+    # package, so it must be explicitly set - no silent default).
+    - name: "Case 4: validate.yml fails when ssd_device is missing"
+      block:
+        - name: Run the real validate.yml with ssd_device undefined
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            automation_trusted_proxies: "100.64.0.0/10"
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a missing ssd_device"
+      rescue:
+        - name: Assert the failure was for the missing ssd_device specifically
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['ssd_device']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing ssd_device): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing ssd_device variable"
+
+        - name: Record case 4 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"

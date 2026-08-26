@@ -1,269 +1,189 @@
 ---
-# Automation-specific packages (common packages inherited from common role)
+# Automation stack: vaultwarden, firefly (+mariadb, cron sidecar), watchtower.
+# TLS terminates at the central reverse proxy (moving onto the Kubernetes
+# cluster on a separate node); these services publish plain HTTP bound to
+# primary_ip, reached over the tailnet. Secrets never appear here - the
+# compose file refers to ${VAR} and is interpolated from the generated .env
+# (0600) at deploy time.
+
 automation_specific_packages:
   - ncdu
   - tree
+  - sqlite3  # automation-syncthing-backup.sh snapshots vaultwarden's db with VACUUM INTO
 
-# Traefik ports
-automation_traefik_web_port: 80
-automation_traefik_websecure_port: 443
-automation_traefik_dashboard_port: 8080
+# Host-facing ports for the two tailnet-reachable services (the central
+# reverse proxy fronts these). Watchtower's metrics API stays localhost-only.
+automation_vaultwarden_port: 8081
+automation_firefly_port: 8082
+automation_watchtower_metrics_port: 8084
 
-# Default subdomains
-automation_subdomain_traefik: "traefik"
-automation_subdomain_dozzle: "dozzle"
-automation_subdomain_portainer: "portainer"
-automation_subdomain_influxdb: "influxdb"
+# Subdomains used in service URLs and by the reverse proxy.
 automation_subdomain_vaultwarden: "vault"
-automation_subdomain_explorer: "influxdb-ui"
-automation_domain_name: "{{ domain_name }}"
+automation_subdomain_firefly: "firefly"
 
-# Short domain reference for labels (used to shorten line length)
-automation_domain: "{{ automation_domain_name }}"
-automation_explorer_sub: "{{ automation_subdomain_explorer }}"
+# Request source allow-list for Firefly's TRUSTED_PROXIES - host-defined and
+# scoped to the tailnet/LAN, never '**'.
+# automation_trusted_proxies: REQUIRED in host_vars - no default.
 
-# SSL configuration
-automation_letsencrypt_staging: false
+# Watchtower update policy: opt-in per container via labels, nightly
+# sweep, notification through vault's ntfy topic. No default tag pins for
+# application images (floating latest is the documented exception); mariadb
+# is pinned and has no watchtower label (DB upgrades are manual).
+automation_watchtower_schedule: "0 2 * * *"
 
-automation_services_enabled:
-  traefik: true
+# Secondary local backup replicated by Syncthing; primary/off-site is
+# restic (unchanged). automation_backup_dir / automation_backup_owner are
+# host_vars when enabled.
+automation_backup_enabled: false
+automation_backup_retention: 14
+automation_backup_schedule_hour: "03"
+automation_backup_schedule_minute: "45"
 
-# SSD configuration (common variables inherited from common role)
+# --- Generated compose profile (secretless; env values come from .env) -----
 
-# Backup configuration now handled by unified backup system
-# restic_enabled: must be set in host_vars - no default
-# restic_repository: must be set in host_vars - no default
-# restic_password: must be set in host_vars - no default
-# backup_ssh_* variables: must be set in host_vars - no default
+automation_compose_networks:
+  - name: automation-stack
+    compose_name: automation-stack
+    driver: bridge
 
-# Services to backup
-automation_services:
-  - traefik
-  - portainer
-  - influxdb3
-  - influxdb3-explorer
-  - vaultwarden
-
-# start_stack: inherited from common role
-
-# Docker Compose services configuration
 automation_compose_services:
-  traefik:
-    image: "traefik:v3.0"
-    container_name: "traefik"
-    restart: "always"
-    ports:
-      - "{{ automation_traefik_web_port }}:80"
-      - "{{ automation_traefik_websecure_port }}:443"
-      - "127.0.0.1:{{ automation_traefik_dashboard_port }}:8080"
-    deploy:
-      resources:
-        limits:
-          memory: "{{ hardware_limits.traefik.memory }}"
-          cpus: "{{ hardware_limits.traefik.cpus }}"
-        reservations:
-          memory: "{{ hardware_limits.traefik.memory_reservation }}"
-          cpus: "{{ hardware_limits.traefik.cpus_reservation }}"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./config/traefik:/config:ro"
-      - "{{ automation_data_path }}/traefik:/data"
-      - "./logs:/logs"
-    environment:
-      - "TRAEFIK_API_DASHBOARD=true"
-      - "TRAEFIK_API_INSECURE=false"
-      - "CF_DNS_API_TOKEN={{ vault_cloudflare_api_token }}"
-    ansible.builtin.command:
-      - "--configFile=/config/traefik.yml"
-    networks:
-      - "traefik-network"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`{{ automation_subdomain_traefik }}.{{ automation_domain_name }}`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
-      - "traefik.http.middlewares.dashboard-auth.basicauth.users={{ vault_traefik_basic_auth }}"
-
-  dozzle:
-    image: "amir20/dozzle:v8"
-    container_name: "dozzle"
-    restart: "always"
-    deploy:
-      resources:
-        limits:
-          memory: "256M"
-          cpus: "0.5"
-        reservations:
-          memory: "128M"
-          cpus: "0.25"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./config/dozzle:/data"
-    networks:
-      - "traefik-network"
-    environment:
-      - "DOZZLE_REMOTE_AGENT=media:7007,pascal:7007,kepler-services-lxc:7007"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dozzle.rule=Host(`{{ automation_subdomain_dozzle }}.{{ automation_domain_name }}`)"
-      - "traefik.http.routers.dozzle.entrypoints=websecure"
-      - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
-      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
-
-  portainer:
-    image: "portainer/portainer-ce:2.21"
-    container_name: "portainer"
-    restart: "always"
-    deploy:
-      resources:
-        limits:
-          memory: "{{ hardware_limits.portainer.memory }}"
-          cpus: "{{ hardware_limits.portainer.cpus }}"
-        reservations:
-          memory: "{{ hardware_limits.portainer.memory_reservation }}"
-          cpus: "{{ hardware_limits.portainer.cpus_reservation }}"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "{{ automation_data_path }}/portainer:/data"
-    networks:
-      - "traefik-network"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`{{ automation_subdomain_portainer }}.{{ automation_domain_name }}`)"
-      - "traefik.http.routers.portainer.entrypoints=websecure"
-      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
-      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
-
-  influxdb3-core:
-    image: "influxdb:3-core"
-    container_name: "influxdb3-core"
-    restart: "always"
-    user: "{{ automation_uid }}:{{ automation_gid }}"
-    deploy:
-      resources:
-        limits:
-          memory: "{{ hardware_limits.influxdb3.memory }}"
-          cpus: "{{ hardware_limits.influxdb3.cpus }}"
-        reservations:
-          memory: "{{ hardware_limits.influxdb3.memory_reservation }}"
-          cpus: "{{ hardware_limits.influxdb3.cpus_reservation }}"
-    ports:
-      - "127.0.0.1:8181:8181"
-    ansible.builtin.command:
-      - "influxdb3"
-      - "serve"
-      - "--node-id=node0"
-      - "--object-store=file"
-      - "--data-dir=/var/lib/influxdb3/data"
-      - "--plugin-dir=/var/lib/influxdb3/plugins"
-    volumes:
-      - "{{ automation_data_path }}/influxdb3/data:/var/lib/influxdb3/data"
-      - "{{ automation_data_path }}/influxdb3/plugins:/var/lib/influxdb3/plugins"
-    networks:
-      - "traefik-network"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.influxdb.rule=Host(`{{ automation_subdomain_influxdb }}.{{ automation_domain_name }}`)"
-      - "traefik.http.routers.influxdb.entrypoints=websecure"
-      - "traefik.http.routers.influxdb.tls.certresolver=letsencrypt"
-      - "traefik.http.services.influxdb.loadbalancer.server.port=8181"
-
-  influxdb3-explorer:
-    image: "influxdata/influxdb3-ui:1.2.0"
-    container_name: "influxdb3-explorer"
-    restart: "always"
-    ansible.builtin.command: ["--mode=admin"]
-    deploy:
-      resources:
-        limits:
-          memory: "256M"
-          cpus: "0.5"
-        reservations:
-          memory: "128M"
-          cpus: "0.25"
-    ports:
-      - "127.0.0.1:8888:80"
-    environment:
-      - "SESSION_SECRET_KEY={{ vault_influxdb3_session_secret_key }}"
-    volumes:
-      - "{{ automation_data_path }}/influxdb3-explorer:/db:rw"
-      - "./config/influxdb3-explorer:/app-root/config:ro"
-    networks:
-      - "traefik-network"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.influxdb-explorer.rule=Host(`{{ automation_explorer_sub }}.{{ automation_domain }}`)"
-      - "traefik.http.routers.influxdb-explorer.entrypoints=websecure"
-      - "traefik.http.routers.influxdb-explorer.tls.certresolver=letsencrypt"
-      - "traefik.http.services.influxdb-explorer.loadbalancer.server.port=80"
-
-  vaultwarden:
-    image: "vaultwarden/server:1.32"
-    container_name: "vaultwarden"
-    restart: "always"
-    deploy:
-      resources:
-        limits:
-          memory: "{{ hardware_limits.vaultwarden.memory }}"
-          cpus: "{{ hardware_limits.vaultwarden.cpus }}"
-        reservations:
-          memory: "{{ hardware_limits.vaultwarden.memory_reservation }}"
-          cpus: "{{ hardware_limits.vaultwarden.cpus_reservation }}"
-    volumes:
-      - "{{ automation_data_path }}/vaultwarden:/data"
-    environment:
-      - "DOMAIN=https://{{ automation_subdomain_vaultwarden }}.{{ automation_domain_name }}"
+  - service_name: vaultwarden
+    service_image: "vaultwarden/server:latest"
+    service_ports:
+      - host: "{{ automation_vaultwarden_port }}"
+        container: 80
+        bind_ip: "{{ primary_ip }}"
+    service_environment:
+      - "DOMAIN=https://{{ automation_subdomain_vaultwarden }}.{{ domain_name }}"
       - "SIGNUPS_ALLOWED=false"
       - "INVITATIONS_ALLOWED=false"
       - "SHOW_PASSWORD_HINT=false"
-      - "ADMIN_TOKEN={{ vault_vaultwarden_admin_token }}"
-    networks:
-      - "traefik-network"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.vaultwarden.rule=Host(`{{ automation_subdomain_vaultwarden }}.{{ automation_domain }}`)"
-      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
-      - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.vaultwarden.middlewares=rate-limit,body-limit,default-headers"
-      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+      - "ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}"
+    service_volumes:
+      - "{{ automation_data_path }}/vaultwarden:/data"
+    service_networks:
+      - automation-stack
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 512M
+        cpus: "0.5"
+      reservations:
+        memory: 256M
+        cpus: "0.25"
 
-  watchtower:
-    image: "containrrr/watchtower:1.7"
-    container_name: "watchtower"
-    restart: "always"
-    deploy:
-      resources:
-        limits:
-          memory: "256M"
-          cpus: "0.5"
-        reservations:
-          memory: "128M"
-          cpus: "0.25"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    ports:
-      - "127.0.0.1:8084:8080"
-    environment:
+  - service_name: firefly
+    service_image: "fireflyiii/core:latest"
+    service_ports:
+      - host: "{{ automation_firefly_port }}"
+        container: 8080
+        bind_ip: "{{ primary_ip }}"
+    service_environment:
+      - "APP_URL=https://{{ automation_subdomain_firefly }}.{{ domain_name }}"
+      - "APP_ENV=production"
+      - "APP_KEY=${FIREFLY_APP_KEY}"
+      - "STATIC_CRON_TOKEN=${FIREFLY_STATIC_CRON_TOKEN}"
+      - "TRUSTED_PROXIES={{ automation_trusted_proxies }}"
+      - "TZ={{ timezone }}"
+      - "DB_CONNECTION=mysql"
+      - "DB_HOST=mariadb"
+      - "DB_PORT=3306"
+      - "DB_DATABASE=firefly"
+      - "DB_USERNAME=firefly"
+      - "DB_PASSWORD=${FIREFLY_DB_PASSWORD}"
+    service_volumes:
+      - "{{ automation_data_path }}/firefly/upload:/var/www/html/storage/upload"
+    service_networks:
+      - automation-stack
+    service_depends_on:
+      - service: mariadb
+        condition: service_healthy
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 512M
+        cpus: "0.5"
+      reservations:
+        memory: 256M
+        cpus: "0.25"
+
+  - service_name: firefly-cron
+    service_image: "alpine:3.20"
+    service_command:
+      - "sh"
+      - "-c"
+      - >-
+        wget -q -O /dev/null
+        "http://firefly:8080/api/v1/cron/${FIREFLY_STATIC_CRON_TOKEN}"
+        && sleep 60s
+    service_depends_on:
+      - service: firefly
+        condition: service_started
+    service_networks:
+      - automation-stack
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 64M
+        cpus: "0.1"
+      reservations:
+        memory: 32M
+        cpus: "0.05"
+
+  - service_name: mariadb
+    service_image: "mariadb:11.4"
+    service_healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    service_environment:
+      - "MARIADB_DATABASE=firefly"
+      - "MARIADB_USER=firefly"
+      - "MARIADB_PASSWORD=${FIREFLY_DB_PASSWORD}"
+    service_volumes:
+      - "{{ automation_data_path }}/mariadb:/var/lib/mysql"
+    service_networks:
+      - automation-stack
+    service_resources:
+      limits:
+        memory: 768M
+        cpus: "1.0"
+      reservations:
+        memory: 256M
+        cpus: "0.25"
+
+  - service_name: watchtower
+    service_image: "containrrr/watchtower:latest"
+    service_ports:
+      - host: "{{ automation_watchtower_metrics_port }}"
+        container: 8080
+        bind_ip: "127.0.0.1"
+    service_environment:
+      - "WATCHTOWER_LABEL_ENABLE=true"
+      - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
       - "WATCHTOWER_CLEANUP=true"
-      - "WATCHTOWER_SCHEDULE=0 0 2 * * *"
+      - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
+      - "WATCHTOWER_NOTIFICATION_TITLE=watchtower: {{ inventory_hostname }}"
       - "WATCHTOWER_HTTP_API_METRICS=true"
-      - "WATCHTOWER_HTTP_API_TOKEN={{ vault_watchtower_api_token }}"
+      - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
       - "WATCHTOWER_HTTP_API_UPDATE=true"
-    networks:
-      - "traefik-network"
+    service_volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    service_networks:
+      - automation-stack
+    service_resources:
+      limits:
+        memory: 256M
+        cpus: "0.5"
+      reservations:
+        memory: 128M
+        cpus: "0.1"
 
-# Docker Compose networks configuration
-automation_compose_networks:
-  traefik-network:
-    external: true
-
-# Docker Compose volumes configuration
-automation_compose_volumes:
-  traefik-data:
-    driver: "local"
-    driver_opts:
-      o: "bind"
-      type: "none"
-      device: "{{ automation_data_path }}/traefik"
+# No named volumes - every service volume is a bind mount onto the SSD
+# (automation_data_path).
+automation_compose_volumes: []

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+# Generic start/stop/restart/status/logs wrapper for a docker compose stack.
+# Installed as /usr/local/bin/manage-{{ manage_stack_name }}.
+
+set -euo pipefail
+
+STACK_HOME="{{ manage_stack_home }}"
+STACK_NAME="{{ manage_stack_name }}"
+COMMAND="${1:-help}"
+SERVICE="${2:-}"
+
+cd "$STACK_HOME"
+
+usage() {
+  echo "Usage: $(basename "$0") <command> [service]"
+  echo ""
+  echo "Commands:"
+  echo "  start     Start all services (or one: docker compose start <svc>)"
+  echo "  stop      Stop all services (or one)"
+  echo "  restart   Restart all services (or one)"
+  echo "  status    Show container status"
+  echo "  logs      Follow logs (all services, or one with a service arg)"
+  echo "  help      Show this message"
+  echo ""
+  echo "Examples:"
+  echo "  manage-$STACK_NAME status"
+  echo "  manage-$STACK_NAME restart vaultwarden"
+}
+
+case "$COMMAND" in
+  start)
+    if [ -n "$SERVICE" ]; then
+      docker compose start "$SERVICE"
+    else
+      docker compose up -d
+    fi
+    ;;
+  stop)
+    if [ -n "$SERVICE" ]; then
+      docker compose stop "$SERVICE"
+    else
+      docker compose down
+    fi
+    ;;
+  restart)
+    if [ -n "$SERVICE" ]; then
+      docker compose restart "$SERVICE"
+    else
+      docker compose restart
+    fi
+    ;;
+  status)
+    docker compose ps
+    ;;
+  logs)
+    if [ -n "$SERVICE" ]; then
+      docker compose logs -f "$SERVICE"
+    else
+      docker compose logs -f
+    fi
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

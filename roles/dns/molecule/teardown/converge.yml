@@ -24,30 +24,40 @@
     # Deploy side: the container-safe parts of a real dns deploy, plus the
     # common helpers the role re-applies after a teardown (so the teardown
     # has the real things to remove - real scripts, real cron entries).
+    # All tagged molecule-idempotence-notest: this is the scenario's ARRANGE
+    # phase - the teardown below removes everything it creates, so the
+    # idempotence rerun must skip it (re-running it would re-create state
+    # and report changed, failing the run; the system under test here is
+    # the teardown, which stays untagged and must converge).
     - name: Deploy the real chrony setup
       ansible.builtin.include_role:
         name: dns
         tasks_from: chrony_sync
+      tags: [molecule-idempotence-notest]
 
     - name: Deploy the real auto-update script and cron
       ansible.builtin.include_role:
         name: dns
         tasks_from: auto_updates
+      tags: [molecule-idempotence-notest]
 
     - name: Deploy the real Syncthing backup script and cron
       ansible.builtin.include_role:
         name: dns
         tasks_from: backup
+      tags: [molecule-idempotence-notest]
 
     - name: Deploy the real ntfy notification helper
       ansible.builtin.include_role:
         name: common
         tasks_from: ntfy_install
+      tags: [molecule-idempotence-notest]
 
     - name: Deploy the real unattended-upgrades + reboot notification
       ansible.builtin.include_role:
         name: common
         tasks_from: auto_updates
+      tags: [molecule-idempotence-notest]
 
     # Run the deploy-phase handlers (e.g. Restart chrony) now, while their
     # services still exist. On a real host deploy and teardown are separate
@@ -55,6 +65,7 @@
     # left pending here would fire after the teardown purged chrony.
     - name: Flush deploy-phase handlers
       ansible.builtin.meta: flush_handlers
+      tags: [molecule-idempotence-notest]
 
     # Fixture side: minimal stand-ins for what the Pi-hole installer would
     # have created (basic-install.sh cannot run in a container). One-shot,

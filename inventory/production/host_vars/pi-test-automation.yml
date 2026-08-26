@@ -1,0 +1,48 @@
+---
+# Disposable clone of pi-automation.yml for testing the automation role.
+# Delete this file and the pi-test-automation entry in hosts.yml once done.
+
+device_type: rpi3b # adjust if your spare Pi is a different model
+
+# Test services publish on the same ports as production so the reverse-
+# proxy-facing paths are exercised identically.
+automation_subdomain_vaultwarden: "vault"
+automation_subdomain_firefly: "firefly"
+# Adapt to the test host's reachable CIDR (Tailscale CGNAT by default).
+automation_trusted_proxies: "100.64.0.0/10"
+
+common_firewall_ports:
+  - {port: 22, comment: "SSH"}
+  - {port: 8081, comment: "Vaultwarden"}
+  - {port: 8082, comment: "Firefly III"}
+
+# The automation role's full storage package applies here: the SSD mounts
+# at automation_data_path, journald relocates onto it and Docker's data-root
+# moves off the SD card. common_ssd_format stays false (common default) - the
+# staging drive is pre-formatted; set it true per host only for a blank disk.
+ssd_device: "/dev/sda1"
+automation_data_path: "/mnt/automation-data"
+automation_stack_home: "/home/automation/automation-stack"
+common_docker_data_root: "/mnt/automation-data/docker"
+
+# Start the compose stack as part of the deploy.
+common_start_stack: true
+# Notifications: keep TRUE so the automation role re-applies reboot-notify on
+# every automation-only redeploy (the shared ntfy helper is installed fleet-wide).
+common_auto_updates_reboot_if_required: true
+
+prometheus_exporters_docker_exporter_enabled: true
+prometheus_role: "automation"
+
+# Secondary local backup on the SSD, mirrored by Syncthing (as on pi-automation).
+common_syncthing_enabled: true
+automation_backup_enabled: true
+automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_owner: "automation"
+
+# DESTRUCTIVE, host-scoped on purpose - NOT a role default.
+# Off-site restic backup disabled with a placeholder repo - never write into
+# pi-automation's real Hetzner backup.
+restic_enabled: false
+restic_repository: "sftp:hetzner-storage:unused-automation-test-placeholder"
+restic_password: "unused-automation-test-placeholder"

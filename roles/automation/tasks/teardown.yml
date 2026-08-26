@@ -1,0 +1,115 @@
+---
+# Reverse the automation role so a disposable test Pi can be re-tested from a
+# near-clean state. Meant for test hosts (playbooks/automation-teardown.yml
+# hard-refuses the production pi-automation). User data under
+# automation_data_path is intentionally left in place.
+
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.assert:
+    that:
+      - teardown_confirmed | default(false) | bool
+    fail_msg: >-
+      automation teardown requires the shared teardown_confirmed fact - run
+      through playbooks/automation-teardown.yml instead.
+    quiet: true
+
+- name: Stop and disable the automation-stack systemd unit
+  ansible.builtin.systemd:
+    name: automation-stack
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  become: true
+  failed_when: false
+
+- name: Remove the automation-stack systemd unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/automation-stack.service
+    state: absent
+  become: true
+
+- name: Remove the manage-automation symlink
+  ansible.builtin.file:
+    path: /usr/local/bin/manage-automation
+    state: absent
+  become: true
+  failed_when: false
+
+- name: Check whether a Docker daemon is available
+  ansible.builtin.command: docker info
+  register: automation_docker_info
+  failed_when: false
+  changed_when: false
+
+- name: Tear down the compose project if a daemon is available
+  # The guard keeps the teardown exercisable in molecule (containers have no
+  # docker daemon) while still removing real containers on a Pi. The compose
+  # file is removed regardless, so a stale network may linger on a daemon-less
+  # run - acceptable on a disposable test box.
+  community.docker.docker_compose_v2:
+    project_src: "{{ automation_stack_home }}"
+    state: absent
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: automation_docker_info.rc == 0
+  ignore_errors: true
+
+- name: Remove the automation cron jobs
+  ansible.builtin.cron:
+    name: "{{ item }}"
+    state: absent
+    user: root
+  become: true
+  loop:
+    - "Automation Syncthing local backup"
+
+- name: Remove the automation role file artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /usr/local/bin/automation-syncthing-backup
+    - "{{ automation_stack_home }}"
+    - /var/log/automation-syncthing-backup.log
+
+- name: Tear down Syncthing (common role)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_teardown
+  when: common_syncthing_enabled | default(false) | bool
+
+# Self-verification: fail loudly if anything the role installed is still around.
+- name: Verify key automation artifacts are gone
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/automation-syncthing-backup
+    - /usr/local/bin/manage-automation
+    - /etc/systemd/system/automation-stack.service
+    - /var/log/automation-syncthing-backup.log
+    - "{{ automation_stack_home }}"
+  register: automation_teardown_verify
+
+- name: Assert key automation artifacts are gone
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: "{{ item.item }} still exists after teardown"
+    success_msg: "[OK] {{ item.item }} removed"
+  loop: "{{ automation_teardown_verify.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Verify the automation cron job is gone
+  ansible.builtin.command: crontab -l -u root
+  register: automation_teardown_crontab
+  failed_when: false
+  changed_when: false
+
+- name: Assert no automation cron survives
+  ansible.builtin.assert:
+    that:
+      - "'Automation Syncthing local backup' not in (automation_teardown_crontab.stdout | default(''))"
+    fail_msg: "Automation cron jobs survived the teardown: {{ automation_teardown_crontab.stdout | default('') }}"
+    success_msg: "[OK] automation cron jobs removed"

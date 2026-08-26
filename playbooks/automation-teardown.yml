@@ -1,0 +1,44 @@
+---
+# Single confirmation flag cascades into all related teardowns.
+#   ansible-playbook -i inventory/production playbooks/automation-teardown.yml \
+#     --limit <your-test-host> -e automation_teardown_confirm=true
+#
+# Pattern (shared by every teardown playbook, see playbooks/dns-teardown.yml):
+#   1. Gate on this role's own flag (automation_teardown_confirm) and
+#      hard-refuse the production host.
+#   2. Set the shared fact teardown_confirmed: true.
+#   3. Run the teardown manifest - every included teardown task file checks
+#      teardown_confirmed, so nothing can run outside a confirmed teardown.
+- name: Tear down the automation role for repeatable testing
+  hosts: automation
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Require explicit teardown confirmation
+      ansible.builtin.assert:
+        that:
+          - automation_teardown_confirm | default(false) | bool
+        fail_msg: >-
+          Refusing automation teardown. Re-run with -e automation_teardown_confirm=true
+          and --limit <your-test-host>.
+        quiet: true
+
+    - name: Never tear down the production automation host
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname != 'pi-automation'
+          - (ansible_host | default('')) != '192.168.20.20'
+        fail_msg: >-
+          Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }})
+          is the PRODUCTION automation host. Point --limit at your test Pi instead.
+        quiet: true
+
+    - name: Mark this run as a confirmed teardown
+      ansible.builtin.set_fact:
+        teardown_confirmed: true
+
+    - name: Run automation role teardown
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: teardown
+      when: teardown_confirmed | default(false) | bool

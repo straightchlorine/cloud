@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Post-deployment check for a disposable DNS test host (default pi-dns-test).
+# Post-deployment check for a disposable DNS test host (default pi-dns-test -
+# not in the inventory while the spare Pi stages automation as pi-test-automation).
 # Run after a successful site.yml deploy to confirm Pi-hole, exporters,
 # NTP, drive/journald relocation and firewall all work. Pairs with
 # validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".

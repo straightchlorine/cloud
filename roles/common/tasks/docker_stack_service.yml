@@ -1,4 +1,11 @@
 ---
+# One-shot systemd unit that runs `docker compose up -d` at boot for a stack.
+# Callers pass stack_service_name, stack_description, stack_home_directory,
+# stack_user and (optionally) stack_environment_vars. The exec_* commands
+# default to plain `docker compose <verb>` and can be overridden with
+# stack_exec_start/stop/reload when a stack needs an explicit -f path (the
+# shared systemd template's WorkingDirectory rendering is a known-open issue -
+# see its header comment).
 - name: Create systemd service for Docker stack auto-start
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
@@ -17,9 +24,9 @@
     service_user: "{{ stack_user }}"
     service_group: "{{ stack_user }}"
     service_environment: "{{ stack_environment_vars }}"
-    exec_start: "/usr/bin/docker compose up -d"
-    exec_stop: "/usr/bin/docker compose down"
-    exec_reload: "/usr/bin/docker compose restart"
+    exec_start: "{{ stack_exec_start | default('/usr/bin/docker compose up -d') }}"
+    exec_stop: "{{ stack_exec_stop | default('/usr/bin/docker compose down') }}"
+    exec_reload: "{{ stack_exec_reload | default('/usr/bin/docker compose restart') }}"
     syslog_identifier: "{{ stack_service_name }}"
     common_timeout_start_sec: "0"
     kill_mode: "none"
@@ -32,7 +39,7 @@
     common_enable_security_hardening: true
     common_no_new_privileges: "true"
   become: true
-  notify: "restart {{ stack_service_name }}"
+  notify: "Restart {{ stack_service_name }}"
 
 - name: Enable Docker stack service for auto-start
   ansible.builtin.systemd:

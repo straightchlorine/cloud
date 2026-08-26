@@ -3,26 +3,24 @@
 # REQUIRED VARIABLES - Deployment fails without these
 # ==============================================================================
 
-# Domain & SSL Configuration
-# Validation: Domain must be valid FQDN, email must be valid format
+# Domain Configuration (used for service URLs; TLS terminates at fleet)
 vault_domain_name: "yourdomain.com"
 vault_letsencrypt_email: "admin@yourdomain.com"
-
-# Cloudflare API for Let's Encrypt DNS-01 Challenge
-# Required for: Traefik SSL certificate automation
-# How to get: Cloudflare dashboard → API Tokens → Create Token (Zone:Read, DNS:Edit)
-# Validation: Must have proper permissions
-vault_cloudflare_api_token: "your-cloudflare-api-token"
 
 # Service Authentication
 # DNS Server (pi-dns)
 vault_pihole_webpassword: "your-secure-web-password"
 
-# Automation Stack (pi-automation)
-# Generate: htpasswd -nbB admin your-password
-vault_traefik_basic_auth: "admin:$2y$10$your-bcrypt-hash"
+# Automation Stack (pi-automation): vaultwarden, firefly, watchtower
 # Generate: openssl rand -base64 32
-vault_influxdb3_session_secret_key: "your-session-secret-key-min-32-chars"
+vault_vaultwarden_admin_token: "your-vaultwarden-admin-token"
+# Generate: openssl rand -base64 32 (Firefly APP_KEY)
+vault_firefly_app_key: "your-firefly-app-key"
+# Generate: openssl rand -hex 16 (Firefly cron endpoint token)
+vault_firefly_static_cron_token: "your-firefly-static-cron-token"
+# Generate: openssl rand -base64 32 (MariaDB firefly user password)
+vault_firefly_db_password: "your-firefly-db-password"
+vault_watchtower_api_token: "your-watchtower-api-token"
 
 # Monitoring Stack (debian-monitoring)
 vault_grafana_admin_password: "your-secure-grafana-password"
@@ -65,9 +63,3 @@ vault_smtp_port: 587
 vault_smtp_username: "alerts@yourdomain.com"
 vault_smtp_password: "your-smtp-app-password"
 vault_alertmanager_email: "admin@yourdomain.com"
-
-# Optional Services (automation)
-vault_vaultwarden_admin_token: "your-vaultwarden-admin-token"
-vault_watchtower_api_token: "your-watchtower-api-token"
-vault_dozzle_username: "admin"
-vault_dozzle_password: "your-dozzle-password"

@@ -83,6 +83,8 @@
       ansible.builtin.shell: |
         set -o pipefail
         { ss -H -ltn; ss -H -lun; } | grep -E ':(53|80) ' || true
+      args:
+        executable: /bin/bash
       register: dns_teardown_listeners
       changed_when: false
 

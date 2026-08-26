@@ -1,157 +1,117 @@
 ---
-- name: Verify automation role
+- name: Verify the automation role's deployed state
   hosts: all
+  become: true
   vars:
-    automation_user: automation
-    automation_uid: 2000
-    automation_gid: 2000
-    automation_data_path: /mnt/automation-data
     automation_stack_home: /home/automation/automation-stack
   tasks:
-    # User verification
-    - name: Check if automation user exists
-      ansible.builtin.getent:
-        database: passwd
-        key: "{{ automation_user }}"
-      register: automation_user_check
+    - name: Read the generated compose file and env file
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ automation_stack_home }}/docker-compose.yml"
+        - "{{ automation_stack_home }}/.env"
+        - /usr/local/bin/automation-syncthing-backup
+        - "{{ automation_stack_home }}/scripts/manage-automation.sh"
+        - /tmp/automation-stack.service.rendered
+      register: automation_deployed_files
 
-    - name: Assert automation user exists with correct UID/GID
-      ansible.builtin.assert:
-        that:
-          - automation_user_check.ansible_facts.getent_passwd['automation'] is defined
-          - automation_user_check.ansible_facts.getent_passwd['automation'][1] | int == 2000
-          - automation_user_check.ansible_facts.getent_passwd['automation'][2] | int == 2000
-        fail_msg: |
-          Automation user check failed
-          Expected UID: 2000, GID: 2000
-        success_msg: "[OK] Automation user exists with correct UID/GID (2000:2000)"
-
-    # Directory verification
-    - name: Verify automation directories exist
+    - name: Stat the deployed files
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: dir_stat
       loop:
-        - "{{ automation_data_path }}"
-        - "{{ automation_stack_home }}"
-        - "{{ automation_stack_home }}/config"
-        - "{{ automation_stack_home }}/config/traefik"
-        - "{{ automation_stack_home }}/scripts"
-        - "{{ automation_data_path }}/traefik"
-        - "{{ automation_data_path }}/influxdb3"
-        - "{{ automation_data_path }}/influxdb3/data"
-        - "{{ automation_data_path }}/influxdb3/plugins"
-        - "{{ automation_data_path }}/vaultwarden"
-        - "{{ automation_data_path }}/portainer"
+        - "{{ automation_stack_home }}/.env"
+        - "{{ automation_stack_home }}/scripts/manage-automation.sh"
+        - /usr/local/bin/manage-automation
+        - /usr/local/bin/automation-syncthing-backup
+        - /tmp/molecule-automation-backup
+        - /tmp/automation-stack.service.rendered
+      register: automation_deployed_stats
 
-    - name: Assert all directories exist
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      changed_when: false
+      register: automation_root_crontab
+
+    - name: Assert compose file contents (services, bindings, no secrets)
+      vars:
+        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - item.stat.exists
-          - item.stat.isdir
-        fail_msg: "Directory {{ item.item }} does not exist or is not a directory"
-        success_msg: "[OK] Directory verified: {{ item.item }}"
-      loop: "{{ dir_stat.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+          - "'vaultwarden:' in compose_file"
+          - "'fireflyiii/core:latest' in compose_file"
+          - "'mariadb:11.4' in compose_file"
+          - "'containrrr/watchtower' in compose_file"
+          # Ports bind to the discovered primary_ip, watchtower stays on loopback.
+          - "':8081:80' in compose_file"
+          - "':8082:8080' in compose_file"
+          - "'127.0.0.1:8084:8080' in compose_file"
+          # Secrets only as ${VAR} placeholders - never inlined.
+          - "'ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}' in compose_file"
+          - "'DB_PASSWORD=${FIREFLY_DB_PASSWORD}' in compose_file"
+          - "'molecule-test' not in compose_file"
+          # Watchtower label-enable policy on apps; mariadb has no label.
+          - "'com.centurylinklabs.watchtower.enable=true' in compose_file"
+        fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
+        success_msg: "[OK] compose file has the 5 services, correct bindings and no inlined secrets"
 
-    # File permissions verification
-    - name: Verify acme.json has secure permissions (0600)
-      ansible.builtin.stat:
-        path: "{{ automation_data_path }}/traefik/acme.json"
-      register: acme_json_stat
-
-    - name: Assert acme.json has mode 0600
+    - name: Assert the generated .env carries the secrets at 0600
+      vars:
+        env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - acme_json_stat.stat.exists
-          - acme_json_stat.stat.mode == '0600'
-        fail_msg: |
-          acme.json verification failed
-          Expected mode: 0600
-          Actual mode: {{ acme_json_stat.stat.mode }}
-        success_msg: "[OK] acme.json has secure permissions (0600)"
+          - "'VAULTWARDEN_ADMIN_TOKEN=molecule-test-admin-token' in env_file"
+          - "'FIREFLY_DB_PASSWORD=molecule-test-db-password' in env_file"
+          - "'WATCHTOWER_API_TOKEN=molecule-test-watchtower-token' in env_file"
+          - automation_deployed_stats.results[0].stat.mode == '0600'
+        fail_msg: >-
+          .env wrong (mode {{ automation_deployed_stats.results[0].stat.mode }}):
+          {{ env_file }}
+        success_msg: "[OK] .env holds every vault secret and is 0600"
 
-    # Configuration files verification
-    - name: Verify Traefik configuration files exist
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: traefik_config_stat
-      loop:
-        - "{{ automation_stack_home }}/config/traefik/traefik.yml"
-        - "{{ automation_stack_home }}/config/traefik/dynamic.yml"
-
-    - name: Assert Traefik configs exist
+    - name: Assert the manage script and its symlink
       ansible.builtin.assert:
         that:
-          - item.stat.exists
-        fail_msg: "Traefik config {{ item.item }} does not exist"
-        success_msg: "[OK] Traefik config file exists: {{ item.item }}"
-      loop: "{{ traefik_config_stat.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+          - automation_deployed_stats.results[1].stat.mode == '0755'
+          - automation_deployed_stats.results[1].stat.executable
+          - automation_deployed_stats.results[2].stat.islnk
+          - "'docker compose' in (automation_deployed_files.results[3].content | b64decode)"
+        fail_msg: manage script/symlink wrong
+        success_msg: "[OK] manage-automation.sh (0755) deployed and symlinked into PATH"
 
-    # Docker Compose file verification
-    - name: Verify docker-compose.yml exists
-      ansible.builtin.stat:
-        path: "{{ automation_stack_home }}/docker-compose.yml"
-      register: compose_file_stat
-
-    - name: Assert docker-compose.yml exists
+    - name: Assert the backup script and cron job
+      vars:
+        backup_script: "{{ automation_deployed_files.results[2].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - compose_file_stat.stat.exists
-        fail_msg: "docker-compose.yml does not exist"
-        success_msg: "[OK] docker-compose.yml exists"
+          - automation_deployed_stats.results[3].stat.mode == '0755'
+          - "'/usr/local/bin/automation-syncthing-backup' in automation_root_crontab.stdout"
+          - "'Automation Syncthing local backup' in automation_root_crontab.stdout"
+          # The backup script must not embed any vault secret.
+          - "'molecule-test' not in backup_script"
+          - "'VACUUM INTO' in backup_script"
+          - "'mariadb-dump' in backup_script"
+        fail_msg: "backup script/cron wrong: {{ backup_script }}"
+        success_msg: "[OK] backup script (0755, no embedded secrets) + root cron present"
 
-    # Management scripts verification
-    - name: Verify manage-automation.sh is executable
-      ansible.builtin.stat:
-        path: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-      register: manage_script_stat
-
-    - name: Assert manage-automation.sh is executable
+    - name: Assert the backup directory ownership
       ansible.builtin.assert:
         that:
-          - manage_script_stat.stat.exists
-          - manage_script_stat.stat.executable
-        fail_msg: |
-          manage-automation.sh verification failed
-          Exists: {{ manage_script_stat.stat.exists }}
-          Executable: {{ manage_script_stat.stat.executable }}
-        success_msg: "[OK] manage-automation.sh is executable"
+          - automation_deployed_stats.results[4].stat.isdir
+          - automation_deployed_stats.results[4].stat.mode == '0750'
+          - automation_deployed_stats.results[4].stat.pw_name == 'molecule'
+        fail_msg: >-
+          backup dir wrong: mode {{ automation_deployed_stats.results[4].stat.mode }}
+          owner {{ automation_deployed_stats.results[4].stat.pw_name }}
+        success_msg: "[OK] Syncthing backup dir 0750 owned by molecule"
 
-    # Display verification summary
-    - name: Display automation role verification results
-      ansible.builtin.debug:
-        msg: |
-          [OK] Automation Role Verification Complete
-
-          User Configuration Verified:
-          - User: automation - EXISTS
-          - UID: 2000 - CORRECT
-          - GID: 2000 - CORRECT
-
-          Directory Structure Verified:
-          - Data path: {{ automation_data_path }} - EXISTS
-          - Stack home: {{ automation_stack_home }} - EXISTS
-          - Config directory: {{ automation_stack_home }}/config - EXISTS
-          - Traefik config: {{ automation_stack_home }}/config/traefik - EXISTS
-          - Scripts: {{ automation_stack_home }}/scripts - EXISTS
-          - InfluxDB data: {{ automation_data_path }}/influxdb3 - EXISTS
-          - Vaultwarden data: {{ automation_data_path }}/vaultwarden - EXISTS
-          - Portainer data: {{ automation_data_path }}/portainer - EXISTS
-
-          File Permissions Verified:
-          - acme.json: 0600 - SECURE
-
-          Configuration Files Verified:
-          - traefik.yml - EXISTS
-          - dynamic.yml - EXISTS
-          - docker-compose.yml - EXISTS
-
-          Scripts Verified:
-          - manage-automation.sh - EXECUTABLE
-
-          Note: Docker container startup skipped in container test
-          This validates core role logic without Docker-in-Docker complexity
+    - name: Assert the rendered systemd unit
+      vars:
+        unit: "{{ automation_deployed_files.results[4].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'Requires=docker.service' in unit"
+          - "'ExecStart=/usr/bin/docker compose -f /home/automation/automation-stack/docker-compose.yml up -d' in unit"
+          - "'RemainAfterExit=true' in unit"
+        fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
+        success_msg: "[OK] automation-stack unit renders with explicit compose path"

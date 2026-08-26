@@ -1,0 +1,39 @@
+---
+# Business-level post-deploy checks over the real publish addresses: plain
+# HTTP on primary_ip - exactly what the central reverse proxy serves.
+
+- name: Verify Vaultwarden answers on /alive
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}:{{ automation_vaultwarden_port }}/alive"
+    method: GET
+    timeout: 10
+  register: automation_vaultwarden_health
+  until: automation_vaultwarden_health.status == 200
+  retries: 10
+  delay: 3
+  tags: [post_validation]
+
+- name: Verify Firefly serves its web frontend
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}:{{ automation_firefly_port }}/"
+    method: GET
+    timeout: 10
+    status_code: [200, 302]
+    follow_redirects: none
+  register: automation_firefly_health
+  until: automation_firefly_health.status in [200, 302]
+  retries: 10
+  delay: 3
+  tags: [post_validation]
+
+- name: Verify MariaDB answers ping
+  ansible.builtin.command: docker compose exec -T mariadb mariadb-admin ping
+  args:
+    chdir: "{{ automation_stack_home }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: automation_mariadb_ping
+  until: "'mysqld is alive' in automation_mariadb_ping.stdout"
+  retries: 10
+  delay: 3
+  tags: [post_validation]
