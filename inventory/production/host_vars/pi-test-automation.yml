@@ -22,7 +22,7 @@ common_firewall_ports:
 # TEST HOST: opt in to a full format + mount of the attached drive on first
 # deploy (DESTRUCTIVE) - this is a disposable test box, so wiping is intended.
 automation_ssd_format: true
-automation_data_path: "/mnt/automation-data"
+automation_data_path: "/mnt/data"
 # automation_stack_home derives from ansible_user (inventory pins
 # ansible_user: ansible) => /home/ansible/automation-stack, whose parent is the
 # ansible user's own home - so it always exists on this host.
@@ -39,7 +39,7 @@ prometheus_role: "automation"
 # Secondary local backup on the SSD, mirrored by Syncthing (as on pi-automation).
 common_syncthing_enabled: true
 automation_backup_enabled: true
-automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_dir: "/mnt/data/syncthing/backup"
 # automation_backup_owner derives from ansible_user (=> ansible on this host).
 
 # DESTRUCTIVE, host-scoped on purpose - NOT a role default.

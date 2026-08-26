@@ -16,7 +16,7 @@
     vault_vaultwarden_admin_token: molecule-test-admin-token
     vault_watchtower_api_token: molecule-test-watchtower-token
     automation_trusted_proxies: "100.64.0.0/10"
-    automation_data_path: /mnt/automation-data
+    automation_data_path: /mnt/data
     automation_stack_home: /home/automation/automation-stack
     automation_backup_enabled: true
     automation_backup_dir: /tmp/molecule-automation-backup

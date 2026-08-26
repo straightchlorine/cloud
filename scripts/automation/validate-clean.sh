@@ -77,10 +77,10 @@ else
 fi
 
 # Data dir is deliberately retained across a teardown (replicated user data).
-if [ -d /mnt/automation-data ]; then
-  note_ok "/mnt/automation-data present (data intentionally left)"
+if [ -d /mnt/data ]; then
+  note_ok "/mnt/data present (data intentionally left)"
 else
-  note_left "/mnt/automation-data missing (expected to remain mounted)"
+  note_left "/mnt/data missing (expected to remain mounted)"
 fi
 
 echo

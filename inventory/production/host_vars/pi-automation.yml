@@ -11,7 +11,7 @@ device_specs:
 
 # automation_data_path: SSD mount when a drive is present; Docker's data-root and
 # journald live under it too (all optional/auto-detected, mirroring DNS).
-automation_data_path: "/mnt/automation-data"
+automation_data_path: "/mnt/data"
 # automation_stack_home derives from ansible_user (=> /home/automation here).
 # Docker's data-root + journald ride the auto-detected SSD when one is present.
 
@@ -56,4 +56,4 @@ common_backup_service_name: "automation"
 # automation_backup_owner derives from ansible_user (the stack/Syncthing user).
 common_syncthing_enabled: true
 automation_backup_enabled: true
-automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_dir: "/mnt/data/syncthing/backup"

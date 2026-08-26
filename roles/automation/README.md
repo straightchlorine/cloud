@@ -63,7 +63,7 @@ Example for production:
 
 ```yaml
 device_type: rpi4b
-automation_data_path: "/mnt/automation-data"   # stack data path (on the optional SSD when present)
+automation_data_path: "/mnt/data"   # stack data path (on the optional SSD when present)
 # automation_stack_home derives from ansible_user (=> /home/automation here).
 # Override only to pin a dedicated stack account.
 # Optional SSD (mirrors DNS): auto-detected if attached; wipe/format it here.
@@ -72,7 +72,7 @@ automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
 
 # Secondary local backup (mariadb dump + vaultwarden snapshot) into Syncthing
 automation_backup_enabled: true
-automation_backup_dir: "/mnt/automation-data/syncthing/backup"
+automation_backup_dir: "/mnt/data/syncthing/backup"
 # automation_backup_owner derives from ansible_user (the stack/Syncthing user).
 common_syncthing_enabled: true
 

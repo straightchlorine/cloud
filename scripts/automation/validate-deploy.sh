@@ -75,11 +75,11 @@ for svc in docker automation-stack syncthing node-exporter; do
 done
 
 echo "-- SSD / storage --"
-if findmnt -n /mnt/automation-data >/dev/null 2>&1; then
-  fstype="$(findmnt -no FSTYPE /mnt/automation-data)"
-  note_ok "/mnt/automation-data mounted ($fstype)"
+if findmnt -n /mnt/data >/dev/null 2>&1; then
+  fstype="$(findmnt -no FSTYPE /mnt/data)"
+  note_ok "/mnt/data mounted ($fstype)"
 else
-  note_left "/mnt/automation-data not mounted"
+  note_left "/mnt/data not mounted"
 fi
 if findmnt -n /var/log/journal >/dev/null 2>&1; then
   note_ok "/var/log/journal relocated to SSD"
@@ -90,7 +90,7 @@ fi
 # STACK_HOME follows the SSH user's home, mirroring the role's derived
 # automation_stack_home (ansible_user_dir/automation-stack).
 STACK_HOME="${HOME}/automation-stack"
-DATA="/mnt/automation-data"
+DATA="/mnt/data"
 
 echo "-- Compose file + secrets --"
 check_present "$STACK_HOME/docker-compose.yml"

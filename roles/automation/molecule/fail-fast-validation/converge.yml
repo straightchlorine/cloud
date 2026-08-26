@@ -15,7 +15,7 @@
     vault_firefly_db_password: molecule-test-db-password
     vault_vaultwarden_admin_token: molecule-test-admin-token
     vault_watchtower_api_token: molecule-test-watchtower-token
-    automation_data_path: /mnt/automation-data
+    automation_data_path: /mnt/data
     automation_stack_home: /home/automation/automation-stack
     restic_enabled: false
     restic_repository: /tmp/test-restic

@@ -70,7 +70,7 @@ coordinator_targets:
       - /var/lib/docker/volumes
       - /var/log
       - /home/automation
-      - /mnt/automation-data
+      - /mnt/data
       - /root/.ssh
     backup_excludes:
       - /var/cache/*
