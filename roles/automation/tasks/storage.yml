@@ -139,7 +139,9 @@
 
 - name: Move Docker's data-root onto the SSD
   # common/docker.yml only adds data-root when this fact is defined, so on an
-  # SD-only run Docker keeps its default /var/lib/docker.
-  ansible.builtin.set_fact:
+  # SD-only run Docker keeps its default /var/lib/docker. The variable belongs
+  # to the common role (docker.yml consumes it) - set_fact here is a deliberate
+  # cross-role handoff, so the foreign prefix is intentional.
+  ansible.builtin.set_fact:  # noqa: var-naming[no-role-prefix]
     common_docker_data_root: "{{ automation_data_path }}/docker"
   when: automation_ssd_present
