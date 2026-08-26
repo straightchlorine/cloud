@@ -79,6 +79,15 @@
   become: true
   notify: Restart docker
 
+- name: Refresh the connection so the new docker group takes effect
+  # Ansible reuses a single become wrapper spawned when the connection was
+  # established, whose supplementary groups were set BEFORE this user: was added
+  # to the docker group above. Tasks further down run as "{{ ansible_user }}"
+  # via that stale session, so they'd be denied the docker socket. Resetting the
+  # connection re-spawns the become session and picks up the updated group
+  # membership (idempotent: no-op if the group was already present).
+  ansible.builtin.meta: reset_connection
+
 - name: Check if daemon.json exists
   ansible.builtin.stat:
     path: /etc/docker/daemon.json
