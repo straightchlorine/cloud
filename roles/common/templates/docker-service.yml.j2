@@ -28,7 +28,7 @@
 {% if service_environment is defined %}
     environment:
 {% for env_var in service_environment %}
-      - {{ env_var }}
+      - "{{ env_var }}"
 {% endfor %}
 {% endif %}
 {% if service_volumes is defined %}
