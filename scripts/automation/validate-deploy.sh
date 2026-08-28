@@ -88,7 +88,7 @@ else
 fi
 
 # STACK_HOME follows the SSH user's home, mirroring the role's derived
-# automation_stack_home (ansible_user_dir/automation-stack).
+# automation_stack_home (/home/<ansible_user>/automation-stack).
 STACK_HOME="${HOME}/automation-stack"
 DATA="/mnt/data"
 

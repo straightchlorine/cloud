@@ -126,3 +126,37 @@
             dest: /tmp/molecule-case3.passed
             force: false
             mode: "0644"
+
+    # Case 4 (regression guard): stack home resolved under /root for a non-root
+    # stack user - the exact trap that shipped a /root/automation-stack deploy
+    # once. The parent-dir check passes (/root exists), so validate.yml reaches
+    # the new /root guard and must refuse.
+    - name: "Case 4: validate.yml refuses a stack home under /root for a non-root user"
+      block:
+        - name: Run the real validate.yml with the /root stack-home misconfiguration
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            ansible_user: testuser
+            automation_trusted_proxies: "100.64.0.0/10"
+            automation_stack_home: /root/automation-stack
+
+        - name: Fail the test - the /root guard should have refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse the /root stack home"
+      rescue:
+        - name: Assert the failure was the /root stack-home guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'/root' in (ansible_failed_result.msg | default(''))"
+              - "'ansible_user' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason (stack home
+              under /root): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's /root stack-home guard correctly refused the misconfiguration"
+
+        - name: Record case 4 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"

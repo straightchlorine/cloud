@@ -12,9 +12,10 @@
         - /tmp/molecule-case1.passed
         - /tmp/molecule-case2.passed
         - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
       register: automation_failfast_markers
 
-    - name: Assert all three fail-fast cases completed
+    - name: Assert all four fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -34,6 +35,7 @@
           Case 1 - missing required variable (automation_trusted_proxies): FAILED as expected
           Case 2 - placeholder vault secret (vault_firefly_app_key): FAILED as expected
           Case 3 - TRUSTED_PROXIES catch-all ('**'): FAILED as expected
+          Case 4 - stack home under /root for a non-root user: FAILED as expected
 
-          All three cases ran the real roles/automation/tasks/validate.yml end to end -
+          All four cases ran the real roles/automation/tasks/validate.yml end to end -
           no hand-copied guards anywhere in this scenario.

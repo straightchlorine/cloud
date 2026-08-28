@@ -57,6 +57,26 @@
     - "{{ automation_stack_home }}"
   tags: [validation]
 
+- name: Refuse a stack home under /root for a non-root stack user
+  # Regression guard for the ansible_user_dir/ansible_user_id FACT trap: under
+  # become:true those facts reflect the BECOME user (root), so deriving the
+  # stack home from them silently lands in /root - which the real (non-root)
+  # stack owner cannot traverse, and the deploy dies later at docker compose.
+  # The role derives the stack home from the inventory's ansible_user instead
+  # (/home/<user>/automation-stack); this guard fails fast if a refactor or a
+  # host override ever reintroduces a /root path for a non-root control user.
+  ansible.builtin.fail:
+    msg: >-
+      automation_stack_home ({{ automation_stack_home }}) resolves under /root,
+      but ansible_user is '{{ ansible_user }}'. The role derives the stack home
+      from the inventory's ansible_user (/home/<user>/automation-stack); a /root
+      path usually means an ansible_user_dir / ansible_user_id FACT was used -
+      under become:true those reflect the become root user, not the stack owner.
+  when:
+    - ansible_user != 'root'
+    - automation_stack_home is match('/root(/|$)')
+  tags: [validation]
+
 - name: Refuse the Firefly TRUSTED_PROXIES catch-all
   ansible.builtin.fail:
     msg: >

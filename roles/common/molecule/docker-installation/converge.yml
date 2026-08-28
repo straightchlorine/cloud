@@ -1,5 +1,14 @@
 ---
-# Test Docker installation with user namespace mapping
+# Test Docker installation with user namespace mapping.
+#
+# Converge runs the REAL roles/common/tasks/docker.yml (per
+# docs/testing/molecule-standard.md). Because the scenario connects as root,
+# docker.yml's own smoke test (become_user: "{{ ansible_user }}") can never see
+# a non-root docker-permission regression on its own - root bypasses the
+# socket's group ownership. So, after the install, this converge also re-runs
+# the REAL docker.yml against a freshly-created NON-ROOT user, with a stale
+# become session forced first - reproducing production, where the connect user
+# is a non-root PVC/syncthing user that is added to the docker group mid-run.
 
 - name: Converge - Docker installation
   hosts: all
@@ -18,3 +27,45 @@
       ansible.builtin.include_role:
         name: common
         tasks_from: docker
+
+    # -- Non-root docker-group regression guard ----------------------------
+    # On a fresh box the automation user is added to the docker group DURING
+    # the same play that must then use docker (smoke test become_user user).
+    # Ansible caches one become session per target user, so without a
+    # `meta: reset_connection` right after the user: group change, the cached
+    # session still carries the pre-change groups and `docker run` fails with
+    # "permission denied ... docker.sock". A root-connected test hides this.
+    # Sequence:
+    #   1) create 'docker-probe' (NOT yet in the docker group),
+    #   2) arm a STALE become session for it (spawned before the group grant),
+    #   3) re-run the real docker.yml with ansible_user=docker-probe: it adds
+    #      that user to the group, then reset_connection re-spawns the session
+    #      with docker, and finally re-runs the smoke as docker-probe.
+    # If reset_connection is ever removed, step 3 reuses the stale session and
+    # the smoke test fails here on the FIRST converge - catching the regression.
+    - name: Create the non-root docker test user (not yet a docker member)
+      ansible.builtin.user:
+        name: docker-probe
+        state: present
+        shell: /bin/bash
+      become: true
+
+    - name: Arm a stale non-root become session before the docker group is granted
+      # A trivial command that forces Ansible to spawn (and cache) a become
+      # session as docker-probe while it still has NO docker group. This cached
+      # session is what the docker.yml smoke test would be given if docker.yml
+      # ever lost its reset_connection step.
+      ansible.builtin.command: id
+      args:
+        warn: false
+      become: true
+      become_user: docker-probe
+      changed_when: false
+
+    - name: Include the real docker role as the non-root user (regression path)
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: docker
+      vars:
+        # Point the role's become/smoke wiring at the non-root user.
+        ansible_user: docker-probe

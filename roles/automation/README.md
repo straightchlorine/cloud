@@ -53,11 +53,13 @@ vault_watchtower_api_token: "openssl rand -base64 32"
 ### Host Variables (host_vars/pi-automation.yml)
 
 `automation_stack_home` and `automation_backup_owner` are **derived from the
-inventory's `ansible_user`** (role defaults: `{{ ansible_user_dir }}/automation-stack`
-and `{{ ansible_user_id }}`). Set the SSH/stack user once in `hosts.yml` and both
+inventory's `ansible_user`** (role defaults: `/home/{{ ansible_user }}/automation-stack`
+and `{{ ansible_user }}`). Set the SSH/stack user once in `hosts.yml` and both
 follow automatically - this is why the test host (`ansible`) lands on
 `/home/ansible/automation-stack` while production (`automation`) uses
-`/home/automation/automation-stack`.
+`/home/automation/automation-stack`. (These derive from the inventory variable,
+not the `ansible_user_dir`/`ansible_user_id` facts - those reflect the `become`
+root user and would resolve to `/root`.)
 
 Example for production:
 
