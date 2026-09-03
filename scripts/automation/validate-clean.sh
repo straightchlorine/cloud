@@ -35,15 +35,15 @@ check_absent() {
 echo "-- Automation role state --"
 check_absent /usr/local/bin/automation-syncthing-backup
 check_absent /usr/local/bin/manage-automation
-check_absent /etc/systemd/system/automation-stack.service
+check_absent /etc/systemd/system/stack.service
 check_absent /var/log/automation-syncthing-backup.log
 # Stack home follows the SSH user's home (automation_stack_home derives from ansible_user).
-check_absent "$HOME/automation-stack"
+check_absent "$HOME/stack"
 
-if systemctl is-active --quiet automation-stack 2>/dev/null; then
-  note_left "automation-stack service still active"
+if systemctl is-active --quiet stack 2>/dev/null; then
+  note_left "stack service still active"
 else
-  note_ok "automation-stack service not active"
+  note_ok "stack service not active"
 fi
 
 # Syncthing fully torn down by the role's teardown include (common role).
@@ -61,10 +61,10 @@ fi
 
 echo "-- Docker state --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx 'automation-stack'; then
-    note_left "docker network automation-stack still exists"
+  if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx 'stack'; then
+    note_left "docker network stack still exists"
   else
-    note_ok "docker network automation-stack removed"
+    note_ok "docker network stack removed"
   fi
   running="$(docker ps -q --filter 'label=com.docker.compose.project=automation' 2>/dev/null | wc -l)"
   if [ "$running" -gt 0 ]; then

@@ -17,7 +17,7 @@
     vault_watchtower_api_token: molecule-test-watchtower-token
     automation_trusted_proxies: "100.64.0.0/10"
     automation_data_path: /mnt/data
-    automation_stack_home: /home/automation/automation-stack
+    automation_stack_home: /home/automation/stack
     automation_backup_enabled: true
     automation_backup_dir: /tmp/molecule-automation-backup
     automation_backup_owner: molecule
@@ -66,13 +66,13 @@
         name: automation
         tasks_from: backup
 
-    - name: Render the automation-stack systemd unit
+    - name: Render the stack systemd unit
       # docker_stack_service itself needs docker.service (excluded above) -
       # render the unit here so a broken template variable still fails CI
       # instead of silently writing a broken unit on a real Pi.
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
-        dest: /tmp/automation-stack.service.rendered
+        dest: /tmp/stack.service.rendered
         mode: "0644"
       vars:
         service_description: "Automation Stack (molecule render)"
@@ -89,7 +89,7 @@
         exec_start: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml up -d"
         exec_stop: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml down"
         exec_reload: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml restart"
-        syslog_identifier: "automation-stack"
+        syslog_identifier: "stack"
         common_timeout_start_sec: "0"
         kill_mode: "none"
         common_standard_output: "journal"

@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    automation_stack_home: /home/automation/automation-stack
+    automation_stack_home: /home/automation/stack
   tasks:
     - name: Read the generated compose file and env file
       ansible.builtin.slurp:
@@ -13,7 +13,7 @@
         - "{{ automation_stack_home }}/.env"
         - /usr/local/bin/automation-syncthing-backup
         - "{{ automation_stack_home }}/scripts/manage-automation.sh"
-        - /tmp/automation-stack.service.rendered
+        - /tmp/stack.service.rendered
       register: automation_deployed_files
 
     - name: Stat the deployed files
@@ -25,7 +25,7 @@
         - /usr/local/bin/manage-automation
         - /usr/local/bin/automation-syncthing-backup
         - /tmp/molecule-automation-backup
-        - /tmp/automation-stack.service.rendered
+        - /tmp/stack.service.rendered
       register: automation_deployed_stats
 
     - name: Read root's crontab
@@ -118,7 +118,7 @@
       ansible.builtin.assert:
         that:
           - "'Requires=docker.service' in unit"
-          - "'ExecStart=/usr/bin/docker compose -f /home/automation/automation-stack/docker-compose.yml up -d' in unit"
+          - "'ExecStart=/usr/bin/docker compose -f /home/automation/stack/docker-compose.yml up -d' in unit"
           - "'RemainAfterExit=true' in unit"
         fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
-        success_msg: "[OK] automation-stack unit renders with explicit compose path"
+        success_msg: "[OK] stack unit renders with explicit compose path"

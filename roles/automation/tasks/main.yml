@@ -58,7 +58,7 @@
     name: common
     tasks_from: docker_stack_service
   vars:
-    stack_service_name: "automation-stack"
+    stack_service_name: "stack"
     stack_description: "Automation Stack (vaultwarden, firefly, mariadb, watchtower)"
     stack_home_directory: "{{ automation_stack_home }}"
     stack_user: "{{ ansible_user }}"

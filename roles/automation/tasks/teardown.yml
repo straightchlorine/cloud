@@ -13,18 +13,18 @@
       through playbooks/automation-teardown.yml instead.
     quiet: true
 
-- name: Stop and disable the automation-stack systemd unit
+- name: Stop and disable the stack systemd unit
   ansible.builtin.systemd:
-    name: automation-stack
+    name: stack
     enabled: false
     state: stopped
     daemon_reload: true
   become: true
   failed_when: false
 
-- name: Remove the automation-stack systemd unit
+- name: Remove the stack systemd unit
   ansible.builtin.file:
-    path: /etc/systemd/system/automation-stack.service
+    path: /etc/systemd/system/stack.service
     state: absent
   become: true
 
@@ -86,7 +86,7 @@
   loop:
     - /usr/local/bin/automation-syncthing-backup
     - /usr/local/bin/manage-automation
-    - /etc/systemd/system/automation-stack.service
+    - /etc/systemd/system/stack.service
     - /var/log/automation-syncthing-backup.log
     - "{{ automation_stack_home }}"
   register: automation_teardown_verify

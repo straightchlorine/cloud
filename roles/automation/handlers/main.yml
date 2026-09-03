@@ -1,9 +1,9 @@
 ---
 # docker_stack_service's unit template notifies "Restart {{ stack_service_name }}"
 # whenever the unit file changes (first deploy or unit edit).
-- name: Restart automation-stack
+- name: Restart stack
   ansible.builtin.systemd:
-    name: automation-stack
+    name: stack
     state: restarted
     daemon_reload: true
   become: true

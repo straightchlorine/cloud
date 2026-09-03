@@ -16,7 +16,7 @@
     vault_vaultwarden_admin_token: molecule-test-admin-token
     vault_watchtower_api_token: molecule-test-watchtower-token
     automation_data_path: /mnt/data
-    automation_stack_home: /home/automation/automation-stack
+    automation_stack_home: /home/automation/stack
     restic_enabled: false
     restic_repository: /tmp/test-restic
     restic_password: molecule-test-restic-password
@@ -128,7 +128,7 @@
             mode: "0644"
 
     # Case 4 (regression guard): stack home resolved under /root for a non-root
-    # stack user - the exact trap that shipped a /root/automation-stack deploy
+    # stack user - the exact trap that shipped a /root/stack deploy
     # once. The parent-dir check passes (/root exists), so validate.yml reaches
     # the new /root guard and must refuse.
     - name: "Case 4: validate.yml refuses a stack home under /root for a non-root user"
@@ -138,7 +138,7 @@
           vars:
             ansible_user: testuser
             automation_trusted_proxies: "100.64.0.0/10"
-            automation_stack_home: /root/automation-stack
+            automation_stack_home: /root/stack
 
         - name: Fail the test - the /root guard should have refused
           ansible.builtin.fail:

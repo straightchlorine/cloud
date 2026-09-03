@@ -12,10 +12,10 @@
 # FACTS here: plays run with become:true, so those reflect the BECOME user
 # (root) and resolve to /root, not the stack owner's home. Set the SSH/stack
 # user once in hosts.yml and both values follow it:
-#   pi-automation  (ansible_user=automation) -> /home/automation/automation-stack
-#   pi-test-automation (ansible_user=ansible) -> /home/ansible/automation-stack
+#   pi-automation  (ansible_user=automation) -> /home/automation/stack
+#   pi-test-automation (ansible_user=ansible) -> /home/ansible/stack
 # Host_vars may still override these to pin a dedicated stack account.
-automation_stack_home: "/home/{{ ansible_user }}/automation-stack"
+automation_stack_home: "/home/{{ ansible_user }}/stack"
 automation_backup_owner: "{{ ansible_user }}"
 
 automation_specific_packages:
@@ -66,8 +66,8 @@ automation_backup_schedule_minute: "45"
 # --- Generated compose profile (secretless; env values come from .env) -----
 
 automation_compose_networks:
-  - name: automation-stack
-    compose_name: automation-stack
+  - name: stack
+    compose_name: stack
     driver: bridge
 
 automation_compose_services:
@@ -86,7 +86,7 @@ automation_compose_services:
     service_volumes:
       - "{{ automation_data_path }}/vaultwarden:/data"
     service_networks:
-      - automation-stack
+      - stack
     service_labels:
       - "com.centurylinklabs.watchtower.enable=true"
     service_resources:
@@ -119,7 +119,7 @@ automation_compose_services:
     service_volumes:
       - "{{ automation_data_path }}/firefly/upload:/var/www/html/storage/upload"
     service_networks:
-      - automation-stack
+      - stack
     service_depends_on:
       - service: mariadb
         condition: service_healthy
@@ -146,7 +146,7 @@ automation_compose_services:
       - service: firefly
         condition: service_started
     service_networks:
-      - automation-stack
+      - stack
     service_labels:
       - "com.centurylinklabs.watchtower.enable=true"
     service_resources:
@@ -172,7 +172,7 @@ automation_compose_services:
     service_volumes:
       - "{{ automation_data_path }}/mariadb:/var/lib/mysql"
     service_networks:
-      - automation-stack
+      - stack
     service_resources:
       limits:
         memory: 768M
@@ -199,7 +199,7 @@ automation_compose_services:
     service_volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     service_networks:
-      - automation-stack
+      - stack
     service_resources:
       limits:
         memory: 256M
@@ -234,7 +234,7 @@ automation_compose_services:
       - "{{ automation_data_path }}/calibre/ingest:/cwa-book-ingest"
       - "{{ automation_data_path }}/calibre/library:/calibre-library"
     service_networks:
-      - automation-stack
+      - stack
     service_labels:
       - "com.centurylinklabs.watchtower.enable=true"
     service_resources:

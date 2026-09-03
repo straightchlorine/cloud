@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    automation_stack_home: /home/automation/automation-stack
+    automation_stack_home: /home/automation/stack
   tasks:
     - name: Stat everything the teardown should have removed
       ansible.builtin.stat:
@@ -11,7 +11,7 @@
       loop:
         - /usr/local/bin/automation-syncthing-backup
         - /usr/local/bin/manage-automation
-        - /etc/systemd/system/automation-stack.service
+        - /etc/systemd/system/stack.service
         - /var/log/automation-syncthing-backup.log
         - "{{ automation_stack_home }}"
       register: automation_teardown_leftovers
@@ -39,8 +39,8 @@
         fail_msg: "Cron job survived the teardown: {{ automation_teardown_crontab.stdout | default('') }}"
         success_msg: "[OK] automation backup cron job removed"
 
-    - name: Assert the automation-stack service is not active
+    - name: Assert the stack service is not active
       ansible.builtin.systemd:
-        name: automation-stack
+        name: stack
       register: automation_teardown_unit
       failed_when: automation_teardown_unit.status.ActiveState == 'active'

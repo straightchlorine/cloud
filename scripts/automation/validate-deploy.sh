@@ -61,7 +61,7 @@ else
 fi
 
 echo "-- Services --"
-for svc in docker automation-stack syncthing node-exporter; do
+for svc in docker stack syncthing node-exporter; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     note_ok "$svc active"
   else
@@ -88,8 +88,8 @@ else
 fi
 
 # STACK_HOME follows the SSH user's home, mirroring the role's derived
-# automation_stack_home (/home/<ansible_user>/automation-stack).
-STACK_HOME="${HOME}/automation-stack"
+# automation_stack_home (/home/<ansible_user>/stack).
+STACK_HOME="${HOME}/stack"
 DATA="/mnt/data"
 
 echo "-- Compose file + secrets --"

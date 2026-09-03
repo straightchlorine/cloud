@@ -15,7 +15,7 @@
     vault_watchtower_api_token: molecule-test-watchtower-token
     automation_trusted_proxies: "100.64.0.0/10"
     automation_data_path: /mnt/data
-    automation_stack_home: /home/automation/automation-stack
+    automation_stack_home: /home/automation/stack
     automation_backup_enabled: true
     automation_backup_dir: /tmp/molecule-automation-backup
     automation_backup_owner: molecule
@@ -56,7 +56,7 @@
     # Fixture: what docker_stack_service would have created on a real host (a
     # container has no docker.service, so the unit is faked here only to give
     # the teardown a real unit file to stop and remove).
-    - name: Create the fake automation-stack service unit
+    - name: Create the fake stack service unit
       ansible.builtin.copy:
         content: |
           [Unit]
@@ -66,7 +66,7 @@
           ExecStart=/bin/true
           [Install]
           WantedBy=multi-user.target
-        dest: /etc/systemd/system/automation-stack.service
+        dest: /etc/systemd/system/stack.service
         mode: "0644"
       tags: [molecule-idempotence-notest]
 

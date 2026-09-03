@@ -25,7 +25,7 @@ common_firewall_ports:
 automation_ssd_format: true
 automation_data_path: "/mnt/data"
 # automation_stack_home derives from ansible_user (inventory pins
-# ansible_user: ansible) => /home/ansible/automation-stack, whose parent is the
+# ansible_user: ansible) => /home/ansible/stack, whose parent is the
 # ansible user's own home - so it always exists on this host.
 
 # Start the compose stack as part of the deploy.
