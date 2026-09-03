@@ -60,7 +60,7 @@
       {% endif %}
       {% endfor %}
     insertafter: EOF
-  when: compose_networks is defined
+  when: compose_networks is defined and compose_networks | length > 0
 
 - name: Add volumes section if defined
   ansible.builtin.blockinfile:
@@ -80,7 +80,10 @@
       {% endif %}
       {% endfor %}
     insertafter: EOF
-  when: compose_volumes is defined
+  # An empty (or undefined) volumes list must NOT emit a bare `volumes:` key:
+  # compose rejects an empty mapping ("volumes must be a mapping"). Bind-mount
+  # only stacks (automation) define compose_volumes as [] - omit the section.
+  when: compose_volumes is defined and compose_volumes | length > 0
 
 - name: Generate the environment file from vault secrets
   # Compose auto-interpolates a `.env` file placed next to the compose file, so

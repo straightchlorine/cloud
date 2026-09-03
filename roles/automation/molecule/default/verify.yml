@@ -62,6 +62,24 @@
         fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
         success_msg: "[OK] compose file has the 6 services, correct bindings and no inlined secrets"
 
+    - name: Assert the rendered compose parses and has no empty top-level keys
+      vars:
+        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
+        compose_data: "{{ compose_file | from_yaml }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            'volumes' not in compose_data
+            or (compose_data.volumes is mapping and compose_data.volumes | length > 0)
+          - >-
+            'networks' not in compose_data
+            or (compose_data.networks is mapping and compose_data.networks | length > 0)
+          - "compose_data.services is mapping"
+        fail_msg: >-
+          rendered compose file is structurally invalid (empty volumes/networks,
+          or missing services): {{ compose_data }}
+        success_msg: "[OK] rendered compose parses and has non-empty volumes/networks mappings"
+
     - name: Assert the generated .env carries the secrets at 0600
       vars:
         env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
