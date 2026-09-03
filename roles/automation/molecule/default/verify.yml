@@ -42,18 +42,25 @@
           - "'fireflyiii/core:latest' in compose_file"
           - "'mariadb:11.4' in compose_file"
           - "'containrrr/watchtower' in compose_file"
+          - "'crocodilestick/calibre-web-automated' in compose_file"
           # Ports bind to the discovered primary_ip, watchtower stays on loopback.
           - "':8081:80' in compose_file"
           - "':8082:8080' in compose_file"
+          - "':8083:8083' in compose_file"
           - "'127.0.0.1:8084:8080' in compose_file"
+          # Calibre's three separate binds (config/ingest/library) - CWA errors
+          # on nested binds, so each must be its own directory.
+          - "'/cwa-book-ingest' in compose_file"
+          - "'/calibre-library' in compose_file"
           # Secrets only as ${VAR} placeholders - never inlined.
           - "'ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}' in compose_file"
           - "'DB_PASSWORD=${FIREFLY_DB_PASSWORD}' in compose_file"
+          - "'HARDCOVER_TOKEN=${HARDCOVER_TOKEN}' in compose_file"
           - "'molecule-test' not in compose_file"
           # Watchtower label-enable policy on apps; mariadb has no label.
           - "'com.centurylinklabs.watchtower.enable=true' in compose_file"
         fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
-        success_msg: "[OK] compose file has the 5 services, correct bindings and no inlined secrets"
+        success_msg: "[OK] compose file has the 6 services, correct bindings and no inlined secrets"
 
     - name: Assert the generated .env carries the secrets at 0600
       vars:

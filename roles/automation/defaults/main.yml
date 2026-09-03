@@ -23,10 +23,11 @@ automation_specific_packages:
   - tree
   - sqlite3  # automation-syncthing-backup.sh snapshots vaultwarden's db with VACUUM INTO
 
-# Host-facing ports for the two tailnet-reachable services (the central
-# reverse proxy fronts these). Watchtower's metrics API stays localhost-only.
+# Host-facing ports for the tailnet-reachable services (the central reverse
+# proxy fronts these). Watchtower's metrics API stays localhost-only.
 automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
+automation_calibre_port: 8083
 automation_watchtower_metrics_port: 8084
 
 # Subdomains used in service URLs and by the reverse proxy.
@@ -207,6 +208,43 @@ automation_compose_services:
         memory: 128M
         cpus: "0.1"
 
-# No named volumes - every service volume is a bind mount onto the SSD
-# (automation_data_path).
+  - service_name: calibre-web-automated
+    service_image: "crocodilestick/calibre-web-automated:latest"
+    service_ports:
+      - host: "{{ automation_calibre_port }}"
+        container: 8083
+        bind_ip: "{{ primary_ip }}"
+    service_environment:
+      # Stack user owns the library files - CWA must not run as root (its docs
+      # warn root-owned library files break ingestion/transfer). The uid/gid
+      # are resolved via getent in stack.yml from the inventory's ansible_user.
+      - "PUID={{ automation_stack_uid }}"
+      - "PGID={{ automation_stack_gid }}"
+      - "TZ={{ timezone }}"
+      # Data lives on the local data path - NETWORK_SHARE_MODE (disables WAL,
+      # switches to polling watchers) is only for NFS/SMB libraries.
+      - "NETWORK_SHARE_MODE=false"
+      # Optional Hardcover metadata-provider key - empty until
+      # vault_hardcover_token is set in vault (value lives in the 0600 .env).
+      - "HARDCOVER_TOKEN=${HARDCOVER_TOKEN}"
+    service_volumes:
+      # Three SEPARATE directories - CWA errors when binds are nested in binds.
+      - "{{ automation_data_path }}/calibre/config:/config"
+      # DESTRUCTIVE by design: files dropped here are deleted after ingest.
+      - "{{ automation_data_path }}/calibre/ingest:/cwa-book-ingest"
+      - "{{ automation_data_path }}/calibre/library:/calibre-library"
+    service_networks:
+      - automation-stack
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 1G
+        cpus: "1.0"
+      reservations:
+        memory: 256M
+        cpus: "0.25"
+
+# No named volumes - every service volume is a bind mount onto the data path
+# (automation_data_path; the SSD when the optional drive is present).
 automation_compose_volumes: []

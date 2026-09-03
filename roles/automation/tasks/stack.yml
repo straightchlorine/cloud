@@ -3,7 +3,22 @@
 # common's build_docker_compose as a 0600 .env next to docker-compose.yml and
 # interpolated by compose via ${VAR} - the compose file never carries a secret.
 
-- name: Create the stack data directories on the SSD
+- name: Resolve the stack user's uid/gid on this host
+  # CWA honors PUID/PGID and must not run as root (its library files then end
+  # up root-owned, which breaks ingestion/transfer). Do NOT use the
+  # ansible_user_dir / ansible_user_uid FACTS here - under become:true they
+  # reflect root (the /root automation_stack_home trap). Resolve the
+  # inventory's ansible_user on this host instead.
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+
+- name: Publish the stack user's uid/gid for the compose services
+  ansible.builtin.set_fact:
+    automation_stack_uid: "{{ getent_passwd[ansible_user][1] }}"
+    automation_stack_gid: "{{ getent_passwd[ansible_user][2] }}"
+
+- name: Create the stack data directories
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
@@ -16,6 +31,9 @@
     - firefly
     - firefly/upload
     - mariadb
+    - calibre/config
+    - calibre/ingest
+    - calibre/library
 
 - name: Create the stack home directory
   ansible.builtin.file:
@@ -54,6 +72,10 @@
       FIREFLY_DB_PASSWORD: "{{ vault_firefly_db_password }}"
       VAULTWARDEN_ADMIN_TOKEN: "{{ vault_vaultwarden_admin_token }}"
       WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
+      # Optional Hardcover metadata-provider key (CWA env). Empty until
+      # vault_hardcover_token is set in vault, so molecule/test deploys without
+      # the vault var still render.
+      HARDCOVER_TOKEN: "{{ vault_hardcover_token if vault_hardcover_token is defined else '' }}"
       # Watchtower notifications ride the shared ntfy topic when a key is
       # configured (the key deploy is optional in common/ntfy_install.yml);
       # an empty URL just leaves watchtower silent.

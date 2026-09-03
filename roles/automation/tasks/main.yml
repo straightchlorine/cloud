@@ -66,8 +66,8 @@
     # known-open issue (see its header comment), so don't rely on cwd here.
     stack_environment_vars:
       - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
-      - "PUID={{ ansible_uid }}"
-      - "PGID={{ ansible_gid }}"
+      - "PUID={{ automation_stack_uid }}"
+      - "PGID={{ automation_stack_gid }}"
     stack_exec_start: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml up -d"
     stack_exec_stop: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml down"
     stack_exec_reload: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml restart"

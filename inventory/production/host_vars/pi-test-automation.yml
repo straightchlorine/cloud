@@ -15,6 +15,7 @@ common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 8081, comment: "Vaultwarden"}
   - {port: 8082, comment: "Firefly III"}
+  - {port: 8083, comment: "Calibre-Web"}
 
 # The automation role's optional SSD (mirrors DNS): when an unused drive is
 # attached (or already mounted at automation_data_path) the stack data, journald

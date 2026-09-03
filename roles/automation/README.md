@@ -13,8 +13,23 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 - **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.4`
 - **firefly-cron** (compose-internal): drives Firefly's recurring transactions
 - **Watchtower** (`127.0.0.1:8084`): nightly container updates, label-gated
+- **Calibre-Web Automated** (`:8083` on `primary_ip`): ebook library - ingest,
+  auto-convert, EPUB-fix, read in-browser and send to e-readers
 - **Monitoring**: Node/Docker exporters, deployed by the `prometheus-exporters`
   role (not by this one)
+
+### Calibre-Web notes
+
+- **Three separate volume dirs** under `automation_data_path/calibre/`
+  (`config`, `ingest`, `library`) - CWA errors when binds are nested in binds
+- `/cwa-book-ingest` is **destructive by design**: anything dropped there is
+  deleted after processing - ideal as a Syncthing folder for drop-from-phone
+  ingestion (a deliberate follow-up, not wired by default)
+- Runs as the stack user (`PUID`/`PGID` resolved on-host from `ansible_user`),
+  never root - root-owned library files break ingestion
+- Ships with `admin`/`admin123` - change the admin password at first login
+- Optional `vault_hardcover_token` in vault enables Hardcover as a metadata
+  provider (picked up automatically; empty until set)
 
 ## Deployment
 
