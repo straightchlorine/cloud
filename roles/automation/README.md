@@ -10,7 +10,12 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 
 - **Vaultwarden** (`:8081` on `primary_ip`): password manager (tailnet-only)
 - **Firefly III** (`:8082` on `primary_ip`): finance manager (tailnet-only)
-- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.4`
+- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.4`.
+  Root is deliberately credential-less: the entrypoint demands a root-password
+  policy on first init, so the stack sets `MARIADB_RANDOM_ROOT_PASSWORD=1`
+  (throwaway password, never written to `.env`). Nothing uses root — backups
+  dump via the `firefly` user, and maintenance uses the image's built-in
+  `unix_socket` auth: `docker exec -it mariadb mariadb`
 - **firefly-cron** (compose-internal): drives Firefly's recurring transactions
 - **Watchtower** (`127.0.0.1:8084`): nightly container updates, label-gated
 - **Calibre-Web Automated** (`:8083` on `primary_ip`): ebook library - ingest,

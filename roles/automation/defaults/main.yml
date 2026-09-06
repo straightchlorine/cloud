@@ -166,6 +166,13 @@ automation_compose_services:
       retries: 10
       start_period: 30s
     service_environment:
+      # The entrypoint refuses to initialize an EMPTY datadir without a root
+      # password policy, and exits 1 on every fresh deploy (teardown -> redeploy
+      # included). Nothing here uses root - the backup dumps via the firefly
+      # user, and root@localhost keeps unix_socket auth for `docker exec -it
+      # mariadb mariadb` maintenance - so generate a throwaway root password
+      # rather than adding an unused vault secret to the .env.
+      - "MARIADB_RANDOM_ROOT_PASSWORD=1"
       - "MARIADB_DATABASE=firefly"
       - "MARIADB_USER=firefly"
       - "MARIADB_PASSWORD=${FIREFLY_DB_PASSWORD}"

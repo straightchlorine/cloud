@@ -55,6 +55,9 @@
           # Secrets only as ${VAR} placeholders - never inlined.
           - "'ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}' in compose_file"
           - "'DB_PASSWORD=${FIREFLY_DB_PASSWORD}' in compose_file"
+          # mariadb entrypoint demands a root-password policy on first init;
+          # root is unused (unix_socket maintenance, firefly-user backups).
+          - "'MARIADB_RANDOM_ROOT_PASSWORD=1' in compose_file"
           - "'HARDCOVER_TOKEN=${HARDCOVER_TOKEN}' in compose_file"
           - "'molecule-test' not in compose_file"
           # Watchtower label-enable policy on apps; mariadb has no label.
