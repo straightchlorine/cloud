@@ -85,3 +85,23 @@
       proxy/tailnet CIDRs.
   when: "'**' in automation_trusted_proxies"
   tags: [validation]
+
+- name: Require a 32-character hex Firefly static cron token
+  # Firefly's CLIToken route binder only accepts the static cron token when
+  # it MATCHES the configured STATIC_CRON_TOKEN and is EXACTLY 32 characters
+  # (app/Support/Binder/CLIToken.php in Firefly III). Any other value raises
+  # an AuthenticationException, which the API answers with HTTP 500 - so a
+  # malformed token crash-loops the firefly-cron sidecar ("wget: server
+  # returned error: HTTP/1.1 500 Internal Server Error" on every attempt)
+  # and fails the whole stack deployment.
+  ansible.builtin.fail:
+    msg: >-
+      vault_firefly_static_cron_token must be exactly 32 hex characters
+      (generate with: openssl rand -hex 16); got
+      {{ vault_firefly_static_cron_token | length }} characters. Firefly's
+      cron endpoint rejects anything else with HTTP 500, which crash-loops
+      the firefly-cron container.
+  when: >-
+    vault_firefly_static_cron_token | length != 32
+    or vault_firefly_static_cron_token is not match('^[0-9a-fA-F]{32}$')
+  tags: [validation]

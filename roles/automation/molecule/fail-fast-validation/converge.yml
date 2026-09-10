@@ -11,7 +11,9 @@
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
     vault_firefly_app_key: molecule-test-app-key
-    vault_firefly_static_cron_token: molecule-test-cron-token
+    # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
+    # differently-sized static cron token with HTTP 500 on its cron endpoint).
+    vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
     vault_firefly_db_password: molecule-test-db-password
     vault_vaultwarden_admin_token: molecule-test-admin-token
     vault_watchtower_api_token: molecule-test-watchtower-token
@@ -158,5 +160,38 @@
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"
+
+    # Case 5 (regression guard): Firefly only accepts a static cron token that
+    # matches AND is exactly 32 characters; anything else makes its cron
+    # endpoint answer HTTP 500, crash-looping the firefly-cron sidecar. The
+    # base vars above carry a valid 32-hex token, so pass a malformed one here.
+    - name: "Case 5: validate.yml refuses a malformed Firefly static cron token"
+      block:
+        - name: Run the real validate.yml with a short vault_firefly_static_cron_token
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            automation_trusted_proxies: "100.64.0.0/10"
+            vault_firefly_static_cron_token: molecule-test-cron-token
+
+        - name: Fail the test - the cron-token guard should have refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse the malformed Firefly static cron token"
+      rescue:
+        - name: Assert the failure was the cron-token guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'vault_firefly_static_cron_token' in (ansible_failed_result.msg | default(''))"
+              - "'32' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason (Firefly
+              static cron token): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's Firefly cron-token guard correctly refused a malformed token"
+
+        - name: Record case 5 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case5.passed
             force: false
             mode: "0644"

@@ -94,9 +94,14 @@
       HARDCOVER_TOKEN: "{{ vault_hardcover_token if vault_hardcover_token is defined else '' }}"
       # Watchtower notifications ride the shared ntfy topic when a key is
       # configured (the key deploy is optional in common/ntfy_install.yml);
-      # an empty URL just leaves watchtower silent.
+      # an empty URL just leaves watchtower silent. shoutrrr's ntfy URL is
+      # ntfy://username:password@host/topic and ntfy only honours a token as
+      # the basic-auth PASSWORD (the leading ':' keeps the username empty) -
+      # a key in the username slot is rejected with ntfy error 40301
+      # (forbidden). This differs from the Ansible notifier, which sends the
+      # same key as a Bearer header and is accepted.
       WATCHTOWER_NOTIFICATION_URL: >-
-        {{ 'ntfy://' ~ vault_ntfy_api_key ~ '@' ~
+        {{ 'ntfy://:' ~ vault_ntfy_api_key ~ '@' ~
         (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
         if vault_ntfy_api_key is defined else '' }}
     start_stack: "{{ common_start_stack }}"

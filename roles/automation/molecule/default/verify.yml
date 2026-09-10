@@ -41,7 +41,7 @@
           - "'vaultwarden:' in compose_file"
           - "'fireflyiii/core:latest' in compose_file"
           - "'mariadb:11.4' in compose_file"
-          - "'containrrr/watchtower' in compose_file"
+          - "'nickfedor/watchtower' in compose_file"
           - "'crocodilestick/calibre-web-automated' in compose_file"
           # Ports bind to the discovered primary_ip, watchtower stays on loopback.
           - "':8081:80' in compose_file"

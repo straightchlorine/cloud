@@ -11,7 +11,9 @@
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
     vault_firefly_app_key: molecule-test-app-key
-    vault_firefly_static_cron_token: molecule-test-cron-token
+    # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
+    # differently-sized static cron token with HTTP 500 on its cron endpoint).
+    vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
     vault_firefly_db_password: molecule-test-db-password
     vault_vaultwarden_admin_token: molecule-test-admin-token
     vault_watchtower_api_token: molecule-test-watchtower-token
