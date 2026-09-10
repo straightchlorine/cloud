@@ -1,0 +1,48 @@
+# {{ ansible_managed }}
+# The real admin sshd listens on {{ honeypot_ssh_port }}/tcp; cowrie owns the
+# public {{ honeypot_cowrie_public_port }}/tcp. Two independent controls keep it
+# off the internet: the listener binds the tailnet address only, and firewalld
+# exposes {{ honeypot_ssh_port }} solely in the {{ honeypot_tailnet_zone }} zone
+# ({{ honeypot_tailnet_interface }}).
+
+Port {{ honeypot_ssh_port }}
+AddressFamily inet
+ListenAddress {{ honeypot_ssh_listen_address }}
+
+PermitRootLogin no
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PermitEmptyPasswords no
+UsePAM yes
+AuthenticationMethods publickey
+StrictModes yes
+
+AllowUsers {{ honeypot_ssh_allow_users | join(' ') }}
+
+LogLevel VERBOSE
+MaxAuthTries 3
+MaxSessions 4
+MaxStartups 5:50:10
+LoginGraceTime 20
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+X11Forwarding no
+AllowTcpForwarding no
+GatewayPorts no
+PermitTunnel no
+PermitOpen none
+PrintMotd no
+UseDNS no
+
+{% if honeypot_ssh_manage_crypto_directives %}
+# Dead on stock EL: /etc/crypto-policies is included ahead of sshd_config.d and
+# first value wins. Only emitted when the operator has confirmed the include
+# order allows it - otherwise change the system crypto policy.
+HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+{% endif %}

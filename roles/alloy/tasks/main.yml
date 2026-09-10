@@ -1,0 +1,78 @@
+---
+- name: Run Alloy validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [alloy, validation]
+
+- name: Add the Grafana package repository
+  ansible.builtin.yum_repository:
+    name: grafana
+    description: Grafana OSS packages
+    baseurl: "{{ alloy_repo_baseurl }}"
+    gpgkey: "{{ alloy_repo_gpgkey }}"
+    gpgcheck: true
+    enabled: true
+  become: true
+
+- name: Install Alloy
+  ansible.builtin.dnf:
+    name: "alloy-{{ alloy_version }}"
+    state: present
+    allow_downgrade: true
+  become: true
+  notify: Restart alloy
+
+- name: Allow Alloy to read the systemd journal
+  # The packaged unit runs as an unprivileged user; without this group the
+  # journal source starts cleanly and ships nothing.
+  ansible.builtin.user:
+    name: "{{ alloy_user }}"
+    groups: systemd-journal
+    append: true
+  become: true
+  notify: Restart alloy
+
+- name: Install the Loki push credentials
+  # Kept out of config.alloy so the config file itself carries no secret and
+  # can stay world-readable for debugging.
+  ansible.builtin.template:
+    src: alloy.sysconfig.j2
+    dest: "{{ alloy_env_file }}"
+    owner: root
+    group: "{{ alloy_group }}"
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart alloy
+
+- name: Install the Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_config_file }}"
+    owner: root
+    group: "{{ alloy_group }}"
+    mode: '0644'
+    validate: "alloy validate %s"
+  become: true
+  notify: Restart alloy
+
+- name: Enable and start Alloy
+  ansible.builtin.systemd_service:
+    name: alloy
+    enabled: true
+    state: started
+  become: true
+
+- name: Flush handlers so the health check sees the new configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Confirm Alloy is healthy
+  # Proves the agent parsed its config and is running, not merely that systemd
+  # started it - a bad component leaves the process up and the pipeline dead.
+  ansible.builtin.uri:
+    url: "http://{{ alloy_listen_address }}/-/ready"
+    status_code: 200
+  retries: 6
+  delay: 5
+  register: alloy_ready
+  until: alloy_ready is succeeded
+  tags: [post_validation]

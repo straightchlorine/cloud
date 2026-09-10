@@ -1,0 +1,81 @@
+---
+- name: Confirm SELinux is enforcing
+  # The whole container/unit sandbox story here assumes Enforcing; a Permissive
+  # host silently drops that layer while every check still looks green.
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['selinux']['status'] == 'enabled'
+      - ansible_facts['selinux']['mode'] == 'enforcing'
+    fail_msg: >-
+      SELinux is '{{ ansible_facts['selinux']['mode'] | default('disabled') }}'.
+      Set SELINUX=enforcing in /etc/selinux/config and reboot before deploying.
+    success_msg: "[OK] SELinux is enforcing"
+
+- name: Label the administrative sshd port
+  # Default policy only labels 22/tcp as ssh_port_t; without this, sshd exits
+  # 255 with "Bind to port {{ honeypot_ssh_port }} ... Permission denied".
+  ansible.posix.seport:
+    ports: "{{ honeypot_ssh_port }}"
+    proto: tcp
+    setype: ssh_port_t
+    state: present
+  become: true
+
+- name: Register the honeywatch config directory as etc_t
+  # systemd reads the units' EnvironmentFile from here; an unlabelled directory
+  # makes the backup and mmdb units fail to start under Enforcing.
+  community.general.sefcontext:
+    target: "{{ honeypot_config_dir }}(/.*)?"
+    setype: etc_t
+    state: present
+  become: true
+
+- name: Create the honeywatch config directory
+  ansible.builtin.file:
+    path: "{{ honeypot_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  become: true
+
+- name: Apply the file context to the config directory
+  # Unconditional and reported as unchanged: restorecon is a no-op once the
+  # labels match, and it has to run here rather than as a handler - the backup
+  # and mmdb env files are written into this directory later in the same play.
+  ansible.builtin.command: "restorecon -R {{ honeypot_config_dir }}"
+  become: true
+  changed_when: false
+
+- name: Install the local SELinux policy source
+  ansible.builtin.copy:
+    src: honeywatch-nnp.te
+    dest: "/etc/selinux/{{ honeypot_selinux_module }}.te"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  register: honeypot_selinux_te
+
+- name: Check whether the local SELinux policy module is loaded
+  ansible.builtin.command: semodule -l
+  become: true
+  changed_when: false
+  register: honeypot_semodule_list
+
+- name: Compile and load the local SELinux policy module
+  # Without it, the backup and mmdb units fail under Enforcing with an
+  # nnp_transition AVC: NoNewPrivileges=yes blocks the domain transition that
+  # docker's labelled exec triggers.
+  ansible.builtin.shell: |
+    set -euo pipefail
+    build=$(mktemp -d)
+    trap 'rm -rf "$build"' EXIT
+    cp /etc/selinux/{{ honeypot_selinux_module }}.te "$build/"
+    cd "$build"
+    checkmodule -M -m -o {{ honeypot_selinux_module }}.mod {{ honeypot_selinux_module }}.te
+    semodule_package -o {{ honeypot_selinux_module }}.pp -m {{ honeypot_selinux_module }}.mod
+    semodule -i {{ honeypot_selinux_module }}.pp
+  become: true
+  when: honeypot_selinux_te.changed or honeypot_selinux_module not in honeypot_semodule_list.stdout
+  changed_when: true

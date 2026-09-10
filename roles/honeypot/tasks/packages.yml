@@ -1,0 +1,29 @@
+---
+- name: Update all packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest  # noqa: package-latest
+  become: true
+  when: honeypot_dnf_full_update
+  tags: [packages]
+
+- name: Install EPEL
+  # rclone and age (the backup pipeline) live in EPEL, so it must be enabled
+  # before the base package list is resolved.
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+  become: true
+
+- name: Install base packages
+  ansible.builtin.dnf:
+    name: "{{ honeypot_base_packages }}"
+    state: present
+  become: true
+
+- name: Enable the cron daemon for the cowrie cleanup job
+  ansible.builtin.systemd_service:
+    name: crond
+    enabled: true
+    state: started
+  become: true

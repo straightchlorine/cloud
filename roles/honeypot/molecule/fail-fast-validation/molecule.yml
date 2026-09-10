@@ -1,0 +1,25 @@
+---
+role_name_check: 0
+driver:
+  name: podman
+
+platforms:
+  - name: test
+    # RedHat-family image: validate.yml asserts the OS family, so a Debian
+    # container would fail every case for the wrong reason.
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}
+    pre_build_image: true
+    command: ${MOLECULE_COMMAND:-/usr/lib/systemd/systemd}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+provisioner:
+  name: ansible
+  env:
+    # CI and local both run `cd roles/<role> && molecule test`, so
+    # MOLECULE_PROJECT_DIRECTORY is roles/honeypot - one level up is roles/,
+    # letting `include_role: name: <any role>` resolve by name.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+
+verifier:
+  name: ansible

@@ -1,0 +1,54 @@
+---
+- name: Add the Docker repository
+  ansible.builtin.yum_repository:
+    name: docker-ce-stable
+    description: Docker CE stable
+    baseurl: "{{ honeypot_docker_repo_baseurl }}"
+    gpgkey: "{{ honeypot_docker_repo_gpgkey }}"
+    gpgcheck: true
+    enabled: true
+  become: true
+  when: honeypot_docker_install_enabled
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: "{{ honeypot_docker_packages }}"
+    state: present
+  become: true
+  when: honeypot_docker_install_enabled
+
+- name: Check for an existing Docker daemon configuration
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  become: true
+  register: honeypot_daemon_json
+
+- name: Read the existing Docker daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  become: true
+  register: honeypot_daemon_json_content
+  when: honeypot_daemon_json.stat.exists
+
+- name: Configure the Docker daemon
+  # Merged, not overwritten: keys set out of band (data-root, registry mirrors)
+  # must survive a role run.
+  ansible.builtin.copy:
+    content: >-
+      {{ (honeypot_daemon_json_content.content | b64decode | from_json
+      if honeypot_daemon_json.stat.exists else {})
+      | combine(honeypot_docker_daemon_options) | to_nice_json }}
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  become: true
+  notify: Reload docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  become: true

@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: alloy
+  namespace: homelab
+  author: Ansible Admin
+  description: Grafana Alloy journal log shipper pushing to the fleet Loki
+  company: Local
+  license: MIT
+  min_ansible_version: '2.17'
+
+  platforms:
+    - name: EL
+      versions:
+        - '10'
+
+  galaxy_tags:
+    - alloy
+    - grafana
+    - loki
+    - logging
+    - observability
+
+dependencies: []

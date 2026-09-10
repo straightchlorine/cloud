@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+#
+# Read by alloy.service via EnvironmentFile. config.alloy pulls these in with
+# sys.env(), so no credential is ever written into the configuration file.
+LOKI_USERNAME={{ vault_alloy_loki_username }}
+LOKI_PASSWORD={{ vault_alloy_loki_password }}
+{% if alloy_metrics_enabled %}
+PROMETHEUS_USERNAME={{ vault_alloy_prometheus_username }}
+PROMETHEUS_PASSWORD={{ vault_alloy_prometheus_password }}
+{% endif %}
+
+# Bind the diagnostics UI to localhost: it renders the running configuration.
+CUSTOM_ARGS="--server.http.listen-addr={{ alloy_listen_address }}"

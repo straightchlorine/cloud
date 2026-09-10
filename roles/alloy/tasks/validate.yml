@@ -1,0 +1,46 @@
+---
+- name: Run Alloy configuration validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "Alloy log shipping"
+    validation_type: "full"
+    validation_role: "alloy"
+    required_variables: >-
+      {{ alloy_required_variables
+         + (alloy_metrics_required_variables if alloy_metrics_enabled else []) }}
+    vault_placeholders:
+      - {var: "vault_alloy_loki_password", value: "your-loki-push-password"}
+      # Left in the list unconditionally: unified_validation only checks a
+      # placeholder when vars[item.var] is defined, so this is a no-op when
+      # alloy_metrics_enabled is false and the var was never set in vault.
+      - {var: "vault_alloy_prometheus_password", value: "your-prometheus-write-password"}
+  tags: [validation]
+
+- name: Validate the Loki endpoint is a complete push URL
+  # Alloy posts to exactly this URL. A bare host silently 404s on every push
+  # while the agent itself stays healthy, so the logs just never arrive.
+  ansible.builtin.fail:
+    msg: >-
+      alloy_loki_url must be the full push endpoint ending in
+      /loki/api/v1/push, got '{{ alloy_loki_url }}'.
+  when: not alloy_loki_url.endswith('/loki/api/v1/push')
+  tags: [validation]
+
+- name: Validate the Loki endpoint is TLS-protected
+  # The push carries basic-auth credentials; plain HTTP puts them on the wire.
+  ansible.builtin.fail:
+    msg: "alloy_loki_url must be https, got '{{ alloy_loki_url }}'."
+  when: not alloy_loki_url.startswith('https://')
+  tags: [validation]
+
+- name: Validate the Prometheus endpoint is a TLS remote-write URL
+  ansible.builtin.fail:
+    msg: >-
+      alloy_prometheus_url must be an https remote-write endpoint ending in
+      /api/v1/write, got '{{ alloy_prometheus_url }}'.
+  when:
+    - alloy_metrics_enabled
+    - not (alloy_prometheus_url.startswith('https://') and alloy_prometheus_url.endswith('/api/v1/write'))
+  tags: [validation]

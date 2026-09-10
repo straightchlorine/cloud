@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+#
+# Cowrie's public {{ honeypot_cowrie_public_port }}/tcp is INTENTIONALLY
+# unprotected - it is the attack surface. Only the admin sshd on
+# {{ honeypot_ssh_port }}/tcp (tailnet-only) is jailed here.
+#
+# backend = systemd because journald is the canonical sshd log destination on
+# CentOS Stream. Scope the query with journalmatch and never set logpath: that
+# silently falls back to tailing an empty file and matches nothing.
+
+[DEFAULT]
+backend  = systemd
+bantime  = 3600
+findtime = 600
+maxretry = 5
+
+[sshd-{{ honeypot_ssh_port }}]
+enabled      = true
+port         = {{ honeypot_ssh_port }}
+filter       = sshd
+backend      = systemd
+journalmatch = _SYSTEMD_UNIT=sshd.service + _COMM=sshd
+maxretry     = {{ honeypot_fail2ban_maxretry }}
+findtime     = {{ honeypot_fail2ban_findtime }}
+bantime      = {{ honeypot_fail2ban_bantime }}

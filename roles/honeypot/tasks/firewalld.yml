@@ -1,0 +1,45 @@
+---
+- name: Enable and start firewalld
+  ansible.builtin.systemd_service:
+    name: firewalld
+    enabled: true
+    state: started
+  become: true
+
+- name: Install the tailnet zone definition
+  # The zone is declared as XML rather than assembled with --new-zone/--add-port:
+  # --new-zone NAME_CONFLICTs against this file, and the imperative form drifted
+  # from it. If tailscale0 is absent the zone is simply inactive - fail-closed.
+  ansible.builtin.template:
+    src: tailnet.xml.j2
+    dest: "/etc/firewalld/zones/{{ honeypot_tailnet_zone }}.xml"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: Reload firewalld
+
+- name: Expose the cowrie port in the public zone
+  ansible.posix.firewalld:
+    zone: public
+    port: "{{ honeypot_cowrie_public_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  become: true
+
+# Runs after the explicit 22/tcp above so the cowrie port is never momentarily
+# closed while the `ssh` service is withdrawn.
+- name: Remove default services from the public zone
+  ansible.posix.firewalld:
+    zone: public
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  become: true
+  loop: "{{ honeypot_public_zone_removed_services }}"
+
+# Docker Engine 27+ creates and manages its own `docker` firewalld zone and
+# binds docker0 / br-* into it. Moving those interfaces into `trusted` by hand
+# raises ZONE_CONFLICT and the docker daemon then refuses to start.

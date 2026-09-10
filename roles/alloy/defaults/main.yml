@@ -1,0 +1,69 @@
+---
+# Grafana Alloy: tails the systemd journal to the fleet Loki, and optionally
+# ships host metrics once the fleet has a Prometheus to receive them.
+
+alloy_version: "1.5.1"
+alloy_repo_baseurl: "https://rpm.grafana.com"
+alloy_repo_gpgkey: "https://rpm.grafana.com/gpg.key"
+
+alloy_config_dir: /etc/alloy
+alloy_config_file: /etc/alloy/config.alloy
+alloy_env_file: /etc/sysconfig/alloy
+
+# The packaged unit runs as this user; it needs systemd-journal membership to
+# read the journal and read access to its own credentials file.
+alloy_user: alloy
+alloy_group: alloy
+
+# Alloy's own UI/debug endpoint. Localhost only: it exposes the running
+# configuration, including the Loki endpoint.
+alloy_listen_address: "127.0.0.1:12345"
+
+# Push target. alloy_loki_url must include the full push path.
+# vault_alloy_loki_username / vault_alloy_loki_password carry the basic-auth
+# credentials; the Loki ingress rejects unauthenticated pushes.
+alloy_loki_url: "https://logs.codextechnologies.org/loki/api/v1/push"
+
+# Static labels attached to every stream. `job` is what Grafana queries on.
+alloy_job_label: "systemd-journal"
+
+# Units worth shipping. Everything else on a honeypot host is either noise or
+# already captured by the application's own pipeline.
+alloy_journal_units:
+  - sshd.service
+  - fail2ban.service
+  - firewalld.service
+  - docker.service
+  - auditd.service
+  - dnf-automatic.service
+  - honeywatch-backup.service
+  - honeywatch-mmdb-refresh.service
+  - "honeywatch-notify@.service"
+
+# --- Metrics -------------------------------------------------------------
+# Requires a remote-write endpoint; with none, the scrape only fills the
+# agent's WAL and fails every push.
+alloy_metrics_enabled: false
+alloy_prometheus_url: "https://metrics.codextechnologies.org/api/v1/write"
+alloy_scrape_interval: "60s"
+# Container metrics would need the docker socket or cgroup access; the node
+# exporter alone covers host health.
+alloy_node_exporter_collectors:
+  - cpu
+  - diskstats
+  - filesystem
+  - loadavg
+  - meminfo
+  - netdev
+  - systemd
+  - uname
+
+alloy_required_variables:
+  - alloy_loki_url
+  - vault_alloy_loki_username
+  - vault_alloy_loki_password
+
+alloy_metrics_required_variables:
+  - alloy_prometheus_url
+  - vault_alloy_prometheus_username
+  - vault_alloy_prometheus_password

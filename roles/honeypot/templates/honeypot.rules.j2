@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+#
+# Watches every path whose modification could weaken the host security posture.
+# Each watch carries a key, so `ausearch -k <key>` gives actionable output.
+# Applied with `augenrules --load`.
+
+# Wipe inflight rules so reloads are idempotent.
+-D
+
+{% for watch in honeypot_audit_watches %}
+-w {{ watch.path }} -p {{ watch.perms }} -k {{ watch.key }}
+{% endfor %}
+
+# 1 = enabled but still mutable; 2 locks the audit config until reboot.
+-e {{ honeypot_audit_enable_flag }}

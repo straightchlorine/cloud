@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+#
+# Applies {{ honeypot_auto_updates_upgrade_type }} updates on the
+# dnf-automatic.timer schedule. Output goes to stdio so journald captures it:
+# journalctl -u dnf-automatic.service
+
+[commands]
+apply_updates = yes
+upgrade_type  = {{ honeypot_auto_updates_upgrade_type }}
+# Without a reboot policy, kernel CVEs are staged but never become effective
+# until someone notices. `when-needed` consults `needs-restarting -r`, so
+# cosmetic updates do not trigger a reboot.
+reboot = {{ honeypot_auto_updates_reboot }}
+reboot_command = "shutdown -r +5 'honeywatch: rebooting after dnf-automatic'"
+
+[emitters]
+emit_via = stdio
+
+[base]
+output = quiet

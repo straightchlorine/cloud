@@ -1,0 +1,125 @@
+---
+- name: Confirm the administrative sshd is listening on its hardened port
+  ansible.builtin.wait_for:
+    port: "{{ honeypot_ssh_port }}"
+    host: "{{ ansible_host }}"
+    timeout: 30
+  tags: [post_validation]
+
+- name: Read the effective sshd configuration
+  ansible.builtin.command: sshd -T
+  become: true
+  changed_when: false
+  register: honeypot_sshd_effective
+  tags: [post_validation]
+
+- name: Assert the effective sshd policy matches the drop-in
+  # sshd -T is the merged, running truth; a drop-in that lost to an earlier
+  # file in sshd_config.d would still look correct on disk.
+  ansible.builtin.assert:
+    that:
+      - "'port ' ~ honeypot_ssh_port in honeypot_sshd_effective.stdout"
+      - "'passwordauthentication no' in honeypot_sshd_effective.stdout"
+      - "'permitrootlogin no' in honeypot_sshd_effective.stdout"
+    fail_msg: "The running sshd does not match the hardening drop-in."
+    success_msg: "[OK] sshd enforces key-only auth on {{ honeypot_ssh_port }}"
+  tags: [post_validation]
+
+- name: Read the active firewalld zones
+  ansible.builtin.command: firewall-cmd --get-active-zones
+  become: true
+  changed_when: false
+  register: honeypot_active_zones
+  tags: [post_validation]
+
+- name: Assert the tailnet zone is bound to the tailnet interface
+  # An inactive tailnet zone means the admin sshd is unreachable (fail-closed
+  # by design) - so it is a deploy failure, not a warning.
+  ansible.builtin.assert:
+    that:
+      - honeypot_tailnet_interface in ansible_facts['interfaces']
+      - honeypot_tailnet_zone in honeypot_active_zones.stdout
+      - honeypot_tailnet_interface in honeypot_active_zones.stdout
+    fail_msg: >-
+      Zone '{{ honeypot_tailnet_zone }}' is not bound to
+      '{{ honeypot_tailnet_interface }}'. Bring the tailnet up
+      (`tailscale up --login-server=...`) and re-run.
+    success_msg: "[OK] {{ honeypot_tailnet_zone }} zone is bound to {{ honeypot_tailnet_interface }}"
+  tags: [post_validation]
+
+- name: Confirm the cowrie port is published to the internet
+  ansible.builtin.command: firewall-cmd --zone=public --list-ports
+  become: true
+  changed_when: false
+  register: honeypot_public_ports
+  failed_when: honeypot_cowrie_public_port ~ '/tcp' not in honeypot_public_ports.stdout
+  tags: [post_validation]
+
+- name: Confirm the fail2ban jail for the administrative sshd is running
+  ansible.builtin.command: fail2ban-client status sshd-{{ honeypot_ssh_port }}
+  become: true
+  changed_when: false
+  tags: [post_validation]
+
+- name: Read the loaded audit rules
+  ansible.builtin.command: auditctl -l
+  become: true
+  changed_when: false
+  register: honeypot_audit_loaded
+  tags: [post_validation]
+
+- name: Assert every configured audit watch is loaded
+  ansible.builtin.assert:
+    that:
+      - item.path in honeypot_audit_loaded.stdout
+    fail_msg: "Audit watch for {{ item.path }} is not loaded (augenrules --load failed?)"
+    quiet: true
+  loop: "{{ honeypot_audit_watches }}"
+  loop_control:
+    label: "{{ item.path }}"
+  tags: [post_validation]
+
+- name: Confirm the local SELinux policy module is loaded
+  ansible.builtin.command: semodule -l
+  become: true
+  changed_when: false
+  register: honeypot_semodule_loaded
+  failed_when: honeypot_selinux_module not in honeypot_semodule_loaded.stdout
+  tags: [post_validation]
+
+- name: Read the effective Docker daemon settings
+  ansible.builtin.command: >-
+    docker info --format
+    '{{ '{{' }}.LiveRestoreEnabled{{ '}}' }} {{ '{{' }}.SecurityOptions{{ '}}' }}'
+  become: true
+  changed_when: false
+  register: honeypot_docker_info
+  tags: [post_validation]
+
+- name: Assert the Docker daemon hardening took effect
+  # daemon.json on disk proves nothing until the daemon has reloaded it.
+  ansible.builtin.assert:
+    that:
+      - "'true' in honeypot_docker_info.stdout"
+      - "'selinux' in honeypot_docker_info.stdout"
+    fail_msg: "Docker is running without live-restore or SELinux confinement: {{ honeypot_docker_info.stdout }}"
+    success_msg: "[OK] Docker daemon hardening active"
+  tags: [post_validation]
+
+- name: Confirm the honeywatch timers are active
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+  become: true
+  register: honeypot_timer_state
+  failed_when: honeypot_timer_state.status.ActiveState != 'active'
+  loop: "{{ ['dnf-automatic.timer']
+            + (['honeywatch-backup.timer'] if honeypot_backup_enabled else [])
+            + (['honeywatch-mmdb-refresh.timer'] if honeypot_mmdb_enabled else []) }}"
+  tags: [post_validation]
+
+- name: Confirm the age recipient is installed and public
+  ansible.builtin.command: "grep -c '^age1' {{ honeypot_backup_age_recipient_file }}"
+  become: true
+  changed_when: false
+  when: honeypot_backup_enabled
+  tags: [post_validation]

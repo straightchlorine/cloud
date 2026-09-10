@@ -1,0 +1,54 @@
+---
+# Declaration order is execution order at flush - firewalld must land first
+# so the tailnet zone (and its port permit) is already active before sshd
+# rebinds to it; sshd-then-firewalld would open a window where the admin
+# sshd is listening somewhere the firewall doesn't yet permit reaching.
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  changed_when: true
+  become: true
+
+- name: Reload sshd
+  # reload, never restart: an aborted restart on a host whose only admin path
+  # is this sshd locks everyone out.
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded
+  become: true
+
+- name: Restart fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    state: restarted
+  become: true
+
+- name: Reload audit rules
+  ansible.builtin.command: augenrules --load
+  changed_when: true
+  become: true
+
+- name: Reload docker
+  # live-restore keeps the containers running across the daemon reload.
+  ansible.builtin.systemd_service:
+    name: docker
+    state: reloaded
+  become: true
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  become: true
+
+# A running timer keeps its old next-elapse time after a daemon-reload alone;
+# only a restart makes an OnCalendar/RandomizedDelaySec change actually apply.
+- name: Restart backup timer
+  ansible.builtin.systemd_service:
+    name: honeywatch-backup.timer
+    state: restarted
+  become: true
+
+- name: Restart mmdb refresh timer
+  ansible.builtin.systemd_service:
+    name: honeywatch-mmdb-refresh.timer
+    state: restarted
+  become: true

@@ -1,0 +1,21 @@
+---
+- name: Install the honeypot audit rules
+  ansible.builtin.template:
+    src: honeypot.rules.j2
+    dest: /etc/audit/rules.d/honeypot.rules
+    owner: root
+    group: root
+    mode: '0640'
+  become: true
+  notify: Reload audit rules
+
+- name: Enable and start auditd
+  # Not systemd_service: auditd refuses `systemctl restart` on EL and the
+  # module's state handling trips over that; enabling and starting is enough,
+  # rule changes go through `augenrules --load` in the handler.
+  ansible.builtin.service:
+    name: auditd
+    enabled: true
+    state: started
+    use: service
+  become: true

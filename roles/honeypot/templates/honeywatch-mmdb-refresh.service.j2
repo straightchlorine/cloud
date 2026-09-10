@@ -1,0 +1,41 @@
+[Unit]
+Description=Honeywatch MaxMind GeoLite2 refresh (City + ASN)
+Documentation=https://github.com/straightchlorine/honeywatch
+After=docker.service
+Requires=docker.service
+OnFailure=honeywatch-notify@%n.service
+
+# {{ ansible_managed }}
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=honeywatch-mmdb-refresh
+EnvironmentFile={{ honeypot_config_dir }}/maxmind.env
+# Supplies NTFY_URL/NTFY_TOKEN for the success notification; the failure side
+# goes through OnFailure above.
+EnvironmentFile=-{{ honeypot_config_dir }}/notify.env
+ExecStart=/usr/local/sbin/honeywatch-mmdb-refresh
+# Two downloads, an extract and a container restart; the headroom is for
+# curl's --retry 5 --retry-delay 30 when MaxMind's CDN flaps.
+TimeoutStartSec={{ honeypot_mmdb_timeout_sec }}
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# The refresh writes the new mmdb files into the geoip docker volume only -
+# the local volume driver's mountpoint is deterministic from its name.
+ReadWritePaths=/var/lib/docker/volumes/{{ honeypot_mmdb_geoip_volume }}/_data
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ReadOnlyPaths={{ honeypot_config_dir }}
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryDenyWriteExecute=yes

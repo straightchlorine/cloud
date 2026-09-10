@@ -1,0 +1,35 @@
+---
+- name: Install the sshd hardening drop-in
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: Reload sshd
+
+- name: Validate the sshd configuration
+  # Runs before handlers flush, so a broken config aborts the play with the old
+  # (working) sshd still serving - this is the only admin path into the host.
+  ansible.builtin.command: sshd -t
+  become: true
+  changed_when: false
+
+- name: Mask sshd.socket so sshd.service owns the listener exclusively
+  # Socket activation and sshd.service race for the port; the loser reports
+  # "Address already in use" on the reload that moves sshd to its new port.
+  ansible.builtin.systemd_service:
+    name: sshd.socket
+    state: stopped
+    enabled: false
+    masked: true
+  become: true
+  when: "'sshd.socket' in ansible_facts['services']"
+
+- name: Enable and start sshd
+  ansible.builtin.systemd_service:
+    name: sshd
+    enabled: true
+    state: started
+  become: true

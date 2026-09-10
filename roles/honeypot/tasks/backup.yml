@@ -1,0 +1,56 @@
+---
+- name: Install the age recipient for backup encryption
+  # Public material only. The matching private identity must stay offline - a
+  # host compromise then allows uploading new backups, never decrypting old ones.
+  ansible.builtin.copy:
+    content: "{{ vault_honeypot_age_recipient }}\n"
+    dest: "{{ honeypot_backup_age_recipient_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Install the backup environment file
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: "{{ honeypot_config_dir }}/backup.env"
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+  no_log: true
+
+- name: Install the backup script
+  ansible.builtin.copy:
+    src: honeywatch-backup.sh
+    dest: /usr/local/sbin/honeywatch-backup
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Install the backup service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop:
+    - honeywatch-backup.service
+    - honeywatch-backup.timer
+  notify:
+    - Reload systemd
+    - Restart backup timer
+
+- name: Flush handlers so systemd sees the backup units before they are enabled
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the backup timer
+  # Only the timer: the service is oneshot and triggered by it.
+  ansible.builtin.systemd_service:
+    name: honeywatch-backup.timer
+    enabled: true
+    state: started
+  become: true

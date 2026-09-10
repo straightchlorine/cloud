@@ -1,0 +1,80 @@
+// {{ ansible_managed }}
+//
+// Ships the systemd journal to the fleet Loki, and host metrics to the fleet
+// Prometheus when one exists. Container logs and container metrics are
+// deliberately not collected: both would require the docker socket or
+// root-owned paths, and the honeywatch stack already persists its own
+// telemetry to Postgres.
+
+loki.source.journal "host" {
+  forward_to    = [loki.process.host.receiver]
+  labels        = {
+    job  = "{{ alloy_job_label }}",
+    host = "{{ inventory_hostname }}"
+  }
+  // Only replay the recent past on restart; the journal holds far more than
+  // Loki's reject_old_samples_max_age window would accept.
+  max_age       = "12h"
+  relabel_rules = discovery.relabel.journal.rules
+}
+
+discovery.relabel "journal" {
+  targets = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+  // Keep only the units worth paying Loki ingest for.
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    regex         = "{{ alloy_journal_units | join('|') | replace('.', '\\\\.') }}"
+    action        = "keep"
+  }
+}
+
+loki.process "host" {
+  forward_to = [loki.write.fleet.receiver]
+
+  stage.drop {
+    expression = "^\\s*$"
+  }
+}
+
+loki.write "fleet" {
+  endpoint {
+    url = "{{ alloy_loki_url }}"
+
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("LOKI_PASSWORD")
+    }
+  }
+}
+
+{% if alloy_metrics_enabled %}
+prometheus.exporter.unix "host" {
+  enable_collectors = [{% for c in alloy_node_exporter_collectors %}"{{ c }}"{{ ", " if not loop.last }}{% endfor %}]
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.fleet.receiver]
+  scrape_interval = "{{ alloy_scrape_interval }}"
+}
+
+prometheus.remote_write "fleet" {
+  endpoint {
+    url = "{{ alloy_prometheus_url }}"
+
+    basic_auth {
+      username = sys.env("PROMETHEUS_USERNAME")
+      password = sys.env("PROMETHEUS_PASSWORD")
+    }
+  }
+}
+{% endif %}

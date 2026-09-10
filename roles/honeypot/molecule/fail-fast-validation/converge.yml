@@ -1,0 +1,150 @@
+---
+- name: Converge - honeypot fail-fast validation
+  hosts: all
+  vars:
+    # Every required variable except vault_honeypot_r2_bucket, so Case 1 leaves
+    # it genuinely undefined. Each case then runs the REAL
+    # roles/honeypot/tasks/validate.yml with per-case vars - no hand-copied
+    # guards to keep in sync.
+    ntfy_server_url: "https://ntfy.example.test"
+    vault_honeypot_ntfy_token: "tk_molecule_test_token"
+    vault_honeypot_r2_endpoint: "https://molecule.r2.cloudflarestorage.com"
+    vault_honeypot_r2_access_key_id: "molecule-access-key"
+    vault_honeypot_r2_secret_access_key: "molecule-secret-key"
+    vault_honeypot_age_recipient: "age1moleculetestrecipientvalue"
+    vault_honeypot_maxmind_account_id: "molecule-account"
+    vault_honeypot_maxmind_license_key: "molecule-license"
+  tasks:
+    # Case 1: a required vault variable is missing.
+    - name: "Case 1: validate.yml fails when a required vault variable is missing"
+      block:
+        - name: Run the real validate.yml with vault_honeypot_r2_bucket undefined
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on the missing vault_honeypot_r2_bucket"
+      rescue:
+        - name: Assert the failure was for the missing vault_honeypot_r2_bucket specifically
+          # A looped fail task's top-level msg is the generic "One or more items
+          # failed" - the per-item detail lives in .results.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['vault_honeypot_r2_bucket']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing vault_honeypot_r2_bucket): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing vault_honeypot_r2_bucket"
+
+        - name: Record case 1 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes. force: false keeps the idempotence
+          # rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
+
+    # Case 2: a vault secret still holds its documented placeholder value.
+    - name: "Case 2: validate.yml fails when vault_honeypot_age_recipient still has its placeholder value"
+      block:
+        - name: Run the real validate.yml with the placeholder age recipient
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+          vars:
+            vault_honeypot_r2_bucket: "molecule-bucket"
+            vault_honeypot_age_recipient: "age1your-public-recipient-key"
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a placeholder vault_honeypot_age_recipient"
+      rescue:
+        - name: Assert the failure was for the placeholder age recipient specifically
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') |
+                map(attribute='var') | list) == ['vault_honeypot_age_recipient']
+              - (ansible_failed_result.results | selectattr('failed') | list | first).msg is
+                search('placeholder value')
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (placeholder vault_honeypot_age_recipient): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the placeholder vault_honeypot_age_recipient"
+
+        - name: Record case 2 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
+
+    # Case 3: the admin sshd would collide with cowrie's public port.
+    - name: "Case 3: validate.yml fails when the admin sshd port collides with the cowrie port"
+      block:
+        - name: Run the real validate.yml with the admin sshd on the cowrie port
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+          vars:
+            vault_honeypot_r2_bucket: "molecule-bucket"
+            honeypot_ssh_port: 22
+
+        - name: Fail the test - the port guard should have refused the collision
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on honeypot_ssh_port colliding with the cowrie port"
+      rescue:
+        - name: Assert the failure was the port-collision guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'collides' in ansible_failed_result.msg"
+              - "'honeypot_cowrie_public_port' in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's port guard correctly refused the cowrie collision"
+
+        - name: Record case 3 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"
+
+    # Case 4: a private age identity where the public recipient belongs.
+    - name: "Case 4: validate.yml fails when the age recipient is a private identity"
+      block:
+        - name: Run the real validate.yml with an age private identity
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+          vars:
+            vault_honeypot_r2_bucket: "molecule-bucket"
+            vault_honeypot_age_recipient: "AGE-SECRET-KEY-1MOLECULETESTIDENTITY"
+
+        - name: Fail the test - the age guard should have refused a private identity
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on a private age identity in vault_honeypot_age_recipient"
+      rescue:
+        - name: Assert the failure was the age-recipient guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'age1' in ansible_failed_result.msg"
+              - "'private identity' in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's age guard correctly refused a private identity"
+
+        - name: Record case 4 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"

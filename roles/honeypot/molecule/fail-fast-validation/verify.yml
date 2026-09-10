@@ -1,0 +1,41 @@
+---
+- name: Verify honeypot fail-fast validation
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat the per-case marker files converge wrote
+      # Converge and verify run as separate processes, so each case drops a
+      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
+      register: honeypot_failfast_markers
+
+    - name: Assert all four fail-fast cases completed
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing - the corresponding case in converge.yml
+          either did not fail or failed for an unexpected reason.
+        success_msg: "[OK] {{ item.item }} recorded"
+      loop: "{{ honeypot_failfast_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Display fail-fast validation summary
+      ansible.builtin.debug:
+        msg: |
+          [OK] Honeypot Fail-Fast Validation Test Complete
+
+          Case 1 - missing required vault variable (vault_honeypot_r2_bucket): FAILED as expected
+          Case 2 - placeholder vault secret (vault_honeypot_age_recipient): FAILED as expected
+          Case 3 - admin sshd port colliding with the cowrie port: FAILED as expected
+          Case 4 - age private identity instead of a public recipient: FAILED as expected
+
+          All four cases ran the real roles/honeypot/tasks/validate.yml end to
+          end - no hand-copied guards anywhere in this scenario.

@@ -1,0 +1,29 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Cap cowrie's captured-download volume: cowrie limits each file but not the
+# cumulative size, so a long-running honeypot fills the disk otherwise.
+set -eu
+
+TAG=honeywatch-cowrie-cleanup
+# Log every outcome to journald and stdout. run-parts has no OnFailure handler,
+# so a silent no-op (e.g. the volume name drifting when COMPOSE_PROJECT_NAME is
+# not "honeywatch") would let downloads grow until the disk fills - the one
+# failure that takes the honeypot offline.
+log() {
+    echo "$TAG: $*"
+    command -v logger >/dev/null 2>&1 && logger -t "$TAG" -- "$*" || true
+}
+
+DL={{ honeypot_cowrie_downloads_path }}
+if [ ! -d "$DL" ]; then
+    log "downloads dir missing ($DL); skipping. If the compose project name is not 'honeywatch', update honeypot_cowrie_downloads_path."
+    exit 0
+fi
+
+if ! find "$DL" -type f -mtime +{{ honeypot_cowrie_downloads_max_age_days }} -delete \
+   || ! find "$DL" -type f -size +{{ honeypot_cowrie_downloads_max_file_size }} -delete; then
+    log "WARNING: cleanup of $DL failed; cowrie downloads may grow unbounded"
+    exit 1
+fi
+
+log "trimmed $DL (removed files older than {{ honeypot_cowrie_downloads_max_age_days }}d and larger than {{ honeypot_cowrie_downloads_max_file_size }})"

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  {{ ansible_managed }}
+
+  Bound to the Tailscale interface. If the interface is absent (tailnet down)
+  the zone goes inactive and {{ honeypot_ssh_port }}/tcp is reachable from
+  nowhere - fail-closed by design.
+
+  target=default keeps firewalld's REJECT for unmatched traffic; stated
+  explicitly so the policy is auditable from this file alone.
+
+  ICMPv4 and ICMPv6 are both allowed: the tailnet is dual-stack
+  (fd7a:115c:a1e0::/48), and admins expect ping6 through it.
+-->
+<zone target="default">
+  <short>Tailnet</short>
+  <description>Headscale tailnet interface - trusted, internal only.</description>
+  <interface name="{{ honeypot_tailnet_interface }}"/>
+  <port protocol="tcp" port="{{ honeypot_ssh_port }}"/>
+{% for port in honeypot_tailnet_extra_ports %}
+  <port protocol="{{ port.proto }}" port="{{ port.port }}"/>
+{% endfor %}
+  <protocol value="icmp"/>
+  <protocol value="ipv6-icmp"/>
+</zone>

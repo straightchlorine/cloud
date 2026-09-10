@@ -1,0 +1,13 @@
+---
+- name: Apply kernel hardening parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-hardening.conf
+    sysctl_set: true
+    reload: true
+    state: present
+  become: true
+  loop: "{{ honeypot_sysctl_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"

@@ -1,0 +1,75 @@
+---
+# Also included directly by site.yml's pre-validation (not only via main.yml),
+# so it re-runs os discovery itself - cheap and idempotent.
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run honeypot host comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "honeypot host"
+    validation_type: "full"
+    validation_role: "honeypot"
+    required_variables: >-
+      {{ honeypot_required_variables
+         + (honeypot_backup_required_variables if honeypot_backup_enabled else [])
+         + (honeypot_mmdb_required_variables if honeypot_mmdb_enabled else []) }}
+    vault_placeholders:
+      - {var: "vault_honeypot_r2_bucket", value: "your-honeywatch-r2-bucket"}
+      - {var: "vault_honeypot_r2_access_key_id", value: "your-r2-access-key-id"}
+      - {var: "vault_honeypot_r2_secret_access_key", value: "your-r2-secret-access-key"}
+      - {var: "vault_honeypot_age_recipient", value: "age1your-public-recipient-key"}
+      - {var: "vault_honeypot_maxmind_license_key", value: "your-maxmind-license-key"}
+      - {var: "vault_honeypot_ntfy_token", value: "tk_your-write-only-ntfy-token"}
+  tags: [validation]
+
+- name: Confirm the host OS family is supported
+  ansible.builtin.assert:
+    that:
+      - os_family == "RedHat"
+    fail_msg: >-
+      The honeypot role targets a RedHat-family host (CentOS Stream); got
+      {{ os_family | default('unknown') }}
+      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
+      Every package, firewall and SELinux task here assumes dnf/firewalld/SELinux.
+    success_msg: "[OK] Supported OS: {{ os_name }} {{ os_version }} ({{ os_family }})"
+  tags: [validation]
+
+- name: Validate the administrative sshd port does not collide with cowrie
+  ansible.builtin.fail:
+    msg: >-
+      honeypot_ssh_port is {{ honeypot_ssh_port }}, which collides with
+      honeypot_cowrie_public_port ({{ honeypot_cowrie_public_port }}).
+      Cowrie must own the public port alone - the admin sshd would either fail
+      to bind or be published to the internet.
+  when: honeypot_ssh_port | int == honeypot_cowrie_public_port | int
+  tags: [validation]
+
+- name: Validate the age recipient is a public key, not a private identity
+  # A private identity (AGE-SECRET-KEY-...) here would put the only key that
+  # can decrypt the R2 dumps on the host we assume can be compromised, and
+  # `age -R` would reject it at run time anyway - after a full pg_dumpall.
+  ansible.builtin.fail:
+    msg: >-
+      vault_honeypot_age_recipient must be an age PUBLIC recipient starting
+      with 'age1'. The matching private identity must never reach this host.
+  when:
+    - honeypot_backup_enabled
+    - not (vault_honeypot_age_recipient | string).startswith('age1')
+  tags: [validation]
+
+- name: Validate the backup retention window is a positive number of days
+  # rclone delete --min-age 0d matches every object in the prefix, which would
+  # wipe the whole backup history right after uploading today's dump.
+  ansible.builtin.fail:
+    msg: >-
+      honeypot_backup_retention_days must be a positive integer number of days,
+      got '{{ honeypot_backup_retention_days }}'.
+  when:
+    - honeypot_backup_enabled
+    - honeypot_backup_retention_days | int < 1
+  tags: [validation]

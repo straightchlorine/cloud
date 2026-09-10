@@ -1,0 +1,19 @@
+[Unit]
+Description=Weekly trigger for Honeywatch MaxMind GeoLite2 refresh
+Documentation=https://github.com/straightchlorine/honeywatch
+
+# {{ ansible_managed }}
+
+[Timer]
+# MaxMind ships City updates Tue+Fri and ASN daily; weekly keeps us inside the
+# 30-day GeoLite EULA window with margin, after the Tuesday release lands and
+# off-peak from the 03:30 backup.
+OnCalendar={{ honeypot_mmdb_schedule }}
+RandomizedDelaySec={{ honeypot_mmdb_randomized_delay }}
+# Run a missed refresh on next boot if the timer fired while powered off.
+Persistent=true
+Unit=honeywatch-mmdb-refresh.service
+AccuracySec=15min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Daily trigger for Honeywatch encrypted Postgres backup
+Documentation=https://github.com/straightchlorine/honeywatch
+
+# {{ ansible_managed }}
+
+[Timer]
+# Absolute UTC time so DST shifts do not move the run.
+OnCalendar={{ honeypot_backup_schedule }}
+# Spread runs so several honeypots sharing a bucket do not PUT at the same second.
+RandomizedDelaySec={{ honeypot_backup_randomized_delay }}
+# Run a missed backup on next boot if the timer fired while powered off.
+Persistent=true
+Unit=honeywatch-backup.service
+AccuracySec=15min
+
+[Install]
+WantedBy=timers.target

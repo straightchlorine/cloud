@@ -1,0 +1,44 @@
+---
+- name: Install the MaxMind environment file
+  ansible.builtin.template:
+    src: maxmind.env.j2
+    dest: "{{ honeypot_config_dir }}/maxmind.env"
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+  no_log: true
+
+- name: Install the MaxMind refresh script
+  ansible.builtin.copy:
+    src: honeywatch-mmdb-refresh.sh
+    dest: /usr/local/sbin/honeywatch-mmdb-refresh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Install the MaxMind refresh service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop:
+    - honeywatch-mmdb-refresh.service
+    - honeywatch-mmdb-refresh.timer
+  notify:
+    - Reload systemd
+    - Restart mmdb refresh timer
+
+- name: Flush handlers so systemd sees the refresh units before they are enabled
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the MaxMind refresh timer
+  ansible.builtin.systemd_service:
+    name: honeywatch-mmdb-refresh.timer
+    enabled: true
+    state: started
+  become: true

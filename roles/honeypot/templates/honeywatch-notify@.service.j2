@@ -1,0 +1,49 @@
+[Unit]
+Description=Honeywatch failure notification for %i
+Documentation=https://github.com/straightchlorine/honeywatch
+
+# {{ ansible_managed }}
+#
+# Templated OnFailure handler, invoked as honeywatch-notify@<failing-unit>.service
+# from any honeywatch host unit. Posts one line to the operator's ntfy topic with
+# the failing unit and the journalctl command to pull its logs.
+#
+# If the env file is missing or NTFY_URL is unset the handler exits 0 silently:
+# failure notifications are best-effort and must never fail-cascade.
+
+[Service]
+Type=oneshot
+EnvironmentFile=-{{ honeypot_config_dir }}/notify.env
+ExecStart=/bin/sh -c '\
+  [ -n "$${NTFY_URL:-}" ] || exit 0; \
+  HOST="$$(hostname -s)"; \
+  STATE="$$(systemctl is-failed "%i" 2>/dev/null || true)"; \
+  set -- --silent --fail --max-time 10 \
+    -H "Title: honeywatch: %i failed on $${HOST}" \
+    -H "Tags: warning,rotating_light" \
+    -H "Priority: high"; \
+  [ -n "$${NTFY_TOKEN:-}" ] && set -- "$$@" -H "Authorization: Bearer $${NTFY_TOKEN}"; \
+  curl "$$@" \
+    -d "unit=%i state=$${STATE} host=$${HOST} - check: journalctl -u %i --since -1h" \
+    "$${NTFY_URL}" >/dev/null 2>&1 || true'
+TimeoutStartSec=30
+
+# This unit must never expand the blast radius of the unit it reports on.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+# AF_UNIX: `systemctl is-failed` talks to PID1 over a private socket - without
+# it STATE is always empty, losing the only triage context the alert carries.
+# AF_INET/6 + AF_NETLINK: the curl POST and glibc DNS resolution.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryDenyWriteExecute=yes

@@ -1,0 +1,43 @@
+[Unit]
+Description=Honeywatch encrypted Postgres backup to Cloudflare R2
+Documentation=https://github.com/straightchlorine/honeywatch
+After=docker.service
+Requires=docker.service
+OnFailure=honeywatch-notify@%n.service
+
+# {{ ansible_managed }}
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=honeywatch-backup
+EnvironmentFile={{ honeypot_config_dir }}/backup.env
+# Supplies NTFY_URL/NTFY_TOKEN for the success notification; the failure side
+# goes through OnFailure above. The leading '-' keeps backups working on a host
+# with no ntfy configured.
+EnvironmentFile=-{{ honeypot_config_dir }}/notify.env
+ExecStart=/usr/local/sbin/honeywatch-backup
+TimeoutStartSec={{ honeypot_backup_timeout_sec }}
+
+# Keep the blast radius small even though the unit runs as root (required to
+# talk to /var/run/docker.sock).
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ReadOnlyPaths={{ honeypot_config_dir }}
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+# AF_UNIX for the docker socket, AF_INET/6 for the R2 upload, AF_NETLINK for
+# glibc getaddrinfo. Without AF_NETLINK, resolution can fail - and then the
+# OnFailure notify cannot resolve its ntfy host either, turning a caught
+# failure into a silent one.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryDenyWriteExecute=yes
