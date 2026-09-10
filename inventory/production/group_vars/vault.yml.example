@@ -63,3 +63,33 @@ vault_smtp_port: 587
 vault_smtp_username: "alerts@yourdomain.com"
 vault_smtp_password: "your-smtp-app-password"
 vault_alertmanager_email: "admin@yourdomain.com"
+
+# Honeypot VPS (honeywatch)
+# Cloudflare R2 backup target. Token scope: Object Read & Write (Read is needed
+# for the `rclone delete --min-age` retention trim).
+vault_honeypot_r2_bucket: "your-honeywatch-r2-bucket"
+vault_honeypot_r2_endpoint: "https://your-account-id.r2.cloudflarestorage.com"
+vault_honeypot_r2_access_key_id: "your-r2-access-key-id"
+vault_honeypot_r2_secret_access_key: "your-r2-secret-access-key"
+
+# age PUBLIC recipient only (age-keygen -o backup.age.key, generated OFFLINE).
+# The private identity must never be stored here or on the honeypot - it is the
+# only thing that can decrypt the R2 dumps.
+vault_honeypot_age_recipient: "age1your-public-recipient-key"
+
+# MaxMind GeoLite2 (https://www.maxmind.com/en/accounts/<id>/license-key)
+vault_honeypot_maxmind_account_id: "your-maxmind-account-id"
+vault_honeypot_maxmind_license_key: "your-maxmind-license-key"
+
+# Write-only ntfy token for the honeypot topic; the server runs
+# auth-default-access=deny-all, so an unauthenticated POST is rejected 401.
+vault_honeypot_ntfy_token: "tk_your-write-only-ntfy-token"
+
+# Grafana Alloy push credentials (basic auth on the Loki/Prometheus ingress).
+# Generate the htpasswd entry the ingress checks against with:
+#   htpasswd -nB alloy
+vault_alloy_loki_username: "alloy"
+vault_alloy_loki_password: "your-loki-push-password"
+# Only needed once alloy_metrics_enabled is true.
+vault_alloy_prometheus_username: "alloy"
+vault_alloy_prometheus_password: "your-prometheus-write-password"

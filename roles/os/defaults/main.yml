@@ -2,6 +2,8 @@
 
 os_supported_families:
   - Debian
+  # The honeypot VPS is CentOS Stream; every other host in the fleet is Debian.
+  - RedHat
 
 # Maps ansible_architecture to the download suffix used by Prometheus-style
 # releases (linux-<arch>).

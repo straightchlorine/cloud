@@ -1,6 +1,9 @@
 ---
 - name: Pre-deployment validation
-  hosts: all
+  # The honeypot is excluded from every `all` play: it is a CentOS Stream VPS
+  # and the fleet base roles below are apt- and ufw-based. It is deployed by
+  # its own play at the end of this file (and by playbooks/honeypot.yml).
+  hosts: all:!honeypot
   gather_facts: true
   become: false
   tags: [validation, pre_validation]
@@ -32,6 +35,12 @@
             tasks_from: validate
           when: "'music' in group_names"
 
+        - name: Honeypot validation for the honeypot host
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+          when: "'honeypot' in group_names"
+
         - name: Monitoring validation for monitoring hosts
           ansible.builtin.include_role:
             name: monitoring
@@ -39,7 +48,7 @@
           when: "'monitoring' in group_names"
 
 - name: Configure all hosts with common setup
-  hosts: all
+  hosts: all:!honeypot
   become: true
   gather_facts: true
   pre_tasks:
@@ -106,3 +115,11 @@
   roles:
     - role: backup
       tags: [backup]
+
+- name: Configure the honeypot host
+  hosts: honeypot
+  become: true
+  gather_facts: true
+  roles:
+    - role: honeypot
+      tags: [honeypot, security]

@@ -1,0 +1,31 @@
+---
+device_type: vps
+
+# Cowrie owns the public 22/tcp; the real sshd is tailnet-only on 2022.
+honeypot_ssh_port: 2022
+honeypot_cowrie_public_port: 22
+honeypot_ssh_allow_users:
+  - deploy
+  - admin
+
+honeypot_tailnet_interface: tailscale0
+honeypot_stack_dir: /opt/honeywatch
+
+honeypot_backup_enabled: true
+# Retention is handled by an R2 bucket lifecycle rule, so the R2 token needs no
+# Object Delete scope; the script's own trim is parked far in the future rather
+# than disabled, because 0 would match every object in the prefix.
+honeypot_backup_retention_days: 36500
+honeypot_backup_r2_prefix: honeywatch/postgres
+honeypot_mmdb_enabled: true
+
+# Its own ntfy topic: honeypot alerts are operational pages, not fleet chatter.
+honeypot_ntfy_topic: honeywatch
+
+# Backups go to Cloudflare R2 (age-encrypted), not the fleet restic coordinator -
+# this host must not hold credentials that reach the LAN backup repository.
+restic_enabled: false
+
+# Journal shipping to the fleet Loki, host metrics to the fleet Prometheus.
+honeypot_alloy_enabled: true
+alloy_metrics_enabled: true

@@ -26,6 +26,19 @@
   delay: 3
   tags: [post_validation]
 
+- name: Verify Firefly can actually write its upload directory
+  # The failure this guards is silent: attachments upload "fine", Firefly
+  # returns HTTP 200 on the attachment view and nothing lands on disk. Only
+  # the container's own view of the bind mount proves it.
+  ansible.builtin.command:
+    cmd: >-
+      docker compose -f {{ automation_stack_home }}/docker-compose.yml
+      exec -T firefly test -w /var/www/html/storage/upload
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
 - name: Verify Calibre-Web Automated serves its web UI
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ automation_calibre_port }}/"

@@ -1,0 +1,42 @@
+---
+# Standalone deployment for the public-facing honeywatch honeypot VPS.
+#
+# The host is a CentOS Stream VPS reached over the tailnet, not a LAN Pi: the
+# fleet-wide common/firewall/prometheus-exporters roles are apt- and ufw-based
+# and are deliberately not applied here.
+#
+# First bootstrap only - sshd is still on 22 and the tailnet does not exist yet,
+# so the hardened listener has no address to bind:
+#   ansible-playbook playbooks/honeypot.yml -e ansible_port=22 \
+#     -e honeypot_ssh_listen_address=0.0.0.0
+# Bring the tailnet up, then re-run without either override to move sshd onto
+# the tailnet address.
+
+- name: Deploy the honeypot host configuration
+  hosts: honeypot
+  become: true
+  gather_facts: true
+  tags: [honeypot]
+  roles:
+    - role: honeypot
+      tags: [honeypot, security]
+
+  post_tasks:
+    - name: Report the manual steps this play deliberately leaves out
+      ansible.builtin.debug:
+        msg: |
+          [OK] Honeypot host configured.
+
+          Still manual, by design:
+            1. tailscale up --login-server=... --authkey=... --advertise-tags=tag:honeypot
+               (needs the Headscale auth key; re-running it can drop this session)
+            2. The age key pair is generated OFFLINE; only the public recipient
+               (vault_honeypot_age_recipient) ever reaches this host.
+            3. The application stack is deployed by the honeywatch release
+               workflow: docker compose -f {{ honeypot_stack_dir }}/docker-compose.prod.yml
+
+          Smoke checks:
+            ssh -p {{ honeypot_cowrie_public_port }} anyone@<public-ip>   # cowrie
+            ssh -p {{ honeypot_ssh_port }} {{ ansible_user }}@<tailnet-ip>  # real sshd
+            nmap -Pn -p- <public-ip>                                      # only {{ honeypot_cowrie_public_port }} open
+      tags: [info]
