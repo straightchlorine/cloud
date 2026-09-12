@@ -74,6 +74,14 @@ for svc in docker stack syncthing node-exporter; do
   fi
 done
 
+echo "-- Docker resource (cgroup) limits --"
+cgroup_version="$(docker info --format '{{.CgroupVersion}}' 2>/dev/null || true)"
+if docker info 2>&1 | grep -q 'No memory limit support'; then
+  note_left "Docker memory limits NOT enforced (cgroup v${cgroup_version}: memory controller unavailable - see README)"
+else
+  note_ok "Docker memory limits enforced (cgroup v${cgroup_version})"
+fi
+
 echo "-- SSD / storage --"
 if findmnt -n /mnt/data >/dev/null 2>&1; then
   fstype="$(findmnt -no FSTYPE /mnt/data)"
@@ -105,8 +113,11 @@ if [ -f "$STACK_HOME/.env" ]; then
   fi
 fi
 
-# Compose file must not carry a secret value.
-if grep -qE 'FIREFLY_DB_PASSWORD|VAULTWARDEN_ADMIN_TOKEN' "$STACK_HOME/docker-compose.yml" 2>/dev/null; then
+# Compose file must not carry an INLINED secret value. The legit env lines
+# reference secrets by NAME ("DB_PASSWORD=${FIREFLY_DB_PASSWORD}"), so a '$'
+# immediately after the key's '=' marks a reference; anything else there is a
+# real (inlined) value - which is exactly what we refuse.
+if grep -qE '(DB_PASSWORD|ADMIN_TOKEN)=[^$]' "$STACK_HOME/docker-compose.yml" 2>/dev/null; then
   note_left "compose file contains a secret value (!)"
 else
   note_ok "compose file contains no secret material"
@@ -132,11 +143,23 @@ echo "-- Containers --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   ps_out="$(docker compose -f "$STACK_HOME/docker-compose.yml" ps --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
   for svc in vaultwarden firefly firefly-cron mariadb watchtower; do
-    line="$(printf '%s\n' "$ps_out" | grep -w "$svc" || true)"
-    if [ -n "$line" ] && printf '%s\n' "$line" | grep -q 'running'; then
-      note_ok "$svc running"
+    if [ "$svc" = "firefly-cron" ]; then
+      # Sleep-sidecar: wget the cron endpoint -> sleep 60s -> exit 0 -> Docker
+      # restarts. State only shows "running" ~60s per ~62s cycle, so treat a
+      # clean last exit (code 0) as healthy, exactly like post_deploy_validate.
+      state_line="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' firefly-cron 2>/dev/null || true)"
+      if [ -n "$state_line" ] && printf '%s\n' "$state_line" | grep -Eq '^(running|restarting|exited) 0$'; then
+        note_ok "$svc running"
+      else
+        note_left "$svc not running ($state_line)"
+      fi
     else
-      note_left "$svc not running ($line)"
+      line="$(printf '%s\n' "$ps_out" | grep -w "$svc" || true)"
+      if [ -n "$line" ] && printf '%s\n' "$line" | grep -q 'running'; then
+        note_ok "$svc running"
+      else
+        note_left "$svc not running ($line)"
+      fi
     fi
   done
 else

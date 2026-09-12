@@ -14,9 +14,10 @@
         - /tmp/molecule-case3.passed
         - /tmp/molecule-case4.passed
         - /tmp/molecule-case5.passed
+        - /tmp/molecule-case6.passed
       register: automation_failfast_markers
 
-    - name: Assert all five fail-fast cases completed
+    - name: Assert all six fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -38,6 +39,7 @@
           Case 3 - TRUSTED_PROXIES catch-all ('**'): FAILED as expected
           Case 4 - stack home under /root for a non-root user: FAILED as expected
           Case 5 - malformed Firefly static cron token (not 32 hex chars): FAILED as expected
+          Case 6 - malformed Firefly APP_KEY (bare base64 output, no prefix): FAILED as expected
 
-          All five cases ran the real roles/automation/tasks/validate.yml end to end -
+          All six cases ran the real roles/automation/tasks/validate.yml end to end -
           no hand-copied guards anywhere in this scenario.

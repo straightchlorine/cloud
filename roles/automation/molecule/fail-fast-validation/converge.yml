@@ -10,7 +10,9 @@
     domain_name: example.test
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
-    vault_firefly_app_key: molecule-test-app-key
+    # 32 chars - validate.yml refuses a malformed APP_KEY (Laravel's encrypter
+    # fatal "Unsupported cipher or incorrect key length" 500s every route).
+    vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
     # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
     # differently-sized static cron token with HTTP 500 on its cron endpoint).
     vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
@@ -193,5 +195,40 @@
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case5.passed
+            force: false
+            mode: "0644"
+
+    # Case 6 (regression guard): Laravel builds its encrypter from APP_KEY
+    # before any route handler runs, so a malformed key (e.g. bare
+    # 'openssl rand -base64 32' output without the base64: prefix - 44 chars
+    # raw) makes Firefly 500 EVERY route and crash-loops the firefly-cron
+    # sidecar. The base vars above carry a valid 32-char key, so pass a
+    # malformed one here.
+    - name: "Case 6: validate.yml refuses a malformed Firefly APP_KEY"
+      block:
+        - name: Run the real validate.yml with a bare-44-char vault_firefly_app_key
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            automation_trusted_proxies: "100.64.0.0/10"
+            vault_firefly_app_key: "base64-without-prefix-44-char-bare-openssloutput"
+
+        - name: Fail the test - the APP_KEY guard should have refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse the malformed Firefly APP_KEY"
+      rescue:
+        - name: Assert the failure was the APP_KEY guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'vault_firefly_app_key' in (ansible_failed_result.msg | default(''))"
+              - "'APP_KEY' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason (Firefly
+              APP_KEY): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's Firefly APP_KEY guard correctly refused a malformed key"
+
+        - name: Record case 6 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case6.passed
             force: false
             mode: "0644"

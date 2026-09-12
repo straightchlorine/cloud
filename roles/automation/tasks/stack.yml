@@ -74,10 +74,15 @@
     compose_services: "{{ automation_compose_services }}"
     compose_networks: "{{ automation_compose_networks }}"
     compose_volumes: "{{ automation_compose_volumes }}"
+    # firefly-cron is deliberately NOT in the critical set: it is a sleep-sidecar
+    # (wget the cron endpoint -> sleep 60s -> exit 0 -> Docker restarts it), so it
+    # only reports State=running ~60s of every ~62s cycle. Requiring a running
+    # state would false-fail every deploy exactly when the sidecar is healthy.
+    # Its health is proven separately in post_deploy_validate.yml by the LAST
+    # exit code (0 = the wget+sleep cycle completed cleanly).
     compose_critical_services:
       - vaultwarden
       - firefly
-      - firefly-cron
       - mariadb
       - watchtower
     # Vault glue - the only place real secret values exist in the role. The

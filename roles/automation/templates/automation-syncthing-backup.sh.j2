@@ -50,9 +50,15 @@ fi
 cp "$STACK_HOME/.env" "$DEST/$STAMP/automation.env"
 
 # Retention: keep the newest $RETENTION snapshot directories; wipe the rest.
-ls -1dt "$DEST"/20* "$DEST"/19* 2>/dev/null \
+# First-run safety: `ls` on an empty glob exits 2, and under `set -o pipefail`
+# that would fail the whole script - and fire the failure alert - even though
+# the snapshot above is complete. nullglob + printf never fail on no matches.
+shopt -s nullglob
+printf '%s\n' "$DEST"/20* "$DEST"/19* \
+  | sort -r \
   | tail -n +"$((RETENTION + 1))" \
   | xargs -r rm -rf
+shopt -u nullglob
 
 # Hand ownership to the Syncthing user so the mesh can replicate the files.
 chown -R "$OWNER" "$DEST"

@@ -8,7 +8,9 @@
     domain_name: example.test
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
-    vault_firefly_app_key: molecule-test-app-key
+    # 32 chars - validate.yml refuses a malformed APP_KEY (Laravel's encrypter
+    # fatal "Unsupported cipher or incorrect key length" 500s every route).
+    vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
     # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
     # differently-sized static cron token with HTTP 500 on its cron endpoint).
     vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef

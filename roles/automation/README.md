@@ -64,7 +64,9 @@ ansible-playbook -i inventory/production/hosts.yml \
 
 ```yaml
 vault_vaultwarden_admin_token: "openssl rand -base64 32"
-vault_firefly_app_key: "openssl rand -base64 32"
+# APP_KEY - exactly 32 random alnum chars (NO bare base64 output - a bare
+# 'openssl rand -base64 32' without the base64: prefix 500s every route):
+vault_firefly_app_key: "head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32"
 vault_firefly_static_cron_token: "openssl rand -hex 16"
 vault_firefly_db_password: "openssl rand -base64 32"
 vault_watchtower_api_token: "openssl rand -base64 32"
@@ -167,6 +169,75 @@ Pre-deployment (`validate.yml`) checks that:
 
 Post-deployment (`post_deploy_validate.yml`) checks that:
 
-- All five critical compose containers report running
+- All critical long-lived compose containers report running (vaultwarden,
+  firefly, mariadb, watchtower)
+- The `firefly-cron` sleep-sidecar is healthy — judged by its **last exit code**
+  (0 = clean wget+sleep cycle), never by `State=running` (it only reports
+  `running` ~60s of every ~62s cycle by design)
 - Vaultwarden answers `/alive` and Firefly serves its frontend on `primary_ip`
 - MariaDB answers `mariadb-admin ping`
+
+## Operational notes
+
+### Deploy order: the stack brings up LAST
+
+The automation role runs the Docker stack bring-up (`docker compose up -d` +
+the critical-service poll) **after** every security/configuration step —
+packages, storage, Docker, the backup files, the ntfy helper and the **firewall**
+all land first, so containers never run freely ahead of the host hardening
+(fail2ban and the base firewall run in the `site.yml` base play, before this
+role). The only tasks after the bring-up are: starting the `stack.service`
+auto-start unit (which proves the boot path works) and post-deploy validation.
+Keep it that way: the stack is the finishing step, not a mid-play side effect.
+
+### firefly-cron: a sleep-sidecar, not a daemon
+
+`firefly-cron` does one thing: `wget` Firefly's cron endpoint, `sleep 60`, exit
+0. Docker's restart policy then re-runs it. Consequences for every health
+check: `State=running` only holds ~60s of every ~62s cycle, and a sample taken
+during the restart gap will show `restarting` on a perfectly healthy box — a
+`running`-state check is a false positive. What proves health is the last exit
+code (0 = the sidecar finished its cycle; a failed wget aborts before the sleep
+with exit 8/4/1).
+
+### Resource limits vs. cgroup availability
+
+The compose services declare `deploy.resources` (memory/CPU) limits. On kernels
+where Docker cannot enforce memory limits — e.g. many Raspberry Pi/VM hosts —
+Docker logs at every `compose up`:
+
+```
+[WARNING]: Docker compose: unknown <service>: Your kernel does not support memory
+limit capabilities or the cgroup is not mounted. Limitation discarded.
+```
+
+This means the **memory limits are not enforced** (each container may use up to
+all free RAM), it does not stop or harm any container. To get real enforcement:
+
+1. Confirm the diagnosis: `docker info | grep -i cgroup` shows one or both of
+   `WARNING: No memory limit support` / `No swap limit support`.
+2. cgroup **v1** hosts (or 32-bit Pi OS): add to
+   `/boot/firmware/cmdline.txt` (older: `/boot/cmdline.txt`):
+   `cgroup_enable=memory cgroup_memory=1` — then reboot.
+3. cgroup **v2** hosts (what the automation Pis run — `Cgroup Version: 2`,
+   systemd driver): check `cat /sys/fs/cgroup/cgroup.controllers`. If `memory`
+   is not listed there, the controller is disabled at kernel/boot level —
+   `docker info` cannot fix it. The automation Pi shows exactly
+   `cpuset cpu io pids` = confirmed disabled. On Raspberry Pi/RPi-kernel
+   distros the well-known trial fix is still the classic boot args
+   `cgroup_enable=memory cgroup_memory=1` (the kernel then mounts the memory
+   controller; on Bookworm+ systemd may answer by booting hybrid/legacy
+   cgroup — either way `docker info` regains memory support). If even those
+   don't help, the running kernel may lack `CONFIG_MEMCG` entirely — verify
+   with `zgrep MEMCG /proc/config.gz` (kernel build is then the fix).
+4. Either way, re-verify with `docker info | grep -i cgroup` after the fix —
+   both warnings must be gone for limits to be honored.
+
+Both `scripts/automation/validate-deploy.sh` (hard FAIL) and this role's
+post-deploy validation (WARNING) check for `No memory limit support` on every
+deploy, so a regression is always surfaced.
+
+On this stack the warnings are benign but real: with limits discarded for good
+on an SD-card Pi, aggressive containers could exhaust RAM (zram then swaps).
+If you want the limits honored, apply the fix above; accept the warnings
+otherwise.

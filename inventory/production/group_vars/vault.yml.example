@@ -14,7 +14,12 @@ vault_pihole_webpassword: "your-secure-web-password"
 # Automation Stack (pi-automation): vaultwarden, firefly, watchtower
 # Generate: openssl rand -base64 32
 vault_vaultwarden_admin_token: "your-vaultwarden-admin-token"
-# Generate: openssl rand -base64 32 (Firefly APP_KEY)
+# Firefly APP_KEY - EXACTLY 32 random alphanumeric characters, or the
+# 'base64:' prefixed form. A bare 'openssl rand -base64 32' output WITHOUT
+# the prefix does NOT work: Firefly 500s every route with "Unsupported
+# cipher or incorrect key length" and the firefly-cron sidecar crash-loops.
+# Generate: head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32
+#       or: echo "base64:$(openssl rand -base64 32)"
 vault_firefly_app_key: "your-firefly-app-key"
 # Generate: openssl rand -hex 16 (Firefly cron endpoint token)
 vault_firefly_static_cron_token: "your-firefly-static-cron-token"

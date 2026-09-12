@@ -39,10 +39,6 @@
     tasks_from: docker
   tags: [docker]
 
-- name: Include stack deployment (compose + .env + up + poll)
-  ansible.builtin.include_tasks: stack.yml
-  tags: [stack, deploy]
-
 - name: Include backup configuration (syncthing secondary + restic)
   ansible.builtin.include_tasks: backup.yml
   when: automation_backup_enabled or restic_enabled
@@ -52,6 +48,15 @@
   ansible.builtin.include_role:
     name: firewall
   tags: [firewall, security]
+
+- name: Re-apply shared notification helpers (ntfy + reboot)
+  # An automation-only redeploy (--tags automation) skips the site.yml base
+  # play that installs these, so the role re-applies them itself. Tagged so
+  # the includes run under --tags automation.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: ntfy_install
+  tags: [automation, common, base]
 
 - name: Create Docker stack systemd service  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
@@ -73,14 +78,27 @@
     stack_exec_reload: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml restart"
   tags: [systemd, auto-start]
 
-- name: Re-apply shared notification helpers (ntfy + reboot)
-  # An automation-only redeploy (--tags automation) skips the site.yml base
-  # play that installs these, so the role re-applies them itself. Tagged so
-  # the includes run under --tags automation.
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: ntfy_install
-  tags: [automation, common, base]
+# --- Stack bring-up is the FINISHING STEP, on purpose ------------------------
+# Everything above (packages, storage, Docker, backup files, the firewall and
+# the ntfy helper) is host configuration that must exist BEFORE any service is
+# exposed. Composing up here guarantees the containers never run freely ahead
+# of the security setup (fail2ban/firewall run in the site.yml base play and
+# this role) - the stack only comes online once the host is hardened.
+- name: Include stack deployment (compose + .env + up + poll) - finishing step
+  ansible.builtin.include_tasks: stack.yml
+  tags: [stack, deploy]
+
+- name: Activate the stack auto-start unit
+  # docker_stack_service above creates+enables the unit but it only takes
+  # effect at boot. Starting it now (a) keeps "stack" active AND enabled on
+  # the running host - matching the validate-deploy.sh invariant - and (b)
+  # proves the boot path itself works: RemainAfterExit forces the unit's
+  # ExecStart (`docker compose up -d`) to run once immediately, idempotently.
+  ansible.builtin.systemd:
+    name: "stack"
+    state: started
+  become: true
+  tags: [systemd, auto-start, stack]
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml

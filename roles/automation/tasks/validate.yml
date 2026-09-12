@@ -105,3 +105,33 @@
     vault_firefly_static_cron_token | length != 32
     or vault_firefly_static_cron_token is not match('^[0-9a-fA-F]{32}$')
   tags: [validation]
+
+- name: Require a well-formed Firefly APP_KEY
+  # Laravel builds its encrypter from APP_KEY when the session/auth container
+  # first resolves - BEFORE any route handler runs. A key that does not decode
+  # to a 16/32-byte cipher key raises "RuntimeException: Unsupported cipher or
+  # incorrect key length" and 500s EVERY Firefly route with a ~5-byte body
+  # (firefly /api/v1/about, /login and the cron endpoint all included), which
+  # makes the firefly-cron sidecar crash-loop on a bare "500 Internal Server
+  # Error" from wget. Two formats are valid (Firefly III upstream docs):
+  #   1. Exactly 32 plain random alphanumeric characters - no special chars,
+  #      no bare openssl rand -base64 output (44 chars raw does NOT work).
+  #      Generate: head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32
+  #   2. Laravel's "base64:" prefixed form (7 + 44 = 51 chars, 32-byte key).
+  #      Generate: echo "base64:$(openssl rand -base64 32)"
+  ansible.builtin.fail:
+    msg: >-
+      vault_firefly_app_key is not a valid Firefly APP_KEY; got
+      {{ vault_firefly_app_key | length }} characters. Valid formats: exactly
+      32 random alphanumeric characters
+      (head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32), or the
+      'base64:' prefixed form (echo "base64:$(openssl rand -base64 32)"). A
+      bare 'openssl rand -base64 32' output WITHOUT the base64: prefix does
+      not work - Firefly 500s every route with "Unsupported cipher or
+      incorrect key length" and the firefly-cron sidecar crash-loops.
+  when: >-
+    not ((vault_firefly_app_key | length == 32)
+    and (vault_firefly_app_key is match('^[A-Za-z0-9]{32}$')))
+    and not ((vault_firefly_app_key | length == 51)
+    and (vault_firefly_app_key is match('^base64:[A-Za-z0-9+/]{43}={1,2}$')))
+  tags: [validation]
