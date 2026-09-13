@@ -142,6 +142,33 @@
     state: started
   become: true
 
+- name: Flush handlers so Docker restarts before reading its userns-remap range
+  # A daemon.json change above only notifies Restart docker; that handler
+  # runs at end of play by default. Flush now so /etc/subuid reflects the
+  # currently active userns-remap config, not a pending one.
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the Docker userns-remap subordinate UID range
+  ansible.builtin.command: grep '^dockremap:' /etc/subuid
+  register: common_dockremap_subuid
+  changed_when: false
+  become: true
+
+- name: Read the Docker userns-remap subordinate GID range
+  ansible.builtin.command: grep '^dockremap:' /etc/subgid
+  register: common_dockremap_subgid
+  changed_when: false
+  become: true
+
+- name: Publish the Docker userns-remap base uid/gid facts
+  # Containers whose entrypoint chowns its own bind-mounted data dir as root
+  # (e.g. MariaDB) need that host directory pre-owned by this range - under
+  # userns-remap, container "root" is this uid, not real host root, and it
+  # has no authority to chown a directory owned by an unrelated host uid.
+  ansible.builtin.set_fact:
+    common_dockremap_uid: "{{ common_dockremap_subuid.stdout.split(':')[1] }}"
+    common_dockremap_gid: "{{ common_dockremap_subgid.stdout.split(':')[1] }}"
+
 - name: Verify Docker Compose plugin installation
   ansible.builtin.command: docker compose version
   register: common_docker_compose_check

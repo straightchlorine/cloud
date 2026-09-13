@@ -29,10 +29,22 @@
   loop:
     - vaultwarden
     - firefly
-    - mariadb
     - calibre/config
     - calibre/ingest
     - calibre/library
+
+- name: Create the MariaDB data directory owned by Docker's userns-remap range
+  # mariadb's entrypoint chown -Rs /var/lib/mysql to mysql:mysql as root on
+  # every start. Under userns-remap, container root is common_dockremap_uid/gid,
+  # not real host root - it has no authority to chown a directory owned by
+  # ansible_user, so this dir must start out owned by the remap range itself.
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/mariadb"
+    state: directory
+    owner: "{{ common_dockremap_uid }}"
+    group: "{{ common_dockremap_gid }}"
+    mode: "0755"
+  become: true
 
 - name: Create the Firefly upload directory owned by the image's www-data
   # fireflyiii/core runs php-fpm as USER www-data (uid/gid 33 on its Debian
