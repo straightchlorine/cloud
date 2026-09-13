@@ -14,6 +14,9 @@
   tags: [post_validation]
 
 - name: Verify Firefly serves its web frontend
+  # Firefly runs its DB migrations on first boot (and after every image
+  # update), which can take several minutes on Pi-class hardware/SD storage -
+  # a short retry window here false-fails a healthy, still-migrating deploy.
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ automation_firefly_port }}/"
     method: GET
@@ -22,8 +25,8 @@
     follow_redirects: none
   register: automation_firefly_health
   until: automation_firefly_health.status in [200, 302]
-  retries: 10
-  delay: 3
+  retries: 40
+  delay: 10
   tags: [post_validation]
 
 - name: Verify Firefly can actually write its upload directory

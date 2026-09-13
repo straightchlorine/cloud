@@ -143,8 +143,12 @@ automation_compose_services:
         "http://firefly:8080/api/v1/cron/${FIREFLY_STATIC_CRON_TOKEN}"
         && sleep 60s
     service_depends_on:
+      # service_healthy (not just service_started): firefly's own image
+      # healthcheck only passes once migrations finish, and the cron
+      # endpoint 404s/500s until then - service_started let this sidecar
+      # hammer it and restart-loop through Firefly's whole boot.
       - service: firefly
-        condition: service_started
+        condition: service_healthy
     service_networks:
       - stack
     service_labels:
