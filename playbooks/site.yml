@@ -52,6 +52,14 @@
   become: true
   gather_facts: true
   pre_tasks:
+    - name: Sync system clock via chrony
+      # Must run before any HTTPS-dependent task (apt cache update, package
+      # installs, checksum downloads) - a wrong clock fails TLS notBefore
+      # validation on all of them.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: chrony
+
     - name: Update package cache
       ansible.builtin.include_role:
         name: common

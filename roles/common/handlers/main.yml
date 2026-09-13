@@ -1,4 +1,11 @@
 ---
+- name: Restart chrony
+  ansible.builtin.systemd:
+    name: chrony
+    state: restarted
+    enabled: true
+  become: true
+
 - name: Restart fail2ban
   ansible.builtin.systemd:
     name: fail2ban

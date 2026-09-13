@@ -1,6 +1,8 @@
-# Local upstream (VLAN router) - lower latency, no external dependency.
-server {{ dns_ntp_upstream_server }} iburst prefer
+{% if common_ntp_upstream_server is defined %}
+# Local upstream ({{ common_ntp_upstream_server }}) - lower latency, no external dependency.
+server {{ common_ntp_upstream_server }} iburst prefer
 
+{% endif %}
 pool 2.debian.pool.ntp.org iburst maxsources 4
 pool 0.debian.pool.ntp.org iburst maxsources 1
 pool 1.debian.pool.ntp.org iburst maxsources 1
@@ -12,8 +14,8 @@ driftfile /var/lib/chrony/drift
 makestep 1.0 3
 rtcsync
 
-{% if dns_ntp_server_enabled %}
-{% for network in dns_ntp_allowed_networks %}
+{% if common_ntp_server_enabled %}
+{% for network in common_ntp_allowed_networks %}
 allow {{ network }}
 {% endfor %}
 

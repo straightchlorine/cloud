@@ -12,9 +12,9 @@
     # resolve from CI.
     dns_pihole_dns_servers:
       - 9.9.9.9
-    dns_ntp_upstream_server: pool.ntp.org
-    dns_ntp_server_enabled: false
-    dns_ntp_allowed_networks: []
+    common_ntp_upstream_server: pool.ntp.org
+    common_ntp_server_enabled: false
+    common_ntp_allowed_networks: []
     dns_backup_enabled: true
     dns_backup_dir: /tmp/molecule-syncthing-backup
     dns_backup_retention: 14
@@ -31,8 +31,8 @@
     # the teardown, which stays untagged and must converge).
     - name: Deploy the real chrony setup
       ansible.builtin.include_role:
-        name: dns
-        tasks_from: chrony_sync
+        name: common
+        tasks_from: chrony
       tags: [molecule-idempotence-notest]
 
     - name: Deploy the real auto-update script and cron

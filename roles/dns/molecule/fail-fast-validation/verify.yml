@@ -34,7 +34,7 @@
 
           Case 1 - missing required variable (dns_pihole_interface): FAILED as expected
           Case 2 - placeholder vault secret (vault_pihole_webpassword): FAILED as expected
-          Case 3 - NTP guard, empty dns_ntp_allowed_networks: FAILED as expected
+          Case 3 - NTP guard, empty common_ntp_allowed_networks: FAILED as expected
           Case 4 - non-existent dns_pihole_interface: FAILED as expected
 
           All four cases ran the real roles/dns/tasks/validate.yml end to end -

@@ -14,9 +14,22 @@
     ntfy_topic: "molecule-test"
     common_auto_updates_reboot_time: "03:00"
     inventory_hostname: molecule-test-host
+    common_ntp_upstream_server: pool.ntp.org
+    common_ntp_server_enabled: true
+    common_ntp_allowed_networks:
+      - 192.168.1.0/24
   tasks:
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
+
+    # include_role (not a raw include_tasks path) so the role-relative
+    # `template: src: chrony.conf.j2` in chrony.yml resolves correctly.
+    # chrony.yml itself tags only its container-unsafe enable/start task
+    # molecule-idempotence-notest - don't blanket-tag the whole include.
+    - name: Run the real chrony setup and sync
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: chrony
 
     # Hardware detection moved to a standalone 'hardware' role with its own
     # molecule scenario - no duplicate include needed here.

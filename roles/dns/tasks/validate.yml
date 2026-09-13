@@ -18,8 +18,8 @@
       - vault_pihole_webpassword
       - dns_pihole_interface
       - dns_pihole_dns_servers
-      - dns_ntp_server_enabled
-      - dns_ntp_upstream_server
+      - common_ntp_server_enabled
+      - common_ntp_upstream_server
     vault_placeholders:
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
     common_backup_directories:
@@ -44,10 +44,10 @@
 
 - name: Validate NTP allowed networks are set when serving NTP to the VLAN
   ansible.builtin.fail:
-    msg: "dns_ntp_allowed_networks must be non-empty when dns_ntp_server_enabled is true"
+    msg: "common_ntp_allowed_networks must be non-empty when common_ntp_server_enabled is true"
   when:
-    - dns_ntp_server_enabled
-    - dns_ntp_allowed_networks | length == 0
+    - common_ntp_server_enabled
+    - common_ntp_allowed_networks | length == 0
 
 - name: Validate specified interface exists
   ansible.builtin.fail:

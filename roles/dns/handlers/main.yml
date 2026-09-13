@@ -5,10 +5,3 @@
     state: restarted
     enabled: true
   become: true
-
-- name: Restart chrony
-  ansible.builtin.systemd:
-    name: chrony
-    state: restarted
-    enabled: true
-  become: true

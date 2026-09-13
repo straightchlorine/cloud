@@ -15,11 +15,11 @@ dns_pihole_packages:
 dns_auto_updates_enabled: true
 common_auto_updates_reboot_if_required: true
 
-# Serves NTP to the VLAN (see chrony.conf.j2 `allow` + firewall rule).
-dns_ntp_server_enabled: true
+# Serves NTP to the VLAN (see common/templates/chrony.conf.j2 `allow` + firewall rule).
+common_ntp_server_enabled: true
 # OPNsense already runs NTP here - use it as the low-latency upstream.
-dns_ntp_upstream_server: "192.168.20.1"
-dns_ntp_allowed_networks:
+common_ntp_upstream_server: "192.168.20.1"
+common_ntp_allowed_networks:
   - "{{ primary_network_cidr }}"
 
 common_firewall_ports:
@@ -28,7 +28,7 @@ common_firewall_ports:
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
   - {port: 80, comment: "Pi-hole Web Interface"}
   # No blanket 123/udp: ufw is first-match, so an unrestricted allow would
-  # shadow the src-restricted NTP rule from dns_ntp_allowed_networks.
+  # shadow the src-restricted NTP rule from common_ntp_allowed_networks.
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
 

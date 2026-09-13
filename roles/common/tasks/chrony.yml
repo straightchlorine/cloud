@@ -1,7 +1,8 @@
 ---
-# chrony must be syncing before the Pi-hole install: the gravity build downloads
-# blocklists over HTTPS, which fails TLS validation on a wrong clock. NTP
-# firewall rules come later, after the firewall role installs ufw.
+# Runs before packages.yml and any HTTPS-dependent role tasks: a wrong clock
+# fails TLS certificate validation (notBefore/notAfter checks) on every
+# downstream apt/curl/get_url call, and Pi hosts have no RTC to persist time
+# across reboots.
 
 - name: Gather service facts to check for systemd-timesyncd
   ansible.builtin.service_facts:
@@ -48,7 +49,7 @@
   # deploy on it - the task below warns and proceeds.
   ansible.builtin.command: timeout 30 chronyc waitsync 10 0.5
   become: true
-  register: dns_chrony_sync_result
+  register: common_chrony_sync_result
   changed_when: false
   failed_when: false
 
@@ -56,7 +57,7 @@
   ansible.builtin.debug:
     msg: >-
       chronyc waitsync did not confirm sync within the timeout
-      ({{ dns_chrony_sync_result.stdout | default('no output') }}).
-      Proceeding anyway - the Pi-hole install may fail TLS validation if the
-      clock is still wrong.
-  when: dns_chrony_sync_result.rc != 0
+      ({{ common_chrony_sync_result.stdout | default('no output') }}).
+      Proceeding anyway - later HTTPS downloads may fail TLS validation if
+      the clock is still wrong.
+  when: common_chrony_sync_result.rc != 0

@@ -60,10 +60,10 @@ dns_auto_updates_enabled: true
 dns_auto_update_time: "2:00"
 dns_auto_update_day: "Monday"
 
-# NTP server
-dns_ntp_server_enabled: true
-dns_ntp_upstream_server: "192.168.20.1"
-dns_ntp_allowed_networks:
+# NTP server (chrony sync itself is fleet-wide via the common role)
+common_ntp_server_enabled: true
+common_ntp_upstream_server: "192.168.20.1"
+common_ntp_allowed_networks:
   - "192.168.20.0/24"
 
 # Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
@@ -188,7 +188,7 @@ Pre-deployment (`validate.yml`) checks that:
 
 - Required variables are defined and contain no vault placeholder values
 - The configured `dns_pihole_interface` exists on the host
-- `dns_ntp_allowed_networks` is non-empty when this host serves NTP
+- `common_ntp_allowed_networks` is non-empty when this host serves NTP
 
 Post-deployment (`post_deploy_validate.yml`) checks that:
 

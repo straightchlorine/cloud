@@ -9,9 +9,9 @@
     vault_pihole_webpassword: molecule-test-password
     dns_pihole_dns_servers:
       - "9.9.9.9"
-    dns_ntp_server_enabled: false
-    dns_ntp_upstream_server: pool.ntp.org
-    dns_ntp_allowed_networks: []
+    common_ntp_server_enabled: false
+    common_ntp_upstream_server: pool.ntp.org
+    common_ntp_allowed_networks: []
   tasks:
     # The container's interface name varies by driver/network; cases 2 and 3
     # need a real one so they fail for the reason under test, not the
@@ -94,25 +94,25 @@
     # validate.yml (not a hand-copied reproduction).
     - name: "Case 3: validate.yml fails when NTP serving is enabled without allowed networks"
       block:
-        - name: Run the real validate.yml with an empty dns_ntp_allowed_networks
+        - name: Run the real validate.yml with an empty common_ntp_allowed_networks
           ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
           vars:
             dns_pihole_interface: "{{ molecule_primary_interface }}"
-            dns_ntp_server_enabled: true
+            common_ntp_server_enabled: true
 
         - name: Fail the test - the NTP guard should have refused an empty allow-list
           ansible.builtin.fail:
-            msg: "validate.yml did not fail on an empty dns_ntp_allowed_networks"
+            msg: "validate.yml did not fail on an empty common_ntp_allowed_networks"
       rescue:
         - name: Assert the failure was the NTP guard, for the right reason
           ansible.builtin.assert:
             that:
-              - "'dns_ntp_allowed_networks' in ansible_failed_result.msg"
+              - "'common_ntp_allowed_networks' in ansible_failed_result.msg"
               - "'must be non-empty' in ansible_failed_result.msg"
             fail_msg: >-
               validate.yml failed, but not for the expected reason:
               {{ ansible_failed_result.msg | default('') }}
-            success_msg: "[OK] validate.yml's NTP guard correctly failed on an empty dns_ntp_allowed_networks"
+            success_msg: "[OK] validate.yml's NTP guard correctly failed on an empty common_ntp_allowed_networks"
 
         - name: Record case 3 as passed for verify.yml
           # A file, not set_fact: converge and verify are separate

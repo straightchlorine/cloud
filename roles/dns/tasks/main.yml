@@ -25,9 +25,6 @@
     role_specific_packages: "{{ dns_pihole_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
-- name: Sync system time before installing Pi-hole
-  ansible.builtin.include_tasks: chrony_sync.yml
-
 - name: Set up an optional attached drive if present
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
@@ -217,16 +214,16 @@
 
 - name: Configure firewall for NTP
   # Must run after the firewall role, which installs ufw. Chrony itself is
-  # installed and synced earlier, in chrony_sync.yml.
+  # installed and synced fleet-wide, earlier, in common/tasks/chrony.yml.
   community.general.ufw:
     rule: allow
     port: "123"
     proto: udp
     src: "{{ item }}"
     comment: "Allow NTP (chrony) from VLAN"
-  loop: "{{ dns_ntp_allowed_networks }}"
+  loop: "{{ common_ntp_allowed_networks }}"
   become: true
-  when: dns_ntp_server_enabled
+  when: common_ntp_server_enabled
 
 - name: Re-apply fleet notification helpers (ntfy + reboot)
   # The dns teardown removes the common-role notification helpers (ntfy-notify,

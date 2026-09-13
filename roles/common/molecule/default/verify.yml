@@ -65,6 +65,32 @@
         fail_msg: "Not running on Debian/Ubuntu"
         success_msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
 
+    - name: Read the deployed chrony config
+      ansible.builtin.slurp:
+        src: /etc/chrony/chrony.conf
+      register: common_deployed_chrony_conf
+
+    - name: Assert the chrony config rendered correctly
+      ansible.builtin.assert:
+        that:
+          - "'server pool.ntp.org iburst prefer' in chrony_conf"
+          - "'allow 192.168.1.0/24' in chrony_conf"
+          - "'local stratum 8' in chrony_conf"
+        fail_msg: "chrony.conf rendered wrong: {{ chrony_conf }}"
+        success_msg: "[OK] chrony.conf has upstream, allow network and local stratum"
+      vars:
+        chrony_conf: "{{ common_deployed_chrony_conf.content | b64decode }}"
+
+    - name: Assert chrony is installed and enabled
+      ansible.builtin.package_facts:
+      register: common_installed_packages
+
+    - name: Assert the chrony package is present
+      ansible.builtin.assert:
+        that: "'chrony' in ansible_facts.packages"
+        fail_msg: "chrony package not installed"
+        success_msg: "[OK] chrony installed"
+
     - name: Verify ntfy/reboot-notify scripts rendered
       ansible.builtin.stat:
         path: "{{ item }}"

@@ -205,7 +205,7 @@
 - name: Stop systemd-journald before reverting storage relocation
   # molecule-idempotence-notest: journald is socket-activated - it restarts
   # whenever anything logs, so state=stopped can never converge on a rerun
-  # (same reasoning as the chrony unit in chrony_sync.yml).
+  # (same reasoning as the chrony unit in common/tasks/chrony.yml).
   ansible.builtin.systemd:
     name: systemd-journald
     state: stopped

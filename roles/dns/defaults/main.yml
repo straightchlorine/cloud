@@ -28,11 +28,6 @@ dns_backup_schedule_minute: "30"
 # dns_backup_dir:   Syncthing-shared folder
 # dns_backup_owner: the Syncthing user
 
-# chrony_sync.yml always syncs the clock; this only gates whether it also
-# advertises as an NTP server for the VLAN (chrony.conf.j2 `allow` + firewall).
-dns_ntp_server_enabled: false
-dns_ntp_allowed_networks: []
-
 # Optional attached drive - opt in per host; no-op if none is found (see storage.yml).
 dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"

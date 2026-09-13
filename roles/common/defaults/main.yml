@@ -1,4 +1,12 @@
 ---
+# NTP (chrony.yml always syncs the clock on every host). common_ntp_upstream_server
+# is optional - set it per host_vars only when a low-latency local source (e.g. the
+# VLAN router) is known to run NTP; omitted, chrony falls back to public pools alone.
+# common_ntp_server_enabled/allowed_networks gate this host also advertising as an
+# NTP server (chrony.conf.j2 `allow` + a role-owned firewall rule, see roles/dns).
+common_ntp_server_enabled: false
+common_ntp_allowed_networks: []
+
 # Security Configuration
 common_fail2ban_enabled: true
 common_fail2ban_ssh_maxretry: 3
