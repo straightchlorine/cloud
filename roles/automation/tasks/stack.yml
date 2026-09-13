@@ -54,20 +54,22 @@
     - calibre/library
 
 - name: Create the Firefly upload directory owned by the image's www-data
-  # fireflyiii/core runs php-fpm as USER www-data (uid/gid 33 on its Debian
-  # base) and never chowns its storage. Upstream's compose gets away with a
-  # named volume, which inherits the image's ownership; a bind mount starts
-  # out owned by the host user and Firefly then fails attachment uploads
-  # SILENTLY ("storage/upload is not writeable" in the log, HTTP 200 on the
-  # attachment view, zero bytes on disk).
-  # ponytail: uid pinned to 33 because the image is Debian-based - if upstream
-  # ever moves to their Alpine variant this becomes 82.
+  # fireflyiii/core runs php-fpm as a static USER www-data (uid/gid 33 on its
+  # Debian base) and never chowns its storage itself - unlike mariadb/CWA
+  # above, no internal root process ever fixes this mount up. Under
+  # userns-remap a host file only resolves to a real uid *inside* the
+  # container if its host-owning uid falls within that container's remapped
+  # range - so the host dir must be owned by common_dockremap_uid/gid + 33
+  # (the actual host uid www-data maps to), not literal uid/gid 33.
+  # ponytail: offset pinned to +33 because the image is Debian-based - if
+  # upstream ever moves to their Alpine variant this becomes +82.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/firefly/upload"
     state: directory
-    owner: "33"
-    group: "33"
+    owner: "{{ (common_dockremap_uid | int) + 33 }}"
+    group: "{{ (common_dockremap_gid | int) + 33 }}"
     mode: "0755"
+    recurse: true
   become: true
 
 - name: Create the stack home directory
