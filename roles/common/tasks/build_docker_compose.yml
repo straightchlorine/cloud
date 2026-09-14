@@ -33,8 +33,9 @@
 - name: Add each service to compose file
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
-    marker: "# {mark} ANSIBLE MANAGED SERVICE: {{ item.service_name }}"
-    block: |
+    marker: "# {mark} {{ item.service_name }}"
+    block: |2
+
       {{ lookup('template', 'docker-service.yml.j2', template_vars=item) | indent(0, first=False) }}
     insertafter: "^services:"
   loop: "{{ compose_services }}"
@@ -44,7 +45,7 @@
 - name: Add networks section if defined
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
-    marker: "# {mark} ANSIBLE MANAGED NETWORKS"
+    marker: "# {mark} networks"
     block: |2
 
       networks:
@@ -65,7 +66,7 @@
 - name: Add volumes section if defined
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
-    marker: "# {mark} ANSIBLE MANAGED VOLUMES"
+    marker: "# {mark} volumes"
     block: |2
 
       volumes:

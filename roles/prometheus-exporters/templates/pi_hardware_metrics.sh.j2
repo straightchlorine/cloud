@@ -19,6 +19,22 @@ safe_read() {
     fi
 }
 
+# vcgencmd can exit 0 while printing an unsupported-feature message with no
+# '=' in it (e.g. a clock/voltage rail not present on this board/GPU driver) -
+# `cut`/`grep` on that still exits 0 with empty output, so a plain `|| 0`
+# fallback never catches it and an empty value ends up embedded in the
+# Prometheus line ("expected float as value"). Coalesce empty results here
+# instead of relying on exit codes.
+default_if_empty() {
+    local value="$1"
+    local fallback="${2:-0}"
+    if [ -z "$value" ]; then
+        echo "$fallback"
+    else
+        echo "$value"
+    fi
+}
+
 # Collect metrics
 {
     echo "# HELP pi_temperature_celsius Raspberry Pi CPU temperature in Celsius"
@@ -34,46 +50,46 @@ safe_read() {
     if command -v vcgencmd >/dev/null 2>&1; then
         echo "# HELP pi_gpu_temperature_celsius Raspberry Pi GPU temperature in Celsius"
         echo "# TYPE pi_gpu_temperature_celsius gauge"
-        GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        GPU_TEMP=$(default_if_empty "$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9.]+')" "0")
         echo "pi_gpu_temperature_celsius $GPU_TEMP"
 
         echo "# HELP pi_voltage_volts Raspberry Pi voltage readings"
         echo "# TYPE pi_voltage_volts gauge"
-        CORE_VOLT=$(vcgencmd measure_volts core 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        CORE_VOLT=$(default_if_empty "$(vcgencmd measure_volts core 2>/dev/null | grep -oE '[0-9.]+')" "0")
         echo "pi_voltage_volts{component=\"core\"} $CORE_VOLT"
 
-        SDRAM_C_VOLT=$(vcgencmd measure_volts sdram_c 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        SDRAM_C_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_c 2>/dev/null | grep -oE '[0-9.]+')" "0")
         echo "pi_voltage_volts{component=\"sdram_c\"} $SDRAM_C_VOLT"
 
-        SDRAM_I_VOLT=$(vcgencmd measure_volts sdram_i 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        SDRAM_I_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_i 2>/dev/null | grep -oE '[0-9.]+')" "0")
         echo "pi_voltage_volts{component=\"sdram_i\"} $SDRAM_I_VOLT"
 
-        SDRAM_P_VOLT=$(vcgencmd measure_volts sdram_p 2>/dev/null | grep -oE '[0-9.]+' || echo "0")
+        SDRAM_P_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_p 2>/dev/null | grep -oE '[0-9.]+')" "0")
         echo "pi_voltage_volts{component=\"sdram_p\"} $SDRAM_P_VOLT"
 
         echo "# HELP pi_clock_frequency_hz Raspberry Pi clock frequencies"
         echo "# TYPE pi_clock_frequency_hz gauge"
 
-        ARM_FREQ=$(vcgencmd measure_clock arm 2>/dev/null | cut -d= -f2 || echo "0")
+        ARM_FREQ=$(default_if_empty "$(vcgencmd measure_clock arm 2>/dev/null | cut -d= -f2)" "0")
         echo "pi_clock_frequency_hz{clock=\"arm\"} $ARM_FREQ"
 
-        CORE_FREQ=$(vcgencmd measure_clock core 2>/dev/null | cut -d= -f2 || echo "0")
+        CORE_FREQ=$(default_if_empty "$(vcgencmd measure_clock core 2>/dev/null | cut -d= -f2)" "0")
         echo "pi_clock_frequency_hz{clock=\"core\"} $CORE_FREQ"
 
-        GPU_FREQ=$(vcgencmd measure_clock v3d 2>/dev/null | cut -d= -f2 || echo "0")
+        GPU_FREQ=$(default_if_empty "$(vcgencmd measure_clock v3d 2>/dev/null | cut -d= -f2)" "0")
         echo "pi_clock_frequency_hz{clock=\"gpu\"} $GPU_FREQ"
 
         echo "# HELP pi_memory_split_bytes Memory split between CPU and GPU"
         echo "# TYPE pi_memory_split_bytes gauge"
-        GPU_MEM=$(vcgencmd get_mem gpu 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+        GPU_MEM=$(default_if_empty "$(vcgencmd get_mem gpu 2>/dev/null | grep -oE '[0-9]+')" "0")
         echo "pi_memory_split_bytes{component=\"gpu\"} $(echo "$GPU_MEM * 1024 * 1024" | bc)"
 
-        ARM_MEM=$(vcgencmd get_mem arm 2>/dev/null | grep -oE '[0-9]+' || echo "0")
+        ARM_MEM=$(default_if_empty "$(vcgencmd get_mem arm 2>/dev/null | grep -oE '[0-9]+')" "0")
         echo "pi_memory_split_bytes{component=\"arm\"} $(echo "$ARM_MEM * 1024 * 1024" | bc)"
 
         echo "# HELP pi_throttled Pi throttling status bitmask"
         echo "# TYPE pi_throttled gauge"
-        THROTTLED=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2 || echo "0x0")
+        THROTTLED=$(default_if_empty "$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)" "0x0")
         echo "pi_throttled $(echo "ibase=16; ${THROTTLED#0x}" | bc 2>/dev/null || echo "0")"
     fi
 

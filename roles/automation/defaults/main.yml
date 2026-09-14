@@ -218,8 +218,18 @@ automation_compose_services:
       - "WATCHTOWER_LABEL_ENABLE=true"
       - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
       - "WATCHTOWER_CLEANUP=true"
+      # One container at a time, waiting for health before continuing -
+      # firefly depends_on mariadb condition: service_healthy, so updating
+      # both simultaneously risked firefly restarting against a mariadb
+      # that's mid-update. Not supported with legacy --link containers,
+      # which this stack doesn't use (networks only).
+      - "WATCHTOWER_ROLLING_RESTART=true"
       - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
-      - "WATCHTOWER_NOTIFICATION_TITLE=watchtower: {{ inventory_hostname }}"
+      # WATCHTOWER_NOTIFICATION_TITLE is not a real Watchtower option (silently
+      # ignored) - WATCHTOWER_NOTIFICATIONS_HOSTNAME is the documented flag for
+      # this, and gives the plain hostname as the title with no extra text.
+      - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
+      - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
       - "WATCHTOWER_HTTP_API_METRICS=true"
       - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
       - "WATCHTOWER_HTTP_API_UPDATE=true"

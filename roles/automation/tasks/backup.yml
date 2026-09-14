@@ -81,6 +81,14 @@
       - "{{ automation_data_path }}"
     # common_backup_schedule defaults to 03:00 daily already (see common's
     # defaults/main.yml) - no override needed here.
+    # Matches the documented retention for this host (docs/backup/index.md) -
+    # without this, cleanup_old_snapshots() silently fell back to restic's
+    # own hardcoded default (7 daily/4 weekly/6 monthly/1 yearly).
+    retention_policy:
+      daily: 14
+      weekly: 8
+      monthly: 12
+      yearly: 3
     backup_exclude_patterns:
       - "*.log"
       - "tmp/*"

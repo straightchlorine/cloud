@@ -67,7 +67,6 @@ coordinator_targets:
     backup_schedule: "*-*-* 02:00:00"
     common_backup_paths:
       - /etc
-      - /var/lib/docker/volumes
       - /var/log
       - /home/automation
       - /mnt/data
