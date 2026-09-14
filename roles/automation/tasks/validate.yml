@@ -113,9 +113,13 @@
   # incorrect key length" and 500s EVERY Firefly route with a ~5-byte body
   # (firefly /api/v1/about, /login and the cron endpoint all included), which
   # makes the firefly-cron sidecar crash-loop on a bare "500 Internal Server
-  # Error" from wget. Two formats are valid (Firefly III upstream docs):
-  #   1. Exactly 32 plain random alphanumeric characters - no special chars,
-  #      no bare openssl rand -base64 output (44 chars raw does NOT work).
+  # Error" from wget. Two formats are valid (Firefly III upstream docs); the
+  # raw form is exactly 32 BYTES, not restricted to alphanumeric - Laravel
+  # uses the raw string as key material directly, so any 32 characters work
+  # (a migrated-in production key with symbols is entirely valid). The one
+  # real constraint from this pipeline: it must not contain a literal double
+  # quote, which would break the quoted value in the generated .env file.
+  #   1. Exactly 32 raw characters, no embedded double quote.
   #      Generate: head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32
   #   2. Laravel's "base64:" prefixed form (7 + 44 = 51 chars, 32-byte key).
   #      Generate: echo "base64:$(openssl rand -base64 32)"
@@ -123,7 +127,7 @@
     msg: >-
       vault_firefly_app_key is not a valid Firefly APP_KEY; got
       {{ vault_firefly_app_key | length }} characters. Valid formats: exactly
-      32 random alphanumeric characters
+      32 raw characters with no embedded double quote
       (head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32), or the
       'base64:' prefixed form (echo "base64:$(openssl rand -base64 32)"). A
       bare 'openssl rand -base64 32' output WITHOUT the base64: prefix does
@@ -131,7 +135,7 @@
       incorrect key length" and the firefly-cron sidecar crash-loops.
   when: >-
     not ((vault_firefly_app_key | length == 32)
-    and (vault_firefly_app_key is match('^[A-Za-z0-9]{32}$')))
+    and ('"' not in vault_firefly_app_key))
     and not ((vault_firefly_app_key | length == 51)
     and (vault_firefly_app_key is match('^base64:[A-Za-z0-9+/]{43}={1,2}$')))
   tags: [validation]
