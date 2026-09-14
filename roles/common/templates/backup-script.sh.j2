@@ -78,7 +78,13 @@ check_prerequisites() {
 test_connectivity() {
     log "Testing repository connectivity..."
 
-    if ssh -i {{ backup_ssh_config.key_path }} -p {{ backup_ssh_config.port }} -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new {{ backup_ssh_config.user }}@{{ backup_ssh_config.host }} "echo 'Connection test successful'" >/dev/null 2>&1; then
+    # Hetzner Storage Box (and similar backup-only SSH endpoints) allow only
+    # the SFTP subsystem - no general shell, so a plain command-exec test
+    # (e.g. `ssh host echo hi`) is refused even when the box is perfectly
+    # reachable. -b /dev/null connects, reads zero batch commands (immediate
+    # EOF), and exits cleanly - a real SFTP-native connectivity probe using
+    # the same shared config/alias restic itself connects through.
+    if sftp -F {{ common_backup_base_path }}/.ssh/config -b /dev/null hetzner-storage >/dev/null 2>&1; then
         log "Repository connectivity test passed"
     else
         error_exit "Cannot connect to backup repository"

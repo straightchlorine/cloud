@@ -91,13 +91,9 @@
     post_backup_commands:
       - >-
         docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
-    # Matches the actual Hetzner SFTP target and key path already used by
-    # restic_backup.yml's own RESTIC_SFTP_COMMAND - backup_ssh_host/port/user
-    # were never-defined placeholders that happened not to be dereferenced.
-    backup_ssh_config:
-      host: "{{ vault_backup_storage_host }}"
-      port: "{{ vault_backup_storage_port }}"
-      user: "{{ vault_backup_storage_user }}"
-      key_path: "{{ common_backup_base_path }}/.ssh/hetzner"
+    # Just a flag: backup-script.sh.j2's connectivity test connects through
+    # the shared hetzner-storage ssh_config alias directly (same one restic
+    # itself uses), so it needs nothing beyond "is this feature enabled".
+    backup_ssh_config: true
   when: restic_enabled
   tags: [backup]
