@@ -41,7 +41,10 @@ check_script() {
     note_left "$path missing"
     return
   fi
-  got_mode="$(stat -c '%a' "$path" 2>/dev/null || echo "000")"
+  # -L: symlinks (e.g. /usr/local/bin/manage-automation) always report
+  # lrwxrwxrwx for their own mode bits - the real permission lives on
+  # whatever the link points at, so dereference before checking.
+  got_mode="$(stat -L -c '%a' "$path" 2>/dev/null || echo "000")"
   if [ "$got_mode" = "$want_mode" ]; then
     note_ok "$path mode $want_mode"
   else

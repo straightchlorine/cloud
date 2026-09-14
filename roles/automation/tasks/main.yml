@@ -100,6 +100,15 @@
   become: true
   tags: [systemd, auto-start, stack]
 
+- name: Flush pending handlers before validation
+  # docker_stack_service (earlier in this file) notifies "Restart stack"
+  # whenever the unit file changes - guaranteed on every teardown/redeploy
+  # cycle, since teardown deletes the unit first. Handlers only flush at
+  # end of play by default, so without this, that restart fired AFTER every
+  # post-deploy check below had already passed, tearing the just-validated
+  # stack back down and leaving validate-deploy.sh to catch it mid-restart.
+  ansible.builtin.meta: flush_handlers
+
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
   tags: [post_validation]

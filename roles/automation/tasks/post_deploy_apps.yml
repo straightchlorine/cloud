@@ -85,5 +85,6 @@
   until: "'mysqld is alive' in automation_mariadb_ping.stdout"
   retries: 10
   delay: 3
+  changed_when: false
   no_log: true
   tags: [post_validation]
