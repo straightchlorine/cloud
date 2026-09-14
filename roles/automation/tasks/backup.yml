@@ -85,6 +85,11 @@
       - "*.log"
       - "tmp/*"
       - "cache/*"
+      # Docker's own internal image/container-layer storage - many GB of
+      # completely re-derivable state (re-pull the image, don't restore a
+      # backup), not real app data. Including it wholesale is what exhausted
+      # the backup's temp staging space during a real run.
+      - "{{ automation_data_path }}/docker"
     pre_backup_commands:
       - >-
         docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
