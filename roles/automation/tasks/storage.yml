@@ -37,11 +37,19 @@
     - not automation_ssd_mounted
   block:
     - name: Determine whether the drive needs formatting
-      # "Has a filesystem" isn't enough - a foreign one we don't want (e.g. a
-      # leftover installer USB stick) would be reused as-is.
+      # Either the filesystem type doesn't already match ("has a filesystem"
+      # isn't enough - a foreign one we don't want, e.g. a leftover installer
+      # USB stick, would otherwise be reused as-is), OR the operator
+      # explicitly opted into an unconditional wipe via automation_ssd_format
+      # - a drive that already happens to be ext4 (e.g. reused from a prior
+      # production setup, still carrying its old data) would otherwise never
+      # be recognized as needing a fresh format at all, silently ignoring the
+      # flag forever (mounted once, automation_ssd_mounted is true on every
+      # later run and this whole block is skipped from then on).
       ansible.builtin.set_fact:
         automation_ssd_needs_format: >-
-          {{ common_optional_drive_fstype != automation_ssd_filesystem }}
+          {{ (common_optional_drive_fstype != automation_ssd_filesystem)
+          or (automation_ssd_format | bool) }}
 
     - name: Refuse to use an unformatted/foreign drive unless explicitly allowed
       ansible.builtin.fail:
