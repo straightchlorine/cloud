@@ -79,8 +79,9 @@
     common_backup_paths:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
-    backup_schedule: "0 3 * * *"
-    backup_excludes:
+    # common_backup_schedule defaults to 03:00 daily already (see common's
+    # defaults/main.yml) - no override needed here.
+    backup_exclude_patterns:
       - "*.log"
       - "tmp/*"
       - "cache/*"
@@ -90,10 +91,13 @@
     post_backup_commands:
       - >-
         docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
+    # Matches the actual Hetzner SFTP target and key path already used by
+    # restic_backup.yml's own RESTIC_SFTP_COMMAND - backup_ssh_host/port/user
+    # were never-defined placeholders that happened not to be dereferenced.
     backup_ssh_config:
-      host: "{{ backup_ssh_host }}"
-      port: "{{ backup_ssh_port }}"
-      user: "{{ backup_ssh_user }}"
-      remote_path: "/backups"
+      host: "{{ vault_backup_storage_host }}"
+      port: "{{ vault_backup_storage_port }}"
+      user: "{{ vault_backup_storage_user }}"
+      key_path: "{{ common_backup_base_path }}/.ssh/hetzner"
   when: restic_enabled
   tags: [backup]

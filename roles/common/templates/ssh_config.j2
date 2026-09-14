@@ -2,9 +2,18 @@
 
 # Global SSH settings for all connections
 Host *
-    ControlMaster auto
-    ControlPath {{ common_backup_base_path }}/.ssh/sockets/%r@%h-%p
-    ControlPersist 10m
+    # No connection multiplexing: this config is used both directly as the
+    # backup user (restic init/snapshots) and via `sudo` as root (restic
+    # backup, HOME reset to /root by sudo's env_reset) - a persistent
+    # ControlMaster socket from one identity reused by the other crosses a
+    # privilege boundary and fails with "file already closed" errors. One
+    # connection per scheduled backup run gets no benefit from multiplexing
+    # anyway.
+    ControlMaster no
+    # Explicit path (not the default $HOME/.ssh/known_hosts) so root-via-sudo
+    # and the backup user share the same host key trust store regardless of
+    # which HOME sudo's env_reset leaves in effect.
+    UserKnownHostsFile {{ common_backup_base_path }}/.ssh/known_hosts
     ServerAliveInterval 60
     ServerAliveCountMax 3
     TCPKeepAlive yes

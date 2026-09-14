@@ -126,15 +126,6 @@
   become: true
   when: common_hetzner_key_stat.stat.exists
 
-- name: Create SSH socket directory
-  ansible.builtin.file:
-    path: "{{ common_backup_base_path }}/.ssh/sockets"
-    state: directory
-    owner: backup
-    group: backup
-    mode: '0700'
-  become: true
-
 - name: Create SSH config for backup connectivity
   ansible.builtin.template:
     src: ssh_config.j2
