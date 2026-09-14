@@ -34,6 +34,12 @@ Wants={{ want }}
 Before={{ before }}
 {% endfor %}
 {% endif %}
+{% if start_limit_burst is defined %}
+StartLimitBurst={{ start_limit_burst }}
+{% endif %}
+{% if start_limit_interval_sec is defined %}
+StartLimitIntervalSec={{ start_limit_interval_sec }}
+{% endif %}
 
 [Service]
 Type={{ service_type }}
@@ -190,14 +196,6 @@ IOSchedulingClass={{ io_scheduling_class }}
 {% endif %}
 {% if io_scheduling_priority is defined %}
 IOSchedulingPriority={{ io_scheduling_priority }}
-{% endif %}
-
-# Start limit configuration
-{% if start_limit_burst is defined %}
-StartLimitBurst={{ start_limit_burst }}
-{% endif %}
-{% if start_limit_interval_sec is defined %}
-StartLimitIntervalSec={{ start_limit_interval_sec }}
 {% endif %}
 {% endif %}
 
