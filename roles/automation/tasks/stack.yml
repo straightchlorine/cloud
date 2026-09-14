@@ -27,18 +27,18 @@
     mode: "0755"
   become: true
   loop:
-    - vaultwarden
     - firefly
 
 - name: Create data directories owned by Docker's userns-remap range
-  # mariadb and calibre-web-automated both chown their bind-mounted data dirs
-  # as root during container startup (mariadb to mysql:mysql; CWA's init to
+  # vaultwarden runs directly as container uid 0 (no privilege drop); mariadb
+  # and calibre-web-automated chown their bind-mounted data dirs as root
+  # during container startup (mariadb to mysql:mysql; CWA's init to
   # PUID/PGID, resolved above from ansible_user). Under userns-remap, container
   # root is common_dockremap_uid/gid, not real host root - it has no authority
-  # to chown a directory (or anything already inside it, left over from a
-  # teardown that intentionally preserves automation_data_path) owned by
-  # ansible_user, so these dirs must start out owned by the remap range
-  # itself; each container's own root then re-chowns within its own namespace.
+  # over (nor, for vaultwarden, does any uid other than this one match)
+  # a directory (or anything already inside it, left over from a teardown
+  # that intentionally preserves automation_data_path) owned by ansible_user,
+  # so these dirs must start out owned by the remap range itself.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
@@ -48,6 +48,7 @@
     recurse: true
   become: true
   loop:
+    - vaultwarden
     - mariadb
     - calibre/config
     - calibre/ingest

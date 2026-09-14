@@ -13,6 +13,18 @@
   delay: 3
   tags: [post_validation]
 
+- name: Verify Vaultwarden can actually write its data directory
+  # /alive only proves the HTTP listener is up, not that SQLite writes
+  # succeed - a host/container uid mismatch here failed silently for days
+  # (WAL file stopped advancing) while this endpoint kept reporting healthy.
+  ansible.builtin.command: >-
+    docker compose -f {{ automation_stack_home }}/docker-compose.yml
+    exec -T vaultwarden test -w /data
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
 - name: Verify Firefly serves its web frontend
   # Firefly runs its DB migrations on first boot (and after every image
   # update), which can take several minutes on Pi-class hardware/SD storage -
