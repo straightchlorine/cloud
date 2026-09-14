@@ -241,3 +241,33 @@ On this stack the warnings are benign but real: with limits discarded for good
 on an SD-card Pi, aggressive containers could exhaust RAM (zram then swaps).
 If you want the limits honored, apply the fix above; accept the warnings
 otherwise.
+
+### USB-attached SSD dropping out under load (Pi4)
+
+Symptoms: the drive vanishes from `lsblk` (sometimes renaming `sda` to `sdb`
+on reappearance, sometimes not reappearing without a reboot), `dmesg` shows a
+cascade from `uas_eh_device_reset_handler` through `USB disconnect` to ext4
+forcing the filesystem read-only, and in the worse case
+`xhci_hcd ...: Host System Error` / `HC died; cleaning up` - the Pi4's own
+USB3 controller (a VL805 chip on an internal PCIe link), not just the drive,
+crashing. Confirmed not the drive/enclosure itself if it works fine plugged
+into another machine.
+
+Fix, in order of most to least likely to be the actual cause:
+
+1. Update the VL805 controller's own firmware (separate from the main
+   bootloader EEPROM): `sudo rpi-eeprom-update -a` then `sudo reboot`.
+2. Raise the Pi's conservative default USB power budget - add to
+   `/boot/firmware/config.txt`: `max_usb_current=1` - then reboot.
+3. Force the specific drive off UAS (USB Attached SCSI): some USB-SATA
+   bridge chips have firmware bugs in UAS that destabilize the host
+   controller under sustained write load, while the older bulk-only-transport
+   mode is stable. Find the device's vendor:product ID with `lsusb`, then
+   append (same line, space-separated - `cmdline.txt` must stay one line) to
+   `/boot/firmware/cmdline.txt`: `usb-storage.quirks=VVVV:PPPP:u`.
+4. If none of the above help, `pcie_aspm=off` on the kernel cmdline is a
+   further mitigation some Pi4 boards need for VL805-related instability -
+   try last, since it disables power management on that link entirely.
+
+Confirmed fix for one OWC USB3-to-SATA adapter (`lsusb` ID `7825:a2a4`):
+steps 1+2+3 together, in the same reboot cycle.

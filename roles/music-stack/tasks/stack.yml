@@ -300,7 +300,7 @@
     state: present
   become: true
   become_user: "{{ ansible_user }}"
-  when: start_stack
+  when: start_stack | bool
 
 - name: Verify Navidrome is responding
   ansible.builtin.uri:
@@ -310,5 +310,5 @@
   until: music_stack_navidrome_health.status == 200
   retries: 30
   delay: 2
-  when: start_stack
+  when: start_stack | bool
   failed_when: false

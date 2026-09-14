@@ -23,7 +23,7 @@
         state: present
       become: true
       become_user: "{{ compose_owner }}"
-      when: start_stack
+      when: start_stack | bool
 
     - name: Wait for critical compose services to report running
       ansible.builtin.shell: |
@@ -42,7 +42,7 @@
         (compose_critical_services | length)
       retries: 30
       delay: 5
-      when: start_stack
+      when: start_stack | bool
   rescue:
     - name: Notify ntfy of the failed stack startup
       ansible.builtin.include_role:
