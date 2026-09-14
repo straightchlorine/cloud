@@ -10,7 +10,7 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 
 - **Vaultwarden** (`:8081` on `primary_ip`): password manager (tailnet-only)
 - **Firefly III** (`:8082` on `primary_ip`): finance manager (tailnet-only)
-- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.4`.
+- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.8.9`.
   Root is deliberately credential-less: the entrypoint demands a root-password
   policy on first init, so the stack sets `MARIADB_RANDOM_ROOT_PASSWORD=1`
   (throwaway password, never written to `.env`). Nothing uses root — backups
@@ -127,7 +127,7 @@ restic_password: "{{ vault_restic_automation_password }}"
 ## Tag policy
 
 Application images float (`latest`) — that is what Watchtower updates. The
-known exception: `mariadb:11.4` and the `alpine:3.20` cron sidecar are
+known exception: `mariadb:11.8.9` and the `alpine:3.20` cron sidecar are
 minor-pinned and excluded from auto-update; bump them deliberately.
 
 ## Teardown & Re-test

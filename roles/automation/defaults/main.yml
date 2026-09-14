@@ -162,7 +162,13 @@ automation_compose_services:
         cpus: "0.05"
 
   - service_name: mariadb
-    service_image: "mariadb:11.4"
+    # Newest stable 11.8.x patch as of this pin. Matters for the migration
+    # onto pi-automation: the production data directory being copied in was
+    # last written by 11.8.5, and MariaDB only upgrades a data directory
+    # forward within the same major.minor series, never back - this must
+    # stay >= 11.8.5 (a same-series bump like this is a routine, safe
+    # forward upgrade; jumping to a new major series would not be).
+    service_image: "mariadb:11.8.9"
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
