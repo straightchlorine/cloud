@@ -14,7 +14,7 @@ export RESTIC_SFTP_COMMAND="ssh -i {{ common_backup_base_path }}/.ssh/hetzner -o
 SERVICE_NAME="{{ common_backup_service_name }}"
 LOG_FILE="{{ common_backup_log_dir }}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 BACKUP_PATHS=(
-{% for path in backup_directories %}
+{% for path in common_backup_directories %}
     "{{ path }}"
 {% endfor %}
 )
@@ -139,8 +139,8 @@ perform_backup() {
 {% endif %}
 
     # Add excludes
-{% if backup_excludes is defined %}
-{% for exclude in backup_excludes %}
+{% if backup_exclude_patterns is defined %}
+{% for exclude in backup_exclude_patterns %}
     backup_cmd="$backup_cmd --exclude '{{ exclude }}'"
 {% endfor %}
 {% endif %}
