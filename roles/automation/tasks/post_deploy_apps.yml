@@ -56,7 +56,15 @@
   tags: [post_validation]
 
 - name: Verify MariaDB answers ping
-  ansible.builtin.command: docker compose exec -T mariadb mariadb-admin ping
+  # root@localhost has no known-working passwordless auth here
+  # (MARIADB_RANDOM_ROOT_PASSWORD generates a password we never capture) -
+  # authenticate as the firefly account instead, whose credentials are
+  # already vault-managed and already proven working (Firefly itself is up).
+  # MYSQL_PWD (not -p on the command line) keeps the password out of the
+  # container's own process list.
+  ansible.builtin.command: >-
+    docker compose exec -T -e MYSQL_PWD={{ vault_firefly_db_password }}
+    mariadb mariadb-admin -u firefly ping
   args:
     chdir: "{{ automation_stack_home }}"
   become: true
@@ -65,4 +73,5 @@
   until: "'mysqld is alive' in automation_mariadb_ping.stdout"
   retries: 10
   delay: 3
+  no_log: true
   tags: [post_validation]
