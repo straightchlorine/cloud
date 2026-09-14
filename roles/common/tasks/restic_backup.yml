@@ -210,7 +210,7 @@
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_standard_error: |
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
-    common_timeout_start_sec: "{{ backup_timeout }}"
+    common_timeout_start_sec: "{{ common_backup_timeout }}"
     common_enable_security_hardening: true
     common_no_new_privileges: false
     common_protect_system: "strict"
@@ -235,8 +235,8 @@
   vars:
     timer_description: "Backup Timer for {{ common_backup_service_name }}"
     timer_service: "backup-{{ common_backup_service_name }}.service"
-    timer_schedule: "{{ backup_schedule }}"
-    timer_randomized_delay: "{{ backup_randomized_delay }}"
+    timer_schedule: "{{ common_backup_schedule }}"
+    timer_randomized_delay: "{{ common_backup_randomized_delay }}"
   become: true
   notify:
     - Reload systemd
@@ -253,7 +253,7 @@
 
 - name: Initialize restic repository if it doesn't exist
   ansible.builtin.command: "{{ common_backup_base_path }}/scripts/init-{{ common_backup_service_name }}.sh"
-  become_user: "{{ backup_user }}"
+  become_user: "backup"
   become: true
   register: common_repository_init
   changed_when: "'initialized' in common_repository_init.stdout"
@@ -266,13 +266,16 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Enable and start backup timer
+  # Unconditional: this task file is only ever included once a caller has
+  # already decided backup is enabled (e.g. automation's
+  # `when: automation_backup_enabled or restic_enabled`) - backup_enabled
+  # was never actually set by anything and would have failed fast here.
   ansible.builtin.systemd:
     name: "backup-{{ common_backup_service_name }}.timer"
     enabled: true
     state: started
     daemon_reload: true
   become: true
-  when: backup_enabled
 
 # NoNewPrivileges is deliberately set to false in the templated unit (see
 # common_no_new_privileges above) because the backup script re-execs through
@@ -291,14 +294,14 @@
       [OK] Unified Restic Backup Configured for {{ common_backup_service_name }}:
 
       Repository: {{ restic_repository }}
-      Schedule: {{ backup_schedule }}
+      Schedule: {{ common_backup_schedule }}
       Backup Paths: {{ common_backup_paths | join(', ') }}
       Service: backup-{{ common_backup_service_name }}.service
       Timer: backup-{{ common_backup_service_name }}.timer
       Script: {{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh
 
       Logs: {{ common_backup_base_path }}/logs/
-      Status: {{ 'Enabled' if backup_enabled else 'Disabled' }}
+      Status: Enabled
       Restic Version: {{ common_restic_version_check.stdout }}
 
       Deployed Service Config:

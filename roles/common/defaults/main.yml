@@ -61,6 +61,9 @@ common_no_new_privileges: "true"
 # Backup integration defaults
 common_backup_nice_level: 19
 common_backup_io_class: "idle"
+common_backup_schedule: "*-*-* 03:00:00"
+common_backup_randomized_delay: "1800s"
+common_backup_timeout: "2h"
 
 # Port connectivity testing
 common_firewall_ports: []
