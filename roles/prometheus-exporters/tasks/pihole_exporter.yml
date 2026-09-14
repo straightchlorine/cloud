@@ -86,6 +86,13 @@
     daemon_reload: true
   become: true
 
+- name: Flush pending handlers before verifying
+  # Reload systemd/Restart pihole-exporter are notified above but only flush
+  # at the natural end of the whole play by default - this verify task would
+  # otherwise run against a unit file that changed but whose already-running
+  # process never got told to restart and pick it up.
+  ansible.builtin.meta: flush_handlers
+
 - name: Verify Pi-hole Exporter is responding
   ansible.builtin.uri:
     url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"

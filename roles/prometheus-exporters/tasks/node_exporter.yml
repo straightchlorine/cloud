@@ -139,6 +139,14 @@
     daemon_reload: true
   become: true
 
+- name: Flush pending handlers before verifying
+  # Reload systemd/Restart node-exporter are notified above but only flush at
+  # the natural end of the whole "Configure all hosts" play by default - long
+  # after this verify task would already have failed against a unit file that
+  # changed (e.g. --web.listen-address after primary_ip changes) but whose
+  # already-running process never got told to restart and pick it up.
+  ansible.builtin.meta: flush_handlers
+
 - name: Verify Node Exporter is responding
   # Must target primary_ip, not localhost: the unit binds
   # --web.listen-address={{ primary_ip }}:port, so 127.0.0.1:port refuses.
