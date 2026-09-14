@@ -8,7 +8,11 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ common_backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ common_backup_cache_dir }}"
-export RESTIC_SFTP_COMMAND="ssh -i {{ common_backup_base_path }}/.ssh/hetzner -o StrictHostKeyChecking=accept-new -o Compression=yes -o ServerAliveInterval=60 {{ vault_backup_storage_user }}@{{ vault_backup_storage_host }} -p {{ vault_backup_storage_port }} -s sftp"
+# Matches restic-init.sh.j2 and the systemd unit's own Environment= exactly -
+# a hand-reconstructed command here (raw -i/-o flags, no -F) previously
+# bypassed ssh_config.j2's shared settings (UserKnownHostsFile, ControlMaster)
+# entirely and silently drifted out of sync with them.
+export RESTIC_SFTP_COMMAND="ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Service-specific configuration
 SERVICE_NAME="{{ common_backup_service_name }}"
