@@ -11,20 +11,18 @@
   no_log: false
 
 - name: Create backup user (if not already created)
+  # Unconditional: this was previously gated on common_backup_additional_groups
+  # being non-empty, which left the user never created on any host that didn't
+  # customize it (no host_vars ever did - that var was speculative and unused,
+  # removed). ansible.builtin.user is already idempotent (existing user, no
+  # error), so no failed_when override is needed either.
   ansible.builtin.user:
     name: backup
     system: true
     shell: /bin/bash
     home: "{{ common_backup_base_path }}"
     createhome: true
-    groups: "{{ common_backup_additional_groups }}"
-    append: true
   become: true
-  when: common_backup_additional_groups is defined and common_backup_additional_groups | length > 0
-  # Suppress errors if user already exists or groups not available on this system
-  failed_when:
-    - common_backup_user_group_result.rc not in [0, 1]
-  register: common_backup_user_group_result
 
 - name: Configure sudoers for backup user
   ansible.builtin.template:

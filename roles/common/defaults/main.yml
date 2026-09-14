@@ -59,7 +59,6 @@ common_enable_security_hardening: true
 common_no_new_privileges: "true"
 
 # Backup integration defaults
-common_backup_additional_groups: []
 common_backup_nice_level: 19
 common_backup_io_class: "idle"
 
