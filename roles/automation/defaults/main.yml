@@ -210,6 +210,13 @@ automation_compose_services:
     # version pin) is the documented exception for application images -
     # and watchtower refreshes itself on its nightly sweep anyway.
     service_image: "nickfedor/watchtower:latest"
+    # Fleet-wide userns-remap maps container root to a subordinate host uid,
+    # not real root - it can't open a bind-mounted /var/run/docker.sock
+    # (host-owned root:docker) at all ("permission denied ... trying to
+    # connect to the docker API"), breaking Watchtower's actual function
+    # entirely. userns_mode: host is the standard, accepted opt-out for
+    # docker-socket-consuming tools like this one.
+    service_userns_mode: "host"
     service_ports:
       - host: "{{ automation_watchtower_metrics_port }}"
         container: 8080
@@ -230,9 +237,14 @@ automation_compose_services:
       # this, and gives the plain hostname as the title with no extra text.
       - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
       - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-      - "WATCHTOWER_HTTP_API_METRICS=true"
+      # WATCHTOWER_HTTP_API_METRICS/_UPDATE (the old per-endpoint booleans)
+      # are deprecated and slated for removal in Watchtower v2 - this stack
+      # tracks :latest, so a future major bump would silently drop them.
+      # HTTP_API_ENDPOINTS is the current replacement. health is open (no
+      # token) for a plain liveness check; metrics/update require the token
+      # below either way.
+      - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics,update"
       - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
-      - "WATCHTOWER_HTTP_API_UPDATE=true"
     service_volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     service_networks:

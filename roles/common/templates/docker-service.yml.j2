@@ -22,6 +22,9 @@
 {% if service_user is defined %}
     user: "{{ service_user }}"
 {% endif %}
+{% if service_userns_mode is defined %}
+    userns_mode: "{{ service_userns_mode }}"
+{% endif %}
 {% if service_env_file is defined %}
     env_file: {{ service_env_file }}
 {% endif %}
