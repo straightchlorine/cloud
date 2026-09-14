@@ -135,6 +135,19 @@
         state: mounted
       become: true
 
+    - name: Force a Docker restart after a fresh SSD format
+      # An already-running dockerd doesn't reinitialize its data-root
+      # directory structure just because the underlying filesystem was wiped
+      # and remounted under it - it keeps writing into subdirectories that no
+      # longer exist post-format ("no such file or directory" on the very
+      # first image pull). state: started (docker.yml) is a no-op if already
+      # running, so this forces the restart specifically when a fresh format
+      # just happened - reused by the userns-remap flush_handlers point later.
+      ansible.builtin.debug:
+        msg: "Fresh SSD format - Docker will be restarted to reinitialize its data-root"
+      changed_when: true
+      notify: Restart docker
+
 - name: Relocate systemd-journald storage onto the SSD
   ansible.builtin.include_role:
     name: common
