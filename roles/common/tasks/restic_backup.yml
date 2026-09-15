@@ -161,21 +161,15 @@
     backup_ssh_key_path: "{{ common_backup_base_path }}/keys/{{ common_backup_service_name }}-ssh-key"
   become: true
 
-- name: Check if existing systemd service exists
-  ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
-  become: true
-  register: common_existing_service
-
-- name: Backup existing systemd service if it exists
-  ansible.builtin.copy:
-    src: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
-    dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service.backup"
-    remote_src: true
-  become: true
-  when: common_existing_service.stat.exists
-
 - name: Create systemd backup service
+  # backup: true below already does exactly what a separate manual
+  # stat-then-copy pair here would (previously present, removed): Ansible's
+  # own template backup only fires when the destination content is actually
+  # about to change, which is both the correct semantic (preserves what was
+  # really there before a real change, not a repeated snapshot of Ansible's
+  # own prior output) and inherently idempotent, unlike a manual
+  # exists-then-copy gate which always "changes" once on the very next run
+  # after the file first comes into existence.
   ansible.builtin.template:
     src: systemd-service.j2
     dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"

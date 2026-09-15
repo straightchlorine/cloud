@@ -1,0 +1,59 @@
+---
+- name: Converge - the common role's restic_backup.yml task file for real
+  hosts: all
+  become: true
+  vars:
+    # Mirrors a real caller (automation's backup.yml) closely enough to catch
+    # the exact bugs found migrating pi-automation: bare/undefined vars in
+    # this task file, the dead common_backup_additional_groups gate, and
+    # StartLimitBurst/StartLimitIntervalSec landing in the wrong systemd
+    # section.
+    # Normally a global group_vars/all/all.yml value - this standalone
+    # molecule playbook doesn't load that, so it's set explicitly here.
+    common_backup_base_path: "/opt/backup"
+    common_backup_service_name: "molecule-test"
+    restic_repository: "sftp:hetzner-storage:/home/backup/restic-repos/molecule-test"
+    restic_password: "molecule-test-password"
+    common_backup_paths:
+      - /etc
+      - /tmp
+    backup_exclude_patterns:
+      - "*.log"
+      - "tmp/*"
+    pre_backup_commands:
+      - "true"
+    post_backup_commands:
+      - "true"
+    backup_ssh_config: true
+    vault_backup_storage_host: "u000000.your-storagebox.de"
+    vault_backup_storage_user: "u000000"
+    vault_backup_storage_port: 23
+    # The real network round-trip (restic init against Hetzner) can't run in
+    # a container with no such server - restic_backup.yml's own skip flag,
+    # not a molecule-only hack.
+    backup_skip_init: true
+  tasks:
+    - name: Run the real restic_backup.yml
+      block:
+        - name: Include the real restic_backup.yml
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: restic_backup
+      rescue:
+        # The "Restart backup service" handler's own ExecStart runs the real
+        # backup script, which attempts a real network connection to the
+        # dummy hetzner-storage host - expected to fail here with no such
+        # server. Everything this scenario actually verifies (rendered
+        # files, unit config, the user) is already on disk by this point.
+        # Fail loudly instead of masking a real regression if the failure
+        # was for any OTHER reason.
+        - name: Fail loudly if this was not the expected restart failure
+          ansible.builtin.assert:
+            that:
+              - "'Restart backup service' in ansible_failed_task.name"
+              - "'control process exited' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              restic_backup.yml failed for a reason other than the expected
+              network-dependent service restart:
+              {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] failed exactly where expected (network-dependent service restart)"

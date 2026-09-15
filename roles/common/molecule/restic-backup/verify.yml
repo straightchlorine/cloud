@@ -1,0 +1,119 @@
+---
+- name: Verify restic_backup.yml converged correctly
+  hosts: all
+  tasks:
+    - name: Assert the backup user was created unconditionally
+      # Regression guard: this was previously gated on
+      # common_backup_additional_groups being non-empty, which no host ever
+      # set - the user was silently never created anywhere.
+      ansible.builtin.command: id backup
+      register: common_backup_user_check
+      changed_when: false
+
+    - name: Read the rendered backup script
+      ansible.builtin.slurp:
+        src: /opt/backup/scripts/backup-molecule-test.sh
+      register: common_backup_script_rendered
+
+    - name: Assert the backup script has no unrendered Jinja artifacts
+      # A literal '{{' can't appear directly in a `that:` string - Ansible's
+      # own templating tries to parse it as a (invalid, unmatched) embedded
+      # expression. Built via concatenation instead, in a plain variable.
+      vars:
+        common_open_brace_pair: "{{ '{' ~ '{' }}"
+      ansible.builtin.assert:
+        that:
+          - common_open_brace_pair not in (common_backup_script_rendered.content | b64decode)
+        fail_msg: "backup-script.sh.j2 left an unrendered Jinja expression in the output"
+        success_msg: "[OK] backup script fully rendered"
+
+    - name: Assert the backup script's paths array uses the real caller-supplied paths
+      # Regression guard: common_backup_directories (the vars: alias) vs the
+      # bare, never-set backup_directories the template used to loop over.
+      ansible.builtin.assert:
+        that:
+          - "'\"/etc\"' in (common_backup_script_rendered.content | b64decode)"
+          - "'\"/tmp\"' in (common_backup_script_rendered.content | b64decode)"
+        fail_msg: "backup script's BACKUP_PATHS did not pick up common_backup_paths"
+        success_msg: "[OK] backup script's BACKUP_PATHS matches common_backup_paths"
+
+    - name: Assert the backup script's excludes use the real caller-supplied patterns
+      # Regression guard: backup_excludes (never set by any real caller) vs
+      # backup_exclude_patterns (what every host_vars actually sets).
+      ansible.builtin.assert:
+        that:
+          - "\"--exclude '*.log'\" in (common_backup_script_rendered.content | b64decode)"
+        fail_msg: "backup script did not apply backup_exclude_patterns"
+        success_msg: "[OK] backup script applies the configured excludes"
+
+    - name: Assert the restic sftp command is the shared, config-file-based form
+      # Regression guard: a hand-reconstructed "-i <key> -o ..." ssh
+      # invocation here bypassed ssh_config.j2's UserKnownHostsFile/
+      # ControlMaster settings entirely and drifted out of sync with them.
+      ansible.builtin.assert:
+        that:
+          - "'ssh -F' in (common_backup_script_rendered.content | b64decode)"
+          - "'ssh -i' not in (common_backup_script_rendered.content | b64decode)"
+        fail_msg: "backup script's RESTIC_SFTP_COMMAND does not use the shared ssh_config"
+        success_msg: "[OK] backup script uses the shared ssh_config for RESTIC_SFTP_COMMAND"
+
+    - name: Read the rendered systemd timer
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/backup-molecule-test.timer
+      register: common_backup_timer_rendered
+
+    - name: Assert the timer schedule is systemd OnCalendar syntax, not cron
+      # Regression guard: an earlier override used cron syntax ("0 3 * * *"),
+      # invalid for OnCalendar= - would have produced a timer that silently
+      # never fires correctly.
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=*-*-*' in (common_backup_timer_rendered.content | b64decode)"
+        fail_msg: "backup timer's OnCalendar is not valid systemd calendar syntax"
+        success_msg: "[OK] backup timer uses valid OnCalendar syntax"
+
+    - name: Verify the backup timer is enabled
+      ansible.builtin.systemd:
+        name: backup-molecule-test.timer
+      register: common_backup_timer_state
+      failed_when: common_backup_timer_state.status.UnitFileState != 'enabled'
+
+    # Independent of whatever real callers currently pass, directly regression
+    # -tests the systemd-service.j2 section-placement bug: StartLimitBurst/
+    # StartLimitIntervalSec must render in [Unit], not [Service] (some
+    # systemd versions silently reject them there: "Unknown key ... ignoring").
+    - name: Render systemd-service.j2 directly with start-limit fields set
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/systemd-service.j2"
+        dest: /tmp/molecule-systemd-service-test.service
+      vars:
+        service_description: "Molecule start-limit placement test"
+        service_type: "simple"
+        common_restart_policy: "always"
+        common_restart_sec: "1"
+        common_standard_output: "journal"
+        common_standard_error: "journal"
+        common_enable_security_hardening: true
+        common_no_new_privileges: "true"
+        common_wanted_by: "multi-user.target"
+        start_limit_burst: "5"
+        start_limit_interval_sec: "0"
+
+    - name: Read the rendered test unit file
+      ansible.builtin.slurp:
+        src: /tmp/molecule-systemd-service-test.service
+      register: common_systemd_test_rendered
+
+    - name: Assert StartLimitBurst/StartLimitIntervalSec render in [Unit], not [Service]
+      ansible.builtin.assert:
+        that:
+          - >-
+            (common_systemd_test_rendered.content | b64decode).split('[Service]')[0]
+            is search('StartLimitBurst=5')
+          - >-
+            (common_systemd_test_rendered.content | b64decode).split('[Service]')[0]
+            is search('StartLimitIntervalSec=0')
+        fail_msg: >-
+          StartLimitBurst/StartLimitIntervalSec rendered outside [Unit] -
+          some systemd versions silently reject them under [Service]
+        success_msg: "[OK] StartLimitBurst/StartLimitIntervalSec render in [Unit]"

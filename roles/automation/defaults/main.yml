@@ -151,8 +151,11 @@ automation_compose_services:
         condition: service_healthy
     service_networks:
       - stack
-    service_labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+    # No watchtower.enable label: this sidecar has a service_healthy
+    # depends_on above, and watchtower's rolling-restart mode refuses to
+    # run at all (for every monitored container on the host, not just this
+    # one) if any managed container has a compose dependency. Pinned to
+    # alpine:3.20, so watchtower has nothing to update here anyway.
     service_resources:
       limits:
         memory: 64M
