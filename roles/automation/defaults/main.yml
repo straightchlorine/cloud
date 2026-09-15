@@ -228,12 +228,12 @@ automation_compose_services:
       - "WATCHTOWER_LABEL_ENABLE=true"
       - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
       - "WATCHTOWER_CLEANUP=true"
-      # One container at a time, waiting for health before continuing -
-      # firefly depends_on mariadb condition: service_healthy, so updating
-      # both simultaneously risked firefly restarting against a mariadb
-      # that's mid-update. Not supported with legacy --link containers,
-      # which this stack doesn't use (networks only).
-      - "WATCHTOWER_ROLLING_RESTART=true"
+      # No WATCHTOWER_ROLLING_RESTART: it unconditionally refuses to run at
+      # all if any monitored container has a compose depends_on (firefly ->
+      # mariadb here) - it's a separate update strategy, not a variant of
+      # dependency-ordered updates. Watchtower's default update mode already
+      # topologically sorts by depends_on (WATCHTOWER_USE_COMPOSE_DEPENDS_ON,
+      # true by default) so mariadb still restarts before firefly.
       - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
       # WATCHTOWER_NOTIFICATION_TITLE is not a real Watchtower option (silently
       # ignored) - WATCHTOWER_NOTIFICATIONS_HOSTNAME is the documented flag for
