@@ -16,6 +16,9 @@
   become: true
   changed_when: false
 
+- name: Gather service facts to check for sshd.socket
+  ansible.builtin.service_facts:
+
 - name: Mask sshd.socket so sshd.service owns the listener exclusively
   # Socket activation and sshd.service race for the port; the loser reports
   # "Address already in use" on the reload that moves sshd to its new port.
