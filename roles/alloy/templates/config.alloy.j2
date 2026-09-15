@@ -10,7 +10,7 @@ loki.source.journal "host" {
   forward_to    = [loki.process.host.receiver]
   labels        = {
     job  = "{{ alloy_job_label }}",
-    host = "{{ inventory_hostname }}"
+    host = "{{ inventory_hostname }}",
   }
   // Only replay the recent past on restart; the journal holds far more than
   // Loki's reject_old_samples_max_age window would accept.
