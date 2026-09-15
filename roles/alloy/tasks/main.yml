@@ -51,7 +51,11 @@
     owner: root
     group: "{{ alloy_group }}"
     mode: '0644'
-    validate: "alloy validate %s"
+    # This version's CLI has no `validate` subcommand; `fmt` still has to parse
+    # the file to reformat it, so it fails the same way on real syntax errors.
+    # Deliberately no -t/-w: those would also fail on formatting-only
+    # differences, which isn't what this check is for.
+    validate: "alloy fmt %s"
   become: true
   notify: Restart alloy
 
