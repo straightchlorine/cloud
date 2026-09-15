@@ -69,9 +69,11 @@
   tags: [post_validation]
 
 - name: Assert every configured audit watch is loaded
+  # auditctl -l reports directory watches without their trailing slash
+  # (`-w /etc/ssh/sshd_config.d`), so the comparison must strip it too.
   ansible.builtin.assert:
     that:
-      - item.path in honeypot_audit_loaded.stdout
+      - item.path.rstrip('/') in honeypot_audit_loaded.stdout
     fail_msg: "Audit watch for {{ item.path }} is not loaded (augenrules --load failed?)"
     quiet: true
   loop: "{{ honeypot_audit_watches }}"
