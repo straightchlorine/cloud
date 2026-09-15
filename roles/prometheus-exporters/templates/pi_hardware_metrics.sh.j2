@@ -70,13 +70,13 @@ default_if_empty() {
         echo "# HELP pi_clock_frequency_hz Raspberry Pi clock frequencies"
         echo "# TYPE pi_clock_frequency_hz gauge"
 
-        ARM_FREQ=$(default_if_empty "$(vcgencmd measure_clock arm 2>/dev/null | cut -d= -f2)" "0")
+        ARM_FREQ=$(default_if_empty "$(vcgencmd measure_clock arm 2>/dev/null | grep -oE '[0-9]+$')" "0")
         echo "pi_clock_frequency_hz{clock=\"arm\"} $ARM_FREQ"
 
-        CORE_FREQ=$(default_if_empty "$(vcgencmd measure_clock core 2>/dev/null | cut -d= -f2)" "0")
+        CORE_FREQ=$(default_if_empty "$(vcgencmd measure_clock core 2>/dev/null | grep -oE '[0-9]+$')" "0")
         echo "pi_clock_frequency_hz{clock=\"core\"} $CORE_FREQ"
 
-        GPU_FREQ=$(default_if_empty "$(vcgencmd measure_clock v3d 2>/dev/null | cut -d= -f2)" "0")
+        GPU_FREQ=$(default_if_empty "$(vcgencmd measure_clock v3d 2>/dev/null | grep -oE '[0-9]+$')" "0")
         echo "pi_clock_frequency_hz{clock=\"gpu\"} $GPU_FREQ"
 
         echo "# HELP pi_memory_split_bytes Memory split between CPU and GPU"
@@ -89,7 +89,7 @@ default_if_empty() {
 
         echo "# HELP pi_throttled Pi throttling status bitmask"
         echo "# TYPE pi_throttled gauge"
-        THROTTLED=$(default_if_empty "$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)" "0x0")
+        THROTTLED=$(default_if_empty "$(vcgencmd get_throttled 2>/dev/null | grep -oE '0x[0-9a-fA-F]+$')" "0x0")
         echo "pi_throttled $(echo "ibase=16; ${THROTTLED#0x}" | bc 2>/dev/null || echo "0")"
     fi
 

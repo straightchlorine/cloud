@@ -10,6 +10,11 @@ honeypot_ssh_allow_users:
 
 honeypot_tailnet_interface: tailscale0
 honeypot_stack_dir: /opt/honeywatch
+# nginx (docker-compose.prod.yml) binds the dashboard/API to ${TS_IP}:5000;
+# without this the tailnet firewalld zone only allows the admin sshd and the
+# k3s cluster can't reach it.
+honeypot_tailnet_extra_ports:
+  - {proto: tcp, port: 5000}
 
 honeypot_backup_enabled: true
 # Retention is handled by an R2 bucket lifecycle rule, so the R2 token needs no
