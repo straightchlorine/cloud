@@ -7,7 +7,7 @@
     group: root
     mode: '0644'
   become: true
-  notify: Reload systemd
+  notify: Reload systemd (honeypot)
 
 - name: Install the ntfy notification credentials
   ansible.builtin.template:

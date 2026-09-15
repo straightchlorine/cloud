@@ -16,7 +16,11 @@
     state: reloaded
   become: true
 
-- name: Restart fail2ban
+- name: Restart the honeypot fail2ban jail
+  # Named distinctly from common's "Restart fail2ban": both get loaded into
+  # this play (common via include_role in validate.yml), and Ansible resolves
+  # notify-by-name globally across roles - a shared name here would silently
+  # run whichever role's handler collides, not necessarily this one's.
   ansible.builtin.systemd_service:
     name: fail2ban
     state: restarted
@@ -34,14 +38,18 @@
     state: reloaded
   become: true
 
-- name: Reload systemd
+- name: Reload systemd (honeypot)
+  # See the fail2ban handler above: named distinctly from common's "Reload
+  # systemd" to avoid cross-role notify-by-name collisions.
   ansible.builtin.systemd_service:
     daemon_reload: true
   become: true
 
 # A running timer keeps its old next-elapse time after a daemon-reload alone;
 # only a restart makes an OnCalendar/RandomizedDelaySec change actually apply.
-- name: Restart backup timer
+# Named distinctly from common's "Restart backup timer", which targets a
+# different unit name and requires common_backup_service_name - undefined here.
+- name: Restart the honeywatch backup timer
   ansible.builtin.systemd_service:
     name: honeywatch-backup.timer
     state: restarted

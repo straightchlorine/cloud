@@ -30,7 +30,7 @@
     - honeywatch-mmdb-refresh.service
     - honeywatch-mmdb-refresh.timer
   notify:
-    - Reload systemd
+    - Reload systemd (honeypot)
     - Restart mmdb refresh timer
 
 - name: Flush handlers so systemd sees the refresh units before they are enabled

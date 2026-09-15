@@ -41,8 +41,8 @@
     - honeywatch-backup.service
     - honeywatch-backup.timer
   notify:
-    - Reload systemd
-    - Restart backup timer
+    - Reload systemd (honeypot)
+    - Restart the honeywatch backup timer
 
 - name: Flush handlers so systemd sees the backup units before they are enabled
   ansible.builtin.meta: flush_handlers

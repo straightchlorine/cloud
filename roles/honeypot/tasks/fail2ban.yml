@@ -7,7 +7,7 @@
     group: root
     mode: '0644'
   become: true
-  notify: Restart fail2ban
+  notify: Restart the honeypot fail2ban jail
 
 - name: Enable and start fail2ban
   ansible.builtin.systemd_service:
