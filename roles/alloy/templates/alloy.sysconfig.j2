@@ -11,3 +11,8 @@ PROMETHEUS_PASSWORD={{ vault_alloy_prometheus_password }}
 
 # Bind the diagnostics UI to localhost: it renders the running configuration.
 CUSTOM_ARGS="--server.http.listen-addr={{ alloy_listen_address }}"
+
+# The packaged alloy.service ExecStart references $CONFIG_FILE directly; unset,
+# systemd expands it to an empty string and `alloy run` fails with
+# "accepts 1 arg(s), received 0".
+CONFIG_FILE={{ alloy_config_file }}
