@@ -14,7 +14,7 @@
 - name: Label the administrative sshd port
   # Default policy only labels 22/tcp as ssh_port_t; without this, sshd exits
   # 255 with "Bind to port {{ honeypot_ssh_port }} ... Permission denied".
-  ansible.posix.seport:
+  community.general.seport:
     ports: "{{ honeypot_ssh_port }}"
     proto: tcp
     setype: ssh_port_t
