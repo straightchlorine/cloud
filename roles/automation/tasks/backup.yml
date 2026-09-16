@@ -102,11 +102,11 @@
     # backup itself failed, so the stack is never left paused.
     common_backup_exec_start_pre:
       - >-
-        +/usr/bin/runuser -u {{ ansible_user }} --
+        +/usr/sbin/runuser -u {{ ansible_user }} --
         /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
     common_backup_exec_stop_post:
       - >-
-        +/usr/bin/runuser -u {{ ansible_user }} --
+        +/usr/sbin/runuser -u {{ ansible_user }} --
         /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
   when: restic_enabled
   tags: [backup]
