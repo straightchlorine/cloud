@@ -96,5 +96,17 @@
     # A flag only: the connectivity test connects through the shared
     # hetzner-storage ssh_config alias, the same one restic itself uses.
     backup_ssh_config: true
+    # '+' runs this one line as root regardless of the unit's User=backup, so
+    # it can runuser into automation without granting backup itself any
+    # Docker access. ExecStopPost (not ExecStart*Post) runs even if the
+    # backup itself failed, so the stack is never left paused.
+    common_backup_exec_start_pre:
+      - >-
+        +/usr/bin/runuser -u {{ ansible_user }} --
+        /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
+    common_backup_exec_stop_post:
+      - >-
+        +/usr/bin/runuser -u {{ ansible_user }} --
+        /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
   when: restic_enabled
   tags: [backup]

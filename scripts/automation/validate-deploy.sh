@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Post-deployment check for a disposable automation test host (default pi-test-automation).
+# Post-deployment check for a disposable automation test host.
+# (The former default staging host, pi-test-automation, was repurposed as
+# pi-test-media for the media role - the host alias is now required.)
 # Run after a successful site.yml deploy to confirm compose, vaultwarden, firefly,
 # mariadb, watchtower, backup and the SSD layout all work. Pairs with
 # validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".
-# Usage: ./scripts/automation/validate-deploy.sh [ansible-host-alias]
+# Usage: ./scripts/automation/validate-deploy.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-pi-test-automation}"
+HOST="${1:?Usage: ./scripts/automation/validate-deploy.sh <ansible-host-alias>}"
 
 echo "== Checking $HOST after automation deploy =="
 

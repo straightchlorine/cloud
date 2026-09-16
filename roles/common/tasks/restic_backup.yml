@@ -191,6 +191,8 @@
       - "RESTIC_CACHE_DIR={{ common_backup_base_path }}/cache"
       - "RESTIC_SFTP_COMMAND=ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
     exec_start: "{{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh"
+    exec_start_pre: "{{ common_backup_exec_start_pre | default(omit) }}"
+    exec_stop_post: "{{ common_backup_exec_stop_post | default(omit) }}"
     common_standard_output: |
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_standard_error: |

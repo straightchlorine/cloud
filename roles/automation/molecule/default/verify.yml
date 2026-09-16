@@ -43,11 +43,13 @@
           - "'mariadb:11.8.9' in compose_file"
           - "'nickfedor/watchtower' in compose_file"
           - "'crocodilestick/calibre-web-automated' in compose_file"
-          # Ports bind to the discovered primary_ip, watchtower stays on loopback.
+          # Ports bind to the discovered primary_ip; since the "watchtower was
+          # bound only to the localhost" fix the metrics port rides primary_ip
+          # too (firewall-scoped), so assert bind-ip-agnostically.
           - "':8081:80' in compose_file"
           - "':8082:8080' in compose_file"
           - "':8083:8083' in compose_file"
-          - "'127.0.0.1:8084:8080' in compose_file"
+          - "':8084:8080' in compose_file"
           # Calibre's three separate binds (config/ingest/library) - CWA errors
           # on nested binds, so each must be its own directory.
           - "'/cwa-book-ingest' in compose_file"
@@ -88,9 +90,12 @@
         env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - "'VAULTWARDEN_ADMIN_TOKEN=molecule-test-admin-token' in env_file"
-          - "'FIREFLY_DB_PASSWORD=molecule-test-db-password' in env_file"
-          - "'WATCHTOWER_API_TOKEN=molecule-test-watchtower-token' in env_file"
+          # compose-env.j2 double-quotes every value (a mid-value '#' would
+          # otherwise truncate it in Compose's .env parser), so the assertions
+          # carry the quotes.
+          - "'VAULTWARDEN_ADMIN_TOKEN=\"molecule-test-admin-token\"' in env_file"
+          - "'FIREFLY_DB_PASSWORD=\"molecule-test-db-password\"' in env_file"
+          - "'WATCHTOWER_API_TOKEN=\"molecule-test-watchtower-token\"' in env_file"
           - automation_deployed_stats.results[0].stat.mode == '0600'
         fail_msg: >-
           .env wrong (mode {{ automation_deployed_stats.results[0].stat.mode }}):
