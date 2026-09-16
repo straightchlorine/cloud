@@ -193,6 +193,10 @@
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
 
+- name: Gather service facts for the Syncthing folder registration
+  ansible.builtin.service_facts:
+  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+
 - name: Ensure Syncthing backup folder is configured
   # Best-effort registration for Syncthing replication: the backup script
   # creates its destination itself, so a failure here must not fail the deploy.
@@ -202,8 +206,8 @@
   when: >
     common_syncthing_enabled | default(false) | bool
     and dns_backup_enabled
-    and (ansible_facts['services']['syncthing-user'] is defined
-         and ansible_facts['services']['syncthing-user']['state'] == 'running')
+    and (ansible_facts['services']['syncthing.service'] is defined
+         and ansible_facts['services']['syncthing.service']['state'] == 'running')
   changed_when: false
   ignore_errors: true
 

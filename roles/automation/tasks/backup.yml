@@ -64,8 +64,8 @@
   when: >-
     common_syncthing_enabled | default(false) | bool
     and automation_backup_enabled
-    and (ansible_facts['services']['syncthing-user'] is defined
-         and ansible_facts['services']['syncthing-user']['state'] == 'running')
+    and (ansible_facts['services']['syncthing.service'] is defined
+         and ansible_facts['services']['syncthing.service']['state'] == 'running')
   changed_when: false
   ignore_errors: true
 
