@@ -55,6 +55,35 @@
   failed_when: honeypot_cowrie_public_port ~ '/tcp' not in honeypot_public_ports.stdout
   tags: [post_validation]
 
+- name: Read the cowrie ingress network configuration
+  # The public :22 path is DNATed onto this bridge; compose disables masquerade on
+  # it so the bridge can never double as cowrie egress. The stack deploys after
+  # this role, so an absent network (or daemon) is not a failure - a
+  # misconfigured one is, and the docker-info assert below covers a dead daemon.
+  ansible.builtin.command: >-
+    docker network inspect honeywatch_cowrie-ingress --format
+    '{{ '{{' }}index .Options "com.docker.network.bridge.name"{{ '}}' }}
+    {{ '{{' }}index .Options "com.docker.network.bridge.enable_ip_masquerade"{{ '}}' }}'
+  become: true
+  changed_when: false
+  failed_when: false
+  register: honeypot_cowrie_ingress_network
+  tags: [post_validation]
+
+- name: Assert the cowrie ingress bridge stays masquerade-free
+  # Masquerade must be explicitly disabled and the bridge name must match the
+  # pinned honeypot_cowrie_ingress_bridge - anything else fails the deploy.
+  ansible.builtin.assert:
+    that:
+      - honeypot_cowrie_ingress_network.stdout is match('^' ~ honeypot_cowrie_ingress_bridge ~ ' false$')
+    fail_msg: >-
+      honeywatch_cowrie-ingress must use bridge '{{ honeypot_cowrie_ingress_bridge }}'
+      with masquerade disabled - otherwise the public :22 path can double as cowrie
+      egress. Observed: '{{ honeypot_cowrie_ingress_network.stdout | trim }}'.
+    success_msg: "[OK] cowrie ingress bridge {{ honeypot_cowrie_ingress_bridge }} has masquerade disabled"
+  when: honeypot_cowrie_ingress_network.rc == 0
+  tags: [post_validation]
+
 - name: Confirm the fail2ban jail for the administrative sshd is running
   ansible.builtin.command: fail2ban-client status sshd-{{ honeypot_ssh_port }}
   become: true

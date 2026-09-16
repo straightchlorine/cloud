@@ -68,7 +68,7 @@
     stack_home_directory: "{{ automation_stack_home }}"
     stack_user: "{{ ansible_user }}"
     # Explicit -f: the shared systemd template's WorkingDirectory guard is a
-    # known-open issue (see its header comment), so don't rely on cwd here.
+    # known-open issue (see its header), so don't rely on the unit's cwd.
     stack_environment_vars:
       - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
       - "PUID={{ automation_stack_uid }}"
@@ -79,21 +79,17 @@
   tags: [systemd, auto-start]
 
 # --- Stack bring-up is the FINISHING STEP, on purpose ------------------------
-# Everything above (packages, storage, Docker, backup files, the firewall and
-# the ntfy helper) is host configuration that must exist BEFORE any service is
-# exposed. Composing up here guarantees the containers never run freely ahead
-# of the security setup (fail2ban/firewall run in the site.yml base play and
-# this role) - the stack only comes online once the host is hardened.
-- name: Include stack deployment (compose + .env + up + poll) - finishing step
+# Every host-side control above (packages, storage, Docker, backup files, the
+# firewall and the ntfy helper) must exist BEFORE any service is exposed, so the
+# containers never run ahead of the security setup.
+- name: Deploy the stack (compose, .env, up, poll)
   ansible.builtin.include_tasks: stack.yml
   tags: [stack, deploy]
 
 - name: Activate the stack auto-start unit
-  # docker_stack_service above creates+enables the unit but it only takes
-  # effect at boot. Starting it now (a) keeps "stack" active AND enabled on
-  # the running host - matching the validate-deploy.sh invariant - and (b)
-  # proves the boot path itself works: RemainAfterExit forces the unit's
-  # ExecStart (`docker compose up -d`) to run once immediately, idempotently.
+  # docker_stack_service creates+enables the unit but it only takes effect at
+  # boot. Starting it now keeps the unit active AND enabled on the running host,
+  # and proves the boot path works: RemainAfterExit runs ExecStart immediately.
   ansible.builtin.systemd:
     name: "stack"
     state: started

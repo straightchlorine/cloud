@@ -1,6 +1,6 @@
 ---
-# Grafana Alloy: tails the systemd journal to the fleet Loki, and optionally
-# ships host metrics once the fleet has a Prometheus to receive them.
+# Grafana Alloy: ships the systemd journal to the fleet Loki, and host metrics to
+# the fleet Prometheus when alloy_metrics_enabled is set.
 
 alloy_version: "1.5.1"
 alloy_repo_baseurl: "https://rpm.grafana.com"
@@ -15,13 +15,10 @@ alloy_env_file: /etc/sysconfig/alloy
 alloy_user: alloy
 alloy_group: alloy
 
-# Alloy's own UI/debug endpoint. Localhost only: it exposes the running
-# configuration, including the Loki endpoint.
 alloy_listen_address: "127.0.0.1:12345"
 
-# Push target. alloy_loki_url must include the full push path.
-# vault_alloy_loki_username / vault_alloy_loki_password carry the basic-auth
-# credentials; the Loki ingress rejects unauthenticated pushes.
+# Push target; must be the full push path (validate.yml enforces it). Credentials
+# come from vault_alloy_loki_username/_password - the ingress rejects anonymous pushes.
 alloy_loki_url: "https://logs.codextechnologies.org/loki/api/v1/push"
 
 # Static labels attached to every stream. `job` is what Grafana queries on.

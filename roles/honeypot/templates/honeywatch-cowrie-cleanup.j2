@@ -5,10 +5,9 @@
 set -eu
 
 TAG=honeywatch-cowrie-cleanup
-# Log every outcome to journald and stdout. run-parts has no OnFailure handler,
-# so a silent no-op (e.g. the volume name drifting when COMPOSE_PROJECT_NAME is
-# not "honeywatch") would let downloads grow until the disk fills - the one
-# failure that takes the honeypot offline.
+# Log every outcome to journald and stdout. run-parts has no OnFailure handler, so
+# a silent no-op (e.g. the volume name drifting when COMPOSE_PROJECT_NAME is not
+# "honeywatch") would let downloads grow until the disk fills.
 log() {
     echo "$TAG: $*"
     command -v logger >/dev/null 2>&1 && logger -t "$TAG" -- "$*" || true

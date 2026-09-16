@@ -3,11 +3,9 @@
   hosts: all
   become: true
   vars:
-    # Mirrors a real caller (automation's backup.yml) closely enough to catch
-    # the exact bugs found migrating pi-automation: bare/undefined vars in
-    # this task file, the dead common_backup_additional_groups gate, and
-    # StartLimitBurst/StartLimitIntervalSec landing in the wrong systemd
-    # section.
+    # Mirrors a real caller closely enough to exercise the whole task file: the
+    # systemd unit render (start-limit fields in [Unit]), the rendered backup
+    # script, and the caller-supplied paths/excludes.
     # Normally a global group_vars/all/all.yml value - this standalone
     # molecule playbook doesn't load that, so it's set explicitly here.
     common_backup_base_path: "/opt/backup"
@@ -40,13 +38,10 @@
             name: common
             tasks_from: restic_backup
       rescue:
-        # The "Restart backup service" handler's own ExecStart runs the real
-        # backup script, which attempts a real network connection to the
-        # dummy hetzner-storage host - expected to fail here with no such
-        # server. Everything this scenario actually verifies (rendered
-        # files, unit config, the user) is already on disk by this point.
-        # Fail loudly instead of masking a real regression if the failure
-        # was for any OTHER reason.
+        # The "Restart backup service" handler's own ExecStart runs the real backup
+        # script, which connects to the dummy hetzner-storage host - expected to
+        # fail here with no such server. Everything this scenario verifies is
+        # already on disk by now; fail loudly if the reason was something else.
         - name: Fail loudly if this was not the expected restart failure
           ansible.builtin.assert:
             that:

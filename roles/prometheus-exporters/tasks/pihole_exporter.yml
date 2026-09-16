@@ -87,10 +87,8 @@
   become: true
 
 - name: Flush pending handlers before verifying
-  # Reload systemd/Restart pihole-exporter are notified above but only flush
-  # at the natural end of the whole play by default - this verify task would
-  # otherwise run against a unit file that changed but whose already-running
-  # process never got told to restart and pick it up.
+  # The handlers above only flush at the end of the play, so this verify would
+  # otherwise run against a unit whose file changed but whose process never restarted.
   ansible.builtin.meta: flush_handlers
 
 - name: Verify Pi-hole Exporter is responding

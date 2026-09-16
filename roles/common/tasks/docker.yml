@@ -80,12 +80,10 @@
   notify: Restart docker
 
 - name: Refresh the connection so the new docker group takes effect
-  # Ansible reuses a single become wrapper spawned when the connection was
-  # established, whose supplementary groups were set BEFORE this user: was added
-  # to the docker group above. Tasks further down run as "{{ ansible_user }}"
-  # via that stale session, so they'd be denied the docker socket. Resetting the
-  # connection re-spawns the become session and picks up the updated group
-  # membership (idempotent: no-op if the group was already present).
+  # Ansible reuses one become session per target user, spawned when the
+  # connection was established - before this user was added to the docker group
+  # above. Resetting re-spawns it with the new groups (idempotent no-op if the
+  # user was already a member).
   ansible.builtin.meta: reset_connection
 
 - name: Check if daemon.json exists
@@ -143,9 +141,9 @@
   become: true
 
 - name: Flush handlers so Docker restarts before reading its userns-remap range
-  # A daemon.json change above only notifies Restart docker; that handler
-  # runs at end of play by default. Flush now so /etc/subuid reflects the
-  # currently active userns-remap config, not a pending one.
+  # A daemon.json change only notifies "Restart docker", which runs at end of
+  # play. Flush now so /etc/subuid reflects the active userns-remap, not a
+  # pending one.
   ansible.builtin.meta: flush_handlers
 
 - name: Read the Docker userns-remap subordinate UID range
@@ -161,10 +159,8 @@
   become: true
 
 - name: Publish the Docker userns-remap base uid/gid facts
-  # Containers whose entrypoint chowns its own bind-mounted data dir as root
-  # (e.g. MariaDB) need that host directory pre-owned by this range - under
-  # userns-remap, container "root" is this uid, not real host root, and it
-  # has no authority to chown a directory owned by an unrelated host uid.
+  # Under userns-remap, container root is this uid, not real host root: an
+  # entrypoint that chowns its bind mount can only do so on dirs this range owns.
   ansible.builtin.set_fact:
     common_dockremap_uid: "{{ common_dockremap_subuid.stdout.split(':')[1] }}"
     common_dockremap_gid: "{{ common_dockremap_subgid.stdout.split(':')[1] }}"

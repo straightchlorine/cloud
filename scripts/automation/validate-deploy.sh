@@ -147,9 +147,8 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   ps_out="$(docker compose -f "$STACK_HOME/docker-compose.yml" ps --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
   for svc in vaultwarden firefly firefly-cron mariadb watchtower; do
     if [ "$svc" = "firefly-cron" ]; then
-      # Sleep-sidecar: wget the cron endpoint -> sleep 60s -> exit 0 -> Docker
-      # restarts. State only shows "running" ~60s per ~62s cycle, so treat a
-      # clean last exit (code 0) as healthy, exactly like post_deploy_validate.
+      # Sleep-sidecar (see post_deploy_validate.yml): a clean last exit code means
+      # healthy, since State=running only holds ~60s of every ~62s cycle.
       state_line="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' firefly-cron 2>/dev/null || true)"
       if [ -n "$state_line" ] && printf '%s\n' "$state_line" | grep -Eq '^(running|restarting|exited) 0$'; then
         note_ok "$svc running"

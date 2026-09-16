@@ -1,11 +1,15 @@
 ---
-# Host configuration for the public-facing honeywatch honeypot VPS.
-# The application stack itself (docker-compose.prod.yml) is deployed by the
-# honeywatch repo's release workflow over SSH - this role owns only the host
-# the stack runs on.
+# Host configuration for the public-facing honeywatch honeypot VPS. The application
+# stack is deployed by its own release workflow over SSH - this role owns only the
+# host it runs on.
 
 honeypot_config_dir: /etc/honeywatch
 honeypot_stack_dir: /opt/honeywatch
+
+# Bridge name the compose stack pins for its cowrie-ingress network
+# (com.docker.network.bridge.name). Asserted post-deploy with masquerade off, so
+# the public :22 path can never double as cowrie egress.
+honeypot_cowrie_ingress_bridge: br-cowrie-ing
 
 # --- Fail-fast validation -----------------------------------------------------
 # Consumed by validate.yml; the backup/mmdb lists are only required when the
@@ -29,9 +33,8 @@ honeypot_mmdb_required_variables:
   - vault_honeypot_maxmind_license_key
 
 # --- Packages -----------------------------------------------------------------
-# Full `dnf update` on every run is off by default: dnf-automatic already
-# applies security errata, and an unattended full update can pull a kernel
-# mid-play. Set true for a deliberate maintenance run.
+# dnf-automatic already applies security errata; a full update can also pull a
+# kernel mid-play, so it stays opt-in.
 honeypot_dnf_full_update: false
 
 honeypot_base_packages:
@@ -71,10 +74,9 @@ honeypot_ssh_port: 2022
 honeypot_ssh_allow_users:
   - deploy
   - admin
-# Bind the admin sshd to the tailnet address only, so the listener does not
-# exist off-tailnet even if the firewalld zone is ever misconfigured. Requires
-# tailscaled to have brought the address up before sshd starts; set to 0.0.0.0
-# to fall back to firewalld as the only ACL.
+# Bind the admin sshd to the tailnet address only, so the listener does not exist
+# off-tailnet even if the firewalld zone is misconfigured. Requires tailscaled to
+# have brought the address up first; 0.0.0.0 leaves firewalld as the only ACL.
 honeypot_ssh_listen_address: "{{ ansible_facts[honeypot_tailnet_interface]['ipv4']['address'] }}"
 
 # Ciphers/MACs/KexAlgorithms/HostKeyAlgorithms are NOT set by the drop-in:
@@ -85,9 +87,7 @@ honeypot_ssh_manage_crypto_directives: false
 # --- firewalld ----------------------------------------------------------------
 honeypot_tailnet_zone: tailnet
 honeypot_tailnet_interface: tailscale0
-# Extra tailnet-only ports beyond the admin sshd. The dashboard's dormant SSE
-# work needs 5432/tcp here for Postgres LISTEN over the tailnet; add it when
-# that ships, not before.
+# Extra tailnet-only ports beyond the admin sshd (set in host_vars).
 honeypot_tailnet_extra_ports: []
 honeypot_cowrie_public_port: 22
 # Nothing but cowrie is exposed publicly; drop what the CentOS default zone ships.
@@ -97,10 +97,6 @@ honeypot_public_zone_removed_services:
   # 22/tcp is added as an explicit port below; keeping the `ssh` service too
   # would silently reopen whatever a future firewalld ships in that definition.
   - ssh
-
-# Cowrie's ingress bridge must not originate new connections: the compose
-# network disables masquerade, and this drops anything that still tries.
-honeypot_cowrie_ingress_bridge: br-cowrie-ing
 
 # --- fail2ban -----------------------------------------------------------------
 # Deliberately scoped to the admin sshd only. Cowrie's 22/tcp is the attack
@@ -169,8 +165,7 @@ honeypot_audit_watches:
   - {path: /var/lib/tailscale/, perms: wa, key: tailscale}
   - {path: /var/log/audit/, perms: wa, key: auditlog}
 
-# Rules enabled but still mutable. Switch to 2 once the rule set is stable -
-# that locks the audit configuration until reboot.
+# Rules enabled but still mutable; 2 would lock the configuration until reboot.
 honeypot_audit_enable_flag: 1
 
 # --- SELinux ------------------------------------------------------------------
@@ -179,9 +174,8 @@ honeypot_selinux_module: honeywatch-nnp
 
 # --- Docker -------------------------------------------------------------------
 honeypot_docker_install_enabled: true
-# Merged into any existing daemon.json rather than overwriting it.
-# No userns-remap: it would rewrite ownership inside every bind mount the
-# compose stack uses.
+# No userns-remap: it would rewrite ownership inside every bind mount the compose
+# stack uses.
 honeypot_docker_daemon_options:
   icc: false
   log-driver: json-file

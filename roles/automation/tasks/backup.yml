@@ -1,7 +1,6 @@
 ---
-# Backup: restic owns off-site (restic_backup.yml); the secondary LOCAL
-# Syncthing backup below replicates a MariaDB dump and a Vaultwarden snapshot
-# off-box.
+# Restic owns off-site backups (restic_backup.yml); the local Syncthing backup
+# below replicates a MariaDB dump and a Vaultwarden snapshot off-box.
 
 - name: Validate local backup configuration
   ansible.builtin.assert:
@@ -79,11 +78,9 @@
     common_backup_paths:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
-    # common_backup_schedule defaults to 03:00 daily already (see common's
-    # defaults/main.yml) - no override needed here.
-    # Matches the documented retention for this host (docs/backup/index.md) -
-    # without this, cleanup_old_snapshots() silently fell back to restic's
-    # own hardcoded default (7 daily/4 weekly/6 monthly/1 yearly).
+    # Match the retention documented for this host (docs/backup/index.md):
+    # without it, cleanup_old_snapshots() falls back to the script's hardcoded
+    # 7 daily / 4 weekly / 6 monthly / 1 yearly.
     retention_policy:
       daily: 14
       weekly: 8
@@ -93,10 +90,8 @@
       - "*.log"
       - "tmp/*"
       - "cache/*"
-      # Docker's own internal image/container-layer storage - many GB of
-      # completely re-derivable state (re-pull the image, don't restore a
-      # backup), not real app data. Including it wholesale is what exhausted
-      # the backup's temp staging space during a real run.
+      # Docker's own layer storage: many GB of re-derivable state (re-pull the
+      # image rather than restore it), and large enough to exhaust staging space.
       - "{{ automation_data_path }}/docker"
     pre_backup_commands:
       - >-
@@ -104,9 +99,8 @@
     post_backup_commands:
       - >-
         docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
-    # Just a flag: backup-script.sh.j2's connectivity test connects through
-    # the shared hetzner-storage ssh_config alias directly (same one restic
-    # itself uses), so it needs nothing beyond "is this feature enabled".
+    # A flag only: the connectivity test connects through the shared
+    # hetzner-storage ssh_config alias, the same one restic itself uses.
     backup_ssh_config: true
   when: restic_enabled
   tags: [backup]

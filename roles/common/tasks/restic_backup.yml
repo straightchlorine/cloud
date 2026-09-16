@@ -11,11 +11,8 @@
   no_log: false
 
 - name: Create backup user (if not already created)
-  # Unconditional: this was previously gated on common_backup_additional_groups
-  # being non-empty, which left the user never created on any host that didn't
-  # customize it (no host_vars ever did - that var was speculative and unused,
-  # removed). ansible.builtin.user is already idempotent (existing user, no
-  # error), so no failed_when override is needed either.
+  # Unconditional: every host running this role needs the backup user, and
+  # ansible.builtin.user is idempotent, so no gate or failed_when is needed.
   ansible.builtin.user:
     name: backup
     system: true
@@ -162,14 +159,8 @@
   become: true
 
 - name: Create systemd backup service
-  # backup: true below already does exactly what a separate manual
-  # stat-then-copy pair here would (previously present, removed): Ansible's
-  # own template backup only fires when the destination content is actually
-  # about to change, which is both the correct semantic (preserves what was
-  # really there before a real change, not a repeated snapshot of Ansible's
-  # own prior output) and inherently idempotent, unlike a manual
-  # exists-then-copy gate which always "changes" once on the very next run
-  # after the file first comes into existence.
+  # backup: true keeps the previous unit only when the content actually changes -
+  # the semantics a manual stat-then-copy pair would give, but idempotent.
   ansible.builtin.template:
     src: systemd-service.j2
     dest: "/etc/systemd/system/backup-{{ common_backup_service_name }}.service"
@@ -251,10 +242,7 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Enable and start backup timer
-  # Unconditional: this task file is only ever included once a caller has
-  # already decided backup is enabled (e.g. automation's
-  # `when: automation_backup_enabled or restic_enabled`) - backup_enabled
-  # was never actually set by anything and would have failed fast here.
+  # Callers include this file only when backup is enabled - no gate needed here.
   ansible.builtin.systemd:
     name: "backup-{{ common_backup_service_name }}.timer"
     enabled: true

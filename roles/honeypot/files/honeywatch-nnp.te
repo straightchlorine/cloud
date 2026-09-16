@@ -1,24 +1,14 @@
 module honeywatch-nnp 1.0;
 
-# Allow systemd units that have NoNewPrivileges=yes to invoke `docker`
-# (which type-transitions from unconfined_service_t to container_runtime_t).
+# Allow systemd units that have NoNewPrivileges=yes to invoke `docker`, which
+# type-transitions from unconfined_service_t to container_runtime_t.
 #
-# Without this rule, `honeywatch-backup.service` and
-# `honeywatch-mmdb-refresh.service` fail under Enforcing SELinux: their
-# NoNewPrivileges=yes setting causes SELinux to block the domain
-# transition that docker's labelled exec triggers.
+# Without this, honeywatch-backup.service and honeywatch-mmdb-refresh.service fail
+# under Enforcing: NoNewPrivileges blocks the domain transition that docker's
+# labelled exec triggers. The blast radius is narrow - this is the only transition
+# allowed, every other NNP-protected one still requires explicit policy.
 #
-# The blast radius is narrow: only nnp_transition between these two
-# specific domains is allowed; every other NNP-protected transition
-# still requires explicit policy.
-#
-# Generated from the AVC produced by `honeywatch-backup.service`:
-#   sudo ausearch -m AVC -ts today | grep nnp_transition \
-#       | audit2allow -M honeywatch-nnp
-# then compiled and installed via:
-#   sudo semodule -i honeywatch-nnp.pp
-#
-# To regenerate the compiled .pp from this .te:
+# Rebuild from this source with:
 #   checkmodule -M -m -o honeywatch-nnp.mod honeywatch-nnp.te
 #   semodule_package -o honeywatch-nnp.pp -m honeywatch-nnp.mod
 

@@ -1,9 +1,7 @@
 ---
-# Optional dedicated SSD for stack data - mirrors the dns role's optional-drive
-# pattern. When a drive is present (auto-detected, or already mounted at
-# automation_data_path from a previous deploy) the stack's data path, journald
-# and Docker's data-root ride on it; with no drive the stack simply runs on the
-# SD card. Wiping an unprepared drive is opt-in via automation_ssd_format.
+# Optional dedicated SSD for stack data, mirroring the dns role's optional-drive
+# pattern: the data path, journald and Docker's data-root ride it when a drive is
+# present, SD card otherwise. automation_ssd_format: true wipes it (DESTRUCTIVE).
 
 - name: Record whether a drive is already mounted at the data path
   ansible.builtin.set_fact:
@@ -29,23 +27,17 @@
       (automation_data_path: {{ automation_data_path }}, docker data-root: default).
   when: not automation_ssd_present
 
-# Only a freshly-detected (not yet mounted) drive is prepared and mounted here;
-# an already-mounted data_path from a previous deploy is left untouched.
+# Only a freshly detected, not-yet-mounted drive is prepared here; an existing
+# mount at automation_data_path is left untouched.
 - name: Prepare and mount the optional SSD
   when:
     - automation_ssd_present
     - not automation_ssd_mounted
   block:
     - name: Determine whether the drive needs formatting
-      # Either the filesystem type doesn't already match ("has a filesystem"
-      # isn't enough - a foreign one we don't want, e.g. a leftover installer
-      # USB stick, would otherwise be reused as-is), OR the operator
-      # explicitly opted into an unconditional wipe via automation_ssd_format
-      # - a drive that already happens to be ext4 (e.g. reused from a prior
-      # production setup, still carrying its old data) would otherwise never
-      # be recognized as needing a fresh format at all, silently ignoring the
-      # flag forever (mounted once, automation_ssd_mounted is true on every
-      # later run and this whole block is skipped from then on).
+      # Format unless the drive already carries our filesystem, plus an explicit
+      # opt-in wipe: a reused ext4 drive would otherwise never be recognized as
+      # needing one (once mounted, this block is skipped on every later run).
       ansible.builtin.set_fact:
         automation_ssd_needs_format: >-
           {{ (common_optional_drive_fstype != automation_ssd_filesystem)
@@ -102,9 +94,8 @@
         - common_optional_drive_is_whole_disk
 
     - name: Determine the partition to format and mount
-      # A '1' suffix only applies to a partition we just created. A whole disk
-      # that already matches our filesystem was formatted bare (no partition
-      # table), so the target there is the device itself.
+      # The '1' suffix only applies to a partition we just created; a whole disk
+      # that already matched our filesystem was formatted bare, so use the device.
       ansible.builtin.set_fact:
         automation_ssd_target: >-
           {{ (common_optional_drive_device ~ '1')
@@ -136,13 +127,10 @@
       become: true
 
     - name: Force a Docker restart after a fresh SSD format
-      # An already-running dockerd doesn't reinitialize its data-root
-      # directory structure just because the underlying filesystem was wiped
-      # and remounted under it - it keeps writing into subdirectories that no
-      # longer exist post-format ("no such file or directory" on the very
-      # first image pull). state: started (docker.yml) is a no-op if already
-      # running, so this forces the restart specifically when a fresh format
-      # just happened - reused by the userns-remap flush_handlers point later.
+      # dockerd does not re-initialize a data-root whose filesystem was wiped and
+      # remounted underneath it - it keeps writing into subdirectories that no
+      # longer exist ("no such file or directory" on the first image pull).
+      # state: started is a no-op when already running, so force the restart here.
       ansible.builtin.debug:
         msg: "Fresh SSD format - Docker will be restarted to reinitialize its data-root"
       changed_when: true
@@ -159,10 +147,9 @@
     - automation_ssd_journald_enabled | bool
 
 - name: Move Docker's data-root onto the SSD
-  # common/docker.yml only adds data-root when this fact is defined, so on an
-  # SD-only run Docker keeps its default /var/lib/docker. The variable belongs
-  # to the common role (docker.yml consumes it) - set_fact here is a deliberate
-  # cross-role handoff, so the foreign prefix is intentional.
+  # Cross-role handoff: common/docker.yml only adds data-root when this fact is
+  # defined, so an SD-only run keeps Docker's default /var/lib/docker. The
+  # foreign prefix is intentional - the variable belongs to the common role.
   ansible.builtin.set_fact:  # noqa: var-naming[no-role-prefix]
     common_docker_data_root: "{{ automation_data_path }}/docker"
   when: automation_ssd_present

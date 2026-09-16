@@ -1,11 +1,9 @@
 ---
 # One-shot "install a compose stack": render compose + .env, bring it up when
-# start_stack is true, and poll the critical services until they run. Callers
-# pass the whole compose contract (see roles/automation/tasks/stack.yml for the
-# canonical call site) - nothing docker-specific leaks into role code.
-#
-# The compose up/poll tasks need a Docker daemon, so molecule scenarios run
-# this with start_stack: false - only the rendering half executes there.
+# start_stack is true, and poll the critical services until they run. Callers pass
+# the whole compose contract (roles/automation/tasks/stack.yml is the canonical
+# call site). The up/poll tasks need a Docker daemon, so molecule runs with
+# start_stack: false and only the rendering half executes.
 
 - name: Render the compose file and environment
   ansible.builtin.include_tasks: build_docker_compose.yml

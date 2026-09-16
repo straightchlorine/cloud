@@ -132,9 +132,8 @@
             mode: "0644"
 
     # Case 4 (regression guard): stack home resolved under /root for a non-root
-    # stack user - the exact trap that shipped a /root/stack deploy
-    # once. The parent-dir check passes (/root exists), so validate.yml reaches
-    # the new /root guard and must refuse.
+    # stack user. The parent-dir check passes (/root exists), so validate.yml
+    # must reach the /root guard and refuse.
     - name: "Case 4: validate.yml refuses a stack home under /root for a non-root user"
       block:
         - name: Run the real validate.yml with the /root stack-home misconfiguration
@@ -166,9 +165,8 @@
             mode: "0644"
 
     # Case 5 (regression guard): Firefly only accepts a static cron token that
-    # matches AND is exactly 32 characters; anything else makes its cron
-    # endpoint answer HTTP 500, crash-looping the firefly-cron sidecar. The
-    # base vars above carry a valid 32-hex token, so pass a malformed one here.
+    # matches AND is exactly 32 characters; anything else makes its cron endpoint
+    # answer HTTP 500 and crash-loops the firefly-cron sidecar. Pass a short one.
     - name: "Case 5: validate.yml refuses a malformed Firefly static cron token"
       block:
         - name: Run the real validate.yml with a short vault_firefly_static_cron_token
@@ -198,12 +196,10 @@
             force: false
             mode: "0644"
 
-    # Case 6 (regression guard): Laravel builds its encrypter from APP_KEY
-    # before any route handler runs, so a malformed key (e.g. bare
-    # 'openssl rand -base64 32' output without the base64: prefix - 44 chars
-    # raw) makes Firefly 500 EVERY route and crash-loops the firefly-cron
-    # sidecar. The base vars above carry a valid 32-char key, so pass a
-    # malformed one here.
+    # Case 6 (regression guard): Laravel builds its encrypter from APP_KEY before
+    # any route handler runs, so a malformed key 500s every route and crash-loops
+    # the firefly-cron sidecar. The base vars above carry a valid key, so pass a
+    # malformed one here (bare 44-char base64 output without the base64: prefix).
     - name: "Case 6: validate.yml refuses a malformed Firefly APP_KEY"
       block:
         - name: Run the real validate.yml with a bare-44-char vault_firefly_app_key

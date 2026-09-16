@@ -1,14 +1,11 @@
 ---
-# Compose contract: secrets live ONLY in the vault env dict below, rendered by
-# common's build_docker_compose as a 0600 .env next to docker-compose.yml and
-# interpolated by compose via ${VAR} - the compose file never carries a secret.
+# Secrets live only in the vault env dict below: common's build_docker_compose
+# renders them as a 0600 .env next to docker-compose.yml, interpolated via ${VAR}.
 
 - name: Resolve the stack user's uid/gid on this host
-  # CWA honors PUID/PGID and must not run as root (its library files then end
-  # up root-owned, which breaks ingestion/transfer). Do NOT use the
-  # ansible_user_dir / ansible_user_uid FACTS here - under become:true they
-  # reflect root (the /root automation_stack_home trap). Resolve the
-  # inventory's ansible_user on this host instead.
+  # CWA honours PUID/PGID and must not run as root (root-owned library files
+  # break ingestion). Resolve the inventory's ansible_user here, not the facts:
+  # under become:true the ansible_user_uid/_dir facts reflect root.
   ansible.builtin.getent:
     database: passwd
     key: "{{ ansible_user }}"
@@ -30,15 +27,10 @@
     - firefly
 
 - name: Create data directories owned by Docker's userns-remap range
-  # vaultwarden runs directly as container uid 0 (no privilege drop); mariadb
-  # and calibre-web-automated chown their bind-mounted data dirs as root
-  # during container startup (mariadb to mysql:mysql; CWA's init to
-  # PUID/PGID, resolved above from ansible_user). Under userns-remap, container
-  # root is common_dockremap_uid/gid, not real host root - it has no authority
-  # over (nor, for vaultwarden, does any uid other than this one match)
-  # a directory (or anything already inside it, left over from a teardown
-  # that intentionally preserves automation_data_path) owned by ansible_user,
-  # so these dirs must start out owned by the remap range itself.
+  # Under userns-remap, container root is common_dockremap_uid/gid and can only
+  # chown directories it owns. mariadb and calibre chown their bind mounts at
+  # startup, and vaultwarden matches no other uid - so these dirs must start
+  # owned by the remap range, including after a teardown that keeps the data.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
@@ -55,15 +47,10 @@
     - calibre/library
 
 - name: Create the Firefly upload directory owned by the image's www-data
-  # fireflyiii/core runs php-fpm as a static USER www-data (uid/gid 33 on its
-  # Debian base) and never chowns its storage itself - unlike mariadb/CWA
-  # above, no internal root process ever fixes this mount up. Under
-  # userns-remap a host file only resolves to a real uid *inside* the
-  # container if its host-owning uid falls within that container's remapped
-  # range - so the host dir must be owned by common_dockremap_uid/gid + 33
-  # (the actual host uid www-data maps to), not literal uid/gid 33.
-  # ponytail: offset pinned to +33 because the image is Debian-based - if
-  # upstream ever moves to their Alpine variant this becomes +82.
+  # fireflyiii/core runs php-fpm as uid 33 and never chowns its storage itself,
+  # so the host dir must be owned by dockremap + 33 (the host uid that maps to
+  # www-data inside the container), not literal 33. +33 is www-data on the
+  # image's Debian base; an Alpine variant would be +82.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/firefly/upload"
     state: directory
@@ -96,12 +83,9 @@
     compose_services: "{{ automation_compose_services }}"
     compose_networks: "{{ automation_compose_networks }}"
     compose_volumes: "{{ automation_compose_volumes }}"
-    # firefly-cron is deliberately NOT in the critical set: it is a sleep-sidecar
-    # (wget the cron endpoint -> sleep 60s -> exit 0 -> Docker restarts it), so it
-    # only reports State=running ~60s of every ~62s cycle. Requiring a running
-    # state would false-fail every deploy exactly when the sidecar is healthy.
-    # Its health is proven separately in post_deploy_validate.yml by the LAST
-    # exit code (0 = the wget+sleep cycle completed cleanly).
+    # firefly-cron is excluded: it is a sleep-sidecar (wget -> sleep 60s -> exit 0
+    # -> Docker restarts it), so State=running holds only ~60s of every ~62s
+    # cycle. Its health is checked by the last exit code in post_deploy_validate.
     compose_critical_services:
       - vaultwarden
       - firefly
@@ -115,26 +99,19 @@
       FIREFLY_DB_PASSWORD: "{{ vault_firefly_db_password }}"
       VAULTWARDEN_ADMIN_TOKEN: "{{ vault_vaultwarden_admin_token }}"
       WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
-      # Optional Hardcover metadata-provider key (CWA env). Empty until
-      # vault_hardcover_token is set in vault, so molecule/test deploys without
-      # the vault var still render.
+      # Optional CWA metadata key: empty until vault_hardcover_token is set, so
+      # molecule/test deploys without the vault var still render.
       HARDCOVER_TOKEN: "{{ vault_hardcover_token if vault_hardcover_token is defined else '' }}"
-      # Watchtower notifications ride the shared ntfy topic when a key is
-      # configured (the key deploy is optional in common/ntfy_install.yml);
-      # an empty URL just leaves watchtower silent. shoutrrr's ntfy URL is
-      # ntfy://username:password@host/topic and ntfy only honours a token as
-      # the basic-auth PASSWORD (the leading ':' keeps the username empty) -
-      # a key in the username slot is rejected with ntfy error 40301
-      # (forbidden). This differs from the Ansible notifier, which sends the
-      # same key as a Bearer header and is accepted.
+      # shoutrrr's ntfy URL is ntfy://user:password@host/topic and ntfy accepts
+      # the token only as the basic-auth PASSWORD, so the username stays empty
+      # (a key there is rejected with 40301). Empty URL = watchtower is silent.
       WATCHTOWER_NOTIFICATION_URL: >-
         {{ 'ntfy://:' ~ vault_ntfy_api_key ~ '@' ~
         (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
         if vault_ntfy_api_key is defined else '' }}
     start_stack: "{{ common_start_stack }}"
-  # No notify: deploy_compose_stack's `docker compose up -d` already applies
-  # file changes by recreating containers - a restart handler would only
-  # double-restart the stack on every config change.
+  # No notify: compose up -d already recreates containers on file changes, so a
+  # restart handler would only double-restart the stack.
 
 - name: Install the stack management script
   ansible.builtin.template:

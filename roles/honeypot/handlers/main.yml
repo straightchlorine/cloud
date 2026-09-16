@@ -39,16 +39,15 @@
   become: true
 
 - name: Reload systemd (honeypot)
-  # See the fail2ban handler above: named distinctly from common's "Reload
-  # systemd" to avoid cross-role notify-by-name collisions.
+  # Named distinctly from common's "Reload systemd" to avoid cross-role
+  # notify-by-name collisions.
   ansible.builtin.systemd_service:
     daemon_reload: true
   become: true
 
-# A running timer keeps its old next-elapse time after a daemon-reload alone;
-# only a restart makes an OnCalendar/RandomizedDelaySec change actually apply.
-# Named distinctly from common's "Restart backup timer", which targets a
-# different unit name and requires common_backup_service_name - undefined here.
+# A running timer keeps its old next-elapse time after a daemon-reload alone; only
+# a restart applies an OnCalendar/RandomizedDelaySec change. Named distinctly from
+# common's "Restart backup timer", which targets a different unit.
 - name: Restart the honeywatch backup timer
   ansible.builtin.systemd_service:
     name: honeywatch-backup.timer

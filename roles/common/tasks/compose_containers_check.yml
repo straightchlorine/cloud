@@ -1,7 +1,6 @@
 ---
 # Hard-fail on any critical compose service that is not running. Callers pass
-# compose_file_path, compose_owner and compose_critical_services. Needs a live
-# Docker daemon - only used from post-deploy validation, never in molecule.
+# compose_file_path/owner/critical_services; needs a live daemon - never molecule.
 
 - name: Get the compose container states
   ansible.builtin.shell: |

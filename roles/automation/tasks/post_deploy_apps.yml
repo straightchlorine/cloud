@@ -13,7 +13,7 @@
   delay: 3
   tags: [post_validation]
 
-- name: Verify Vaultwarden can actually write its data directory
+- name: Verify Vaultwarden can write its data directory
   # /alive only proves the HTTP listener is up, not that SQLite writes
   # succeed - a host/container uid mismatch here failed silently for days
   # (WAL file stopped advancing) while this endpoint kept reporting healthy.
@@ -41,7 +41,7 @@
   delay: 10
   tags: [post_validation]
 
-- name: Verify Firefly can actually write its upload directory
+- name: Verify Firefly can write its upload directory
   # The failure this guards is silent: attachments upload "fine", Firefly
   # returns HTTP 200 on the attachment view and nothing lands on disk. Only
   # the container's own view of the bind mount proves it.
@@ -68,12 +68,9 @@
   tags: [post_validation]
 
 - name: Verify MariaDB answers ping
-  # root@localhost has no known-working passwordless auth here
-  # (MARIADB_RANDOM_ROOT_PASSWORD generates a password we never capture) -
-  # authenticate as the firefly account instead, whose credentials are
-  # already vault-managed and already proven working (Firefly itself is up).
-  # MYSQL_PWD (not -p on the command line) keeps the password out of the
-  # container's own process list.
+  # root@localhost has no known password (MARIADB_RANDOM_ROOT_PASSWORD is never
+  # captured), so authenticate as the vault-managed firefly user instead. MYSQL_PWD
+  # keeps the password out of the container's own process list.
   ansible.builtin.command: >-
     docker compose exec -T -e MYSQL_PWD={{ vault_firefly_db_password }}
     mariadb mariadb-admin -u firefly ping

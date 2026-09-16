@@ -1,6 +1,6 @@
 ---
 # Proves the running stack, never side effects: container states first, then
-# real endpoint/business checks over the same paths gatus uses.
+# real endpoint and write-access checks on the reverse-proxy-facing paths.
 
 - name: Verify the critical compose containers are running
   ansible.builtin.include_role:
@@ -9,10 +9,8 @@
   vars:  # noqa: var-naming[no-role-prefix]
     compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
     compose_owner: "{{ ansible_user }}"
-    # firefly-cron is deliberately excluded (see stack.yml): as a sleep-sidecar
-    # it only reports State=running ~60s of every ~62s cycle, so a running-state
-    # check would false-fail on the perfectly healthy container. Its health is
-    # asserted separately right below, by the last exit code.
+    # firefly-cron is excluded (see stack.yml) - its health is asserted right
+    # below by the last exit code, not by a running-state check.
     compose_critical_services:
       - vaultwarden
       - firefly
@@ -21,12 +19,10 @@
   tags: [post_validation]
 
 - name: Verify the firefly-cron sidecar is not crash-looping
-  # firefly-cron is a sleep-sidecar BY DESIGN: wget the cron endpoint, sleep
-  # 60s, exit 0, then Docker restarts it - State=running only holds ~60s of
-  # every ~62s cycle. The probe that matters is the LAST EXIT CODE: 0 means the
-  # wget+sleep cycle finished cleanly (a failed wget aborts before the sleep
-  # with exit 8/4/1). Poll up to ~2 minutes so even a sample taken mid-sleep
-  # still observes the previous clean exit.
+  # firefly-cron is a sleep-sidecar by design: wget the cron endpoint, sleep 60s,
+  # exit 0, restart. The probe that matters is the LAST EXIT CODE - 0 means the
+  # cycle finished cleanly (a failed wget aborts with 8/4/1 before the sleep).
+  # Poll ~2 minutes so a sample taken mid-sleep still sees the last clean exit.
   ansible.builtin.command: >-
     docker inspect firefly-cron
     --format '{{ '{{.State.Status}} {{.State.ExitCode}}' }}'
@@ -41,7 +37,7 @@
   delay: 5
   tags: [post_validation]
 
-- name: Gather Docker warnings (resource/cgroup capability report)
+- name: Gather Docker daemon warnings
   ansible.builtin.command: >-
     docker info --format '{{ '{{.Warnings}}' }}'
   become: true
@@ -51,12 +47,10 @@
   tags: [post_validation]
 
 - name: Warn if Docker memory limits cannot be enforced
-  # Not a deploy failure: containers run fine without enforced limits. But the
-  # compose profile declares deploy.resources and it is silently DISCARDED when
-  # the memory controller is unavailable (cgroup v2 without "memory" in
-  # /sys/fs/cgroup/cgroup.controllers, or a v1 host without cgroup_enable=memory
-  # in the kernel cmdline). Surface it every deploy so it cannot be missed; the
-  # hard FAIL gate lives in scripts/automation/validate-deploy.sh.
+  # Not a deploy failure - containers run fine without limits - but the compose
+  # deploy.resources block is silently DISCARDED when the memory controller is
+  # unavailable (cgroup v2 without "memory", or v1 without cgroup_enable=memory).
+  # Surface it every deploy; the hard FAIL gate is in validate-deploy.sh.
   ansible.builtin.debug:
     msg: >-
       WARNING: Docker reports "No memory limit support" on this host - the

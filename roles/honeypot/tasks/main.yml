@@ -27,12 +27,11 @@
   ansible.builtin.include_tasks: firewalld.yml
   tags: [honeypot, firewall, security]
 
-# Deliberate, not incidental: applies the sshd/firewalld templates now,
-# in the safe handler order (firewalld, then sshd - see handlers/main.yml),
-# instead of leaving them queued until whichever later task file happens to
-# flush first. Without this, a failure in any task between here and that
-# flush leaves the new config written but never applied, and a subsequent
-# re-run reports the template task as unchanged so the handler never re-fires.
+# Deliberate, not incidental: applies the sshd/firewalld templates now, in the
+# safe handler order (firewalld, then sshd - see handlers/main.yml), instead of
+# leaving them queued. Without this, a later failure leaves the new config written
+# but never applied, and a re-run reports the template as unchanged so the handler
+# never re-fires.
 - name: Apply the sshd/firewalld configuration before continuing
   ansible.builtin.meta: flush_handlers
   tags: [honeypot, sshd, firewall, security]
@@ -67,7 +66,7 @@
 
 # Before backup/mmdb: both units reference honeywatch-notify@ as their
 # OnFailure handler and read its env file for success notifications.
-- name: Install the ntfy notification handler
+- name: Install the ntfy failure-notification handler
   ansible.builtin.include_tasks: notify.yml
   tags: [honeypot, notifications]
 

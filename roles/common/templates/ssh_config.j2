@@ -2,13 +2,11 @@
 
 # Global SSH settings for all connections
 Host *
-    # No connection multiplexing: this config is used both directly as the
-    # backup user (restic init/snapshots) and via `sudo` as root (restic
-    # backup, HOME reset to /root by sudo's env_reset) - a persistent
-    # ControlMaster socket from one identity reused by the other crosses a
-    # privilege boundary and fails with "file already closed" errors. One
-    # connection per scheduled backup run gets no benefit from multiplexing
-    # anyway.
+    # No connection multiplexing: this same config is used as the backup user
+    # (restic init/snapshots) and as root via sudo (restic backup, with HOME
+    # reset by env_reset) - one identity reusing the other's ControlMaster
+    # socket crosses a privilege boundary and fails with "file already closed".
+    # A single scheduled run gets no benefit from multiplexing anyway.
     ControlMaster no
     # Explicit path (not the default $HOME/.ssh/known_hosts) so root-via-sudo
     # and the backup user share the same host key trust store regardless of

@@ -8,10 +8,8 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ common_backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ common_backup_cache_dir }}"
-# Matches restic-init.sh.j2 and the systemd unit's own Environment= exactly -
-# a hand-reconstructed command here (raw -i/-o flags, no -F) previously
-# bypassed ssh_config.j2's shared settings (UserKnownHostsFile, ControlMaster)
-# entirely and silently drifted out of sync with them.
+# Matches restic-init.sh.j2 and the systemd unit's own Environment= exactly: one
+# shared ssh config/alias, so UserKnownHostsFile and ControlMaster stay in force.
 export RESTIC_SFTP_COMMAND="ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
 # Service-specific configuration
@@ -78,12 +76,11 @@ check_prerequisites() {
 test_connectivity() {
     log "Testing repository connectivity..."
 
-    # Hetzner Storage Box (and similar backup-only SSH endpoints) allow only
-    # the SFTP subsystem - no general shell, so a plain command-exec test
-    # (e.g. `ssh host echo hi`) is refused even when the box is perfectly
-    # reachable. -b /dev/null connects, reads zero batch commands (immediate
-    # EOF), and exits cleanly - a real SFTP-native connectivity probe using
-    # the same shared config/alias restic itself connects through.
+    # Hetzner Storage Box (and similar backup-only SSH endpoints) allow only the
+    # SFTP subsystem, so a plain command-exec test (ssh host echo hi) is refused
+    # even when the box is reachable. -b /dev/null connects, reads zero batch
+    # commands (immediate EOF) and exits cleanly - an SFTP-native probe over the
+    # same shared config/alias restic itself connects through.
     if sftp -F {{ common_backup_base_path }}/.ssh/config -b /dev/null hetzner-storage >/dev/null 2>&1; then
         log "Repository connectivity test passed"
     else
@@ -125,13 +122,9 @@ perform_backup() {
 
     # Build backup command with sudo to read protected files
     # Environment variables are preserved via systemd service configuration
-    # -o sftp.command explicitly, not just the exported env var: env_keep
-    # correctly preserves RESTIC_SFTP_COMMAND across the root escalation
-    # (verified via `sudo -l`), but restic still fell back to its bare
-    # default ssh invocation (wrong port) under sudo in practice - passing
-    # it as a literal CLI flag has no environment-propagation dependency at
-    # all, matching the already-proven-working pattern in
-    # roles/backup/templates/backup-coordinator-target.sh.j2.
+    # -o sftp.command explicitly, not just the exported env var: restic does not
+    # reliably pick RESTIC_SFTP_COMMAND up across the sudo escalation, and the
+    # literal flag has no environment-propagation dependency at all.
     local backup_cmd="sudo --preserve-env=RESTIC_REPOSITORY,RESTIC_PASSWORD_FILE,RESTIC_CACHE_DIR,RESTIC_SFTP_COMMAND restic backup -o sftp.command=\"$RESTIC_SFTP_COMMAND\""
 
     # Add paths

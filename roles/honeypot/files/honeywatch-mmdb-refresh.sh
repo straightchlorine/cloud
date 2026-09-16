@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# Honeywatch MaxMind GeoLite2 refresh. Fetches fresh City + ASN
-# databases into the `geoip-data` docker volume and restarts the
-# ingestor so it reopens its readers against the new files.
+# Honeywatch MaxMind GeoLite2 refresh: fetches fresh City + ASN databases into the
+# `geoip-data` docker volume, restarts the ingestor so it reopens its readers, and
+# re-resolves stored IPs against the new data.
 #
-# MaxMind ships City/Country updates Tue+Fri and ASN daily. GeoLite
-# EULA section 6.3 also requires destroying data older than 30 days.
-# A weekly cadence keeps us well inside both windows.
-#
-# Invoked by systemd timer (honeywatch-mmdb-refresh.timer); not
-# intended to be run directly. EnvironmentFile=/etc/honeywatch/maxmind.env
-# supplies MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY, HONEYWATCH_DIR,
-# GEOIP_VOLUME, INGESTOR_CONTAINER.
+# Invoked by honeywatch-mmdb-refresh.timer, not directly. Env comes from
+# /etc/honeywatch/maxmind.env (MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY,
+# HONEYWATCH_DIR, GEOIP_VOLUME, INGESTOR_CONTAINER).
 
 set -euo pipefail
 
@@ -93,11 +88,9 @@ else
     echo "honeywatch-mmdb-refresh: ${INGESTOR_CONTAINER} not running; new mmdb will be picked up on next start"
 fi
 
-# Re-resolve every stored source/destination IP against the fresh mmdb.
-# Without it only IPs seen after the restart above benefit from the refresh:
-# rows enriched by an older database stay wrong until that attacker returns.
-# Safe alongside the live ingestor - it only writes geo_locations, from a
-# separate process with its own empty cache.
+# Re-resolve every stored source/destination IP against the fresh mmdb, otherwise
+# only IPs seen after the restart benefit. Safe alongside the live ingestor: it
+# only writes geo_locations, from a separate process with its own empty cache.
 reclassify_summary="skipped (ingestor not running)"
 if docker inspect -f '{{.State.Running}}' "$INGESTOR_CONTAINER" 2>/dev/null | grep -q true; then
     echo "honeywatch-mmdb-refresh: re-resolving stored IPs against the fresh mmdb"

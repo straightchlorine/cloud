@@ -1,11 +1,9 @@
 ---
 # One-shot systemd unit that runs `docker compose up -d` at boot for a stack.
-# Callers pass stack_service_name, stack_description, stack_home_directory,
-# stack_user and (optionally) stack_environment_vars. The exec_* commands
-# default to plain `docker compose <verb>` and can be overridden with
-# stack_exec_start/stop/reload when a stack needs an explicit -f path (the
-# shared systemd template's WorkingDirectory rendering is a known-open issue -
-# see its header comment).
+# Callers pass stack_service_name/description/home_directory/user and optionally
+# stack_environment_vars. exec_* default to plain `docker compose <verb>`; override
+# stack_exec_start/stop/reload when a stack needs an explicit -f path (the shared
+# systemd template's WorkingDirectory guard is a known-open issue - see its header).
 - name: Create systemd service for Docker stack auto-start
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"

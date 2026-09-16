@@ -8,8 +8,8 @@
 
 - name: Install the tailnet zone definition
   # The zone is declared as XML rather than assembled with --new-zone/--add-port:
-  # --new-zone NAME_CONFLICTs against this file, and the imperative form drifted
-  # from it. If tailscale0 is absent the zone is simply inactive - fail-closed.
+  # --new-zone NAME_CONFLICTs against this file. If tailscale0 is absent the zone
+  # is simply inactive - fail-closed.
   ansible.builtin.template:
     src: tailnet.xml.j2
     dest: "/etc/firewalld/zones/{{ honeypot_tailnet_zone }}.xml"

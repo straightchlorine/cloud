@@ -1,36 +1,25 @@
 ---
-# Automation stack: vaultwarden, firefly (+mariadb, cron sidecar), watchtower.
-# TLS terminates at the central reverse proxy (moving onto the Kubernetes
-# cluster on a separate node); these services publish plain HTTP bound to
-# primary_ip, reached over the tailnet. Secrets never appear here - the
-# compose file refers to ${VAR} and is interpolated from the generated .env
-# (0600) at deploy time.
+# Automation stack: vaultwarden, firefly (+ mariadb, cron sidecar), watchtower.
+# Secrets never appear here: the compose file refers to ${VAR}, interpolated from
+# the generated .env (0600) at deploy time.
 
-# Deployment identity derives from the inventory's ansible_user - the control
-# user that owns the stack (the same user common_syncthing_home, stack_user and
-# compose_owner all use). Do NOT use the ansible_user_dir / ansible_user_id
-# FACTS here: plays run with become:true, so those reflect the BECOME user
-# (root) and resolve to /root, not the stack owner's home. Set the SSH/stack
-# user once in hosts.yml and both values follow it:
-#   pi-automation  (ansible_user=automation) -> /home/automation/stack
-#   pi-test-automation (ansible_user=ansible) -> /home/ansible/stack
-# Host_vars may still override these to pin a dedicated stack account.
+# Derived from the inventory's ansible_user, the control user that owns the stack
+# (as common_syncthing_home, stack_user and compose_owner do). Do NOT use the
+# ansible_user_dir / ansible_user_id FACTS here: under become:true they reflect
+# root and resolve to /root. Host_vars may override to pin a dedicated account.
 automation_stack_home: "/home/{{ ansible_user }}/stack"
 automation_backup_owner: "{{ ansible_user }}"
 
 automation_specific_packages:
   - ncdu
   - tree
-  - sqlite3  # automation-syncthing-backup.sh snapshots vaultwarden's db with VACUUM INTO
+  - sqlite3  # the vaultwarden snapshot is taken with VACUUM INTO
 
-# Host-facing ports for the tailnet-reachable services (the central reverse
-# proxy fronts these). Watchtower's metrics API stays localhost-only.
 automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
 automation_calibre_port: 8083
 automation_watchtower_metrics_port: 8084
 
-# Subdomains used in service URLs and by the reverse proxy.
 automation_subdomain_vaultwarden: "vault"
 automation_subdomain_firefly: "firefly"
 
@@ -38,26 +27,21 @@ automation_subdomain_firefly: "firefly"
 # scoped to the tailnet/LAN, never '**'.
 # automation_trusted_proxies: REQUIRED in host_vars - no default.
 
-# Optional stack SSD, mirroring the dns role's optional-drive pattern. Stack
-# data (the bind mounts under automation_data_path), journald and Docker's
-# data-root ride a dedicated drive when one is present - auto-detected, or
-# already mounted at automation_data_path from a prior deploy - and with no
-# drive the stack simply runs on the SD card. Wiping a drive is opt-in per
-# host and DESTRUCTIVE:
+# Optional stack SSD, mirroring the dns role's optional-drive pattern: the stack
+# data path, journald and Docker's data-root ride a dedicated drive when one is
+# present (auto-detected, or already mounted from a prior deploy), and the stack
+# simply runs on the SD card when there is none.
 automation_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
 automation_ssd_filesystem: "ext4"
 automation_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 automation_ssd_journald_enabled: true
 
-# Watchtower update policy: opt-in per container via labels, nightly
-# sweep, notification through vault's ntfy topic. No default tag pins for
-# application images (floating latest is the documented exception); mariadb
-# is pinned and has no watchtower label (DB upgrades are manual).
+# Watchtower: opt-in per container via labels, nightly sweep. Application images
+# float on :latest; mariadb is pinned and unlabeled so DB upgrades stay manual.
 automation_watchtower_schedule: "0 2 * * *"
 
-# Secondary local backup replicated by Syncthing; primary/off-site is
-# restic (unchanged). automation_backup_dir / automation_backup_owner are
-# host_vars when enabled.
+# Secondary local backup replicated by Syncthing; primary/off-site is restic.
+# automation_backup_dir / automation_backup_owner are set in host_vars.
 automation_backup_enabled: false
 automation_backup_retention: 14
 automation_backup_schedule_hour: "03"
@@ -143,19 +127,15 @@ automation_compose_services:
         "http://firefly:8080/api/v1/cron/${FIREFLY_STATIC_CRON_TOKEN}"
         && sleep 60s
     service_depends_on:
-      # service_healthy (not just service_started): firefly's own image
-      # healthcheck only passes once migrations finish, and the cron
-      # endpoint 404s/500s until then - service_started let this sidecar
-      # hammer it and restart-loop through Firefly's whole boot.
+      # service_healthy, not service_started: the cron endpoint 500s until
+      # Firefly's migrations finish, so service_started restart-looped this sidecar.
       - service: firefly
         condition: service_healthy
     service_networks:
       - stack
-    # No watchtower.enable label: this sidecar has a service_healthy
-    # depends_on above, and watchtower's rolling-restart mode refuses to
-    # run at all (for every monitored container on the host, not just this
-    # one) if any managed container has a compose dependency. Pinned to
-    # alpine:3.20, so watchtower has nothing to update here anyway.
+    # No watchtower.enable label: watchtower refuses to run at all when any
+    # monitored container has a compose dependency, and this sidecar depends on
+    # firefly. Pinned to alpine:3.20, so there is nothing to update anyway.
     service_resources:
       limits:
         memory: 64M
@@ -165,12 +145,8 @@ automation_compose_services:
         cpus: "0.05"
 
   - service_name: mariadb
-    # Newest stable 11.8.x patch as of this pin. Matters for the migration
-    # onto pi-automation: the production data directory being copied in was
-    # last written by 11.8.5, and MariaDB only upgrades a data directory
-    # forward within the same major.minor series, never back - this must
-    # stay >= 11.8.5 (a same-series bump like this is a routine, safe
-    # forward upgrade; jumping to a new major series would not be).
+    # MariaDB upgrades a data directory forward within one major.minor series
+    # only. Production data was written by 11.8.5, so this must stay >= 11.8.5.
     service_image: "mariadb:11.8.9"
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
@@ -180,11 +156,9 @@ automation_compose_services:
       start_period: 30s
     service_environment:
       # The entrypoint refuses to initialize an EMPTY datadir without a root
-      # password policy, and exits 1 on every fresh deploy (teardown -> redeploy
-      # included). Nothing here uses root - the backup dumps via the firefly
-      # user, and root@localhost keeps unix_socket auth for `docker exec -it
-      # mariadb mariadb` maintenance - so generate a throwaway root password
-      # rather than adding an unused vault secret to the .env.
+      # password policy, and exits 1 on every fresh deploy. Nothing here uses
+      # root - backups dump as the firefly user, and root@localhost keeps
+      # unix_socket auth - so a throwaway password beats another vault secret.
       - "MARIADB_RANDOM_ROOT_PASSWORD=1"
       - "MARIADB_DATABASE=firefly"
       - "MARIADB_USER=firefly"
@@ -202,23 +176,14 @@ automation_compose_services:
         cpus: "0.25"
 
   - service_name: watchtower
-    # containrrr/watchtower is archived and pins the Docker client to API
-    # 1.25, which Docker Engine >= 26 refuses ("client version 1.25 is too
-    # old. Minimum supported API version is 1.40") - the container exit-1
-    # crash-loops. nickfedor/watchtower is the actively maintained fork
-    # (newest release v1.22.1, 2026-09; the multi-arch :latest tag tracks
-    # it exactly) that autonegotiates the Docker API version and keeps the
-    # WATCHTOWER_* environment variables and the
-    # com.centurylinklabs.watchtower.enable label. Floating :latest (not a
-    # version pin) is the documented exception for application images -
-    # and watchtower refreshes itself on its nightly sweep anyway.
+    # nickfedor/watchtower, not containrrr/watchtower: the latter pins the Docker
+    # client to API 1.25, which Engine >= 26 refuses (exit-1 crash-loop). This
+    # fork autonegotiates the API version and keeps the WATCHTOWER_* variables
+    # and the com.centurylinklabs.watchtower.enable label. App images float on
+    # :latest so this nightly sweep can move them; mariadb is pinned.
     service_image: "nickfedor/watchtower:latest"
-    # Fleet-wide userns-remap maps container root to a subordinate host uid,
-    # not real root - it can't open a bind-mounted /var/run/docker.sock
-    # (host-owned root:docker) at all ("permission denied ... trying to
-    # connect to the docker API"), breaking Watchtower's actual function
-    # entirely. userns_mode: host is the standard, accepted opt-out for
-    # docker-socket-consuming tools like this one.
+    # userns_mode: host - the fleet-wide userns-remap maps container root to a
+    # subordinate host uid, which cannot open the host-owned docker.sock.
     service_userns_mode: "host"
     service_ports:
       - host: "{{ automation_watchtower_metrics_port }}"
@@ -228,24 +193,19 @@ automation_compose_services:
       - "WATCHTOWER_LABEL_ENABLE=true"
       - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
       - "WATCHTOWER_CLEANUP=true"
-      # No WATCHTOWER_ROLLING_RESTART: it unconditionally refuses to run at
-      # all if any monitored container has a compose depends_on (firefly ->
-      # mariadb here) - it's a separate update strategy, not a variant of
-      # dependency-ordered updates. Watchtower's default update mode already
-      # topologically sorts by depends_on (WATCHTOWER_USE_COMPOSE_DEPENDS_ON,
-      # true by default) so mariadb still restarts before firefly.
+      # No WATCHTOWER_ROLLING_RESTART: it is a separate update strategy that
+      # refuses to run at all when any monitored container has a compose
+      # dependency. The default mode already sorts updates by depends_on, so
+      # mariadb still restarts before firefly.
       - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
       # WATCHTOWER_NOTIFICATION_TITLE is not a real Watchtower option (silently
       # ignored) - WATCHTOWER_NOTIFICATIONS_HOSTNAME is the documented flag for
       # this, and gives the plain hostname as the title with no extra text.
       - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
       - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-      # WATCHTOWER_HTTP_API_METRICS/_UPDATE (the old per-endpoint booleans)
-      # are deprecated and slated for removal in Watchtower v2 - this stack
-      # tracks :latest, so a future major bump would silently drop them.
-      # HTTP_API_ENDPOINTS is the current replacement. health is open (no
-      # token) for a plain liveness check; metrics/update require the token
-      # below either way.
+      # WATCHTOWER_HTTP_API_ENDPOINTS supersedes the deprecated per-endpoint
+      # booleans. health is open (no token) for a plain liveness check;
+      # metrics/update require the token below either way.
       - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics,update"
       - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
     service_volumes:

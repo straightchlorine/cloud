@@ -2,7 +2,6 @@
 # Bind-mount /var/log/journal onto a directory on the stack drive so journal
 # growth never wears the SD card. Callers set common_journald_path to a
 # directory on their already-mounted storage (must exist and be writable).
-# Mirrors the dns role's original inline steps, parameterized for reuse.
 
 - name: Create the journal directory on the drive
   ansible.builtin.file:

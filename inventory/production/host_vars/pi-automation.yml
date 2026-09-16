@@ -9,25 +9,18 @@ device_specs:
   memory: "2GB"
   architecture: "aarch64"
 
-# automation_data_path: SSD mount when a drive is present; Docker's data-root and
-# journald live under it too (all optional/auto-detected, mirroring DNS).
+# automation_data_path: SSD mount when a drive is present; journald and Docker's
+# data-root live under it too (both optional/auto-detected, mirroring DNS).
 automation_data_path: "/mnt/data"
-# automation_stack_home derives from ansible_user (=> /home/automation here).
-# Docker's data-root + journald ride the auto-detected SSD when one is present.
 
-# Subdomains served by the central reverse proxy (reached over the tailnet).
 automation_subdomain_vaultwarden: "vault"
 automation_subdomain_firefly: "firefly"
 
-# Firefly trusts only the reverse-proxy/tailnet CIDR(s) that send it requests -
-# never '*'. The reverse proxy (192.168.20.30) is on the local LAN, not the
-# tailnet - without it listed, Firefly ignores X-Forwarded-Proto from it
-# entirely and generates http:// URLs/CSP even when the client connected over
-# real HTTPS, since nginx's own upstream hop to Firefly is plain HTTP.
+# Only the CIDRs that actually send requests: the LAN reverse proxy (192.168.20.30)
+# and the tailnet. Without the proxy listed, Firefly ignores its X-Forwarded-Proto
+# and emits http:// URLs/CSP even though the client connected over real HTTPS.
 automation_trusted_proxies: "192.168.20.30/32,100.64.0.0/10"
 
-# Firewall: SSH + the two tailnet-reachable service ports. Watchtower metrics
-# API is bound to 127.0.0.1, so it needs no rule.
 common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 8081, comment: "Vaultwarden"}

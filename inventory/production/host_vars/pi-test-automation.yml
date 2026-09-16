@@ -1,6 +1,5 @@
 ---
 # Disposable clone of pi-automation.yml for testing the automation role.
-# Delete this file and the pi-test-automation entry in hosts.yml once done.
 
 device_type: rpi3b # adjust if your spare Pi is a different model
 
@@ -24,9 +23,8 @@ common_firewall_ports:
 # deploy (DESTRUCTIVE) - this is a disposable test box, so wiping is intended.
 automation_ssd_format: true
 automation_data_path: "/mnt/data"
-# automation_stack_home derives from ansible_user (inventory pins
-# ansible_user: ansible) => /home/ansible/stack, whose parent is the
-# ansible user's own home - so it always exists on this host.
+# automation_stack_home derives from the pinned ansible_user (ansible) =>
+# /home/ansible/stack, whose parent always exists on this host.
 
 # Start the compose stack as part of the deploy.
 common_start_stack: true
@@ -43,8 +41,7 @@ automation_backup_enabled: true
 automation_backup_dir: "/mnt/data/syncthing/backup"
 # automation_backup_owner derives from ansible_user (=> ansible on this host).
 
-# DESTRUCTIVE, host-scoped on purpose - NOT a role default.
-# Off-site restic backup disabled with a placeholder repo - never write into
+# Off-site restic backup stays off: the placeholder repo must never write into
 # pi-automation's real Hetzner backup.
 restic_enabled: false
 restic_repository: "sftp:hetzner-storage:unused-automation-test-placeholder"

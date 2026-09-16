@@ -3,9 +3,8 @@
   hosts: all
   tasks:
     - name: Assert the backup user was created unconditionally
-      # Regression guard: this was previously gated on
-      # common_backup_additional_groups being non-empty, which no host ever
-      # set - the user was silently never created anywhere.
+      # Regression guard: the backup user must exist regardless of how the
+      # caller configures groups - a gate here would silently skip creation.
       ansible.builtin.command: id backup
       register: common_backup_user_check
       changed_when: false

@@ -19,12 +19,10 @@ safe_read() {
     fi
 }
 
-# vcgencmd can exit 0 while printing an unsupported-feature message with no
-# '=' in it (e.g. a clock/voltage rail not present on this board/GPU driver) -
-# `cut`/`grep` on that still exits 0 with empty output, so a plain `|| 0`
-# fallback never catches it and an empty value ends up embedded in the
-# Prometheus line ("expected float as value"). Coalesce empty results here
-# instead of relying on exit codes.
+# vcgencmd can exit 0 while printing an unsupported-feature message (a clock or
+# voltage rail not present on this board), so `grep -oE` yields empty output and a
+# plain `|| 0` fallback never fires - leaving an empty value in the Prometheus line
+# ("expected float as value"). Coalesce empty results here, not exit codes.
 default_if_empty() {
     local value="$1"
     local fallback="${2:-0}"
