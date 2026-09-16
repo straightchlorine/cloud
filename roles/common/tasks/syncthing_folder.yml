@@ -1,0 +1,43 @@
+---
+# Registers one Syncthing-shared folder. Callers gate the include on their own
+# enabled flags (e.g. common_syncthing_enabled and <role>_backup_enabled) - this
+# task assumes Syncthing is meant to be installed and running already.
+#
+# Contract:
+#   common_syncthing_folder_id:    unique folder id (e.g. "automation-backup")
+#   common_syncthing_folder_path:  host path to share (the backup script's destination)
+#   common_syncthing_folder_label: optional, defaults to the id
+
+- name: Gather service facts for Syncthing folder registration
+  ansible.builtin.service_facts:
+
+- name: List existing Syncthing folders
+  # command: does not invoke a shell, so pipes/|| in a single command string
+  # are passed as literal arguments, not shell operators - list then check
+  # membership in Ansible instead of relying on shell syntax here.
+  ansible.builtin.command: syncthing cli config folders list
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: common_syncthing_existing_folders
+  changed_when: false
+  failed_when: false
+  when: >-
+    ansible_facts['services']['syncthing.service'] is defined
+    and ansible_facts['services']['syncthing.service']['state'] == 'running'
+
+- name: "Ensure Syncthing folder '{{ common_syncthing_folder_id }}' is configured"
+  # Best-effort registration: the backup script creates its destination itself,
+  # so a failure here must not fail the deploy. Runs as ansible_user - that's
+  # who the Syncthing service itself runs as (common/tasks/syncthing.yml), and
+  # who owns its config/certs under ~/.config/syncthing.
+  ansible.builtin.command: >-
+    syncthing cli config folders add --id "{{ common_syncthing_folder_id }}"
+    --label "{{ common_syncthing_folder_label | default(common_syncthing_folder_id) }}"
+    --path "{{ common_syncthing_folder_path }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: >-
+    ansible_facts['services']['syncthing.service'] is defined
+    and ansible_facts['services']['syncthing.service']['state'] == 'running'
+    and common_syncthing_folder_id not in (common_syncthing_existing_folders.stdout | default(''))
+  ignore_errors: true

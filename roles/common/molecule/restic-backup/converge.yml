@@ -31,24 +31,7 @@
     # not a molecule-only hack.
     backup_skip_init: true
   tasks:
-    - name: Run the real restic_backup.yml
-      block:
-        - name: Include the real restic_backup.yml
-          ansible.builtin.include_role:
-            name: common
-            tasks_from: restic_backup
-      rescue:
-        # The "Restart backup service" handler's own ExecStart runs the real backup
-        # script, which connects to the dummy hetzner-storage host - expected to
-        # fail here with no such server. Everything this scenario verifies is
-        # already on disk by now; fail loudly if the reason was something else.
-        - name: Fail loudly if this was not the expected restart failure
-          ansible.builtin.assert:
-            that:
-              - "'Restart backup service' in ansible_failed_task.name"
-              - "'control process exited' in (ansible_failed_result.msg | default(''))"
-            fail_msg: >-
-              restic_backup.yml failed for a reason other than the expected
-              network-dependent service restart:
-              {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg | default('') }}
-            success_msg: "[OK] failed exactly where expected (network-dependent service restart)"
+    - name: Include the real restic_backup.yml
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: restic_backup

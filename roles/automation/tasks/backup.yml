@@ -49,28 +49,14 @@
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
 
-- name: Gather service facts for the Syncthing folder registration
-  # The registration condition below reads ansible_facts.services - gather it
-  # here so the condition is safe even when nothing else ran service_facts.
-  ansible.builtin.service_facts:
-  when: automation_backup_enabled
-
-- name: Ensure Syncthing backup folder is configured
-  # Best-effort registration for Syncthing replication: the backup script
-  # creates its destination itself, so a failure here must not fail the deploy.
-  ansible.builtin.command: >-
-    syncthing cli config folders list | grep -q "backup" ||
-    syncthing cli config folders add --id "backup" --label "backup"
-    --path "{{ automation_backup_dir }}"
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: >-
-    common_syncthing_enabled | default(false) | bool
-    and automation_backup_enabled
-    and (ansible_facts['services']['syncthing.service'] is defined
-         and ansible_facts['services']['syncthing.service']['state'] == 'running')
-  changed_when: false
-  ignore_errors: true
+- name: Register the automation Syncthing backup folder
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_folder
+  vars:
+    common_syncthing_folder_id: "backup"
+    common_syncthing_folder_path: "{{ automation_backup_dir }}"
+  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
 
 - name: Configure unified restic backup  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:

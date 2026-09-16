@@ -76,6 +76,11 @@ ExecStartPre={{ pre_cmd }}
 ExecStartPost={{ post_cmd }}
 {% endfor %}
 {% endif %}
+{% if exec_stop_post is defined %}
+{% for post_cmd in exec_stop_post %}
+ExecStopPost={{ post_cmd }}
+{% endfor %}
+{% endif %}
 
 # Environment variables
 {% if service_environment is defined %}

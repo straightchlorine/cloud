@@ -210,7 +210,6 @@
   become: true
   notify:
     - Reload systemd
-    - Restart backup service
 
 - name: Create systemd backup timer
   ansible.builtin.template:

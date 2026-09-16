@@ -15,6 +15,14 @@
 
 - name: Bring up the compose stack
   block:
+    - name: Unpause any containers left paused by a concurrent backup run
+      ansible.builtin.command: "docker compose -f {{ compose_file_path }} unpause"
+      become: true
+      become_user: "{{ compose_owner }}"
+      changed_when: false
+      failed_when: false
+      when: start_stack | bool
+
     - name: Run docker compose up -d
       community.docker.docker_compose_v2:
         project_src: "{{ compose_file_path | dirname }}"

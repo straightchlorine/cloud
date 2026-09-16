@@ -148,6 +148,9 @@ automation_compose_services:
     # MariaDB upgrades a data directory forward within one major.minor series
     # only. Production data was written by 11.8.5, so this must stay >= 11.8.5.
     service_image: "mariadb:11.8.9"
+    # Longer than the 10s compose default: a SIGKILL mid-shutdown tears
+    # tc.log ("Bad magic header in tc log") and forces manual recovery.
+    service_stop_grace_period: "60s"
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
