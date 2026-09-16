@@ -154,7 +154,11 @@ automation_compose_services:
     # can't do the wipe since docker-entrypoint.sh's init/privilege-drop only
     # fires when it sees $1 == mariadbd.
     service_stop_grace_period: "60s"
+    # command: restated explicitly - unlike `docker run --entrypoint`, compose
+    # does not fall back to the image's default CMD when only entrypoint: is
+    # set, so without this the wrapper's "$@" is empty and mariadbd never runs.
     service_entrypoint: ["/usr/local/bin/mariadb-safe-entrypoint.sh"]
+    service_command: ["mariadbd"]
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
