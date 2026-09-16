@@ -77,6 +77,15 @@
     - "{{ common_backup_base_path }}/cache"
     - "{{ common_backup_base_path }}/keys"
 
+- name: Create restic temp pack directory
+  ansible.builtin.file:
+    path: "{{ common_backup_tmp_dir }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: '0750'
+  become: true
+
 - name: Create service-specific restic password file
   ansible.builtin.copy:
     content: "{{ restic_password }}"

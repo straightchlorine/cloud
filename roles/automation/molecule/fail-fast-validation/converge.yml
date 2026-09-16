@@ -32,6 +32,16 @@
         path: /home/automation
         state: directory
         mode: "0755"
+
+    - name: Create the non-root stack user the /root-guard case connects as
+      # Case 4 overrides ansible_user (the guard reads it directly); the
+      # podman connection then execs as that user, so it must exist in the
+      # container - otherwise every task after the override is UNREACHABLE.
+      ansible.builtin.user:
+        name: testuser
+        uid: 1000
+        shell: /bin/bash
+        create_home: true
   tasks:
     # Case 1: a required automation variable is missing.
     - name: "Case 1: validate.yml fails when automation_trusted_proxies is missing"
@@ -142,6 +152,10 @@
             ansible_user: testuser
             automation_trusted_proxies: "100.64.0.0/10"
             automation_stack_home: /root/stack
+            # The connection execs as 'testuser' for this include; validate.yml
+            # is read-only (facts, stat, fail), so it needs no become - and the
+            # unprivileged user cannot sudo in the test container anyway.
+            ansible_become: false
 
         - name: Fail the test - the /root guard should have refused
           ansible.builtin.fail:

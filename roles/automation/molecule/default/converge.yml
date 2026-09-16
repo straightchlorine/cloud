@@ -36,6 +36,16 @@
         state: directory
         mode: "0755"
 
+    - name: Publish fixture userns-remap facts
+      # docker.yml (deliberately excluded here) publishes these on a real
+      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
+      # the nested rootless-podman mapping (container uids 0-65536 only - the
+      # canonical dockremap base 165536 is outside it and chown fails with
+      # EINVAL).
+      ansible.builtin.set_fact:
+        common_dockremap_uid: "10000"
+        common_dockremap_gid: "10000"
+
   tasks:
     # main.yml's task files that are container-safe, in the same order the
     # role runs them. include_role tasks_from runs the real task file with

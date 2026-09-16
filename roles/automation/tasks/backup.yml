@@ -93,12 +93,6 @@
       # Docker's own layer storage: many GB of re-derivable state (re-pull the
       # image rather than restore it), and large enough to exhaust staging space.
       - "{{ automation_data_path }}/docker"
-    pre_backup_commands:
-      - >-
-        docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
-    post_backup_commands:
-      - >-
-        docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
     # A flag only: the connectivity test connects through the shared
     # hetzner-storage ssh_config alias, the same one restic itself uses.
     backup_ssh_config: true

@@ -43,6 +43,7 @@ prometheus_role: "automation"
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
 restic_password: "{{ vault_restic_automation_password }}"
+common_backup_tmp_dir: "{{ automation_data_path }}/backup-tmp"
 common_backup_directories:
   - "{{ automation_stack_home }}"
   - "{{ automation_data_path }}"

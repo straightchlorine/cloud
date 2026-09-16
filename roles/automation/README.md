@@ -132,22 +132,23 @@ minor-pinned and excluded from auto-update; bump them deliberately.
 
 ## Teardown & Re-test
 
-The role ships a repeatable teardown for disposable test hosts (e.g.
-`pi-test-automation`), so the same box can be re-deployed and re-tested
-end-to-end:
+The role ships a repeatable teardown for disposable test hosts, so the same
+box can be re-deployed and re-tested end-to-end. (The former spare-Pi staging
+box `pi-test-automation` was repurposed as `pi-test-media` for the media
+role — point these at whatever spare Pi stages automation next.)
 
 ```bash
 # 1. Tear down the automation role on the test host
 ansible-playbook -i inventory/production playbooks/automation-teardown.yml \
-  --limit pi-test-automation -e automation_teardown_confirm=true
+  --limit <your-test-host> -e automation_teardown_confirm=true
 
 # 2. Verify the box is clean enough for a fresh test
-./scripts/automation/validate-clean.sh pi-test-automation
+./scripts/automation/validate-clean.sh <your-test-host>
 
 # 3. Re-deploy, then verify the box is actually healthy end-to-end
 ansible-playbook -i inventory/production playbooks/site.yml \
-  --limit pi-test-automation --tags automation --ask-vault-pass
-./scripts/automation/validate-deploy.sh pi-test-automation
+  --limit <your-test-host> --tags automation --ask-vault-pass
+./scripts/automation/validate-deploy.sh <your-test-host>
 ```
 
 The teardown playbook refuses to run without

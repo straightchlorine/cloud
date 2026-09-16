@@ -64,6 +64,7 @@ common_backup_io_class: "idle"
 common_backup_schedule: "*-*-* 03:00:00"
 common_backup_randomized_delay: "1800s"
 common_backup_timeout: "2h"
+common_backup_tmp_dir: "{{ common_backup_base_path }}/tmp"
 
 # Port connectivity testing
 common_firewall_ports: []

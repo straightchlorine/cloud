@@ -1,7 +1,9 @@
   {{ service_name }}:
     image: {{ service_image }}
     container_name: {{ service_name }}
-    restart: {{ common_service_restart }}
+    # Per-service override (e.g. restart: "no" for on-demand tools-profile
+    # containers); defaults to the fleet-wide common_service_restart.
+    restart: {{ service_restart | default(common_service_restart) }}
 {% if service_ports is defined %}
     ports:
 {% for port in service_ports %}
