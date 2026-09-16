@@ -188,7 +188,7 @@ automation_compose_services:
     service_ports:
       - host: "{{ automation_watchtower_metrics_port }}"
         container: 8080
-        bind_ip: "127.0.0.1"
+        bind_ip: "{{ primary_ip }}"
     service_environment:
       - "WATCHTOWER_LABEL_ENABLE=true"
       - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
