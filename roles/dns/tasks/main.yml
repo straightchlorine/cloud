@@ -203,6 +203,8 @@
   ansible.builtin.command: >
     syncthing cli config folders list | grep -q "backup" || \
     syncthing cli config folders add --id "backup" --label "backup" --path "{{ dns_backup_dir }}"
+  become: true
+  become_user: "{{ ansible_user }}"
   when: >
     common_syncthing_enabled | default(false) | bool
     and dns_backup_enabled

@@ -9,8 +9,8 @@
       - automation_backup_owner is defined
     fail_msg: >-
       automation_backup_dir (the Syncthing-shared folder, on the SSD) and
-      automation_backup_owner (the user that runs Syncthing) must be set in
-      host_vars when automation_backup_enabled is true.
+      automation_backup_owner (the user that runs Syncthing) must be set
+      in host_vars when automation_backup_enabled is true.
     quiet: true
   when: automation_backup_enabled
 
@@ -59,8 +59,11 @@
   # Best-effort registration for Syncthing replication: the backup script
   # creates its destination itself, so a failure here must not fail the deploy.
   ansible.builtin.command: >-
-    syncthing cli config folders list | grep -q "automation-backup" || syncthing cli config folders add
-    --id "automation-backup" --label "automation-backup" --path "{{ automation_backup_dir }}"
+    syncthing cli config folders list | grep -q "backup" ||
+    syncthing cli config folders add --id "backup" --label "backup"
+    --path "{{ automation_backup_dir }}"
+  become: true
+  become_user: "{{ ansible_user }}"
   when: >-
     common_syncthing_enabled | default(false) | bool
     and automation_backup_enabled
