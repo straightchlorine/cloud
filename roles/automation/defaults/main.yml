@@ -151,6 +151,12 @@ automation_compose_services:
     # Longer than the 10s compose default: a SIGKILL mid-shutdown tears
     # tc.log ("Bad magic header in tc log") and forces manual recovery.
     service_stop_grace_period: "60s"
+    # tc.log only coordinates 2PC across multiple XA-capable engines - this
+    # instance runs InnoDB alone with no binlog, so it's never load-bearing
+    # here. InnoDB's own redo log handles crash recovery independently of it.
+    # Clearing it on every start means a torn tc.log from an unclean shutdown
+    # can no longer block the container from starting.
+    service_command: ["sh", "-c", "rm -f /var/lib/mysql/tc.log && exec mariadbd"]
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
