@@ -21,6 +21,9 @@
 {% endif %}
 {% endfor %}
 {% endif %}
+{% if service_entrypoint is defined %}
+    entrypoint: {{ service_entrypoint }}
+{% endif %}
 {% if service_command is defined %}
     command: {{ service_command }}
 {% endif %}

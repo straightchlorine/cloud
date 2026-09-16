@@ -72,6 +72,22 @@
     - "{{ automation_stack_home }}"
     - "{{ automation_stack_home }}/scripts"
 
+- name: Install the mariadb tc.log-safe entrypoint wrapper
+  # Bind-mounted into mariadb (service_volumes) as its entrypoint - clears
+  # tc.log before handing off to the image's own docker-entrypoint.sh so its
+  # init/privilege-drop logic still runs unmodified (see mariadb's
+  # service_stop_grace_period/service_entrypoint comment for why).
+  ansible.builtin.copy:
+    content: |
+      #!/bin/sh
+      set -eu
+      rm -f /var/lib/mysql/tc.log
+      exec docker-entrypoint.sh "$@"
+    dest: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
 - name: Render compose + .env and bring up the stack
   ansible.builtin.include_role:
     name: common

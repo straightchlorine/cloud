@@ -148,15 +148,13 @@ automation_compose_services:
     # MariaDB upgrades a data directory forward within one major.minor series
     # only. Production data was written by 11.8.5, so this must stay >= 11.8.5.
     service_image: "mariadb:11.8.9"
-    # Longer than the 10s compose default: a SIGKILL mid-shutdown tears
-    # tc.log ("Bad magic header in tc log") and forces manual recovery.
+    # Longer grace period + wipe tc.log (2PC coordination, unused - single
+    # engine, no binlog) on every start via a wrapper entrypoint: a SIGKILL
+    # mid-shutdown tears it ("Bad magic header in tc log"), and `command:`
+    # can't do the wipe since docker-entrypoint.sh's init/privilege-drop only
+    # fires when it sees $1 == mariadbd.
     service_stop_grace_period: "60s"
-    # tc.log only coordinates 2PC across multiple XA-capable engines - this
-    # instance runs InnoDB alone with no binlog, so it's never load-bearing
-    # here. InnoDB's own redo log handles crash recovery independently of it.
-    # Clearing it on every start means a torn tc.log from an unclean shutdown
-    # can no longer block the container from starting.
-    service_command: ["sh", "-c", "rm -f /var/lib/mysql/tc.log && exec mariadbd"]
+    service_entrypoint: ["/usr/local/bin/mariadb-safe-entrypoint.sh"]
     service_healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -174,6 +172,7 @@ automation_compose_services:
       - "MARIADB_PASSWORD=${FIREFLY_DB_PASSWORD}"
     service_volumes:
       - "{{ automation_data_path }}/mariadb:/var/lib/mysql"
+      - "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh:/usr/local/bin/mariadb-safe-entrypoint.sh:ro"
     service_networks:
       - stack
     service_resources:
