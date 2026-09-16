@@ -1,7 +1,8 @@
 ---
 # Woodpecker CI — Molecule tests
 # Depends on lint passing first — won't run if lint fails
-# Tests on Debian 13 (trixie) — all roles use apt
+# Per-role images: Debian 13 for the apt-based fleet roles, Rocky 9 for the
+# dnf-based honeypot.
 
 depends_on:
   - lint
@@ -16,17 +17,16 @@ when:
     - master
     - develop
     - feature/*
+    - refactor/*
 
 matrix:
-  # Only refactored roles run in CI: they are the reference implementations
-  # whose molecule scenarios exercise the real task files. The other roles
-  # still carry pre-refactor, fixture-based scenarios that would burn runner
-  # resources without catching regressions - re-add each role here as its
-  # tests are rebuilt on the dns pattern
-  # (docs/testing/molecule-standard.md).
+  # Only roles whose molecule scenarios exercise the real task files run in CI:
+  # fixture-based scenarios burn runner resources without catching regressions.
+  # Add a role here once its scenarios follow docs/testing/molecule-standard.md.
   ROLE:
     - dns
     - automation
+    - honeypot
 
 steps:
   - name: checkout
@@ -62,6 +62,15 @@ steps:
         CONF
       - pip install 'ansible-core>=2.17,<2.22' 'molecule>=26.8.0' 'molecule-plugins[podman]>=26.7.15' 'netaddr>=1.3.0'
       - ansible-galaxy collection install -r requirements.yml
-      - export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest"
+      # honeypot is the RedHat-family exception (Rocky 9), and its only real-task
+      # scenario is fail-fast-validation - there is no default scenario to run.
+      - |
+        if [ "${ROLE}" = "honeypot" ]; then
+          export MOLECULE_IMAGE="docker.io/geerlingguy/docker-rockylinux9-ansible:latest"
+          export MOLECULE_SCENARIO="fail-fast-validation"
+        else
+          export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest"
+          export MOLECULE_SCENARIO="default"
+        fi
       - cd roles/${ROLE}
-      - molecule test
+      - molecule test -s "${MOLECULE_SCENARIO}"
