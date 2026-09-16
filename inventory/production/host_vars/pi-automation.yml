@@ -27,6 +27,11 @@ common_firewall_ports:
   - {port: 8082, comment: "Firefly III"}
   - {port: 8083, comment: "Calibre-Web"}
 
+# Watchtower's HTTP API can trigger image updates, not just read metrics -
+# scoped to the monitoring host only, unlike the LAN-wide ports above.
+firewall_rules:
+  - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape - monitoring host only)"}
+
 # Stack-level
 common_start_stack: true
 
