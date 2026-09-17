@@ -13,7 +13,7 @@ automation_backup_owner: "{{ ansible_user }}"
 automation_specific_packages:
   - ncdu
   - tree
-  - sqlite3  # the vaultwarden snapshot is taken with VACUUM INTO
+  - sqlite3 # the vaultwarden snapshot is taken with VACUUM INTO
 
 automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
@@ -31,7 +31,7 @@ automation_subdomain_firefly: "firefly"
 # data path, journald and Docker's data-root ride a dedicated drive when one is
 # present (auto-detected, or already mounted from a prior deploy), and the stack
 # simply runs on the SD card when there is none.
-automation_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
+automation_ssd_format: false # DESTRUCTIVE if true - wipes the detected drive
 automation_ssd_filesystem: "ext4"
 automation_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 automation_ssd_journald_enabled: true
@@ -123,9 +123,7 @@ automation_compose_services:
       - "sh"
       - "-c"
       - >-
-        wget -q -O /dev/null
-        "http://firefly:8080/api/v1/cron/${FIREFLY_STATIC_CRON_TOKEN}"
-        && sleep 60s
+        wget -q -O /dev/null "http://firefly:8080/api/v1/cron/${FIREFLY_STATIC_CRON_TOKEN}" && sleep 60s
     service_depends_on:
       # service_healthy, not service_started: the cron endpoint 500s until
       # Firefly's migrations finish, so service_started restart-looped this sidecar.
@@ -157,10 +155,16 @@ automation_compose_services:
     # command: restated explicitly - unlike `docker run --entrypoint`, compose
     # does not fall back to the image's default CMD when only entrypoint: is
     # set, so without this the wrapper's "$@" is empty and mariadbd never runs.
-    service_entrypoint: ["/usr/local/bin/mariadb-safe-entrypoint.sh"]
-    service_command: ["mariadbd"]
+    service_entrypoint:
+      - "/usr/local/bin/mariadb-safe-entrypoint.sh"
+    service_command:
+      - "mariadbd"
     service_healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test:
+        - "CMD"
+        - "healthcheck.sh"
+        - "--connect"
+        - "--innodb_initialized"
       interval: 10s
       timeout: 5s
       retries: 10
@@ -263,11 +267,11 @@ automation_compose_services:
       - "com.centurylinklabs.watchtower.enable=true"
     service_resources:
       limits:
-        memory: 1G
-        cpus: "1.0"
+        memory: 1.5G
+        cpus: "1.5"
       reservations:
-        memory: 256M
-        cpus: "0.25"
+        memory: 512M
+        cpus: "0.5"
 
 # No named volumes - every service volume is a bind mount onto the data path
 # (automation_data_path; the SSD when the optional drive is present).
