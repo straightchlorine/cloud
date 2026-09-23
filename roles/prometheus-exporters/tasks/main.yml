@@ -2,94 +2,141 @@
 
 - name: Include validation tasks
   ansible.builtin.include_tasks: validate.yml
-  tags: [validation]
+  tags:
+    - validation
 
 - name: Include common setup tasks
-  # Also tagged with every host-specific play tag in site.yml: these create
-  # the user/dirs/packages that node_exporter.yml et al. depend on. apply: is
-  # required, not just tags: - plain tags on an include do NOT propagate into
-  # the tasks inside, so without apply: they'd be silently tag-filtered out on
-  # --tags-scoped runs ("Destination directory does not exist").
   ansible.builtin.include_tasks:
     file: common_setup.yml
     apply:
-      tags: [dns, automation, music, monitoring, backup]
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
   when: prometheus_exporters_enabled
-  tags: [dns, automation, music, monitoring, backup]
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
 
 - name: Gather network facts
-  # primary_ip is rendered into the exporters' systemd units. The fleet play's
-  # common role normally provides it, but that role is tagged [common, base] -
-  # on --tags-dns runs it never executes, primary_ip stays undefined, and the
-  # systemd template's 'is defined' guard then silently drops ExecStart (unit
-  # rejected). apply: is required here for the same tag-propagation reason as
-  # the includes above.
+  # primary_ip is rendered into the exporters' systemd units.
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
     apply:
-      tags: [dns, automation, music, monitoring, backup]
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
   when: prometheus_exporters_enabled
-  tags: [dns, automation, music, monitoring, backup]
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
 
 - name: Include Node Exporter setup
-  # node_exporter runs on every host but lives in the fleet-wide play, which
-  # only carries [monitoring, prometheus, exporters] by default - without the
-  # extra tags, --tags dns (or automation/music/backup) never reaches it. apply:
-  # propagates the tags into node_exporter.yml's tasks (see note above).
   ansible.builtin.include_tasks:
     file: node_exporter.yml
     apply:
-      tags: [dns, automation, music, monitoring, backup]
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_node_exporter_enabled
-  tags: [dns, automation, music, monitoring, backup]
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
 
 - name: Include Pi hardware metrics setup
-  # Same tag-propagation rationale as node_exporter above: without tags: the
-  # --tags-scoped deploy run (e.g. --tags dns) never reaches this include.
   ansible.builtin.include_tasks:
     file: pi_hardware_metrics.yml
     apply:
-      tags: [dns, automation, music, monitoring, backup]
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
   when:
     - prometheus_exporters_enabled
     - pi_hardware_metrics_enabled
     - ansible_architecture in ['armv7l', 'aarch64']
-  tags: [dns, automation, music, monitoring, backup]
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
 
 - name: Include Pi-hole Exporter setup
-  # Also tagged dns: lives in the fleet-wide play, which only carries
-  # [monitoring, prometheus, exporters] by default - without this,
-  # `--tags dns` never reaches the exporter. See node_exporter above for
-  # why apply: is required in addition to tags:.
   ansible.builtin.include_tasks:
     file: pihole_exporter.yml
     apply:
-      tags: [dns]
+      tags:
+        - dns
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_pihole_exporter_enabled
     - "'dns' in group_names"
-  tags: [dns]
+  tags:
+    - dns
 
 - name: Include Docker Exporter setup
-  ansible.builtin.include_tasks: docker_exporter.yml
+  ansible.builtin.include_tasks:
+    file: docker_exporter.yml
+    apply:
+      tags:
+        - automation
+        - music
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_docker_exporter_enabled
     - "'automation' in group_names or 'music' in group_names"
+  tags:
+    - automation
+    - music
 
 - name: Include firewall configuration
-  ansible.builtin.include_tasks: firewall.yml
+  ansible.builtin.include_tasks:
+    file: firewall.yml
+    apply:
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_ufw_enabled
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
 
 - name: Include health checks
   ansible.builtin.include_tasks: health_checks.yml
   when:
     - prometheus_exporters_enabled
     - prometheus_exporters_health_check_enabled
-  tags: [health_check, post_validation]
+  tags:
+    - health_check
+    - post_validation

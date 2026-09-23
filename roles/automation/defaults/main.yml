@@ -35,7 +35,7 @@ automation_ssd_journald_enabled: true
 
 # Watchtower: opt-in per container via labels, nightly sweep. Application images
 # float on :latest; mariadb is pinned.
-automation_watchtower_schedule: "0 2 * * *"
+automation_watchtower_schedule: "0 0 2 * * *"
 
 # Secondary local backup replicated by Syncthing; primary/off-site is restic.
 # automation_backup_dir / automation_backup_owner are set in host_vars.
@@ -207,7 +207,7 @@ automation_compose_services:
       - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
       - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
       - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-      - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics,update"
+      - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics"
       - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
     service_volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
