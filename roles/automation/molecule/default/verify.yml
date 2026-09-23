@@ -43,15 +43,12 @@
           - "'mariadb:11.8.9' in compose_file"
           - "'nickfedor/watchtower' in compose_file"
           - "'crocodilestick/calibre-web-automated' in compose_file"
-          # Ports bind to the discovered primary_ip; since the "watchtower was
-          # bound only to the localhost" fix the metrics port rides primary_ip
-          # too (firewall-scoped), so assert bind-ip-agnostically.
           - "':8081:80' in compose_file"
           - "':8082:8080' in compose_file"
           - "':8083:8083' in compose_file"
           - "':8084:8080' in compose_file"
           # Calibre's three separate binds (config/ingest/library) - CWA errors
-          # on nested binds, so each must be its own directory.
+          # on nested binds
           - "'/cwa-book-ingest' in compose_file"
           - "'/calibre-library' in compose_file"
           # Secrets only as ${VAR} placeholders - never inlined.
@@ -74,11 +71,9 @@
       ansible.builtin.assert:
         that:
           - >-
-            'volumes' not in compose_data
-            or (compose_data.volumes is mapping and compose_data.volumes | length > 0)
+            'volumes' not in compose_data or (compose_data.volumes is mapping and compose_data.volumes | length > 0)
           - >-
-            'networks' not in compose_data
-            or (compose_data.networks is mapping and compose_data.networks | length > 0)
+            'networks' not in compose_data or (compose_data.networks is mapping and compose_data.networks | length > 0)
           - "compose_data.services is mapping"
         fail_msg: >-
           rendered compose file is structurally invalid (empty volumes/networks,
@@ -98,8 +93,7 @@
           - "'WATCHTOWER_API_TOKEN=\"molecule-test-watchtower-token\"' in env_file"
           - automation_deployed_stats.results[0].stat.mode == '0600'
         fail_msg: >-
-          .env wrong (mode {{ automation_deployed_stats.results[0].stat.mode }}):
-          {{ env_file }}
+          .env wrong (mode {{ automation_deployed_stats.results[0].stat.mode }}): {{ env_file }}
         success_msg: "[OK] .env holds every vault secret and is 0600"
 
     - name: Assert the manage script and its symlink
@@ -124,6 +118,17 @@
           - "'molecule-test' not in backup_script"
           - "'VACUUM INTO' in backup_script"
           - "'mariadb-dump' in backup_script"
+          # Calibre: the config/library trees replicate live via Syncthing
+          # folder, so the script snapshots every *.db under config and the
+          # library catalog.
+          - "'databases' in backup_script"
+          - "'config/*.db' in backup_script"
+          - "'library/metadata.db' in backup_script"
+          - "'calibre' in backup_script"
+          # A paused stack (restic holds it) must not hang the DB dump.
+          - "'timeout 600' in backup_script"
+          # 02:30, ahead of the restic timer whose unit pauses the stack.
+          - "'30 2 * * *' in automation_root_crontab.stdout"
         fail_msg: "backup script/cron wrong: {{ backup_script }}"
         success_msg: "[OK] backup script (0755, no embedded secrets) + root cron present"
 

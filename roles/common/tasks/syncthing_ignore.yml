@@ -1,0 +1,36 @@
+---
+# Deploys a .stignore into a Syncthing folder's root. Patterns are folder-local
+# and the file is never synced to peers (per syncthing ignoring docs), so only
+# this side's view is shaped - which is exactly what a send-only export needs.
+#
+# Contract:
+#   common_syncthing_folder_path:   host path of the folder root
+#   common_syncthing_folder_ignore: list of .stignore lines (undefined = skip)
+#
+# The root is created/chowned to ansible_user here (Syncthing runs as that user
+# and must be able to write .stfolder and .stignore into it). For live-data
+# folders the data role deliberately leaves that root dockremap-owned, so this
+# task owns the hand-over; the children the containers mount are untouched.
+
+- name: Ensure the Syncthing folder root is writable for the ignore file
+  ansible.builtin.file:
+    path: "{{ common_syncthing_folder_path }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user_gid | default(ansible_user) }}"
+    mode: "0755"
+  become: true
+  when: common_syncthing_folder_ignore is defined
+
+- name: "Deploy the Syncthing folder ignore file for {{ common_syncthing_folder_path }}"
+  ansible.builtin.copy:
+    content: |
+      {% for line in common_syncthing_folder_ignore %}
+      {{ line }}
+      {% endfor %}
+    dest: "{{ common_syncthing_folder_path }}/.stignore"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user_gid | default(ansible_user) }}"
+    mode: "0644"
+  become: true
+  when: common_syncthing_folder_ignore is defined

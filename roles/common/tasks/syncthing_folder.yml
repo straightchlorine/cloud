@@ -7,14 +7,16 @@
 #   common_syncthing_folder_id:    unique folder id (e.g. "automation-backup")
 #   common_syncthing_folder_path:  host path to share (the backup script's destination)
 #   common_syncthing_folder_label: optional, defaults to the id
+#   common_syncthing_folder_type:  optional (sendonly / receiveonly / sendreceive).
+#                                  A backup folder belongs in sendonly: Syncthing's
+#                                  default is bidirectional, so a peer's delete
+#                                  or move would propagate back and wipe this
+#                                  host's copies.
 
 - name: Gather service facts for Syncthing folder registration
   ansible.builtin.service_facts:
 
 - name: List existing Syncthing folders
-  # command: does not invoke a shell, so pipes/|| in a single command string
-  # are passed as literal arguments, not shell operators - list then check
-  # membership in Ansible instead of relying on shell syntax here.
   ansible.builtin.command: syncthing cli config folders list
   become: true
   become_user: "{{ ansible_user }}"
@@ -25,11 +27,7 @@
     ansible_facts['services']['syncthing.service'] is defined
     and ansible_facts['services']['syncthing.service']['state'] == 'running'
 
-- name: "Ensure Syncthing folder '{{ common_syncthing_folder_id }}' is configured"
-  # Best-effort registration: the backup script creates its destination itself,
-  # so a failure here must not fail the deploy. Runs as ansible_user - that's
-  # who the Syncthing service itself runs as (common/tasks/syncthing.yml), and
-  # who owns its config/certs under ~/.config/syncthing.
+- name: "Ensure the Syncthing folder is configured: {{ common_syncthing_folder_id }}"
   ansible.builtin.command: >-
     syncthing cli config folders add --id "{{ common_syncthing_folder_id }}"
     --label "{{ common_syncthing_folder_label | default(common_syncthing_folder_id) }}"
@@ -40,4 +38,34 @@
     ansible_facts['services']['syncthing.service'] is defined
     and ansible_facts['services']['syncthing.service']['state'] == 'running'
     and common_syncthing_folder_id not in (common_syncthing_existing_folders.stdout | default(''))
+  # Best-effort registration: the backup script creates its destination itself,
+  # so a failure here must not fail the deploy.
+  ignore_errors: true
+
+- name: "Read the current Syncthing folder type: {{ common_syncthing_folder_id }}"
+  ansible.builtin.command: >-
+    syncthing cli config folders {{ common_syncthing_folder_id }} type get
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: common_syncthing_folder_current_type
+  changed_when: false
+  failed_when: false
+  when: >-
+    common_syncthing_folder_type is defined
+    and ansible_facts['services']['syncthing.service'] is defined
+    and ansible_facts['services']['syncthing.service']['state'] == 'running'
+
+- name: "Set the Syncthing folder type to {{ common_syncthing_folder_type }}"
+  ansible.builtin.command: >-
+    syncthing cli config folders {{ common_syncthing_folder_id }} type set {{ common_syncthing_folder_type }}
+  become: true
+  become_user: "{{ ansible_user }}"
+  when:
+    - common_syncthing_folder_type is defined
+    - common_syncthing_folder_current_type is defined
+    - ansible_facts['services']['syncthing.service'] is defined
+    - ansible_facts['services']['syncthing.service']['state'] == 'running'
+    - common_syncthing_folder_type not in common_syncthing_folder_current_type.stdout
+  # Same best-effort contract as registration: a wrong type is visible in the
+  # Syncthing UI, not worth failing the whole deploy over.
   ignore_errors: true

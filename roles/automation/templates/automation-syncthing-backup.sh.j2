@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Local stack -> Syncthing backup: consistent Firefly DB dump,
-# Vaultwarden sqlite snapshot + attachments, and the generated .env.
-# Primary/off-site backup is restic (see restic_backup.yml). Managed by Ansible.
+# Local stack -> Syncthing backup: consistent Firefly DB dump, Vaultwarden
+# sqlite snapshot + attachments, the generated .env, and point-in-time
+# snapshots of the Calibre (CWA) SQLite databases.
 #
-# The script embeds NO secrets: database credentials are read from the
-# container's own environment (compose project), and the generated .env file is
-# copied as-is because it is already the secret carrier.
+# Managed by Ansible.
 set -euo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-  echo "Usage: automation-syncthing-backup"
-  echo ""
-  echo "Back up the automation stack (mariadb dump, vaultwarden db + attachment,"
-  echo ".env) to the Syncthing-shared folder. Sends ntfy on success or failure."
-  exit 0
+    echo "Usage: automation-syncthing-backup"
+    echo ""
+    echo "Back up the automation stack (mariadb dump, vaultwarden db + attachments,"
+    echo ".env, calibre SQLite snapshots) to the Syncthing-shared folder. Sends ntfy"
+    echo "on success or failure."
+    exit 0
 fi
 
 trap 'ntfy-notify "$(hostname): automation stack backup failed" \
@@ -24,44 +23,54 @@ DEST="{{ automation_backup_dir }}"
 RETENTION="{{ automation_backup_retention }}"
 OWNER="{{ automation_backup_owner }}"
 VAULT_DATA="{{ automation_data_path }}/vaultwarden"
+CALIBRE_DATA="{{ automation_data_path }}/calibre"
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
+WORK="$(mktemp -d "$(dirname "$DEST")/.automation-backup.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+CALIBRE_DEST="$WORK/calibre-databases"
 
-mkdir -p "$DEST/$STAMP"
 cd "$STACK_HOME"
 
-# 1. Consistent MariaDB dump, piped from the container so the credentials only
-#    ever exist inside compose's network, never on the host.
-docker compose exec -T mariadb sh -c \
-  'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction -u "$MARIADB_USER" "$MARIADB_DATABASE"' \
-  | gzip > "$DEST/$STAMP/firefly.sql.gz"
+# 1. MariaDB dump (scheduled before restic timer, which pauses the compose).
+timeout 600 docker compose exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction -u "$MARIADB_USER" "$MARIADB_DATABASE"' \
+    | gzip > "$WORK/firefly.sql.gz"
 
-# 2. Vaultwarden database snapshot. VACUUM INTO takes a consistent copy of the
-#    live database even while the server is writing to it.
+# 2. Vaultwarden database snapshot.
 sqlite3 "$VAULT_DATA/db.sqlite3" \
-  "VACUUM INTO '$DEST/$STAMP/vaultwarden.db'"
+    "VACUUM INTO '$WORK/vaultwarden.db'"
 
 # 3. Vaultwarden attachments (may not exist if the folder was never populated).
 if [ -d "$VAULT_DATA/attachments" ]; then
-  tar -C "$VAULT_DATA" -czf "$DEST/$STAMP/attachments.tar.gz" attachments
+    tar -C "$VAULT_DATA" -czf "$WORK/attachments.tar.gz" attachments
 fi
 
 # 4. Generated .env (the stack's only secret carrier, restored for disaster
 #    recovery together with the compose file).
-cp "$STACK_HOME/.env" "$DEST/$STAMP/automation.env"
+cp "$STACK_HOME/.env" "$WORK/automation.env"
+
+# 5. Calibre database snapshots.
+if [ -d "$CALIBRE_DATA" ]; then
+    mkdir -p "$CALIBRE_DEST"
+    for db in "$CALIBRE_DATA"/config/*.db "$CALIBRE_DATA"/library/metadata.db; do
+        [ -f "$db" ] || continue
+        sqlite3 -cmd '.timeout 5000' "$db" \
+            ".backup '$CALIBRE_DEST/$(basename "$db")'"
+    done
+fi
+
+# Hand ownership to the Syncthing user before the snapshot becomes visible.
+chmod 0750 "$WORK"
+chown -R "$OWNER" "$WORK"
+mv "$WORK" "$DEST/$STAMP"
 
 # Retention: keep the newest $RETENTION snapshot directories; wipe the rest.
-# First-run safety: `ls` on an empty glob exits 2, and under `set -o pipefail`
-# that would fail the whole script - and fire the failure alert - even though
-# the snapshot above is complete. nullglob + printf never fail on no matches.
 shopt -s nullglob
 printf '%s\n' "$DEST"/20* "$DEST"/19* \
-  | sort -r \
-  | tail -n +"$((RETENTION + 1))" \
-  | xargs -r rm -rf
+    | sort -r \
+    | tail -n +"$((RETENTION + 1))" \
+    | xargs -r rm -rf
 shopt -u nullglob
 
-# Hand ownership to the Syncthing user so the mesh can replicate the files.
-chown -R "$OWNER" "$DEST"
-
 ntfy-notify "$(hostname): automation stack backup successful" \
-  "MariaDB dump, Vaultwarden snapshot and stack env replicated to $DEST." default white_check_mark
+    "MariaDB dump, Vaultwarden snapshot, stack env and the Calibre DB snapshots replicated to $DEST." default white_check_mark

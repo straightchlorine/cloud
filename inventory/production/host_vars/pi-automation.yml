@@ -30,7 +30,7 @@ common_firewall_ports:
 # Watchtower's HTTP API can trigger image updates, not just read metrics -
 # scoped to the monitoring host only, unlike the LAN-wide ports above.
 firewall_rules:
-  - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape - monitoring host only)"}
+  - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
 
 # Stack-level
 common_start_stack: true
@@ -47,8 +47,6 @@ common_backup_tmp_dir: "{{ automation_data_path }}/backup-tmp"
 common_backup_directories:
   - "{{ automation_stack_home }}"
   - "{{ automation_data_path }}"
-  - "/var/lib/docker"
-  - "/etc/docker"
 backup_exclude_patterns:
   - "*.tmp"
   - "*.log.1*"

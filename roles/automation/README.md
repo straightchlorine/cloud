@@ -32,9 +32,57 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
   ingestion (a deliberate follow-up, not wired by default)
 - Runs as the stack user (`PUID`/`PGID` resolved on-host from `ansible_user`),
   never root - root-owned library files break ingestion
+- **Synced live to other devices** via a dedicated send-only Syncthing folder on
+  `/mnt/data/calibre` (id `calibre`): books, covers, metadata sidecars and the
+  non-database config reach the peer within seconds of ingest, with no second
+  copy on this host. A deployed `.stignore` keeps the rest out of the mesh:
+  `ingest/`, `thumbnails/`, `processed_books/`, `log_archive/` and logs
+  (derived/instance-local), the runtime ingest state files (recreated on
+  start), and every SQLite database — a `.db` is only valid alongside its
+  exact `-wal`, and a file sync ships the two independently.
+- **Snapshotted by the Syncthing backup job**: every `config/*.db` plus
+  `library/metadata.db` (WAL-mode, written live) is copied with an online
+  `sqlite3 .backup` into each dated snapshot's `calibre-databases/`
+  (`<automation_backup_dir>/<stamp>/calibre-databases/`, same 14-run
+  retention as the rest) — this is the *only* place the databases leave
+  the host. A full restore onto
+  another device is: copy the peer's `calibre/config` -> `/config` and
+  `calibre/library` -> `/calibre-library`, overlay a snapshot's
+  `calibre-databases/*` onto the matching live files, then re-apply the role-managed
+  values (PUID/PGID, admin password, ports). Thumbnails and the runtime ingest
+  state are rebuilt on start; the processed-books audit archive starts fresh
+  (its history stays recoverable from restic). Never run CWA
+  against the share in two places at once - the peer folder should be
+  Receive Only, or CWA should run against a copy.
 - Ships with `admin`/`admin123` - change the admin password at first login
 - Optional `vault_hardcover_token` in vault enables Hardcover as a metadata
   provider (picked up automatically; empty until set)
+
+### Known upstream CWA issues
+
+Noise you will see in this container's logs on a healthy install. Verified
+against v4.0.6 (image == current stable) and the upstream sources; none of them
+follow from this role's compose config, so the role carries no workaround:
+
+- `no such table: book_format_checksums` - `cwa-init` only creates schema in
+  `/config` and nothing creates this table in `metadata.db`; upstream tracks it
+  under the missing `foreign_keys` pragma
+  (crocodilestick/Calibre-Web-Automated#1523). Cost: KOReader/Kobo checksum
+  *history* is not recorded.
+- `'CWA_DB' object has no attribute 'close'` on book deletion
+  (`cps.editbooks:1398`) - the method does not exist upstream, so the duplicate
+  cache is not invalidated until restart.
+- `Author '<sort>' not found to display name in right order` (`cps.db:1103`) -
+  `order_authors()` splits `author_sort` on `&`; a book whose author is stored
+  as one `Nanigashi Shima and raemz`-style name is looked up whole and misses.
+  Library data, not config; the page renders regardless.
+- `scholarly` / `amazonjp` provider warnings - optional metadata providers with
+  no browser (Scholar needs Chrome/Firefox) or a timeout-prone endpoint. Turn
+  the providers off in CWA's metadata settings if the noise is unwanted.
+- `calibredb ... Another calibre program such as calibre-server ... is running`,
+  followed by `Failed to add format` - CWA's ingest processor racing its own web
+  app for the library lock. Transient (the format lands on retry) and the ingest
+  service logs `Successfully processed` either way.
 
 ## Deployment
 
@@ -94,11 +142,12 @@ automation_data_path: "/mnt/data"   # stack data path (on the optional SSD when 
 # Only set automation_ssd_format: true for a blank disk (DESTRUCTIVE).
 automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
 
-# Secondary local backup (mariadb dump + vaultwarden snapshot) into Syncthing
+# Secondary local backup: Syncthing replicates automation_backup_dir. The
+# live Calibre tree rides its own send-only folder (see the role's README) -
+# enabled with these same two flags, nothing extra to set.
+common_syncthing_enabled: true
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/data/syncthing/backup"
-# automation_backup_owner derives from ansible_user (the stack/Syncthing user).
-common_syncthing_enabled: true
 
 # Off-site restic backup (primary)
 restic_enabled: true

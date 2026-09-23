@@ -74,6 +74,21 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 
+  # Automation Stack Services - Watchtower
+  - job_name: 'watchtower'
+    metrics_path: '/v1/metrics'
+    bearer_token: '{{ vault_watchtower_api_token }}'
+    static_configs:
+{% for host in groups['all'] %}
+{% if hostvars[host]['prometheus_role'] == 'automation' %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:8084']
+        labels:
+          instance: '{{ host }}'
+          service: 'watchtower'
+          role: 'automation'
+{% endif %}
+{% endfor %}
+
   # Docker containers (cAdvisor)
   - job_name: 'cadvisor'
     static_configs:

@@ -9,8 +9,8 @@
       - automation_backup_owner is defined
     fail_msg: >-
       automation_backup_dir (the Syncthing-shared folder, on the SSD) and
-      automation_backup_owner (the user that runs Syncthing) must be set
-      in host_vars when automation_backup_enabled is true.
+      automation_backup_owner (the user that runs Syncthing) must be set in
+      host_vars when automation_backup_enabled is true.
     quiet: true
   when: automation_backup_enabled
 
@@ -49,6 +49,25 @@
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
 
+- name: Deploy the Calibre Syncthing ignore rules (optional)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_ignore
+  vars:
+    common_syncthing_folder_path: "{{ automation_data_path }}/calibre"
+    common_syncthing_folder_ignore: "{{ automation_syncthing_calibre_ignore }}"
+  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
+
+- name: Share the live Calibre tree over Syncthing (optional)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_folder
+  vars:
+    common_syncthing_folder_id: "calibre"
+    common_syncthing_folder_path: "{{ automation_data_path }}/calibre"
+    common_syncthing_folder_type: "sendonly"
+  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
+
 - name: Register the automation Syncthing backup folder
   ansible.builtin.include_role:
     name: common
@@ -56,9 +75,10 @@
   vars:
     common_syncthing_folder_id: "backup"
     common_syncthing_folder_path: "{{ automation_backup_dir }}"
+    common_syncthing_folder_type: "sendonly"
   when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
 
-- name: Configure unified restic backup  # noqa: var-naming[no-role-prefix]
+- name: Configure unified restic backup # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: common
     tasks_from: restic_backup
@@ -67,9 +87,6 @@
     common_backup_paths:
       - "{{ automation_stack_home }}"
       - "{{ automation_data_path }}"
-    # Match the retention documented for this host (docs/backup/index.md):
-    # without it, cleanup_old_snapshots() falls back to the script's hardcoded
-    # 7 daily / 4 weekly / 6 monthly / 1 yearly.
     retention_policy:
       daily: 14
       weekly: 8
@@ -79,16 +96,9 @@
       - "*.log"
       - "tmp/*"
       - "cache/*"
-      # Docker's own layer storage: many GB of re-derivable state (re-pull the
-      # image rather than restore it), and large enough to exhaust staging space.
       - "{{ automation_data_path }}/docker"
-    # A flag only: the connectivity test connects through the shared
-    # hetzner-storage ssh_config alias, the same one restic itself uses.
+      - "{{ automation_backup_dir }}"
     backup_ssh_config: true
-    # '+' runs this one line as root regardless of the unit's User=backup, so
-    # it can runuser into automation without granting backup itself any
-    # Docker access. ExecStopPost (not ExecStart*Post) runs even if the
-    # backup itself failed, so the stack is never left paused.
     common_backup_exec_start_pre:
       - >-
         +/usr/sbin/runuser -u {{ ansible_user }} --
@@ -98,4 +108,5 @@
         +/usr/sbin/runuser -u {{ ansible_user }} --
         /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
   when: restic_enabled
-  tags: [backup]
+  tags:
+    - backup

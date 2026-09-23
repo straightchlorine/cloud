@@ -25,18 +25,13 @@
     owner: "{{ compose_file_owner }}"
     group: "{{ compose_file_group }}"
     mode: "0644"
-  # Only seed a fresh file: rewriting the header on every run would wipe the
-  # per-service blocks below and force them all to re-add (an idempotence
-  # failure). Managed regions are the blockinfile markers, not the header.
   when: not common_compose_existing.stat.exists
 
 - name: Add each service to compose file
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
     marker: "# {mark} {{ item.service_name }}"
-    block: |2
-
-      {{ lookup('template', 'docker-service.yml.j2', template_vars=item) | indent(0, first=False) }}
+    block: "{{ '\n' + lookup('template', 'docker-service.yml.j2', template_vars=item).rstrip() + '\n\n' }}"
     insertafter: "^services:"
   loop: "{{ compose_services }}"
   loop_control:
@@ -46,7 +41,7 @@
   ansible.builtin.blockinfile:
     path: "{{ compose_file_path }}"
     marker: "# {mark} networks"
-    block: |2
+    block: |+
 
       networks:
       {% for network in compose_networks %}
@@ -60,6 +55,7 @@
           driver: {{ network.driver }}
       {% endif %}
       {% endfor %}
+
     insertafter: EOF
   when: compose_networks is defined and compose_networks | length > 0
 
@@ -80,16 +76,11 @@
       {% endfor %}
       {% endif %}
       {% endfor %}
+
     insertafter: EOF
-  # An empty (or undefined) volumes list must NOT emit a bare `volumes:` key:
-  # compose rejects an empty mapping ("volumes must be a mapping"). Bind-mount
-  # only stacks (automation) define compose_volumes as [] - omit the section.
   when: compose_volumes is defined and compose_volumes | length > 0
 
 - name: Generate the environment file from vault secrets
-  # Compose auto-interpolates a `.env` file placed next to the compose file, so
-  # `${VAR}` inside any compose value resolves from here at runtime. 0600 so the
-  # secret contents are readable only by the stack user (compose_file_owner).
   ansible.builtin.template:
     src: compose-env.j2
     dest: "{{ compose_file_path | dirname }}/.env"
