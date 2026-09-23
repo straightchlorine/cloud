@@ -97,21 +97,6 @@
   tags:
     - dns
 
-- name: Include Docker Exporter setup
-  ansible.builtin.include_tasks:
-    file: docker_exporter.yml
-    apply:
-      tags:
-        - automation
-        - music
-  when:
-    - prometheus_exporters_enabled
-    - prometheus_exporters_docker_exporter_enabled
-    - "'automation' in group_names or 'music' in group_names"
-  tags:
-    - automation
-    - music
-
 - name: Include firewall configuration
   ansible.builtin.include_tasks:
     file: firewall.yml

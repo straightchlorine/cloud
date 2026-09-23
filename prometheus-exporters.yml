@@ -49,9 +49,6 @@
           {% if pihole_exporter_enabled %}
           - Pi-hole Exporter: http://{{ ansible_default_ipv4.address }}:{{ pihole_exporter_port }}/metrics
           {% endif %}
-          {% if docker_exporter_enabled %}
-          - Docker Metrics: http://{{ ansible_default_ipv4.address }}:9323/metrics
-          {% endif %}
           {% if pi_hardware_metrics_enabled %}
           - Pi Hardware Metrics: {{ node_exporter_textfile_dir }}/pi_hardware.prom
           {% endif %}

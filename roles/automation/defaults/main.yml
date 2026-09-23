@@ -17,6 +17,7 @@ automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
 automation_calibre_port: 8083
 automation_watchtower_metrics_port: 8084
+automation_cadvisor_port: 8085
 
 automation_subdomain_vaultwarden: "vault"
 automation_subdomain_firefly: "firefly"
@@ -220,6 +221,39 @@ automation_compose_services:
       reservations:
         memory: 128M
         cpus: "0.1"
+
+  - service_name: cadvisor
+    # Patch releases only; bump the minor by hand.
+    service_image: "ghcr.io/google/cadvisor:0.60"
+    # docker.sock access, as for watchtower.
+    service_userns_mode: "host"
+    service_command:
+      - "--housekeeping_interval=10s"
+      - "--docker_only=true"
+      - "--store_container_labels=false"
+      - "--disable_metrics=advtcp,udp,sched,process,hugetlb,referenced_memory,cpu_topology,resctrl,tcp"
+    service_ports:
+      - host: "{{ automation_cadvisor_port }}"
+        container: 8080
+        bind_ip: "{{ primary_ip }}"
+    # data-root fact exists only with the SSD; else Docker's default path.
+    service_volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:ro"
+      - "/sys:/sys:ro"
+      - "{{ common_docker_data_root | default('/var/lib/docker') }}:/var/lib/docker:ro"
+      - "/dev/disk:/dev/disk:ro"
+    service_networks:
+      - stack
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 192M
+        cpus: "0.3"
+      reservations:
+        memory: 64M
+        cpus: "0.05"
 
   - service_name: calibre-web-automated
     service_image: "crocodilestick/calibre-web-automated:latest"

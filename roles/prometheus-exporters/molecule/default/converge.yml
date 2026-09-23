@@ -13,7 +13,6 @@
     prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
     pi_hardware_metrics_enabled: false
     prometheus_exporters_pihole_exporter_enabled: false
-    prometheus_exporters_docker_exporter_enabled: false
     prometheus_exporters_pihole_exporter_port: 9617
     # pihole_exporter_teardown.yml's ufw delete must mirror firewall.yml's
     # src-restricted rule add.

@@ -31,12 +31,12 @@ common_firewall_ports:
 # scoped to the monitoring host only, unlike the LAN-wide ports above.
 firewall_rules:
   - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
+  - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
 
 # Stack-level
 common_start_stack: true
 
-# Prometheus exporters (docker metrics for the stack)
-prometheus_exporters_docker_exporter_enabled: true
+# Prometheus labels
 prometheus_role: "automation"
 
 # Primary/off-site backup - restic.

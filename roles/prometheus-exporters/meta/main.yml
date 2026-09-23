@@ -25,7 +25,6 @@ galaxy_info:
     - exporters
     - raspberry-pi
     - pi-hole
-    - docker
     - hardware
 
 dependencies:

@@ -42,9 +42,6 @@
     - name: "Pi-hole Exporter"
       port: "{{ prometheus_exporters_pihole_exporter_port }}"
       enabled: "{{ prometheus_exporters_pihole_exporter_enabled }}"
-    - name: "Docker Exporter"
-      port: "{{ prometheus_exporters_docker_exporter_port }}"
-      enabled: "{{ prometheus_exporters_docker_exporter_enabled }}"
   loop_control:
     label: "{{ item.name }}"
   tags: [validation]
@@ -119,22 +116,6 @@
     - prometheus_exporters_pihole_exporter_target_host is not defined
   tags: [validation]
 
-- name: Validate Docker Exporter dependencies
-  when:
-    - prometheus_exporters_docker_exporter_enabled
-    - "'automation' in group_names or 'music' in group_names"
-  tags: [validation]
-  block:
-    - name: Check Docker service status
-      ansible.builtin.systemd:
-        name: docker
-      register: prom_exp_docker_service_status
-
-    - name: Fail if Docker required but not available
-      ansible.builtin.fail:
-        msg: "Docker Exporter enabled but Docker service is not active"
-      when: prom_exp_docker_service_status.status.ActiveState != "active"
-
 - name: Validate filesystem permissions
   ansible.builtin.file:
     path: "{{ item }}"
@@ -166,8 +147,7 @@
       - Architecture: {{ ansible_architecture }} → {{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
       - Enabled exporters: >-
           {{ [('node' if prometheus_exporters_node_exporter_enabled else ''),
-          ('pihole' if prometheus_exporters_pihole_exporter_enabled else ''),
-          ('docker' if prometheus_exporters_docker_exporter_enabled else '')] | select | join(', ') }}
+          ('pihole' if prometheus_exporters_pihole_exporter_enabled else '')] | select | join(', ') }}
       - Base directory: {{ prometheus_exporters_base_dir }}
       - Port validation: Completed
       - Dependencies: Verified

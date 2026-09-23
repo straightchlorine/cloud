@@ -17,10 +17,11 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
   dump via the `firefly` user, and maintenance uses the image's built-in
   `unix_socket` auth: `docker exec -it mariadb mariadb`
 - **firefly-cron** (compose-internal): drives Firefly's recurring transactions
-- **Watchtower** (`127.0.0.1:8084`): nightly container updates, label-gated
+- **Watchtower** (`:8084` on `primary_ip`, monitoring host only): nightly container updates, label-gated
+- **cAdvisor** (`:8085` on `primary_ip`, monitoring host only): per-container CPU/memory/IO metrics
 - **Calibre-Web Automated** (`:8083` on `primary_ip`): ebook library - ingest,
   auto-convert, EPUB-fix, read in-browser and send to e-readers
-- **Monitoring**: Node/Docker exporters, deployed by the `prometheus-exporters`
+- **Monitoring**: node_exporter + hardware textfile metrics, deployed by the `prometheus-exporters`
   role (not by this one)
 
 ### Calibre-Web notes

@@ -32,20 +32,3 @@
     enabled: true
   become: true
   when: pi_hardware_metrics_enabled
-
-- name: Restart docker-metrics
-  ansible.builtin.systemd:
-    name: docker-metrics.service
-    state: restarted
-  become: true
-  when: prometheus_exporters_docker_exporter_enabled
-
-- name: Restart docker-metrics-timer
-  ansible.builtin.systemd:
-    name: docker-metrics.timer
-    state: restarted
-    enabled: true
-  become: true
-  when: prometheus_exporters_docker_exporter_enabled
-
-# docker restart handler lives in common (templates/docker handlers not loaded here)

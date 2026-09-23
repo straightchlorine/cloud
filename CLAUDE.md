@@ -99,7 +99,7 @@ monitoring_data_path: "/var/lib/monitoring"
 
 # Feature flags: {role}_{feature}_enabled
 dns_auto_updates_enabled: true
-prometheus_exporters_docker_exporter_enabled: true
+prometheus_exporters_node_exporter_enabled: true
 
 # Subdomains: {role}_subdomain_{service}
 automation_subdomain_traefik: "traefik"
@@ -319,7 +319,6 @@ device_type: "rpi4b"
 
 # Enable exporters as needed
 prometheus_exporters_node_exporter_enabled: true
-prometheus_exporters_docker_exporter_enabled: true   # If running Docker
 pi_hardware_metrics_enabled: false                   # Only for ARM hosts
 prometheus_exporters_pihole_exporter_enabled: false  # Only for DNS hosts
 ```

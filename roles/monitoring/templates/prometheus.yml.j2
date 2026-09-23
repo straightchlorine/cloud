@@ -93,8 +93,8 @@ scrape_configs:
   - job_name: 'cadvisor'
     static_configs:
 {% for host in groups['all'] %}
-{% if hostvars[host]['prometheus_role'] in ['automation', 'music'] %}
-      - targets: ['{{ hostvars[host]['primary_ip'] }}:8081']
+{% if hostvars[host]['prometheus_role'] == 'automation' %}
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:8085']
         labels:
           instance: '{{ host }}'
           service: 'cadvisor'
