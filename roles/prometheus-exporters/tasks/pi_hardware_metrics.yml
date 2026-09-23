@@ -22,8 +22,7 @@
     service_after: ["network.target"]
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
-    # video group: vcgencmd talks to /dev/vchiq (root:video 0660):
-    # prints nothing without it, so GPU temp/clocks/throttle read 0.
+    # vcgencmd needs /dev/vchiq (root:video 0660).
     service_group: "video"
     exec_start: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
     remain_after_exit: "false"
@@ -68,22 +67,9 @@
     path: "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
   register: prom_exp_pi_metrics_file
 
-- name: Display Pi hardware metrics sample
-  ansible.builtin.shell: head -n 5 "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
-  register: prom_exp_pi_metrics_sample
-  changed_when: false
-  when: prom_exp_pi_metrics_file.stat.exists
-
 - name: Pi hardware metrics setup completed
   ansible.builtin.debug:
-    msg: |-
-      [OK] Pi Hardware Metrics Setup Complete:
-      - Metrics script: {{ prometheus_exporters_pi_hardware_metrics_script }}
-      - Collection interval: {{ prometheus_exporters_pi_hardware_metrics_interval }} seconds
-      - Textfile output: {{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom
-      - Service: pi-hardware-metrics.timer
-      {% if prom_exp_pi_metrics_sample.stdout is defined %}
-
-      Sample metrics:
-      {{ prom_exp_pi_metrics_sample.stdout }}
-      {% endif %}
+    msg: >-
+      [OK] {{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom
+      {{ 'written' if prom_exp_pi_metrics_file.stat.exists else 'MISSING' }},
+      refreshed every {{ prometheus_exporters_pi_hardware_metrics_interval }}s

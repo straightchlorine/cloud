@@ -1,5 +1,6 @@
 #!/bin/bash
-# Raspberry Pi hardware metrics for the node exporter textfile collector.
+# Hardware metrics node_exporter lacks (temperature, CPU frequency, memory,
+# disk and load come from its own collectors).
 set -euo pipefail
 
 TEXTFILE_DIR="{{ prometheus_exporters_node_exporter_textfile_dir }}"
@@ -8,137 +9,54 @@ TEMP_FILE="$TEXTFILE_DIR/pi_hardware.prom.$$"
 
 mkdir -p "$TEXTFILE_DIR"
 
-# Read a value file, falling back to 0 when unreadable.
-safe_read() {
-    local file="$1"
-    local fallback="${2:-0}"
-    if [ -r "$file" ]; then
-        cat "$file" 2>/dev/null || echo "$fallback"
-    else
-        echo "$fallback"
-    fi
+# Value from "key=value<unit>", or nothing on error. Missing reads omit the
+# series: a fake 0 would look healthy.
+vc() {
+    vcgencmd "$@" 2>/dev/null | sed -nE '/error/d; s/.*=(0x[0-9a-fA-F]+|[0-9.]+).*/\1/p' || true
 }
 
-# vcgencmd can exit 0 while printing an unsupported-feature message (a clock or
-# voltage rail not present on this board), so `grep -oE` yields empty output and a
-# plain `|| 0` fallback never fires - leaving an empty value in the Prometheus line
-# ("expected float as value"). Coalesce empty results here, not exit codes.
-default_if_empty() {
-    local value="$1"
-    local fallback="${2:-0}"
-    if [ -z "$value" ]; then
-        echo "$fallback"
-    else
-        echo "$value"
-    fi
-}
-
-# Collect metrics
 {
-    echo "# HELP pi_temperature_celsius Raspberry Pi CPU temperature in Celsius"
-    echo "# TYPE pi_temperature_celsius gauge"
-    CPU_TEMP=$(safe_read "/sys/class/thermal/thermal_zone0/temp")
-    echo "pi_temperature_celsius $(echo "scale=3; $CPU_TEMP / 1000" | bc)"
-
-    echo "# HELP pi_cpu_frequency_hz Raspberry Pi CPU frequency in Hz"
-    echo "# TYPE pi_cpu_frequency_hz gauge"
-    CPU_FREQ=$(safe_read "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-    echo "pi_cpu_frequency_hz $(echo "$CPU_FREQ * 1000" | bc)"
-
+    THROTTLED=""
     if command -v vcgencmd >/dev/null 2>&1; then
-        echo "# HELP pi_gpu_temperature_celsius Raspberry Pi GPU temperature in Celsius"
-        echo "# TYPE pi_gpu_temperature_celsius gauge"
-        GPU_TEMP=$(default_if_empty "$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9.]+')" "0")
-        echo "pi_gpu_temperature_celsius $GPU_TEMP"
-
-        echo "# HELP pi_voltage_volts Raspberry Pi voltage readings"
-        echo "# TYPE pi_voltage_volts gauge"
-        CORE_VOLT=$(default_if_empty "$(vcgencmd measure_volts core 2>/dev/null | grep -oE '[0-9.]+')" "0")
-        echo "pi_voltage_volts{component=\"core\"} $CORE_VOLT"
-
-        SDRAM_C_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_c 2>/dev/null | grep -oE '[0-9.]+')" "0")
-        echo "pi_voltage_volts{component=\"sdram_c\"} $SDRAM_C_VOLT"
-
-        SDRAM_I_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_i 2>/dev/null | grep -oE '[0-9.]+')" "0")
-        echo "pi_voltage_volts{component=\"sdram_i\"} $SDRAM_I_VOLT"
-
-        SDRAM_P_VOLT=$(default_if_empty "$(vcgencmd measure_volts sdram_p 2>/dev/null | grep -oE '[0-9.]+')" "0")
-        echo "pi_voltage_volts{component=\"sdram_p\"} $SDRAM_P_VOLT"
-
-        echo "# HELP pi_clock_frequency_hz Raspberry Pi clock frequencies"
-        echo "# TYPE pi_clock_frequency_hz gauge"
-
-        ARM_FREQ=$(default_if_empty "$(vcgencmd measure_clock arm 2>/dev/null | grep -oE '[0-9]+$')" "0")
-        echo "pi_clock_frequency_hz{clock=\"arm\"} $ARM_FREQ"
-
-        CORE_FREQ=$(default_if_empty "$(vcgencmd measure_clock core 2>/dev/null | grep -oE '[0-9]+$')" "0")
-        echo "pi_clock_frequency_hz{clock=\"core\"} $CORE_FREQ"
-
-        GPU_FREQ=$(default_if_empty "$(vcgencmd measure_clock v3d 2>/dev/null | grep -oE '[0-9]+$')" "0")
-        echo "pi_clock_frequency_hz{clock=\"gpu\"} $GPU_FREQ"
-
-        echo "# HELP pi_memory_split_bytes Memory split between CPU and GPU"
-        echo "# TYPE pi_memory_split_bytes gauge"
-        GPU_MEM=$(default_if_empty "$(vcgencmd get_mem gpu 2>/dev/null | grep -oE '[0-9]+')" "0")
-        echo "pi_memory_split_bytes{component=\"gpu\"} $(echo "$GPU_MEM * 1024 * 1024" | bc)"
-
-        ARM_MEM=$(default_if_empty "$(vcgencmd get_mem arm 2>/dev/null | grep -oE '[0-9]+')" "0")
-        echo "pi_memory_split_bytes{component=\"arm\"} $(echo "$ARM_MEM * 1024 * 1024" | bc)"
-
-        echo "# HELP pi_throttled Pi throttling status bitmask"
-        echo "# TYPE pi_throttled gauge"
-        THROTTLED=$(default_if_empty "$(vcgencmd get_throttled 2>/dev/null | grep -oE '0x[0-9a-fA-F]+$')" "0x0")
-        echo "pi_throttled $(echo "ibase=16; ${THROTTLED#0x}" | bc 2>/dev/null || echo "0")"
+        THROTTLED=$(vc get_throttled)
     fi
 
-    echo "# HELP pi_uptime_seconds System uptime in seconds"
-    echo "# TYPE pi_uptime_seconds counter"
-    UPTIME=$(awk '{print $1}' /proc/uptime)
-    echo "pi_uptime_seconds $UPTIME"
+    echo "# HELP hw_metrics_source_up Whether the hardware source could be read."
+    echo "# TYPE hw_metrics_source_up gauge"
+    echo "hw_metrics_source_up{source=\"vcgencmd\"} $([ -n "$THROTTLED" ] && echo 1 || echo 0)"
 
-    echo "# HELP pi_load_average System load average"
-    echo "# TYPE pi_load_average gauge"
-    read -r LOAD1 LOAD5 LOAD15 _ < /proc/loadavg
-    echo "pi_load_average{period=\"1m\"} $LOAD1"
-    echo "pi_load_average{period=\"5m\"} $LOAD5"
-    echo "pi_load_average{period=\"15m\"} $LOAD15"
+    if [ -n "$THROTTLED" ]; then
+        # Bits 0-3: current state; bits 16-19: same flags since boot.
+        echo "# HELP hw_throttled Throttling flag, 1 when set."
+        echo "# TYPE hw_throttled gauge"
+        for entry in 0:under_voltage 1:freq_capped 2:throttled 3:soft_temp_limit; do
+            bit=${entry%%:*}
+            flag=${entry#*:}
+            echo "hw_throttled{flag=\"$flag\",state=\"now\"} $(( (THROTTLED >> bit) & 1 ))"
+            echo "hw_throttled{flag=\"$flag\",state=\"since_boot\"} $(( (THROTTLED >> (bit + 16)) & 1 ))"
+        done
 
-    echo "# HELP pi_memory_bytes Memory information from /proc/meminfo"
-    echo "# TYPE pi_memory_bytes gauge"
-    while IFS=: read -r key value; do
-        case $key in
-            MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree)
-                value_bytes=$(echo "$value" | awk '{print $1 * 1024}')
-                echo "pi_memory_bytes{type=\"$(echo "$key" | tr '[:upper:]' '[:lower:]')\"} $value_bytes"
-                ;;
-        esac
-    done < /proc/meminfo
+        CORE_VOLT=$(vc measure_volts core)
+        if [ -n "$CORE_VOLT" ]; then
+            echo "# HELP hw_voltage_volts Supply voltage per rail."
+            echo "# TYPE hw_voltage_volts gauge"
+            echo "hw_voltage_volts{rail=\"core\"} $CORE_VOLT"
+        fi
 
-    echo "# HELP pi_disk_usage_bytes Disk usage for root filesystem"
-    echo "# TYPE pi_disk_usage_bytes gauge"
-    df -B1 / | awk 'NR==2 {
-        print "pi_disk_usage_bytes{type=\"total\"} " $2
-        print "pi_disk_usage_bytes{type=\"used\"} " $3
-        print "pi_disk_usage_bytes{type=\"available\"} " $4
-    }'
-
-    if mountpoint -q /boot; then
-        echo "# HELP pi_boot_disk_usage_bytes Boot partition disk usage"
-        echo "# TYPE pi_boot_disk_usage_bytes gauge"
-        df -B1 /boot | awk 'NR==2 {
-            print "pi_boot_disk_usage_bytes{type=\"total\"} " $2
-            print "pi_boot_disk_usage_bytes{type=\"used\"} " $3
-            print "pi_boot_disk_usage_bytes{type=\"available\"} " $4
-        }'
+        echo "# HELP hw_clock_frequency_hz Non-CPU clock frequency."
+        echo "# TYPE hw_clock_frequency_hz gauge"
+        for clock in core v3d; do
+            FREQ=$(vc measure_clock "$clock")
+            if [ -n "$FREQ" ]; then
+                echo "hw_clock_frequency_hz{clock=\"$clock\"} $FREQ"
+            fi
+        done
     fi
 
-    echo "# HELP pi_metrics_last_update_timestamp_seconds Timestamp of last metrics update"
-    echo "# TYPE pi_metrics_last_update_timestamp_seconds gauge"
-    echo "pi_metrics_last_update_timestamp_seconds $(date +%s)"
-
+    echo "# HELP hw_metrics_last_update_timestamp_seconds Last run of this collector."
+    echo "# TYPE hw_metrics_last_update_timestamp_seconds gauge"
+    echo "hw_metrics_last_update_timestamp_seconds $(date +%s)"
 } > "$TEMP_FILE"
 
-# Atomic rename so the textfile collector never reads a half-written file
 mv "$TEMP_FILE" "$PROM_FILE"
-
 chmod 644 "$PROM_FILE"

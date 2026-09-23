@@ -81,7 +81,6 @@
         that:
           - "'curl' in ansible_facts.packages"
           - "'jq' in ansible_facts.packages"
-          - "'bc' in ansible_facts.packages"
         fail_msg: "common_setup packages missing"
         success_msg: "[OK] exporter runtime packages installed"
 

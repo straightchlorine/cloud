@@ -40,7 +40,6 @@
       - tar
       - gzip
       - jq
-      - bc
     state: present
     update_cache: true
   become: true

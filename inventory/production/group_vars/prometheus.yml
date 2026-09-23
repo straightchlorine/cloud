@@ -11,7 +11,6 @@ node_exporter_install_method: "binary"
 
 # Pi Hardware Metrics (enabled on ARM hosts)
 pi_hardware_metrics_enabled: true
-pi_hardware_metrics_interval: 30
 
 # Service discovery labels
 prometheus_instance_labels:
