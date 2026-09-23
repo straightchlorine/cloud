@@ -1,44 +1,41 @@
 ---
-# Ansible-optimized YAML formatter configuration
-# Aligns with Ansible best practices and project standards (CLAUDE.md)
+# yamlfmt re-serializes the whole document, so every option here is chosen to
+# produce output that .yamllint accepts and Ansible reads identically.
 
 formatter:
   type: basic
-  # Core formatting
   indent: 2
-  indent_root_array: true
-  array_indent: 2
-
-  # Document structure (Ansible requires this)
+  # indent_root_array stays off: it indents top-level task lists by 2, which
+  # .yamllint rejects ("expected 0 but found 2").
   include_document_start: true
-
-  # Line handling
-  max_line_length: 120
-  retain_line_breaks: true
-  retain_line_breaks_single: false
+  retain_line_breaks_single: true
+  # Without this, >- blocks are re-flowed; combined with max_line_length that
+  # leaks yamlfmt's "#magic___^_^___line" placeholder into Jinja conditions.
+  scan_folded_as_literal: true
+  # max_line_length stays unset: re-wrapping Jinja expressions is unsafe, and
+  # yamllint already enforces 120.
   trim_trailing_whitespace: true
   eof_newline: true
 
-  # Quote and style handling
-  force_quote_style: double  # Consistent with Ansible conventions
-
-  # Flow vs Block style (Ansible prefers block style for readability)
-  force_array_style: block
-
-# File patterns
 include:
   - "**/*.yml"
   - "**/*.yaml"
 
-# Exclude patterns
 exclude:
   - ".git"
-  - "node_modules"
   - ".venv"
   - "venv"
+  - "node_modules"
+  - "collections"
 
-# Continue on invalid YAML files
-continue_on_error: false
+# Files yamlfmt would change semantically or into yamllint errors are skipped:
+# vault ciphertext, keep-chomping block scalars (|+ is rewritten to |, dropping
+# trailing blank lines), and flow-mapping list items (re-emitted with a
+# trailing comma, e.g. {port: 22,}).
+regex_exclude:
+  - '\$ANSIBLE_VAULT'
+  - '\|\+'
+  - '(?m)^\s*- \{'
 
-# Use gitignore for exclude paths
 gitignore_excludes: true
+continue_on_error: false

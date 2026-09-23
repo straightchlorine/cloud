@@ -72,7 +72,9 @@
     common_service_wants: ["docker.service"]
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
-    service_group: "{{ prometheus_exporters_group }}"
+    # docker, not the exporter group: the script talks to docker.sock (root:docker
+    # 0660). Scoped to this oneshot unit so node_exporter never gets socket access.
+    service_group: "docker"
     exec_start: "{{ prometheus_exporters_base_dir }}/scripts/docker_metrics.sh"
     remain_after_exit: "false"
     common_protect_system: "strict"
