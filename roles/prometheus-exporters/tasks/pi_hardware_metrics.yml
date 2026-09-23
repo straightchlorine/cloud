@@ -22,7 +22,9 @@
     service_after: ["network.target"]
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
-    service_group: "{{ prometheus_exporters_group }}"
+    # video group: vcgencmd talks to /dev/vchiq (root:video 0660):
+    # prints nothing without it, so GPU temp/clocks/throttle read 0.
+    service_group: "video"
     exec_start: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
     remain_after_exit: "false"
     common_protect_system: "strict"
@@ -74,7 +76,7 @@
 
 - name: Pi hardware metrics setup completed
   ansible.builtin.debug:
-    msg: |
+    msg: |-
       [OK] Pi Hardware Metrics Setup Complete:
       - Metrics script: {{ prometheus_exporters_pi_hardware_metrics_script }}
       - Collection interval: {{ prometheus_exporters_pi_hardware_metrics_interval }} seconds
