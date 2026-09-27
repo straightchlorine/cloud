@@ -10,7 +10,7 @@ existing violations should be fixed when encountered.
 inventory/production/   hosts.yml, group_vars/, host_vars/, vault.yml.example
 playbooks/              site.yml (fleet), per-stack plays, dns-teardown.yml
 roles/                  common dns os hardware firewall backup backup-system
-                        monitoring prometheus-exporters automation music-stack
+                        monitoring prometheus-exporters automation media
 scripts/                per-role host check scripts (scripts/dns/validate-*.sh)
 docs/                   flat topic docs + docs/testing/ section
 .woodpecker/            lint.yaml, test.yaml, deploy-validation.yaml
@@ -111,7 +111,7 @@ vault_grafana_admin_password: "..."
 vault_restic_automation_password: "..."
 
 # Lists: {role}_{descriptive}_directories or {role}_{descriptive}_list
-music_stack_music_library_directories:
+media_library_directories:
   - music
   - downloads
 ```
@@ -148,7 +148,8 @@ inventory/production/
     pi-dns.yml                    # Production DNS host
     pi-dns-test.yml               # Disposable DNS staging/test Pi
     pi-automation.yml             # Automation-specific: traefik, subdomains
-    pi-music.yml                  # Music stack host
+    pi-test-media.yml             # Disposable media staging/test Pi
+    media.yml                     # Media stack host (navidrome, beets, yt-dlp)
     debian-monitoring.yml         # Monitoring-specific: grafana, prometheus
     backup_wyse.yml               # Coordinator-specific: backup targets
     station-arch.yml              # Workstation
@@ -262,7 +263,12 @@ common builder:
 - **Localhost binding**: Management ports bind to `127.0.0.1`, not `0.0.0.0`
 - **User namespace**: Run containers as `{{ ansible_uid }}:{{ ansible_gid }}` where possible
 - **Read-only mounts**: Use `:ro` suffix for volumes that don't need writes
-- **No latest tags**: Pin container image versions explicitly
+- **Image tags: pinned, or floating under Watchtower**: A floating tag
+  (`:latest`, or a major/minor tag) is allowed only when the service carries the
+  `com.centurylinklabs.watchtower.enable=true` label, so updates are
+  deliberate and ntfy-reported. Everything else pins an explicit version.
+  Stateful services with one-way migrations need a backup before Watchtower's
+  sweep (see `media_navidrome_backup_schedule`).
 - **userns-remap preservation**: When modifying `/etc/docker/daemon.json`,
   always use `combine()` to merge, never overwrite. Verify the `userns-remap`
   key is preserved after writes.

@@ -5,6 +5,10 @@ Unattended-Upgrade::Origins-Pattern {
         "origin=Debian,codename=${distro_codename},label=Debian-Security";
         "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
         "origin=Debian,codename=${distro_codename}-updates";
+        // Raspberry Pi OS: kernel/firmware (all Pis) and, on 32-bit armhf,
+        // the whole base system come from these archives, not Debian's.
+        "origin=Raspberry Pi Foundation,codename=${distro_codename}";
+        "origin=Raspbian,codename=${distro_codename}";
 };
 
 // List of packages to not update (regexp are supported)

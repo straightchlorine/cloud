@@ -8,13 +8,11 @@ set -euo pipefail
 export RESTIC_REPOSITORY="{{ restic_repository }}"
 export RESTIC_PASSWORD_FILE="{{ common_backup_password_file }}"
 export RESTIC_CACHE_DIR="{{ common_backup_cache_dir }}"
-# Defaults to /tmp if unset.
 export TMPDIR="{{ common_backup_tmp_dir }}"
 # Matches restic-init.sh.j2 and the systemd unit's own Environment= exactly: one
 # shared ssh config/alias, so UserKnownHostsFile and ControlMaster stay in force.
 export RESTIC_SFTP_COMMAND="ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
 
-# Service-specific configuration
 SERVICE_NAME="{{ common_backup_service_name }}"
 LOG_FILE="{{ common_backup_log_dir }}/backup-${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
 BACKUP_PATHS=(
@@ -23,7 +21,6 @@ BACKUP_PATHS=(
 {% endfor %}
 )
 
-# Optional pre-backup commands
 PRE_BACKUP_COMMANDS=(
 {% if pre_backup_commands is defined %}
 {% for cmd in pre_backup_commands %}
@@ -32,7 +29,6 @@ PRE_BACKUP_COMMANDS=(
 {% endif %}
 )
 
-# Optional post-backup commands
 POST_BACKUP_COMMANDS=(
 {% if post_backup_commands is defined %}
 {% for cmd in post_backup_commands %}
@@ -41,7 +37,6 @@ POST_BACKUP_COMMANDS=(
 {% endif %}
 )
 
-# Functions
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [${SERVICE_NAME}] $*" | tee -a "$LOG_FILE"
 }
@@ -54,17 +49,14 @@ error_exit() {
 check_prerequisites() {
     log "Checking backup prerequisites..."
 
-    # Check restic is available
     if ! command -v restic >/dev/null 2>&1; then
         error_exit "restic is not installed or not in PATH"
     fi
 
-    # Check password file exists
     if [[ ! -f "$RESTIC_PASSWORD_FILE" ]]; then
         error_exit "Password file not found: $RESTIC_PASSWORD_FILE"
     fi
 
-    # Check backup paths exist
     for path in "${BACKUP_PATHS[@]}"; do
         if [[ ! -e "$path" ]]; then
             log "WARNING: Backup path does not exist: $path"
@@ -129,12 +121,10 @@ perform_backup() {
     # literal flag has no environment-propagation dependency at all.
     local backup_cmd="sudo --preserve-env=RESTIC_REPOSITORY,RESTIC_PASSWORD_FILE,RESTIC_CACHE_DIR,RESTIC_SFTP_COMMAND,TMPDIR restic backup -o sftp.command=\"$RESTIC_SFTP_COMMAND\""
 
-    # Add paths
     for path in "${BACKUP_PATHS[@]}"; do
         backup_cmd="$backup_cmd \"$path\""
     done
 
-    # Add tags
     backup_cmd="$backup_cmd --tag ${SERVICE_NAME}"
     backup_cmd="$backup_cmd --tag $(hostname)"
     backup_cmd="$backup_cmd --tag $(date +%Y-%m-%d)"
@@ -150,14 +140,12 @@ perform_backup() {
     backup_cmd="$backup_cmd --compression {{ restic_compression }}"
 {% endif %}
 
-    # Add excludes
 {% if backup_exclude_patterns is defined %}
 {% for exclude in backup_exclude_patterns %}
     backup_cmd="$backup_cmd --exclude '{{ exclude }}'"
 {% endfor %}
 {% endif %}
 
-    # Execute backup
     log "Executing: $backup_cmd"
     eval "$backup_cmd" >> "$LOG_FILE" 2>&1
     local backup_exit_code=$?
@@ -223,8 +211,6 @@ main() {
     log "=== Backup completed for ${SERVICE_NAME} ==="
 }
 
-# Error handling
 trap 'error_exit "Script interrupted"' INT TERM
 
-# Execute main function
 main "$@"

@@ -1,0 +1,42 @@
+# Audio-only playlist downloads for the media-sync pipeline. Tags matter more
+# than filenames: Navidrome groups purely by tags, and beets moves the files.
+
+-x
+--format "bestaudio/best"
+--audio-format best
+--audio-quality 0
+
+# --- Tags ---------------------------------------------------------------------
+# Order matters: each rule sees the fields the previous ones wrote.
+# YouTube Music ("- Topic" channels) supplies track/artist/album; prefer them.
+--parse-metadata "%(track,title)s:%(title)s"
+--parse-metadata "%(artist,uploader)s:%(artist)s"
+# Reposts: a non-YouTube-Music title "Artist - Title" names the real artist.
+--parse-metadata "%(track&YTM|)s%(title)s:^(?!YTM)(?P<artist>[^-]+?) - (?P<title>.+)$"
+--replace-in-metadata "title" "\s*[\(\[\{【「『][^\)\]\}】」』]*?\b(?i:official|lyrics?|video|audio|visuali[sz]er|mv|hd|4k)\b[^\)\]\}】」』]*[\)\]\}】」』]" ""
+--replace-in-metadata "artist,title" "\s{2,}" " "
+--replace-in-metadata "artist" "(?i)\s+-\s+topic$|vevo$|\s+official$" ""
+--replace-in-metadata "artist,title" "^\s+|\s+$" ""
+# A single with no release: album = title, so Navidrome lists it as its own
+# single instead of one "[Unknown Album]" per artist.
+--parse-metadata "%(album,title)s:%(album)s"
+--parse-metadata "%(artist)s:%(album_artist)s"
+--embed-metadata
+
+# The video thumbnail as cover art (jpg embeds in every container).
+--embed-thumbnail
+--convert-thumbnails jpg
+
+# Flat and transient: beets renames on import.
+--output "{{ media_library_path }}/downloads/%(artist)s - %(title)s [%(id)s].%(ext)s"
+--download-archive "{{ media_library_path }}/youtube-archive.txt"
+--cache-dir "{{ media_library_path }}/cache"
+
+--ignore-errors
+--no-abort-on-error
+--retries 3
+--fragment-retries 3
+--limit-rate 2M
+
+# Strip only the non-music parts of music videos.
+--sponsorblock-remove music_offtopic

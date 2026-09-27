@@ -110,7 +110,6 @@
           loop:
             - dns
             - automation
-            - music-stack
           when: "item.replace('-', '_') in group_names"
       when: run_backup_validation
 
@@ -129,7 +128,6 @@
           loop:
             - dns
             - automation
-            - music-stack
           when: "item.replace('-', '_') in group_names"
       when: run_post_deployment_validation
 

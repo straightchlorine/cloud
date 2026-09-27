@@ -1,0 +1,39 @@
+---
+- name: Verify media fail-fast validation
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat the per-case marker files converge wrote
+      # Converge and verify run as separate processes, so each case drops a
+      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+      register: media_failfast_markers
+
+    - name: Assert all three fail-fast cases completed
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing - the corresponding case in converge.yml
+          either did not fail or failed for an unexpected reason.
+        success_msg: "[OK] {{ item.item }} recorded"
+      loop: "{{ media_failfast_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Display fail-fast validation summary
+      ansible.builtin.debug:
+        msg: |
+          [OK] Media Fail-Fast Validation Test Complete
+
+          Case 1 - missing required variable (media_library_path): FAILED as expected
+          Case 2 - stack home under /root for a non-root user: FAILED as expected
+          Case 3 - placeholder playlist (vault_youtube_playlists): FAILED as expected
+
+          All three cases ran the real roles/media/tasks/validate.yml end
+          to end - no hand-copied guards anywhere in this scenario.

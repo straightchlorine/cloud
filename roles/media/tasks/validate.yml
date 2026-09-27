@@ -1,0 +1,77 @@
+---
+# Fail-fast configuration checks. site.yml includes this file directly, so it
+# runs os discovery itself; no Docker probing (Docker may not exist yet).
+
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run media stack comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "media stack"
+    validation_type: "full"
+    validation_role: "media"
+    required_variables:
+      - domain_name
+      - media_home
+      - media_library_path
+      - restic_enabled
+      - restic_repository
+      - restic_password
+      - vault_watchtower_api_token
+    vault_placeholders:
+      - { var: "vault_watchtower_api_token", value: "your-watchtower-api-token" }
+  tags: [validation]
+
+- name: Require real playlists when the YouTube pipeline is on
+  ansible.builtin.assert:
+    that:
+      - vault_youtube_playlists is defined
+      - vault_youtube_playlists | length > 0
+      - "'YOUR_PLAYLIST_ID' not in (vault_youtube_playlists | join(' '))"
+    fail_msg: >-
+      media_youtube_enabled is true but vault_youtube_playlists is missing,
+      empty or still the vault.yml.example placeholder.
+    quiet: true
+  when: media_youtube_enabled | bool
+  tags: [validation]
+
+- name: Confirm the host OS is supported
+  ansible.builtin.assert:
+    that:
+      - os_family == "Debian"
+    fail_msg: >-
+      media requires a Debian-family OS; got
+      {{ os_family | default('unknown') }}
+      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
+    success_msg: >
+      [OK] Supported OS: {{ os_name }} {{ os_version }}
+      ({{ os_family }}).
+  tags: [validation]
+
+- name: Validate the parent directories of the stack paths exist
+  ansible.builtin.stat:
+    path: "{{ item | dirname }}"
+  register: media_parent_path_check
+  failed_when: not media_parent_path_check.stat.exists or not media_parent_path_check.stat.isdir
+  loop:
+    - "{{ media_library_path }}"
+    - "{{ media_home }}"
+  tags: [validation]
+
+- name: Refuse a stack home under /root for a non-root stack user
+  # Usually means media_home came from the ansible_user_dir/_id facts, which
+  # reflect root under become.
+  ansible.builtin.fail:
+    msg: >-
+      media_home ({{ media_home }}) resolves under /root, but ansible_user is
+      '{{ ansible_user }}'. Derive it from the inventory's ansible_user
+      (/home/<user>/stack), not the ansible_user_dir/_id facts.
+  when:
+    - ansible_user is defined and ansible_user != 'root'
+    - media_home is match('/root(/|$)')
+  tags: [validation]

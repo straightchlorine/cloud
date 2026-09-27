@@ -6,11 +6,10 @@
 #   - No prefix: variables passed by callers only when needed (e.g. service_user,
 #     exec_start, working_directory). Guarded by 'is defined' checks.
 #
-# Known issue: some guards check unprefixed names but render common_ prefixed values
-# (e.g. working_directory vs common_working_directory, timeout_start_sec vs
-# common_timeout_start_sec, protect_system vs common_protect_system). Callers pass
-# the common_ prefixed names, so these sections may not render as intended. Fixing
-# requires coordinating all 13+ callers -- tracked for a future refactor.
+# Known issue: several guards test unprefixed names while rendering common_
+# prefixed values (working_directory vs common_working_directory, timeout_start_sec
+# vs common_timeout_start_sec, protect_system vs common_protect_system). Callers
+# pass the common_ prefixed names, so those sections do not render.
 
 [Unit]
 Description={{ service_description }}

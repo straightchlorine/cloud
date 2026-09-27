@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  namespace: local
+  role_name: media
+  author: Ansible Admin
+  description: Media Stack (navidrome, cadvisor, yt-dlp -> beets pipeline) on a Docker host
+  company: Local
+  license: MIT
+  min_ansible_version: "2.12"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+  galaxy_tags:
+    - music
+    - media
+    - navidrome
+    - beets
+    - docker
+
+collections:
+  - community.docker
+  - community.general
+  - ansible.posix

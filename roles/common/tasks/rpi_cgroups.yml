@@ -1,0 +1,65 @@
+---
+# Raspberry Pi kernel cgroup memory controller for Docker Compose resource limits.
+# /boot/firmware/cmdline.txt (older /boot/cmdline.txt) MUST remain a single line;
+# changes take effect on the next reboot.
+
+- name: Locate Raspberry Pi boot cmdline file
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /boot/firmware/cmdline.txt
+    - /boot/cmdline.txt
+  register: common_rpi_cmdline_stats
+  when:
+    - (ansible_facts['os_family'] | default(ansible_os_family)) == "Debian"
+    - (device_type | default('')).startswith('rpi') or (hardware_platform | default('')).startswith('rpi')
+
+- name: Resolve active cmdline.txt path
+  ansible.builtin.set_fact:
+    common_rpi_cmdline_path: >-
+      {{ (common_rpi_cmdline_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists') | map(attribute='item') | list | first) | default('') }}
+  when:
+    - common_rpi_cmdline_stats is defined
+    - not common_rpi_cmdline_stats is skipped
+
+- name: Read current kernel cmdline arguments
+  ansible.builtin.slurp:
+    src: "{{ common_rpi_cmdline_path }}"
+  register: common_rpi_cmdline_content
+  when:
+    - common_rpi_cmdline_path is defined
+    - common_rpi_cmdline_path | length > 0
+  become: true
+
+- name: Append cgroup memory controller flags if missing
+  vars:
+    current_cmdline: "{{ common_rpi_cmdline_content.content | b64decode | trim }}"
+    needs_cgroup_enable: "{{ 'cgroup_enable=memory' not in current_cmdline }}"
+    needs_cgroup_memory: "{{ 'cgroup_memory=1' not in current_cmdline }}"
+    flags_to_add: >-
+      {{ (['cgroup_enable=memory'] if needs_cgroup_enable else [])
+       + (['cgroup_memory=1'] if needs_cgroup_memory else []) }}
+  ansible.builtin.copy:
+    content: "{{ (current_cmdline ~ ' ' ~ (flags_to_add | join(' '))) | trim }}\n"
+    dest: "{{ common_rpi_cmdline_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  when:
+    - common_rpi_cmdline_path is defined
+    - common_rpi_cmdline_path | length > 0
+    - (needs_cgroup_enable or needs_cgroup_memory)
+  register: common_rpi_cgroup_updated
+
+- name: Notify operator if reboot is required for cgroup limits
+  ansible.builtin.debug:
+    msg: >-
+      Kernel boot arguments updated in {{ common_rpi_cmdline_path }} (cgroup_enable=memory cgroup_memory=1).
+      A system reboot is required for Docker memory limits to take effect.
+  when:
+    - common_rpi_cgroup_updated is defined
+    - common_rpi_cgroup_updated is changed

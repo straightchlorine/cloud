@@ -13,9 +13,10 @@ common_fail2ban_ssh_maxretry: 3
 common_fail2ban_ssh_bantime: 600
 
 # Unattended-upgrades (every host). Automatic-Reboot is off by default -
-# opt in per host; reboot time only matters when it's on.
+# opt in per host. 05:00 clears the 03:00 restic window (2h timeout); stagger
+# per host so DNS is back before the others boot.
 common_auto_updates_reboot_if_required: false
-common_auto_updates_reboot_time: "03:00"
+common_auto_updates_reboot_time: "05:00"
 
 # Common System Packages (can be overridden in group_vars)
 common_packages:
@@ -58,6 +59,9 @@ common_wanted_by: "multi-user.target"
 common_enable_security_hardening: true
 common_no_new_privileges: "true"
 
+# Raspberry Pi kernel cgroup memory controller for Docker resource limits
+common_rpi_cgroup_memory_enabled: true
+
 # Backup integration defaults
 common_backup_nice_level: 19
 common_backup_io_class: "idle"
@@ -80,5 +84,86 @@ common_syncthing_enabled: false
 common_syncthing_home: "/home/{{ ansible_user }}/.config/syncthing"
 
 # Hardware detection (device_type -> hardware_platform -> resource limits)
-# has moved out of this role into the standalone 'hardware' role - see
+# lives in the standalone 'hardware' role - see
 # roles/hardware/defaults/main.yml (hardware_profiles).
+
+
+# Watchtower, appended to a stack's compose services (automation, media). Only
+# updates containers labelled com.centurylinklabs.watchtower.enable=true, so
+# pinned images stay put. Needs common_watchtower_env_vars in the stack .env.
+common_watchtower_port: 8084
+common_watchtower_schedule: "0 0 2 * * *"
+common_watchtower_compose_service:
+  service_name: watchtower
+  service_image: "nickfedor/watchtower:latest"
+  service_userns_mode: "host"
+  service_ports:
+    - host: "{{ common_watchtower_port }}"
+      container: 8080
+      bind_ip: "{{ primary_ip }}"
+  service_environment:
+    - "WATCHTOWER_LABEL_ENABLE=true"
+    - "WATCHTOWER_SCHEDULE={{ common_watchtower_schedule }}"
+    - "WATCHTOWER_CLEANUP=true"
+    - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
+    - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
+    - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
+    - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics"
+    - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
+  service_volumes:
+    - "/var/run/docker.sock:/var/run/docker.sock"
+  service_networks:
+    - stack
+  service_resources:
+    limits:
+      memory: 256M
+      cpus: "0.5"
+    reservations:
+      memory: 128M
+      cpus: "0.1"
+common_watchtower_env_vars:
+  WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
+  # shoutrrr's ntfy URL carries the token as the basic-auth PASSWORD (a
+  # username is rejected with 40301). Empty URL = watchtower is silent.
+  WATCHTOWER_NOTIFICATION_URL: >-
+    {{ 'ntfy://:' ~ vault_ntfy_api_key ~ '@' ~
+    (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
+    if vault_ntfy_api_key is defined else '' }}
+
+# cAdvisor, appended to a stack's compose services (automation, media).
+# Prometheus scrapes it on primary_ip:common_cadvisor_port from the monitoring
+# host only (firewall_rules in host_vars).
+common_cadvisor_port: 8085
+common_cadvisor_compose_service:
+  service_name: cadvisor
+  # Patch releases only; bump the minor by hand.
+  service_image: "ghcr.io/google/cadvisor:0.60"
+  # docker.sock access, as for watchtower.
+  service_userns_mode: "host"
+  service_command:
+    - "--housekeeping_interval=10s"
+    - "--docker_only=true"
+    - "--store_container_labels=false"
+    - "--disable_metrics=advtcp,udp,sched,process,hugetlb,referenced_memory,cpu_topology,resctrl,tcp"
+  service_ports:
+    - host: "{{ common_cadvisor_port }}"
+      container: 8080
+      bind_ip: "{{ primary_ip }}"
+  # data-root fact exists only with the SSD; else Docker's default path.
+  service_volumes:
+    - "/:/rootfs:ro"
+    - "/var/run:/var/run:ro"
+    - "/sys:/sys:ro"
+    - "{{ common_docker_data_root | default('/var/lib/docker') }}:/var/lib/docker:ro"
+    - "/dev/disk:/dev/disk:ro"
+  service_networks:
+    - stack
+  service_labels:
+    - "com.centurylinklabs.watchtower.enable=true"
+  service_resources:
+    limits:
+      memory: 192M
+      cpus: "0.3"
+    reservations:
+      memory: 64M
+      cpus: "0.05"

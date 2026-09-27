@@ -1,0 +1,141 @@
+---
+- name: Converge - media Fail-Fast Validation
+  hosts: all
+  become: true
+  vars:
+    # Every required variable except media_library_path, so
+    # Case 1 leaves it genuinely undefined. Each case below then includes
+    # the REAL roles/media/tasks/validate.yml with per-case vars -
+    # no hand-copied guards to keep in sync.
+    domain_name: example.test
+    media_home: /home/music/stack
+    media_youtube_enabled: false
+    restic_enabled: false
+    restic_repository: /tmp/test-restic
+    restic_password: molecule-test-restic-password
+    vault_watchtower_api_token: molecule-test-watchtower-token
+  pre_tasks:
+    - name: Create the path parents (cases 2 and 3 must reach their guards)
+      # Cases 2 and 3 pass the required-variable check, so validate.yml must
+      # run past the parent-directory check and reach the guard under test.
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /home/music
+        - /mnt
+
+    - name: Create the non-root stack user the /root-guard case connects as
+      # Case 2 overrides ansible_user (the guard reads it directly); the
+      # podman connection then execs as that user, so it must exist in the
+      # container - otherwise every task after the override is UNREACHABLE.
+      ansible.builtin.user:
+        name: media
+        uid: 1000
+        shell: /bin/bash
+        create_home: true
+
+  tasks:
+    # Case 1: a required variable is not defined.
+    - name: "Case 1: validate.yml fails on a missing media_library_path"
+      block:
+        - name: Try to include the media validation without the library path
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a missing media_library_path"
+      rescue:
+        - name: Assert the failure was for the missing media_library_path specifically
+          # A looped fail task's own top-level msg is the generic "One or more
+          # items failed" - the per-item detail lives in .results, so assert
+          # on that rather than on ansible_failed_result.msg directly.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['media_library_path']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing media_library_path): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing media_library_path variable"
+
+        - name: Record case 1 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
+
+    # Case 2 (regression guard): a /root stack home for a non-root user means
+    # something read the ansible_user_dir/_id facts - under become:true those
+    # reflect root, and the stack owner cannot traverse the path.
+    - name: "Case 2: validate.yml refuses a stack home under /root for a non-root user"
+      block:
+        - name: Run the real media validation with a /root stack home
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            media_library_path: /mnt/music
+            ansible_user: media
+            media_home: /root/stack
+            # The connection execs as 'media' for this include; validate.yml is
+            # read-only (facts, stat, fail), so it needs no become - and the
+            # unprivileged user cannot sudo in the test container anyway.
+            ansible_become: false
+
+        - name: Fail the test - the /root guard should have refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse the /root stack home for a non-root user"
+      rescue:
+        - name: Assert the failure was the /root guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'media_home' in (ansible_failed_result.msg | default(''))"
+              - "'/root' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason (the
+              /root stack-home guard): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's /root guard correctly refused a /root stack home"
+
+        - name: Record case 2 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
+
+    # Case 3: the pipeline on with the vault.yml.example placeholder playlist
+    # would deploy a cron that downloads nothing.
+    - name: "Case 3: validate.yml refuses the placeholder YouTube playlist"
+      block:
+        - name: Run the real media validation with the placeholder playlist
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            media_library_path: /mnt/music
+            media_youtube_enabled: true
+            vault_youtube_playlists:
+              - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+
+        - name: Fail the test - the playlist guard should have refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse the placeholder YouTube playlist"
+      rescue:
+        - name: Assert the failure was the playlist guard
+          ansible.builtin.assert:
+            that:
+              - "'vault_youtube_playlists' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason (the
+              placeholder playlist): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml refused the placeholder YouTube playlist"
+
+        - name: Record case 3 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"

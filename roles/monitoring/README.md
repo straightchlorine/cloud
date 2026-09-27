@@ -114,7 +114,7 @@ sudo -u prometheus prometheus --storage.tsdb.retention.time=15d
 Automatic discovery from inventory:
 
 - **pi-dns**: Node metrics, Pi-hole metrics, system logs
-- **pi-music**: Node metrics, Docker metrics, application logs
+- **media**: Node metrics, Docker metrics, application logs
 - **pi-automation**: Node metrics, Docker metrics, Traefik logs
 - **Monitoring (self)**: Node metrics, service metrics, system logs
 

@@ -191,8 +191,18 @@
       - "RESTIC_CACHE_DIR={{ common_backup_base_path }}/cache"
       - "RESTIC_SFTP_COMMAND=ssh -F {{ common_backup_base_path }}/.ssh/config hetzner-storage -s sftp"
     exec_start: "{{ common_backup_base_path }}/scripts/backup-{{ common_backup_service_name }}.sh"
-    exec_start_pre: "{{ common_backup_exec_start_pre | default(omit) }}"
-    exec_stop_post: "{{ common_backup_exec_stop_post | default(omit) }}"
+    # Lists, not omit: the template iterates these (omit is only for modules).
+    exec_start_pre: "{{ common_backup_exec_start_pre | default([]) }}"
+    # Optional caller hooks, then one ntfy per run. '+' runs as root: the
+    # backup user cannot read the ntfy key. $$ reaches the shell as $.
+    exec_stop_post: >-
+      {{ (common_backup_exec_stop_post | default([])) + [common_backup_ntfy_stop_post] }}
+    common_backup_ntfy_stop_post: >-
+      +/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ];
+      then /usr/local/bin/ntfy-notify "$$(hostname): {{ common_backup_service_name }} restic backup successful"
+      "Snapshot uploaded to the off-site repository." default white_check_mark;
+      else /usr/local/bin/ntfy-notify "$$(hostname): {{ common_backup_service_name }} restic backup failed"
+      "$$SERVICE_RESULT/$$EXIT_STATUS - see {{ common_backup_base_path }}/logs." high rotating_light,error; fi'
     common_standard_output: |
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log
     common_standard_error: |

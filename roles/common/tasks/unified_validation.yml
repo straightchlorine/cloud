@@ -1,6 +1,5 @@
 ---
-# Shared validation framework - validates required vars, vault placeholders
-# and backup paths. Replaces per-role validation files.
+# Shared validation framework: required vars, vault placeholders, backup paths.
 - name: Validate required validation parameters
   ansible.builtin.fail:
     msg: >-
@@ -10,7 +9,6 @@
     - validation_context is not defined or validation_type is not defined or validation_role is not defined
   tags: [validation]
 
-# Variable validation
 - name: Validate required variables are defined
   ansible.builtin.fail:
     msg: "Required {{ validation_context }} variable '{{ item }}' is not defined or empty"
@@ -20,7 +18,6 @@
   loop: "{{ required_variables }}"
   tags: [validation, variable_validation]
 
-# Vault validation
 - name: Validate vault variables are properly set
   ansible.builtin.fail:
     msg: "Vault variable '{{ item.var }}' contains placeholder value. Please set a real value in vault.yml."
@@ -32,7 +29,6 @@
   loop: "{{ vault_placeholders }}"
   tags: [validation, vault_validation]
 
-# Backup path validation
 - name: Validate backup directories exist and are accessible
   ansible.builtin.stat:
     path: "{{ item }}"

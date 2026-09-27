@@ -29,9 +29,9 @@
             tasks_from: validate
           when: "'automation' in group_names"
 
-        - name: Music stack validation for music hosts
+        - name: Media stack validation for music hosts
           ansible.builtin.include_role:
-            name: music-stack
+            name: media
             tasks_from: validate
           when: "'music' in group_names"
 
@@ -92,13 +92,13 @@
     - role: dns
       tags: [dns, pihole]
 
-- name: Configure music stack
+- name: Configure media stack
   hosts: music
   become: true
   gather_facts: true
   roles:
-    - role: music-stack
-      tags: [music, docker]
+    - role: media
+      tags: [media, music, docker]
 
 - name: Configure automation stack
   hosts: automation

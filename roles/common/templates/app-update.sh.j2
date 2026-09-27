@@ -1,0 +1,36 @@
+#!/bin/bash
+# Weekly {{ common_app_update_label }} update. No `apt upgrade` here:
+# unattended-upgrades (auto_updates.yml) does that daily and would race us
+# for the apt lock.
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  echo "Usage: {{ common_app_update_name }}-update"
+  echo ""
+  echo "Run the weekly {{ common_app_update_label }} update. Called by cron."
+  echo "Sends ntfy notification on success or failure."
+  exit 0
+fi
+
+LOG_FILE="/var/log/weekly-updates.log"
+FAILED=0
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"; }
+
+log "Starting {{ common_app_update_label }} update..."
+{% for step in common_app_update_steps %}
+log "Running: {{ step }}"
+if ! {{ step }} >> "$LOG_FILE" 2>&1; then
+  FAILED=1
+  log "Failed: {{ step }}"
+fi
+{% endfor %}
+log "{{ common_app_update_label }} update completed"
+echo "----------------------------------------" >> "$LOG_FILE"
+
+if [ "$FAILED" -eq 1 ]; then
+  ntfy-notify "$(hostname): {{ common_app_update_label }} update failed" \
+    "See /var/log/weekly-updates.log" high rotating_light,error
+else
+  ntfy-notify "$(hostname): {{ common_app_update_label }} update successful" \
+    "Weekly {{ common_app_update_label }} update completed." default white_check_mark
+fi

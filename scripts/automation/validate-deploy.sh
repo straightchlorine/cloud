@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # Post-deployment check for a disposable automation test host.
-# (The former default staging host, pi-test-automation, was repurposed as
-# pi-test-media for the media role - the host alias is now required.)
 # Run after a successful site.yml deploy to confirm compose, vaultwarden, firefly,
 # mariadb, watchtower, backup and the SSD layout all work. Pairs with
 # validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".

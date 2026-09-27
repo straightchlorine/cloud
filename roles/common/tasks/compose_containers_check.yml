@@ -28,3 +28,24 @@
   loop: "{{ common_compose_containers }}"
   loop_control:
     label: "{{ item.Service }}"
+
+- name: Gather Docker daemon warnings
+  ansible.builtin.command: >-
+    docker info --format '{{ '{{.Warnings}}' }}'
+  become: true
+  become_user: "{{ compose_owner }}"
+  changed_when: false
+  register: common_docker_warnings
+
+- name: Warn if Docker memory limits cannot be enforced
+  # Not a deploy failure - containers run fine without limits - but the compose
+  # deploy.resources block is silently DISCARDED when the memory controller is
+  # unavailable (cgroup v2 without "memory", or v1 without cgroup_enable=memory).
+  # Surface it every deploy; the hard FAIL gate is in validate-deploy.sh.
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Docker reports "No memory limit support" on this host - the
+      compose deploy.resources memory limits are silently discarded (each
+      container may use up to all free RAM). See roles/automation/README.md
+      "Resource limits vs. cgroup availability" for the check and fix.
+  when: "'No memory limit support' in (common_docker_warnings.stdout | default(''))"

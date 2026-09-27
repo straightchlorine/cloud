@@ -1,0 +1,55 @@
+---
+# Nightly local snapshot of a compose stack's databases and secrets into a
+# Syncthing-shared folder (the secondary, off-box copy; restic stays primary).
+# Installs /usr/local/bin/<name>-syncthing-backup and its root cron entry.
+#
+# Contract:
+#   common_snapshot_name:       stack name (script, log and cron names)
+#   common_snapshot_stack_home: compose project dir (the script's cwd)
+#   common_snapshot_dest:       Syncthing-shared destination
+#   common_snapshot_owner:      user Syncthing runs as (owns the snapshots)
+#   common_snapshot_retention:  snapshot directories to keep
+#   common_snapshot_hour/_minute: cron time - finish before the restic timer
+#   common_snapshot_summary:    what the snapshot holds (ntfy text + --help)
+#   common_snapshot_steps:      shell snippets writing into $WORK, in order;
+#                               they may append caveats to $NOTES (ntfy text)
+
+- name: Validate the snapshot backup contract
+  ansible.builtin.assert:
+    that:
+      - common_snapshot_dest is defined
+      - common_snapshot_owner is defined
+      - common_snapshot_steps | length > 0
+    fail_msg: >-
+      {{ common_snapshot_name }}: the backup dir (the Syncthing-shared folder,
+      on the SSD) and its owner (the user that runs Syncthing) must be set in
+      host_vars when the local backup is enabled.
+    quiet: true
+
+- name: Ensure the Syncthing backup directory exists
+  ansible.builtin.file:
+    path: "{{ common_snapshot_dest }}"
+    state: directory
+    owner: "{{ common_snapshot_owner }}"
+    mode: "0750"
+  become: true
+
+- name: "Install the Syncthing backup script: {{ common_snapshot_name }}"
+  ansible.builtin.template:
+    src: stack-snapshot-backup.sh.j2
+    dest: "/usr/local/bin/{{ common_snapshot_name }}-syncthing-backup"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: "Schedule the Syncthing backup: {{ common_snapshot_name }}"
+  ansible.builtin.cron:
+    name: "{{ common_snapshot_name | capitalize }} Syncthing local backup"
+    minute: "{{ common_snapshot_minute }}"
+    hour: "{{ common_snapshot_hour }}"
+    job: >-
+      /usr/local/bin/{{ common_snapshot_name }}-syncthing-backup
+      >> /var/log/{{ common_snapshot_name }}-syncthing-backup.log 2>&1
+    user: root
+  become: true

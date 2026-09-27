@@ -92,8 +92,8 @@ backup_service_backup_configs:
     pre_backup_scripts: ["media-sync", "library-consistency"]
     post_backup_scripts: ["backup-verification"]
     include_paths:
-      - "{{ music_library_path }}"
-      - "{{ music_stack_home }}"
+      - "{{ media_library_path }}"
+      - "{{ media_home }}"
     exclude_patterns:
       - "*/cache/*"
       - "*.tmp"

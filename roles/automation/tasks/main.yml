@@ -29,8 +29,16 @@
     role_specific_packages: "{{ automation_specific_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
-- name: Include storage setup (optional SSD mount + journald + docker data-root)
-  ansible.builtin.include_tasks: storage.yml
+- name: Set up the optional SSD (mount + journald + docker data-root)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: optional_ssd
+  vars:
+    common_ssd_mount_path: "{{ automation_data_path }}"
+    common_ssd_format: "{{ automation_ssd_format }}"
+    common_ssd_filesystem: "{{ automation_ssd_filesystem }}"
+    common_ssd_mount_options: "{{ automation_ssd_mount_options }}"
+    common_ssd_journald_enabled: "{{ automation_ssd_journald_enabled }}"
   tags: [storage]
 
 - name: Include common Docker setup

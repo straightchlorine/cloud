@@ -1,12 +1,11 @@
 ---
 role_name_check: 0
-# Molecule configuration for Docker installation testing
 
 driver:
   name: podman
 
 platforms:
-  - name: Debian12-docker
+  - name: debian12-docker
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
@@ -19,7 +18,7 @@ platforms:
     tmpfs:
       - /run
       - /tmp
-    environment:
+    env:
       container: podman
 
 provisioner:
@@ -44,7 +43,6 @@ verifier:
 
 scenario:
   name: docker-installation
-  description: Test Docker installation with user namespace mapping (userns-remap)
   test_sequence:
     - dependency
     - cleanup

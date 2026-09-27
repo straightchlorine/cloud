@@ -1,31 +1,18 @@
 ---
-# Weekly Pi-hole update (pihole -up/-g). Debian package updates are handled
-# fleet-wide by the common role (roles/common/tasks/auto_updates.yml).
+# Weekly Pi-hole update. Debian packages are fleet-wide unattended-upgrades
+# (common auto_updates.yml).
 
-- name: Install the Pi-hole update script
-  ansible.builtin.template:
-    src: pihole-update.sh.j2
-    dest: /usr/local/bin/pihole-update
-    owner: root
-    group: root
-    mode: '0755'
-  become: true
-
-- name: Create weekly update cron job
-  ansible.builtin.cron:
-    name: "Weekly Pi-hole updates"
-    minute: "{{ dns_auto_update_time.split(':')[1] }}"
-    hour: "{{ dns_auto_update_time.split(':')[0] }}"
-    weekday: "{{ dns_auto_update_day[:3] | lower }}"
-    job: "/usr/local/bin/pihole-update >> /var/log/weekly-updates.log 2>&1"
-    user: root
-  become: true
-
-- name: Create log rotation for update logs
-  ansible.builtin.template:
-    src: weekly-updates-logrotate.j2
-    dest: /etc/logrotate.d/weekly-updates
-    owner: root
-    group: root
-    mode: '0644'
-  become: true
+- name: Configure the weekly Pi-hole update
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: app_update
+  vars:
+    common_app_update_name: pihole
+    common_app_update_label: Pi-hole
+    common_app_update_steps:
+      - pihole -up
+      - pihole -g
+      - systemctl restart pihole-FTL
+    common_app_update_weekday: "{{ dns_auto_update_day[:3] | lower }}"
+    common_app_update_hour: "{{ dns_auto_update_time.split(':')[0] }}"
+    common_app_update_minute: "{{ dns_auto_update_time.split(':')[1] }}"

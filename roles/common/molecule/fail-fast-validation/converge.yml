@@ -20,9 +20,15 @@
               - neither_does_this_one
 
       rescue:
-        - name: Set fact to indicate expected failure occurred
-          ansible.builtin.set_fact:
-            common_fail_fast_test_passed: true
+        - name: Record the expected failure for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps a rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-common-failfast.passed
+            force: false
+            mode: "0644"
 
         - name: Display expected failure message
           ansible.builtin.debug:

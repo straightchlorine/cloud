@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-roles := "common backup-system firewall dns automation backup monitoring music-stack prometheus-exporters"
+roles := "common backup-system firewall dns automation backup monitoring media prometheus-exporters"
 
 _ok   := "[  OK  ]"
 _fail := "[ FAIL ]"

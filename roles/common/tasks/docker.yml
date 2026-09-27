@@ -178,3 +178,7 @@
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
+
+- name: Enable Raspberry Pi kernel cgroup memory controller for Docker resource limits
+  ansible.builtin.include_tasks: rpi_cgroups.yml
+  when: common_rpi_cgroup_memory_enabled | default(true) | bool

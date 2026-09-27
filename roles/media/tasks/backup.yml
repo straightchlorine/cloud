@@ -1,0 +1,88 @@
+---
+# Recreate-from-zero set: the music library, the Navidrome DB (its own
+# nightly backups), the beets DB, the .env/JWT secret and the yt-dlp download
+# archive. Everything else is rebuilt by this role.
+
+- name: Install the nightly local snapshot backup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_snapshot_backup
+  vars:
+    common_snapshot_name: "media"
+    common_snapshot_stack_home: "{{ media_home }}"
+    common_snapshot_dest: "{{ media_backup_dir }}"
+    common_snapshot_owner: "{{ media_backup_owner }}"
+    common_snapshot_retention: "{{ media_backup_retention }}"
+    common_snapshot_hour: "{{ media_backup_schedule_hour }}"
+    common_snapshot_minute: "{{ media_backup_schedule_minute }}"
+    common_snapshot_summary: "Navidrome's newest backup, a beets DB snapshot, the stack .env and the yt-dlp archive"
+    common_snapshot_steps:
+      # Navidrome writes its own backup at media_navidrome_backup_schedule;
+      # none exists yet on the first night after a fresh deploy.
+      - |
+        latest="$(ls -1 "{{ media_library_path }}"/navidrome-data/backups/navidrome_backup_*.db 2>/dev/null \
+            | sort | tail -n 1 || true)"
+        if [ -n "$latest" ]; then
+            cp "$latest" "$WORK/navidrome.db"
+        else
+            NOTES="$NOTES No Navidrome backup existed yet."
+        fi
+      # sqlite .backup is consistent against a live writer.
+      - |
+        if [ -f "{{ media_library_path }}/beets/library.db" ]; then
+            sqlite3 -cmd '.timeout 5000' "{{ media_library_path }}/beets/library.db" ".backup '$WORK/beets-library.db'"
+        fi
+      - |
+        cp "$STACK_HOME/.env" "$WORK/media.env"
+      - |
+        if [ -f "{{ media_library_path }}/youtube-archive.txt" ]; then
+            cp "{{ media_library_path }}/youtube-archive.txt" "$WORK/"
+        fi
+  when: media_backup_enabled
+
+- name: Install Syncthing (common role, optional)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing
+  when: common_syncthing_enabled | default(false) | bool and media_backup_enabled
+
+- name: Share the backup snapshots and the music library over Syncthing
+  # Send-only: a peer's delete or move must never propagate back here.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_folder
+  vars:
+    common_syncthing_folder_id: "{{ item.id }}"
+    common_syncthing_folder_path: "{{ item.path }}"
+    common_syncthing_folder_type: "sendonly"
+  loop:
+    - {id: "media-backup", path: "{{ media_backup_dir }}"}
+    - {id: "music", path: "{{ media_library_path }}/music"}
+  when: common_syncthing_enabled | default(false) | bool and media_backup_enabled
+
+- name: Configure the off-site restic backup  # noqa: var-naming[no-role-prefix]
+  # No compose pause (unlike automation): a first run over the whole library
+  # would stop Navidrome for hours. The live DB is excluded; Navidrome's own
+  # backups in navidrome-data/backups are the consistent copies restic ships.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: restic_backup
+  vars:
+    common_backup_service_name: "media"
+    common_backup_paths:
+      - "{{ media_home }}"
+      - "{{ media_library_path }}"
+    retention_policy:
+      daily: 7
+      weekly: 4
+      monthly: 6
+    backup_exclude_patterns:
+      - "{{ media_library_path }}/docker"
+      - "{{ media_library_path }}/journal"
+      - "{{ media_library_path }}/cache"
+      - "{{ media_library_path }}/backup-tmp"
+      - "{{ media_library_path }}/navidrome-data/navidrome.db*"
+      - "{{ media_library_path }}/navidrome-data/cache"
+      - "*.log"
+    backup_ssh_config: true
+  when: restic_enabled

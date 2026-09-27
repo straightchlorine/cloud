@@ -4,11 +4,17 @@
   gather_facts: false
   become: false
   tasks:
+    - name: Stat the marker converge's rescue wrote
+      # Converge and verify run as separate processes, so converge records the
+      # expected failure as a marker file instead of a fact.
+      ansible.builtin.stat:
+        path: /tmp/molecule-common-failfast.passed
+      register: common_failfast_marker
+
     - name: Assert that expected failure was caught
       ansible.builtin.assert:
         that:
-          - common_fail_fast_test_passed is defined
-          - common_fail_fast_test_passed | bool
+          - common_failfast_marker.stat.exists
         fail_msg: "Fail-fast validation test did not complete as expected"
 
     - name: Display success message

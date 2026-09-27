@@ -74,18 +74,17 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 
-  # Automation Stack Services - Watchtower
   - job_name: 'watchtower'
     metrics_path: '/v1/metrics'
     bearer_token: '{{ vault_watchtower_api_token }}'
     static_configs:
 {% for host in groups['all'] %}
-{% if hostvars[host]['prometheus_role'] == 'automation' %}
+{% if hostvars[host]['prometheus_role'] in ['automation', 'music'] %}
       - targets: ['{{ hostvars[host]['primary_ip'] }}:8084']
         labels:
           instance: '{{ host }}'
           service: 'watchtower'
-          role: 'automation'
+          role: '{{ hostvars[host]['prometheus_role'] }}'
 {% endif %}
 {% endfor %}
 
@@ -93,7 +92,7 @@ scrape_configs:
   - job_name: 'cadvisor'
     static_configs:
 {% for host in groups['all'] %}
-{% if hostvars[host]['prometheus_role'] == 'automation' %}
+{% if hostvars[host]['prometheus_role'] in ['automation', 'music'] %}
       - targets: ['{{ hostvars[host]['primary_ip'] }}:8085']
         labels:
           instance: '{{ host }}'
@@ -107,12 +106,11 @@ scrape_configs:
     static_configs:
 {% for host in groups['all'] %}
 {% if hostvars[host]['prometheus_role'] == 'music' %}
-      - targets: ['{{ hostvars[host]['primary_ip'] }}:4533']
+      - targets: ['{{ hostvars[host]['primary_ip'] }}:4545']
         labels:
           instance: '{{ host }}'
           service: 'navidrome'
           role: 'music'
-        metrics_path: '/metrics'
 {% endif %}
 {% endfor %}
 

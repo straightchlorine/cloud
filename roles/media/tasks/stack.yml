@@ -1,0 +1,134 @@
+---
+- name: Resolve the stack user's uid/gid on this host
+  # Resolve the inventory's ansible_user, not the facts: under become:true
+  # ansible_user_uid reflects root.
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+
+- name: Publish the stack user's uid/gid for the compose services
+  ansible.builtin.set_fact:
+    media_uid: "{{ getent_passwd[ansible_user][1] }}"
+    media_gid: "{{ getent_passwd[ansible_user][2] }}"
+
+- name: Create the stack home directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+  loop:
+    - "{{ media_home }}"
+    - "{{ media_home }}/config"
+    - "{{ media_home }}/scripts"
+
+- name: Create the library data directories
+  # navidrome runs as media_uid inside the userns-remapped container - host
+  # uid dockremap + media_uid - so only navidrome-data needs that owner. The
+  # rest belongs to the stack user, which yt-dlp and beets (userns host) write
+  # as. Only navidrome-data recurses: walking the library is slow on a Pi.
+  ansible.builtin.file:
+    path: "{{ media_library_path }}/{{ item }}"
+    state: directory
+    owner: >-
+      {{ ((common_dockremap_uid | int) + (media_uid | int))
+      if item == 'navidrome-data' else ansible_user }}
+    group: >-
+      {{ ((common_dockremap_gid | int) + (media_gid | int))
+      if item == 'navidrome-data' else ansible_user }}
+    mode: "0755"
+    recurse: "{{ item == 'navidrome-data' }}"
+  become: true
+  loop: "{{ media_library_directories }}"
+
+- name: Check whether a Navidrome JWT secret is already persisted
+  ansible.builtin.stat:
+    path: "{{ media_home }}/.navidrome_jwt_secret"
+  register: media_jwt_secret_file
+
+- name: Read the persisted Navidrome JWT secret
+  ansible.builtin.slurp:
+    src: "{{ media_home }}/.navidrome_jwt_secret"
+  register: media_jwt_secret_persisted
+  when: media_jwt_secret_file.stat.exists
+  no_log: true
+
+- name: Generate a Navidrome JWT secret when none is persisted
+  # Persisted so redeploys never rotate ND_JWTKEY and log everyone out.
+  ansible.builtin.command: openssl rand -hex 32
+  register: media_jwt_secret_generated
+  when: not media_jwt_secret_file.stat.exists
+  changed_when: true
+  no_log: true
+
+- name: Publish the Navidrome JWT secret for the .env
+  ansible.builtin.set_fact:
+    media_jwt_secret: >-
+      {{ (media_jwt_secret_generated.stdout
+      if not media_jwt_secret_file.stat.exists
+      else (media_jwt_secret_persisted.content | b64decode | trim)) }}
+  no_log: true
+
+- name: Persist the Navidrome JWT secret
+  ansible.builtin.copy:
+    content: "{{ media_jwt_secret }}\n"
+    dest: "{{ media_home }}/.navidrome_jwt_secret"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Write the beets config and the adopt overlay
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ media_library_path }}/beets/{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  loop:
+    - config.yaml
+    - adopt.yaml
+
+- name: Render compose + .env and bring up the stack
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: deploy_compose_stack
+  vars:  # noqa: var-naming[no-role-prefix]
+    stack_name: "media"
+    compose_file_path: "{{ media_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_services: >-
+      {{ media_compose_services
+      + [common_watchtower_compose_service, common_cadvisor_compose_service] }}
+    compose_networks: "{{ media_compose_networks }}"
+    compose_volumes: "{{ media_compose_volumes }}"
+    # beets is a tools-profile container, never running with the stack.
+    compose_critical_services:
+      - navidrome
+      - watchtower
+      - cadvisor
+    compose_env_vars: >-
+      {{ {'NAVIDROME_JWT_SECRET': media_jwt_secret} | combine(common_watchtower_env_vars) }}
+    start_stack: "{{ common_start_stack }}"
+  # No notify: compose up -d already recreates containers on file changes.
+
+- name: Install the stack management script
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/manage-stack.sh.j2"
+    dest: "{{ media_home }}/scripts/manage-media.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  vars:
+    manage_stack_home: "{{ media_home }}"
+    manage_stack_name: "media"
+
+- name: Symlink the management script into PATH
+  ansible.builtin.file:
+    src: "{{ media_home }}/scripts/manage-media.sh"
+    dest: /usr/local/bin/manage-media
+    state: link
+    force: true
+  become: true

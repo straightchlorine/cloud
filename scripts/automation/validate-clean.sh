@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # Post-teardown check for a disposable automation test host.
-# (The former default staging host, pi-test-automation, was repurposed as
-# pi-test-media for the media role - the host alias is now required.)
 # Run after playbooks/automation-teardown.yml to confirm the box is clean enough for
 # a fresh automation-role test. Pairs with validate-deploy.sh (deployed host check).
 # Usage: ./scripts/automation/validate-clean.sh <ansible-host-alias>

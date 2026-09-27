@@ -183,9 +183,7 @@ minor-pinned and excluded from auto-update; bump them deliberately.
 ## Teardown & Re-test
 
 The role ships a repeatable teardown for disposable test hosts, so the same
-box can be re-deployed and re-tested end-to-end. (The former spare-Pi staging
-box `pi-test-automation` was repurposed as `pi-test-media` for the media
-role — point these at whatever spare Pi stages automation next.)
+box can be re-deployed and re-tested end-to-end.
 
 ```bash
 # 1. Tear down the automation role on the test host

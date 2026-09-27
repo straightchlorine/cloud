@@ -3,7 +3,7 @@ role_name_check: 0
 driver:
   name: podman
 platforms:
-  - name: Debian12-network
+  - name: debian12-network
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
@@ -24,4 +24,3 @@ verifier:
   name: ansible
 scenario:
   name: network-facts
-  description: Test network facts detection and CIDR calculation

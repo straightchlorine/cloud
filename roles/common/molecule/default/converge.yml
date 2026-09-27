@@ -31,8 +31,8 @@
         name: common
         tasks_from: chrony
 
-    # Hardware detection moved to a standalone 'hardware' role with its own
-    # molecule scenario - no duplicate include needed here.
+    # Hardware detection lives in the standalone 'hardware' role (own molecule
+    # scenario); nothing to include here.
 
     - name: Set timezone
       community.general.timezone:

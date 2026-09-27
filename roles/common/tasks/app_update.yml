@@ -1,0 +1,38 @@
+---
+# Weekly self-update for software apt does not manage (Pi-hole, yt-dlp).
+# Installs /usr/local/bin/<name>-update and its root cron; all jobs share
+# /var/log/weekly-updates.log and ntfy on the result.
+#
+# Contract:
+#   common_app_update_name:    script name prefix (e.g. pihole)
+#   common_app_update_label:   human name for cron/ntfy (e.g. Pi-hole)
+#   common_app_update_steps:   shell commands; any failure marks the run failed
+#   common_app_update_weekday / _hour / _minute: cron schedule
+
+- name: "Install the weekly update script: {{ common_app_update_name }}"
+  ansible.builtin.template:
+    src: app-update.sh.j2
+    dest: "/usr/local/bin/{{ common_app_update_name }}-update"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: "Schedule the weekly update: {{ common_app_update_name }}"
+  ansible.builtin.cron:
+    name: "Weekly {{ common_app_update_label }} updates"
+    weekday: "{{ common_app_update_weekday }}"
+    hour: "{{ common_app_update_hour }}"
+    minute: "{{ common_app_update_minute }}"
+    job: "/usr/local/bin/{{ common_app_update_name }}-update"
+    user: root
+  become: true
+
+- name: Rotate the shared weekly update log
+  ansible.builtin.template:
+    src: weekly-updates-logrotate.j2
+    dest: /etc/logrotate.d/weekly-updates
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

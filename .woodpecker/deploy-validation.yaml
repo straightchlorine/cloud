@@ -55,7 +55,7 @@ steps:
         CONF
       - pip install 'ansible-core>=2.17,<2.22' 'molecule>=26.8.0' 'molecule-plugins[podman]>=26.7.15'
       - |
-        for role in common backup-system firewall dns automation backup monitoring music-stack prometheus-exporters; do
+        for role in common backup-system firewall dns automation backup monitoring media prometheus-exporters; do
           echo "========================================="
           echo "Testing role: $role"
           echo "========================================="

@@ -47,6 +47,7 @@
           - "':8082:8080' in compose_file"
           - "':8083:8083' in compose_file"
           - "':8084:8080' in compose_file"
+          - "':8085:8080' in compose_file"
           # Calibre's three separate binds (config/ingest/library) - CWA errors
           # on nested binds
           - "'/cwa-book-ingest' in compose_file"
@@ -62,7 +63,7 @@
           # Watchtower label-enable policy on apps; mariadb has no label.
           - "'com.centurylinklabs.watchtower.enable=true' in compose_file"
         fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
-        success_msg: "[OK] compose file has the 6 services, correct bindings and no inlined secrets"
+        success_msg: "[OK] compose file has the 7 services, correct bindings and no inlined secrets"
 
     - name: Assert the rendered compose parses and has no empty top-level keys
       vars:
@@ -79,6 +80,48 @@
           rendered compose file is structurally invalid (empty volumes/networks,
           or missing services): {{ compose_data }}
         success_msg: "[OK] rendered compose parses and has non-empty volumes/networks mappings"
+
+    - name: Assert Watchtower's schedule actually runs
+      vars:
+        watchtower_env: >-
+          {{ dict((automation_deployed_files.results[0].content | b64decode | from_yaml)
+          .services.watchtower.environment | map('split', '=', 1)) }}
+      ansible.builtin.assert:
+        that:
+          # The 'update' endpoint switches Watchtower to API-only mode, silently
+          # disabling WATCHTOWER_SCHEDULE unless periodic polls are re-enabled.
+          - >-
+            'update' not in watchtower_env.WATCHTOWER_HTTP_API_ENDPOINTS.split(',')
+            or watchtower_env.WATCHTOWER_HTTP_API_PERIODIC_POLLS | default('false') | bool
+          # Watchtower's cron has a leading seconds field.
+          - watchtower_env.WATCHTOWER_SCHEDULE.split() | length == 6
+        fail_msg: "watchtower env would never run its schedule: {{ watchtower_env }}"
+        success_msg: "[OK] watchtower schedule is 6-field and not disabled by the update API"
+
+    - name: Assert cAdvisor is updated by Watchtower and not exposed on 0.0.0.0
+      vars:
+        cadvisor: "{{ (automation_deployed_files.results[0].content | b64decode | from_yaml).services.cadvisor }}"
+      ansible.builtin.assert:
+        that:
+          - "'com.centurylinklabs.watchtower.enable=true' in cadvisor.labels"
+          - >-
+            cadvisor.ports | select('match', '^' ~ ansible_facts['default_ipv4']['address'] ~ ':')
+            | list | length == cadvisor.ports | length
+        fail_msg: "cadvisor service wrong: {{ cadvisor }}"
+        success_msg: "[OK] cadvisor labelled for Watchtower and bound to primary_ip"
+
+    - name: Assert the compose builder's block layout
+      vars:
+        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - compose_file is search('\n# END networks')
+          # A non-empty line directly above '# END' means a block lost its
+          # trailing blank line (yamlfmt once rewrote |+ to |, dropping it).
+          - compose_file is not search('[^\n]\n# END ')
+          - compose_file is not search('[ \t]\n')
+        fail_msg: "compose layout wrong (no blank line before '# END', or trailing whitespace):\n{{ compose_file }}"
+        success_msg: "[OK] every managed block ends with a blank line; no trailing whitespace"
 
     - name: Assert the generated .env carries the secrets at 0600
       vars:
@@ -127,8 +170,14 @@
           - "'calibre' in backup_script"
           # A paused stack (restic holds it) must not hang the DB dump.
           - "'timeout 600' in backup_script"
+          # Snapshots are built outside the Syncthing folder and renamed in
+          # whole, so peers never receive half-written dumps.
+          - "'mktemp -d' in backup_script"
+          - "'mv \"$WORK\" \"$DEST/$STAMP\"' in backup_script"
+          # Calibre DB snapshots live in each dated snapshot (retention applies).
+          - "'$WORK/calibre-databases' in backup_script"
           # 02:30, ahead of the restic timer whose unit pauses the stack.
-          - "'30 2 * * *' in automation_root_crontab.stdout"
+          - automation_root_crontab.stdout is search('(?m)^30 0?2 \\* \\* \\* ')
         fail_msg: "backup script/cron wrong: {{ backup_script }}"
         success_msg: "[OK] backup script (0755, no embedded secrets) + root cron present"
 

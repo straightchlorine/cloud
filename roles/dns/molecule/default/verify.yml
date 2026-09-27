@@ -7,7 +7,7 @@
       # Must match the converge discovery so the setupVars assertion can
       # compare against the same interface the role was given.
       ansible.builtin.set_fact:
-        molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | first }}"
+        molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
 
     - name: Read the deployed update and backup scripts
       ansible.builtin.slurp:

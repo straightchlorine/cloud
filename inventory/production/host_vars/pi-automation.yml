@@ -35,6 +35,8 @@ firewall_rules:
 
 # Stack-level
 common_start_stack: true
+common_auto_updates_reboot_if_required: true
+common_auto_updates_reboot_time: "05:00"
 
 # Prometheus labels
 prometheus_role: "automation"

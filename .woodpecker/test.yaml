@@ -26,6 +26,7 @@ matrix:
   ROLE:
     - dns
     - automation
+    - media
     - honeypot
 
 steps:

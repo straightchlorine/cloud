@@ -15,7 +15,7 @@ graph TB
     subgraph VLAN["Services VLAN - (192.168.20.0/24)"]
         direction LR
         dns["<b>pi-dns</b><br/>Pi-hole + NTP"]
-        music["<b>pi-music</b><br/>Navidrome + yt-dlp + Beets"]
+        music["<b>media</b><br/>Navidrome + yt-dlp + Beets"]
         automation["<b>pi-automation</b><br/>Vaultwarden + Firefly III<br/> + MariaDB + Watchtower"]
         monitoring["<b>debian-monitoring</b><br/>Grafana + Prometheus<br/>Loki + Alertmanager"]
     end
@@ -42,7 +42,7 @@ just validate full  # End-to-end infrastructure validation
 ### Deploy Individual Services
 
 ```bash
-just deploy-service playbooks/music-stack.yml
+just deploy-service playbooks/media.yml
 just deploy-service playbooks/automation-stack.yml
 ```
 
@@ -59,7 +59,7 @@ ansible-playbook -i inventory/production/hosts.yml \
 roles/
 ├── common/              # Docker, packages, network facts, backup
 ├── dns/                 # Pi-hole DNS + Chrony NTP
-├── music-stack/         # Navidrome + yt-dlp + Beets
+├── media/               # Navidrome + yt-dlp + Beets
 ├── automation/          # Vaultwarden + Firefly III + MariaDB + Watchtower
 ├── monitoring/          # Grafana + Prometheus + Loki + Alertmanager
 ├── backup/              # Restic multi-tier backup (standalone + coordinator)

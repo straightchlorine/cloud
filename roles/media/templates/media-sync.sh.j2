@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# YouTube playlists -> downloads/ (yt-dlp) -> music/ (beets: MusicBrainz,
+# lyrics, ReplayGain). Navidrome's file watcher picks up the results. Every
+# run ends in one ntfy: a summary on success, the failing line on error.
+#
+#   media-sync             download + import (nightly cron)
+#   media-sync --retag     retry MusicBrainz for recent as-is imports (weekly)
+#   media-sync --adopt     one-time: register the existing music/ with beets
+#   media-sync --backfill  one-time: lyrics + ReplayGain for adopted tracks
+#                          (hours on a Pi - run it under tmux)
+#
+# Managed by Ansible.
+set -euo pipefail
+
+LIB="{{ media_library_path }}"
+MODE="${1:-sync}"
+COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
+# s6-setuidgid abc: run as the image's PUID user, not root, so beets' moves
+# and tag writes stay owned by the stack user.
+BEET=("${COMPOSE[@]}" run --rm -T beets s6-setuidgid abc beet)
+
+notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
+count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
+
+exec 9>"$LIB/logs/.media-sync.lock"
+flock -n 9 || { echo "media-sync already running"; exit 0; }
+
+trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
+
+# beets never runs long enough for watchtower to see it; pull instead. A
+# failed pull keeps the cached image.
+"${COMPOSE[@]}" --profile tools pull -q beets || echo "beets pull failed; using the cached image"
+
+case "$MODE" in
+    --retag)
+        before="$(count 'mb_trackid::^$' added:-4w..)"
+        "${BEET[@]}" import -L 'mb_trackid::^$' added:-4w..
+        after="$(count 'mb_trackid::^$' added:-4w..)"
+        notify done "$((before - after)) of $before recent as-is track(s) matched MusicBrainz."
+        exit 0 ;;
+    --adopt)
+        "${BEET[@]}" -c /config/adopt.yaml import /music
+        notify done "beets now tracks $(count) track(s) in music/."
+        exit 0 ;;
+    --backfill)
+        "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+        "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+        notify done "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
+        exit 0 ;;
+    sync) ;;
+    *)
+        echo "usage: media-sync [--retag|--adopt|--backfill]"; exit 2 ;;
+esac
+
+mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
+
+# yt-dlp exits non-zero whenever a single video is gone; those are expected
+# (the archive retries nothing). Only other errors are worth an alert.
+run_log="$(mktemp)"
+trap 'rm -f "$run_log"' EXIT
+for url in "${playlists[@]}"; do
+    yt-dlp --config-location "{{ media_home }}/config/yt-dlp.conf" "$url" 2>&1 | tee -a "$run_log" || true
+done
+errors="$(grep '^ERROR:' "$run_log" \
+    | grep -cvE 'Video unavailable|Private video|video has been removed|not available in your country|members-only' \
+    || true)"
+
+new="$(find "$LIB/downloads" -type f | wc -l)"
+if [ "$new" -gt 0 ]; then
+    "${BEET[@]}" import /downloads
+fi
+left="$(find "$LIB/downloads" -type f | wc -l)"
+
+summary="$(grep -cv '^\s*$' "{{ media_home }}/config/playlists.txt") playlist(s): $((new - left)) track(s) imported, $left left in downloads/, $errors unexpected yt-dlp error(s)."
+if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ]; then
+    notify "needs a look" "$summary See $LIB/logs/media-sync.log." default warning
+else
+    notify done "$summary"
+fi

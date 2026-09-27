@@ -1,5 +1,7 @@
 ---
-# Automation stack: vaultwarden, firefly (+ mariadb, cron sidecar), watchtower.
+# Automation stack: vaultwarden, firefly (+ mariadb, cron sidecar), calibre;
+# watchtower and cadvisor come from common. Application images float on
+# :latest for watchtower's opt-in (labelled) nightly sweep; mariadb is pinned.
 
 # Derived from the inventory's ansible_user, the control user that owns the stack
 # (as common_syncthing_home, stack_user and compose_owner do). Do NOT use the
@@ -16,8 +18,6 @@ automation_specific_packages:
 automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
 automation_calibre_port: 8083
-automation_watchtower_metrics_port: 8084
-automation_cadvisor_port: 8085
 
 automation_subdomain_vaultwarden: "vault"
 automation_subdomain_firefly: "firefly"
@@ -33,10 +33,6 @@ automation_ssd_format: false # DESTRUCTIVE if true - wipes the detected drive
 automation_ssd_filesystem: "ext4"
 automation_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 automation_ssd_journald_enabled: true
-
-# Watchtower: opt-in per container via labels, nightly sweep. Application images
-# float on :latest; mariadb is pinned.
-automation_watchtower_schedule: "0 0 2 * * *"
 
 # Secondary local backup replicated by Syncthing; primary/off-site is restic.
 # automation_backup_dir / automation_backup_owner are set in host_vars.
@@ -193,67 +189,6 @@ automation_compose_services:
       reservations:
         memory: 256M
         cpus: "0.25"
-
-  - service_name: watchtower
-    service_image: "nickfedor/watchtower:latest"
-    service_userns_mode: "host"
-    service_ports:
-      - host: "{{ automation_watchtower_metrics_port }}"
-        container: 8080
-        bind_ip: "{{ primary_ip }}"
-    service_environment:
-      - "WATCHTOWER_LABEL_ENABLE=true"
-      - "WATCHTOWER_SCHEDULE={{ automation_watchtower_schedule }}"
-      - "WATCHTOWER_CLEANUP=true"
-      - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
-      - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
-      - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-      - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics"
-      - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
-    service_volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-    service_networks:
-      - stack
-    service_resources:
-      limits:
-        memory: 256M
-        cpus: "0.5"
-      reservations:
-        memory: 128M
-        cpus: "0.1"
-
-  - service_name: cadvisor
-    # Patch releases only; bump the minor by hand.
-    service_image: "ghcr.io/google/cadvisor:0.60"
-    # docker.sock access, as for watchtower.
-    service_userns_mode: "host"
-    service_command:
-      - "--housekeeping_interval=10s"
-      - "--docker_only=true"
-      - "--store_container_labels=false"
-      - "--disable_metrics=advtcp,udp,sched,process,hugetlb,referenced_memory,cpu_topology,resctrl,tcp"
-    service_ports:
-      - host: "{{ automation_cadvisor_port }}"
-        container: 8080
-        bind_ip: "{{ primary_ip }}"
-    # data-root fact exists only with the SSD; else Docker's default path.
-    service_volumes:
-      - "/:/rootfs:ro"
-      - "/var/run:/var/run:ro"
-      - "/sys:/sys:ro"
-      - "{{ common_docker_data_root | default('/var/lib/docker') }}:/var/lib/docker:ro"
-      - "/dev/disk:/dev/disk:ro"
-    service_networks:
-      - stack
-    service_labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-    service_resources:
-      limits:
-        memory: 192M
-        cpus: "0.3"
-      reservations:
-        memory: 64M
-        cpus: "0.05"
 
   - service_name: calibre-web-automated
     service_image: "crocodilestick/calibre-web-automated:latest"

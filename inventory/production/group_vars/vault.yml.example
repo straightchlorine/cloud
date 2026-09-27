@@ -53,13 +53,10 @@ vault_restic_monitoring_password: "your-32-character-secure-restic-password"
 # OPTIONAL VARIABLES - Only required for specific features
 # ==============================================================================
 
-# YouTube Sync (music-stack)
-# Required only if: youtube_sync_enabled: true in host_vars
+# YouTube Sync (media role)
+# Required only if: media_youtube_enabled: true in host_vars
 vault_youtube_playlists:
   - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
-vault_youtube_quality: "bestaudio[ext=m4a]/best[ext=mp4]/best"
-vault_youtube_concurrent: 3
-vault_youtube_extra_args: "--embed-metadata --embed-thumbnail"
 
 # SMTP Alerting (monitoring)
 # Required only if: alerting enabled

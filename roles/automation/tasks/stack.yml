@@ -96,7 +96,9 @@
     stack_name: "automation"
     compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
     compose_owner: "{{ ansible_user }}"
-    compose_services: "{{ automation_compose_services }}"
+    compose_services: >-
+      {{ automation_compose_services
+      + [common_watchtower_compose_service, common_cadvisor_compose_service] }}
     compose_networks: "{{ automation_compose_networks }}"
     compose_volumes: "{{ automation_compose_volumes }}"
     # firefly-cron is excluded: it is a sleep-sidecar (wget -> sleep 60s -> exit 0
@@ -107,24 +109,16 @@
       - firefly
       - mariadb
       - watchtower
-    # Vault glue - the only place real secret values exist in the role. The
-    # .env file also feeds Watchtower's ntfy notifications (group_vars/all).
-    compose_env_vars:
+    # Vault glue - the only place real secret values exist in the role.
+    compose_env_vars: "{{ automation_env_vars | combine(common_watchtower_env_vars) }}"
+    automation_env_vars:
       FIREFLY_APP_KEY: "{{ vault_firefly_app_key }}"
       FIREFLY_STATIC_CRON_TOKEN: "{{ vault_firefly_static_cron_token }}"
       FIREFLY_DB_PASSWORD: "{{ vault_firefly_db_password }}"
       VAULTWARDEN_ADMIN_TOKEN: "{{ vault_vaultwarden_admin_token }}"
-      WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
       # Optional CWA metadata key: empty until vault_hardcover_token is set, so
       # molecule/test deploys without the vault var still render.
       HARDCOVER_TOKEN: "{{ vault_hardcover_token if vault_hardcover_token is defined else '' }}"
-      # shoutrrr's ntfy URL is ntfy://user:password@host/topic and ntfy accepts
-      # the token only as the basic-auth PASSWORD, so the username stays empty
-      # (a key there is rejected with 40301). Empty URL = watchtower is silent.
-      WATCHTOWER_NOTIFICATION_URL: >-
-        {{ 'ntfy://:' ~ vault_ntfy_api_key ~ '@' ~
-        (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
-        if vault_ntfy_api_key is defined else '' }}
     start_stack: "{{ common_start_stack }}"
   # No notify: compose up -d already recreates containers on file changes, so a
   # restart handler would only double-restart the stack.

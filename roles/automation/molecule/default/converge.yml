@@ -52,7 +52,7 @@
     # the role's defaults loaded. NOT included, deliberately:
     #   - packages.yml include (apt installs the whole common list - slow,
     #     covered on the staging Pi by scripts/automation/validate-deploy.sh)
-    #   - storage.yml (prepares/mounts the optional SSD - containers must
+    #   - common optional_ssd (prepares/mounts the optional SSD - containers must
     #     not touch the host's block devices)
     #   - docker.yml (installs the Docker daemon; no docker-in-docker here -
     #     start_stack is false so compose up is skipped too)

@@ -1,0 +1,39 @@
+---
+# Media Stack deployment playbook for Raspberry Pi (see
+# roles/media/README.md). The role itself installs everything -
+# including the manage-media symlink - so this playbook is intentionally
+# thin; site.yml's dedicated play covers the same ground for the whole
+# 'music' group.
+- name: Deploy Media Stack
+  hosts: music
+  become: true
+  gather_facts: true
+  tags: [media]
+  pre_tasks:
+    - name: Update package cache
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: package_cache_update
+
+  roles:
+    - role: prometheus-exporters
+      tags: [monitoring, prometheus, exporters]
+    - role: media
+      tags: [media, docker, stack]
+
+  post_tasks:
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg: |
+          Media Stack Deployment Complete!
+
+          Useful commands on the Pi:
+          - Manage stack: manage-media {start|stop|restart|status|logs}
+          - Run the pipeline now: media-sync (when media_youtube_enabled)
+          - View logs: docker compose -f {{ media_home }}/docker-compose.yml logs -f
+
+          Directory structure:
+          - Music library: {{ media_library_path }}/music
+          - Downloads: {{ media_library_path }}/downloads
+          - Config: {{ media_home }}/config/
+          - Scripts: {{ media_home }}/scripts/

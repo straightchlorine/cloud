@@ -1,0 +1,180 @@
+---
+# Host side of the playlist pipeline: GPG-verified yt-dlp and its JS runtime
+# (deno), both kept current by a weekly self-update, plus media-sync and its
+# cron entries.
+
+- name: Resolve the yt-dlp release asset for this host
+  # Upstream asset names; an unlisted architecture fails here, not as a 404.
+  ansible.builtin.set_fact:
+    media_ytdlp_asset: >-
+      {{ {'aarch64': 'yt-dlp_linux_aarch64', 'armv7l': 'yt-dlp_linux_armv7l',
+      'x86_64': 'yt-dlp_linux'}[ansible_architecture] }}
+
+- name: Check for an installed yt-dlp and deno
+  ansible.builtin.stat:
+    path: "/usr/local/bin/{{ item }}"
+  register: media_runtime_stat
+  loop: [yt-dlp, deno]
+
+- name: Publish which binaries still need their first install
+  ansible.builtin.set_fact:
+    media_ytdlp_installed: "{{ media_runtime_stat.results[0] }}"
+    media_deno_installed: "{{ media_runtime_stat.results[1] }}"
+
+- name: Install the first yt-dlp release (the weekly update takes over after)
+  when: not media_ytdlp_installed.stat.exists
+  block:
+    - name: Create a private download directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: yt-dlp
+      register: media_ytdlp_tmp
+
+    - name: Download the yt-dlp key, checksums, signature and binary
+      ansible.builtin.get_url:
+        url: "{{ item.url }}"
+        dest: "{{ media_ytdlp_tmp.path }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {url: "https://github.com/yt-dlp/yt-dlp/raw/master/public.key", dest: public.key}
+        - {url: "{{ media_ytdlp_release }}/SHA2-256SUMS", dest: SHA2-256SUMS}
+        - {url: "{{ media_ytdlp_release }}/SHA2-256SUMS.sig", dest: SHA2-256SUMS.sig}
+        - {url: "{{ media_ytdlp_release }}/{{ media_ytdlp_asset }}", dest: "{{ media_ytdlp_asset }}"}
+      vars:
+        media_ytdlp_release: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ media_ytdlp_version }}"
+
+    - name: Verify the checksums signature and the binary checksum
+      # Throwaway keyring: only the yt-dlp key can satisfy the signature.
+      ansible.builtin.shell: |
+        set -euo pipefail
+        export GNUPGHOME="$PWD/gnupg"
+        mkdir -m 0700 "$GNUPGHOME"
+        gpg --batch --quiet --import public.key
+        gpg --batch --verify SHA2-256SUMS.sig SHA2-256SUMS
+        grep " {{ media_ytdlp_asset }}$" SHA2-256SUMS | sha256sum -c -
+      args:
+        chdir: "{{ media_ytdlp_tmp.path }}"
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Install the verified yt-dlp binary
+      ansible.builtin.copy:
+        src: "{{ media_ytdlp_tmp.path }}/{{ media_ytdlp_asset }}"
+        dest: /usr/local/bin/yt-dlp
+        mode: "0755"
+        owner: root
+        group: root
+        remote_src: true
+      become: true
+
+  always:
+    - name: Remove the download directory
+      ansible.builtin.file:
+        path: "{{ media_ytdlp_tmp.path }}"
+        state: absent
+      when: media_ytdlp_tmp.path is defined
+
+- name: Install deno (yt-dlp's default JS runtime for YouTube challenges)
+  # No armv7l build exists, so a 32-bit OS fails at the download.
+  when: not media_deno_installed.stat.exists
+  vars:
+    media_deno_zip: >-
+      https://github.com/denoland/deno/releases/download/v{{ media_deno_version
+      }}/deno-{{ ansible_architecture }}-unknown-linux-gnu.zip
+  block:
+    - name: Download deno, verified against the release's sha256sum
+      ansible.builtin.get_url:
+        url: "{{ media_deno_zip }}"
+        checksum: "sha256:{{ media_deno_zip }}.sha256sum"
+        dest: /tmp/deno.zip
+        mode: "0644"
+
+    - name: Unpack deno into /usr/local/bin
+      ansible.builtin.unarchive:
+        src: /tmp/deno.zip
+        dest: /usr/local/bin
+        remote_src: true
+        mode: "0755"
+      become: true
+
+  always:
+    - name: Remove the deno download
+      ansible.builtin.file:
+        path: /tmp/deno.zip
+        state: absent
+
+- name: Verify yt-dlp and deno run
+  ansible.builtin.command: "{{ item }} --version"
+  changed_when: false
+  loop:
+    - /usr/local/bin/yt-dlp
+    - /usr/local/bin/deno
+
+- name: Configure the weekly yt-dlp + deno self-update
+  # YouTube breaks old releases within weeks. Runs before the nightly sync so
+  # it uses the new builds.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: app_update
+  vars:
+    common_app_update_name: yt-dlp
+    common_app_update_label: yt-dlp
+    common_app_update_steps:
+      - /usr/local/bin/yt-dlp -U
+      - /usr/local/bin/deno upgrade
+    common_app_update_weekday: "1"
+    common_app_update_hour: "0"
+    common_app_update_minute: "30"
+
+- name: Write the yt-dlp configuration and playlist list
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ media_home }}/config/{{ item.dest }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {dest: yt-dlp.conf, mode: "0644", content: "{{ lookup('template', 'yt-dlp.conf.j2') }}"}
+    - {dest: playlists.txt, mode: "0600", content: "{{ vault_youtube_playlists | join('\n') }}\n"}
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Install the media-sync pipeline script
+  ansible.builtin.template:
+    src: media-sync.sh.j2
+    dest: "{{ media_home }}/scripts/media-sync.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Symlink media-sync into PATH
+  ansible.builtin.file:
+    src: "{{ media_home }}/scripts/media-sync.sh"
+    dest: /usr/local/bin/media-sync
+    state: link
+    force: true
+  become: true
+
+- name: Give the stack user's cron /usr/local/bin (yt-dlp, ntfy-notify)
+  ansible.builtin.cron:
+    name: "PATH"
+    env: true
+    value: "/usr/local/bin:/usr/bin:/bin"
+    user: "{{ ansible_user }}"
+  become: true
+
+- name: Schedule the pipeline runs
+  # Nightly sync finishes before the 02:30 snapshot and 03:00 restic run.
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    weekday: "{{ item.weekday }}"
+    hour: "{{ item.hour }}"
+    minute: "{{ item.minute }}"
+    job: "/usr/local/bin/media-sync {{ item.args }}>> {{ media_library_path }}/logs/media-sync.log 2>&1"
+    user: "{{ ansible_user }}"
+  become: true
+  loop:
+    - {name: "Media nightly sync", weekday: "*", hour: "1", minute: "0", args: ""}
+    - {name: "Media weekly retag", weekday: "0", hour: "4", minute: "15", args: "--retag "}
+  loop_control:
+    label: "{{ item.name }}"

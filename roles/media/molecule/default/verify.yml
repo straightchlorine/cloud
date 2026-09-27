@@ -1,0 +1,205 @@
+---
+- name: Verify the media role's deployed state
+  hosts: all
+  become: true
+  vars:
+    media_home: /home/music/stack
+    media_library_path: /mnt/music
+  tasks:
+    - name: Read the deployed files
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ media_home }}/docker-compose.yml"
+        - "{{ media_home }}/.env"
+        - /tmp/media.service.rendered
+        - "{{ media_library_path }}/beets/config.yaml"
+        - "{{ media_home }}/config/yt-dlp.conf"
+        - /usr/local/bin/media-syncthing-backup
+        - "{{ media_library_path }}/beets/adopt.yaml"
+      register: media_files
+
+    - name: Parse the deployed files
+      ansible.builtin.set_fact:
+        compose: "{{ media_files.results[0].content | b64decode | from_yaml }}"
+        env_file: "{{ media_files.results[1].content | b64decode }}"
+        unit: "{{ media_files.results[2].content | b64decode }}"
+        beets: "{{ media_files.results[3].content | b64decode | from_yaml }}"
+        ytdlp_conf: "{{ media_files.results[4].content | b64decode }}"
+        snapshot_script: "{{ media_files.results[5].content | b64decode }}"
+        adopt: "{{ media_files.results[6].content | b64decode | from_yaml }}"
+
+    - name: Stat the deployed files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ media_home }}/.env"
+        - /usr/local/bin/manage-media
+        - /usr/local/bin/media-sync
+        - "{{ media_home }}/config/playlists.txt"
+        - "{{ media_library_path }}/navidrome-data"
+        - "{{ media_library_path }}/music"
+        - /tmp/molecule-media-backup
+      register: media_stats
+
+    - name: Assert the compose services
+      vars:
+        navidrome: "{{ compose.services.navidrome }}"
+      ansible.builtin.assert:
+        that:
+          - compose.services | list | sort == ['beets', 'cadvisor', 'navidrome', 'watchtower']
+          - navidrome.image == 'deluan/navidrome:latest'
+          - "'com.centurylinklabs.watchtower.enable=true' in navidrome.labels"
+          - "'ND_BACKUP_PATH=/data/backups' in navidrome.environment"
+          - "'ND_BACKUP_SCHEDULE=45 1 * * *' in navidrome.environment"
+          - compose.services.beets.image == 'linuxserver/beets:latest'
+          - navidrome.user == '0:0'
+          - "'ND_JWTKEY=${NAVIDROME_JWT_SECRET}' in navidrome.environment"
+          - "'ND_ENABLESHARING=false' in navidrome.environment"
+          - "'ND_PROMETHEUS_ENABLED=true' in navidrome.environment"
+          - "'ND_BASEURL=https://navidrome.example.test' in navidrome.environment"
+          - navidrome.ports | select('match', '.*:4545:4533$') | list | length == 1
+          - compose.services.beets.userns_mode == 'host'
+          - compose.services.beets.profiles == ['tools']
+          - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
+          - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
+        fail_msg: "compose rendered wrong: {{ compose.services }}"
+        success_msg: "[OK] navidrome (watchtower-managed, own backups) + watchtower + cadvisor + on-demand beets"
+
+    - name: Assert the .env carries the JWT secret at 0600
+      ansible.builtin.assert:
+        that:
+          - env_file is search('NAVIDROME_JWT_SECRET="[0-9a-f]{64}"')
+          - env_file is search('WATCHTOWER_API_TOKEN="molecule-test-watchtower-token"')
+          - media_stats.results[0].stat.mode == '0600'
+        fail_msg: ".env wrong: {{ env_file }}"
+        success_msg: "[OK] .env holds the JWT secret and is 0600"
+
+    - name: Assert the rendered systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'ExecStart=/usr/bin/docker compose -f /home/music/stack/docker-compose.yml up -d' in unit"
+          - "'RemainAfterExit=true' in unit"
+        fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
+        success_msg: "[OK] media unit renders with the explicit compose path"
+
+    - name: Assert the userns-remap ownership split
+      # Fixture: dockremap base 10000, stack user root (uid 0).
+      ansible.builtin.assert:
+        that:
+          - media_stats.results[4].stat.uid == 10000
+          - media_stats.results[5].stat.uid == 0
+        fail_msg: >-
+          navidrome-data uid {{ media_stats.results[4].stat.uid }} (want 10000),
+          music uid {{ media_stats.results[5].stat.uid }} (want 0)
+        success_msg: "[OK] navidrome-data owned by the remapped stack uid"
+
+    - name: Assert the beets config imports YouTube singles unattended
+      ansible.builtin.assert:
+        that:
+          - beets.directory == '/music'
+          - beets.library == '/config/library.db'
+          - beets['import'].quiet
+          - beets['import'].singletons
+          - beets['import'].quiet_fallback == 'asis'
+          - beets['import'].duplicate_action == 'keep'
+          - beets.plugins.split() | sort == ['duplicates', 'lyrics', 'replaygain']
+          - beets.replaygain.backend == 'ffmpeg'
+          - beets.lyrics.synced
+        fail_msg: "beets config wrong: {{ beets }}"
+        success_msg: "[OK] beets: quiet singleton import, as-is fallback, lyrics + ReplayGain"
+
+    - name: Assert the adopt overlay leaves existing files untouched
+      ansible.builtin.assert:
+        that:
+          - not adopt['import']['autotag']
+          - not adopt['import']['move']
+          - not adopt['import']['copy']
+          - not adopt['import']['write']
+        fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
+        success_msg: "[OK] adopt overlay: no autotag, move, copy or write"
+
+    - name: Assert the yt-dlp config prefers YouTube Music tags
+      ansible.builtin.assert:
+        that:
+          - "'%(artist,uploader)s:%(artist)s' in ytdlp_conf"
+          - "'--download-archive \"/mnt/music/youtube-archive.txt\"' in ytdlp_conf"
+          - "'media_library_path' not in ytdlp_conf"
+        fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"
+        success_msg: "[OK] yt-dlp.conf rendered with the tag rules and archive"
+
+    - name: Assert the scripts, symlinks and playlist file
+      ansible.builtin.assert:
+        that:
+          - media_stats.results[1].stat.islnk
+          - media_stats.results[2].stat.islnk
+          - media_stats.results[3].stat.mode == '0600'
+        fail_msg: manage/media-sync symlinks or playlists.txt wrong
+        success_msg: "[OK] manage-media + media-sync in PATH, playlists.txt 0600"
+
+    - name: Run the deployed media-sync against the stub yt-dlp
+      # No downloads land, so the beets step is skipped; only the playlist
+      # handoff is exercised.
+      ansible.builtin.command: /usr/local/bin/media-sync
+      changed_when: false
+
+    - name: Read the stub's recorded calls
+      ansible.builtin.slurp:
+        src: /tmp/molecule-ytdlp-calls
+      register: media_ytdlp_calls
+
+    - name: Assert every playlist reached yt-dlp intact, once each
+      vars:
+        calls: "{{ (media_ytdlp_calls.content | b64decode).splitlines() }}"
+      ansible.builtin.assert:
+        that:
+          - calls | length == 2
+          - calls[0].endswith(' https://www.youtube.com/playlist?list=PLmoleculeA')
+          - calls[1].endswith(' https://www.youtube.com/playlist?list=PLmoleculeB')
+          - calls[0].startswith('--config-location /home/music/stack/config/yt-dlp.conf ')
+        fail_msg: "yt-dlp calls wrong: {{ calls }}"
+        success_msg: "[OK] both playlists passed to yt-dlp as whole URLs"
+
+    - name: Read the ntfy stub's recorded notifications
+      ansible.builtin.slurp:
+        src: /tmp/molecule-ntfy
+      register: media_ntfy_calls
+
+    - name: Assert the sync run sent exactly one summary notification
+      vars:
+        sent: "{{ (media_ntfy_calls.content | b64decode).splitlines() }}"
+      ansible.builtin.assert:
+        that:
+          - sent | length == 1
+          - "'media-sync sync done' in sent[0]"
+          - "'2 playlist(s): 0 track(s) imported, 0 left in downloads/, 0 unexpected yt-dlp error(s).' in sent[0]"
+        fail_msg: "ntfy calls wrong: {{ sent }}"
+        success_msg: "[OK] one success summary per sync run"
+
+    - name: Read root's and the stack user's crontab
+      ansible.builtin.command: crontab -l -u root
+      register: media_crontab
+      changed_when: false
+
+    - name: Assert the pipeline and snapshot cron entries
+      ansible.builtin.assert:
+        that:
+          - "'Media nightly sync' in media_crontab.stdout"
+          - "'Media weekly retag' in media_crontab.stdout"
+          - "'/usr/local/bin/media-sync --retag' in media_crontab.stdout"
+          - "'Media Syncthing local backup' in media_crontab.stdout"
+          - "'/usr/local/bin/yt-dlp-update' in media_crontab.stdout"
+          - "'PATH=\"/usr/local/bin:/usr/bin:/bin\"' in media_crontab.stdout"
+        fail_msg: "crontab wrong:\n{{ media_crontab.stdout }}"
+        success_msg: "[OK] nightly sync, weekly retag and 02:30 snapshot scheduled"
+
+    - name: Assert the snapshot backup script and destination
+      ansible.builtin.assert:
+        that:
+          - "'navidrome-data/backups/navidrome_backup_' in snapshot_script"
+          - "'beets/library.db' in snapshot_script"
+          - "'youtube-archive.txt' in snapshot_script"
+          - "'mv \"$WORK\" \"$DEST/$STAMP\"' in snapshot_script"
+          - media_stats.results[6].stat.mode == '0750'
+        fail_msg: "snapshot script wrong:\n{{ snapshot_script }}"
+        success_msg: "[OK] snapshot covers navidrome + beets DBs and the yt-dlp archive"

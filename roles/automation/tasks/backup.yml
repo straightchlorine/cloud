@@ -2,45 +2,44 @@
 # Restic owns off-site backups (restic_backup.yml); the local Syncthing backup
 # below replicates a MariaDB dump and a Vaultwarden snapshot off-box.
 
-- name: Validate local backup configuration
-  ansible.builtin.assert:
-    that:
-      - automation_backup_dir is defined
-      - automation_backup_owner is defined
-    fail_msg: >-
-      automation_backup_dir (the Syncthing-shared folder, on the SSD) and
-      automation_backup_owner (the user that runs Syncthing) must be set in
-      host_vars when automation_backup_enabled is true.
-    quiet: true
-  when: automation_backup_enabled
-
-- name: Ensure the Syncthing backup directory exists
-  ansible.builtin.file:
-    path: "{{ automation_backup_dir }}"
-    state: directory
-    owner: "{{ automation_backup_owner }}"
-    mode: "0750"
-  become: true
-  when: automation_backup_enabled
-
-- name: Install the automation Syncthing backup script
-  ansible.builtin.template:
-    src: automation-syncthing-backup.sh.j2
-    dest: /usr/local/bin/automation-syncthing-backup
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  when: automation_backup_enabled
-
-- name: Schedule the automation Syncthing backup
-  ansible.builtin.cron:
-    name: "Automation Syncthing local backup"
-    minute: "{{ automation_backup_schedule_minute }}"
-    hour: "{{ automation_backup_schedule_hour }}"
-    job: "/usr/local/bin/automation-syncthing-backup >> /var/log/automation-syncthing-backup.log 2>&1"
-    user: root
-  become: true
+- name: Install the nightly local snapshot backup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_snapshot_backup
+  vars:
+    common_snapshot_name: "automation"
+    common_snapshot_stack_home: "{{ automation_stack_home }}"
+    common_snapshot_dest: "{{ automation_backup_dir }}"
+    common_snapshot_owner: "{{ automation_backup_owner }}"
+    common_snapshot_retention: "{{ automation_backup_retention }}"
+    common_snapshot_hour: "{{ automation_backup_schedule_hour }}"
+    common_snapshot_minute: "{{ automation_backup_schedule_minute }}"
+    common_snapshot_summary: >-
+      MariaDB dump, Vaultwarden snapshot + attachments, the stack .env and the
+      Calibre DB snapshots
+    common_snapshot_steps:
+      # Scheduled before the restic timer, which pauses the compose project.
+      - |
+        timeout 600 docker compose exec -T mariadb sh -c \
+            'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction -u "$MARIADB_USER" "$MARIADB_DATABASE"' \
+            | gzip > "$WORK/firefly.sql.gz"
+      - |
+        sqlite3 "{{ automation_data_path }}/vaultwarden/db.sqlite3" "VACUUM INTO '$WORK/vaultwarden.db'"
+      - |
+        if [ -d "{{ automation_data_path }}/vaultwarden/attachments" ]; then
+            tar -C "{{ automation_data_path }}/vaultwarden" -czf "$WORK/attachments.tar.gz" attachments
+        fi
+      - |
+        cp "$STACK_HOME/.env" "$WORK/automation.env"
+      - |
+        if [ -d "{{ automation_data_path }}/calibre" ]; then
+            mkdir -p "$WORK/calibre-databases"
+            for db in "{{ automation_data_path }}"/calibre/config/*.db \
+                      "{{ automation_data_path }}"/calibre/library/metadata.db; do
+                [ -f "$db" ] || continue
+                sqlite3 -cmd '.timeout 5000' "$db" ".backup '$WORK/calibre-databases/$(basename "$db")'"
+            done
+        fi
   when: automation_backup_enabled
 
 - name: Install Syncthing (common role, optional)

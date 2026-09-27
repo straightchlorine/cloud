@@ -1,0 +1,149 @@
+---
+# Secretless by design: the compose file refers to ${VAR}s, interpolated from
+# the generated 0600 .env.
+
+# From the inventory's ansible_user, not the ansible_user_dir/_id facts: under
+# become those resolve to /root. Holds compose, .env and scripts (SD card);
+# everything else lives under media_library_path (the SSD when present).
+media_home: "/home/{{ ansible_user }}/stack"
+# media_library_path: REQUIRED in host_vars - data path and SSD mount point.
+
+# sqlite3: beets DB snapshot; unzip: deno install.
+media_specific_packages:
+  - sqlite3
+  - unzip
+
+media_navidrome_port: 4545
+media_subdomain_navidrome: "navidrome"
+# Navidrome's own nightly DB backup, before watchtower's 02:00 sweep, so the
+# newest backup predates any image upgrade (its migrations are one-way). The
+# 02:30 snapshot ships that file to Syncthing; restic picks up all of them.
+media_navidrome_backup_schedule: "45 1 * * *"
+media_navidrome_backup_count: 7
+
+# First install only (yt-dlp: GPG-verified SHA2-256SUMS; deno: release
+# sha256sum); the weekly self-update keeps both current afterwards. Deno is
+# the JS runtime yt-dlp now needs for YouTube's challenges.
+media_ytdlp_version: "2026.08.19"
+media_deno_version: "2.9.7"
+media_youtube_enabled: false
+
+# Beets query excluded from the one-time `media-sync --backfill`
+# (e.g. audiobooks). Empty = whole library.
+media_backfill_exclude: ""
+
+# Created under media_library_path.
+media_library_directories:
+  - music           # beets-organized library, read-only for navidrome
+  - downloads       # yt-dlp output, beets import source
+  - navidrome-data
+  - beets           # beets config, library.db, import.log
+  - cache           # yt-dlp cache
+  - logs
+
+media_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
+media_ssd_filesystem: "ext4"
+media_ssd_mount_options: "defaults,noatime,errors=remount-ro"
+media_ssd_journald_enabled: true
+
+# Secondary local backup (Syncthing-replicated snapshots of the databases and
+# secrets) plus a send-only Syncthing share of the music library. Primary
+# off-site backup is restic (restic_enabled).
+media_backup_enabled: false
+media_backup_owner: "{{ ansible_user }}"
+media_backup_retention: 14
+# Before the 03:00 restic timer, so restic ships tonight's snapshot too.
+media_backup_schedule_hour: "02"
+media_backup_schedule_minute: "30"
+
+# --- Generated compose profile (secretless; env values come from .env) -----
+
+media_compose_networks:
+  - name: stack
+    compose_name: stack
+    driver: bridge
+
+media_compose_services:
+  - service_name: navidrome
+    service_image: "deluan/navidrome:latest"
+    # primary_ip, not loopback: the central reverse proxy reaches it over the
+    # tailnet, and Prometheus scrapes /metrics here.
+    service_ports:
+      - host: "{{ media_navidrome_port }}"
+        container: 4533
+        bind_ip: "{{ primary_ip }}"
+    service_user: "{{ media_uid }}:{{ media_gid }}"
+    service_environment:
+      - "ND_MUSICFOLDER=/music"
+      - "ND_DATAFOLDER=/data"
+      - "ND_LOGLEVEL=info"
+      - "ND_BASEURL=https://{{ media_subdomain_navidrome }}.{{ domain_name }}"
+      - "ND_JWTKEY=${NAVIDROME_JWT_SECRET}"
+      - "ND_AUTOIMPORTPLAYLISTS=false"
+      - "ND_ENABLEINSIGHTSCOLLECTOR=false"
+      # The watcher picks up beets' moves; no scheduled scans needed.
+      - "ND_SCANNER_WATCHERWAIT=10s"
+      - "ND_SCANNER_SCANONSTARTUP=true"
+      - "ND_SCANNER_PURGEMISSING=full"
+      # 0.63 enables public share links by default; keep them off.
+      - "ND_ENABLESHARING=false"
+      - "ND_BACKUP_PATH=/data/backups"
+      - "ND_BACKUP_SCHEDULE={{ media_navidrome_backup_schedule }}"
+      - "ND_BACKUP_COUNT={{ media_navidrome_backup_count }}"
+      - "ND_ENABLENATURALSORTING=true"
+      - "ND_PROMETHEUS_ENABLED=true"
+      - "ND_IMAGECACHESIZE=250MB"
+      - "ND_TRANSCODINGCACHESIZE=500MB"
+      - "ND_SESSIONTIMEOUT=24h"
+      - "ND_DEFAULTUIVOLUME=70"
+      - "ND_ENABLELOGREDACTING=true"
+      - "ND_DEFAULTDOWNSAMPLINGFORMAT=opus"
+      - "ND_ENABLETRANSCODINGCONFIG=true"
+      - "ND_DEFAULTTHEME=Dark"
+      - "ND_ENABLECOVERANIMATION=true"
+      - "ND_MAXSIDEBARPLAYLISTS=50"
+    service_volumes:
+      - "{{ media_library_path }}/music:/music:ro"
+      - "{{ media_library_path }}/navidrome-data:/data"
+    service_networks:
+      - stack
+    service_labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    service_resources:
+      limits:
+        memory: 256M
+        cpus: "1.0"
+      reservations:
+        memory: 128M
+        cpus: "0.5"
+
+  - service_name: beets
+    service_image: "linuxserver/beets:latest"
+    # On-demand import tool, never running, so watchtower cannot see it:
+    # media-sync pulls the image before each run instead.
+    service_restart: "no"
+    service_profiles:
+      - tools
+    # Host user namespace: beets moves files yt-dlp wrote on the host, so its
+    # PUID must be the real stack uid, not dockremap + uid.
+    service_userns_mode: "host"
+    service_environment:
+      - "PUID={{ media_uid }}"
+      - "PGID={{ media_gid }}"
+      - "TZ={{ timezone }}"
+    service_volumes:
+      - "{{ media_library_path }}/beets:/config"
+      - "{{ media_library_path }}/music:/music"
+      - "{{ media_library_path }}/downloads:/downloads"
+    service_networks:
+      - stack
+    service_resources:
+      # ReplayGain decodes every imported track with ffmpeg.
+      limits:
+        memory: 384M
+        cpus: "2.0"
+      reservations:
+        memory: 64M
+        cpus: "0.1"
+
+media_compose_volumes: []

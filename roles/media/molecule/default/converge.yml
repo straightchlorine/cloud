@@ -1,0 +1,141 @@
+---
+- name: Converge - the media role's container-testable task files
+  hosts: all
+  become: true
+  vars:
+    # Mirrors host_vars/media.yml. ansible_user is pinned because the
+    # role's ownership/become wiring reads it directly.
+    ansible_user: root
+    timezone: UTC
+    domain_name: example.test
+    media_home: /home/music/stack
+    media_library_path: /mnt/music
+    restic_enabled: false
+    restic_repository: /tmp/test-restic
+    restic_password: molecule-test-restic-password
+    vault_watchtower_api_token: molecule-test-watchtower-token
+    common_start_stack: false
+    media_youtube_enabled: true
+    # Two playlists: verify.yml proves each URL reaches yt-dlp intact.
+    vault_youtube_playlists:
+      - "https://www.youtube.com/playlist?list=PLmoleculeA"
+      - "https://www.youtube.com/playlist?list=PLmoleculeB"
+    media_backup_enabled: true
+    media_backup_dir: /tmp/molecule-media-backup
+  pre_tasks:
+
+    - name: Create the path parents (validate.yml asserts they exist)
+      ansible.builtin.file:
+        path: "{{ item | dirname }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ media_home }}"
+        - "{{ media_library_path }}"
+
+    - name: Publish fixture userns-remap facts
+      # docker.yml (deliberately excluded here) publishes these on a real
+      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
+      # the nested rootless-podman mapping (container uids 0-65536 only - the
+      # canonical dockremap base 165536 is outside it and chown fails with
+      # EINVAL).
+      ansible.builtin.set_fact:
+        common_dockremap_uid: "10000"
+        common_dockremap_gid: "10000"
+
+    - name: Read the role defaults for the stub below
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../defaults/main.yml"
+        name: media_role_defaults
+
+    - name: Stub yt-dlp and deno
+      # youtube.yml only downloads missing binaries, so the real task file
+      # runs offline. The yt-dlp and ntfy stubs log their calls for verify.yml.
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/{{ item.name }}"
+        mode: "0755"
+        content: "{{ item.content }}"
+      loop:
+        - name: yt-dlp
+          content: |
+            #!/bin/sh
+            [ "$1" = "--version" ] && { echo {{ media_role_defaults.media_ytdlp_version }}; exit 0; }
+            echo "$@" >> /tmp/molecule-ytdlp-calls
+        - name: deno
+          content: "#!/bin/sh\necho deno {{ media_role_defaults.media_deno_version }}\n"
+        - name: ntfy-notify
+          content: "#!/bin/sh\necho \"$1 | $2\" >> /tmp/molecule-ntfy\n"
+      loop_control:
+        label: "{{ item.name }}"
+
+  tasks:
+    # main.yml's task files that are container-safe, in the same order the
+    # role runs them. include_role tasks_from runs the real task file with
+    # the role's defaults loaded. NOT included, deliberately:
+    #   - packages.yml include (apt installs the whole common list - slow)
+    #   - common optional_ssd (prepares/mounts the optional SSD - containers must
+    #     not touch the host's block devices)
+    #   - docker.yml (installs the Docker daemon; no docker-in-docker here -
+    #     start_stack is false so compose up is skipped too)
+    #   - docker_stack_service (the unit Requires=docker.service, which a
+    #     container lacks; the unit template is rendered standalone below)
+    #   - firewall (ufw cannot bind rules in a container)
+    #   - post_deploy_validate.yml (needs a running compose stack)
+    - name: Gather network facts for dynamic configuration
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
+    - name: Run the real pre-deployment validation
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: validate
+
+    - name: Run the real stack deployment (compose + .env + manage script)
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: stack
+
+    - name: Run the real backup deployment (snapshot script + cron; restic, syncthing off)
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: backup
+
+    - name: Run the real pipeline deployment (yt-dlp stubbed at the pinned version)
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: youtube
+
+    - name: Render the stack systemd unit
+      # docker_stack_service itself needs docker.service (excluded above) -
+      # render the unit here so a broken template variable still fails CI
+      # instead of silently writing a broken unit on a real Pi.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
+        dest: /tmp/media.service.rendered
+        mode: "0644"
+      vars:
+        service_description: "Media Stack (molecule render)"
+        service_requires: ["docker.service"]
+        service_after: ["docker.service", "network-online.target"]
+        common_service_wants: ["network.target"]
+        service_type: "oneshot"
+        common_remain_after_exit: "true"
+        common_working_directory: "{{ media_home }}"
+        service_user: "{{ ansible_user }}"
+        service_group: "{{ ansible_user }}"
+        service_environment:
+          - "MEDIA_LIBRARY_PATH={{ media_library_path }}"
+        exec_start: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml up -d"
+        exec_stop: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml down"
+        exec_reload: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml restart"
+        syslog_identifier: "stack"
+        common_timeout_start_sec: "0"
+        kill_mode: "none"
+        common_standard_output: "journal"
+        common_standard_error: "journal"
+        common_restart_policy: "on-failure"
+        common_restart_sec: "5"
+        common_wanted_by: "multi-user.target"
+        common_enable_security_hardening: true
+        common_no_new_privileges: "true"

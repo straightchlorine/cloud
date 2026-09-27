@@ -1,0 +1,104 @@
+---
+- name: Converge - deploy what a container allows, then run the real teardown
+  hosts: all
+  become: true
+  vars:
+    ansible_user: root
+    timezone: UTC
+    domain_name: example.test
+    media_home: /home/music/stack
+    media_library_path: /mnt/music
+    restic_enabled: false
+    restic_repository: /tmp/test-restic
+    restic_password: molecule-test-restic-password
+    vault_watchtower_api_token: molecule-test-watchtower-token
+    common_start_stack: false
+    media_youtube_enabled: true
+    vault_youtube_playlists:
+      - "https://www.youtube.com/playlist?list=PLmoleculeA"
+    media_backup_enabled: true
+    media_backup_dir: /tmp/molecule-media-backup
+  pre_tasks:
+    - name: Create the path parents (validate.yml asserts they exist)
+      ansible.builtin.file:
+        path: "{{ item | dirname }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ media_home }}"
+        - "{{ media_library_path }}"
+
+    - name: Publish fixture userns-remap facts
+      # docker.yml (deliberately excluded here) publishes these on a real
+      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
+      # the nested rootless-podman mapping (container uids 0-65536 only - the
+      # canonical dockremap base 165536 is outside it and chown fails with
+      # EINVAL).
+      ansible.builtin.set_fact:
+        common_dockremap_uid: "10000"
+        common_dockremap_gid: "10000"
+
+    - name: Read the role defaults for the stub below
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../defaults/main.yml"
+        name: media_role_defaults
+
+    - name: Stub yt-dlp and deno (youtube.yml then runs offline)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        content: "#!/bin/sh\necho stub\n"
+      loop: [yt-dlp, deno]
+      tags: [molecule-idempotence-notest]
+
+  tasks:
+    # Deploy side (the ARRANGE phase): the container-safe parts of a real
+    # deploy, so the teardown has real things to remove. Tagged
+    # molecule-idempotence-notest because the teardown removes what this
+    # creates; the system under test is the teardown, which must converge on
+    # a rerun.
+    - name: Gather network facts for dynamic configuration
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+      tags: [molecule-idempotence-notest]
+
+    - name: Run the real stack deployment
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: stack
+      tags: [molecule-idempotence-notest]
+
+    # Fixture: what docker_stack_service would have created on a real host (a
+    # container has no docker.service, so the unit is faked here only to give
+    # the teardown a real unit file to stop and remove).
+    - name: Create the fake stack service unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Media Stack (molecule fixture)
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/stack.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
+    - name: Run the real backup and pipeline deployments
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: "{{ item }}"
+      loop: [backup, youtube]
+      tags: [molecule-idempotence-notest]
+
+    # The real teardown, as playbooks/media-teardown.yml runs it once
+    # teardown_confirmed is set. Its own self-verification runs as part of
+    # this include; docker compose down is skipped by the docker-info guard.
+    - name: Run the real media role teardown
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: teardown
+      vars:
+        teardown_confirmed: true

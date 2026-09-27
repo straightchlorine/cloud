@@ -27,8 +27,8 @@
         success_msg: "[OK] backup script fully rendered"
 
     - name: Assert the backup script's paths array uses the real caller-supplied paths
-      # Regression guard: common_backup_directories (the vars: alias) vs the
-      # bare, never-set backup_directories the template used to loop over.
+      # Regression guard: the template must loop over common_backup_directories
+      # (the vars: alias); no caller sets the bare backup_directories name.
       ansible.builtin.assert:
         that:
           - "'\"/etc\"' in (common_backup_script_rendered.content | b64decode)"
@@ -37,8 +37,8 @@
         success_msg: "[OK] backup script's BACKUP_PATHS matches common_backup_paths"
 
     - name: Assert the backup script's excludes use the real caller-supplied patterns
-      # Regression guard: backup_excludes (never set by any real caller) vs
-      # backup_exclude_patterns (what every host_vars actually sets).
+      # Regression guard: excludes come from backup_exclude_patterns (what
+      # host_vars set), not the never-set backup_excludes.
       ansible.builtin.assert:
         that:
           - "\"--exclude '*.log'\" in (common_backup_script_rendered.content | b64decode)"
@@ -46,9 +46,9 @@
         success_msg: "[OK] backup script applies the configured excludes"
 
     - name: Assert the restic sftp command is the shared, config-file-based form
-      # Regression guard: a hand-reconstructed "-i <key> -o ..." ssh
-      # invocation here bypassed ssh_config.j2's UserKnownHostsFile/
-      # ControlMaster settings entirely and drifted out of sync with them.
+      # Regression guard: RESTIC_SFTP_COMMAND must use ssh_config.j2's shared
+      # form (-F); a hand-built "-i <key> -o ..." invocation bypasses its
+      # UserKnownHostsFile/ControlMaster settings.
       ansible.builtin.assert:
         that:
           - "'ssh -F' in (common_backup_script_rendered.content | b64decode)"
@@ -62,14 +62,41 @@
       register: common_backup_timer_rendered
 
     - name: Assert the timer schedule is systemd OnCalendar syntax, not cron
-      # Regression guard: an earlier override used cron syntax ("0 3 * * *"),
-      # invalid for OnCalendar= - would have produced a timer that silently
-      # never fires correctly.
+      # Regression guard: OnCalendar= takes systemd calendar syntax; cron syntax
+      # ("0 3 * * *") yields a timer that silently never fires as intended.
       ansible.builtin.assert:
         that:
           - "'OnCalendar=*-*-*' in (common_backup_timer_rendered.content | b64decode)"
         fail_msg: "backup timer's OnCalendar is not valid systemd calendar syntax"
         success_msg: "[OK] backup timer uses valid OnCalendar syntax"
+
+    - name: Read the rendered backup service
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/backup-molecule-test.service
+      register: common_backup_service_rendered
+
+    - name: Assert every run ends in a root ntfy
+      # '+' is required (the backup user cannot read the ntfy key) and $$ must
+      # survive, or systemd substitutes the variables away before the shell runs.
+      vars:
+        unit: "{{ common_backup_service_rendered.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'ExecStopPost=+/bin/sh -c' in unit"
+          - "'$$SERVICE_RESULT' in unit"
+          - "'molecule-test restic backup failed' in unit"
+        fail_msg: "backup service lacks the ntfy ExecStopPost:\n{{ unit }}"
+        success_msg: "[OK] backup service notifies on success and failure"
+
+    - name: Verify that systemd accepts the backup service
+      ansible.builtin.command: systemd-analyze verify /etc/systemd/system/backup-molecule-test.service
+      register: common_backup_unit_verify
+      changed_when: false
+      # Only unit-file syntax matters here; missing binaries in the container
+      # (restic script, ntfy-notify) are expected.
+      failed_when: >-
+        'Invalid' in common_backup_unit_verify.stderr
+        or 'Failed to parse' in common_backup_unit_verify.stderr
 
     - name: Verify the backup timer is enabled
       ansible.builtin.systemd:
@@ -77,10 +104,9 @@
       register: common_backup_timer_state
       failed_when: common_backup_timer_state.status.UnitFileState != 'enabled'
 
-    # Independent of whatever real callers currently pass, directly regression
-    # -tests the systemd-service.j2 section-placement bug: StartLimitBurst/
-    # StartLimitIntervalSec must render in [Unit], not [Service] (some
-    # systemd versions silently reject them there: "Unknown key ... ignoring").
+    # Regression-tests systemd-service.j2's section placement directly:
+    # StartLimitBurst/StartLimitIntervalSec must render in [Unit], not [Service]
+    # (some systemd versions silently ignore them under [Service]).
     - name: Render systemd-service.j2 directly with start-limit fields set
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/systemd-service.j2"

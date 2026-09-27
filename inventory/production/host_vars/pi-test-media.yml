@@ -1,0 +1,46 @@
+---
+# Disposable staging clone for the media role. Deploy, verify with
+# scripts/media/validate-deploy.sh, tear down with
+# playbooks/media-teardown.yml, verify clean, repeat.
+
+device_type: rpi3b # adjust if your spare Pi is a different model
+
+# Test services publish on the same ports as production so the reverse-
+# proxy-facing paths are exercised identically (media_navidrome_port etc.
+# keep their role defaults).
+
+common_firewall_ports:
+  - {port: 22, comment: "SSH"}
+  - {port: 4545, comment: "Navidrome"}
+
+firewall_rules:
+  - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
+  - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
+
+# The media role's optional SSD (mirrors automation/dns): when an unused
+# drive is attached (or already mounted at media_library_path) the library,
+# journald and Docker's data-root live on it; otherwise everything stays on
+# the SD card.
+# TEST HOST: opt in to a full format + mount of the attached drive on first
+# deploy (DESTRUCTIVE) - this is a disposable test box, so wiping is intended.
+media_ssd_format: true
+media_library_path: "/mnt/data"
+# media_home derives from the pinned ansible_user (ansible) =>
+# /home/ansible/stack, whose parent always exists on this host.
+
+common_start_stack: true
+# Notifications: keep TRUE so the media role re-applies reboot-notify on
+# every media-only redeploy (the shared ntfy helper is installed fleet-wide).
+common_auto_updates_reboot_if_required: true
+
+prometheus_role: "music"
+
+# Flip to true (with vault_youtube_playlists set) to exercise the yt-dlp
+# install and the media-sync pipeline end to end.
+media_youtube_enabled: false
+
+# Off-site restic backup stays off: the placeholder repo must never write
+# into the production media host's real Hetzner backup.
+restic_enabled: false
+restic_repository: "sftp:hetzner-storage:unused-media-test-placeholder"
+restic_password: "unused-media-test-placeholder"

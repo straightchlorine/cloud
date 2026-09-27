@@ -1,0 +1,60 @@
+---
+# Reads the running stack's state; changes nothing.
+
+- name: Verify the critical compose containers are running
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: compose_containers_check
+  vars:  # noqa: var-naming[no-role-prefix]
+    compose_file_path: "{{ media_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_critical_services:
+      - navidrome
+      - watchtower
+      - cadvisor
+  tags: [post_validation]
+
+- name: Verify the Navidrome web frontend and the scraped metrics endpoints answer
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    timeout: 10
+    status_code: [200, 302]
+    follow_redirects: none
+  register: media_endpoint_health
+  until: media_endpoint_health.status in [200, 302]
+  retries: 10
+  delay: 3
+  loop:
+    - "http://{{ primary_ip }}:{{ media_navidrome_port }}/"
+    - "http://{{ primary_ip }}:{{ media_navidrome_port }}/metrics"
+    - "http://{{ primary_ip }}:{{ common_cadvisor_port }}/metrics"
+  tags: [post_validation]
+
+- name: Verify Navidrome can write its data directory
+  # A uid mismatch on the bind mount fails silently while HTTP stays healthy;
+  # only the container's own view proves it.
+  ansible.builtin.command: >-
+    docker compose -f {{ media_home }}/docker-compose.yml
+    exec -T navidrome test -w /data
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
+- name: Verify beets loads our config and plugins as the stack user
+  # media-sync's exact invocation. Proves the image resolves /config as its
+  # config dir (media-sync and the adopt overlay rely on it), the lyrics and
+  # replaygain plugins load, and ffmpeg (replaygain backend) is present.
+  ansible.builtin.command: >-
+    docker compose -f {{ media_home }}/docker-compose.yml
+    run --rm -T beets s6-setuidgid abc sh -c 'beet config -p && beet version && ffmpeg -version'
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: media_beets_check
+  changed_when: false
+  failed_when: >-
+    media_beets_check.rc != 0
+    or '/config/config.yaml' not in media_beets_check.stdout
+    or 'lyrics' not in media_beets_check.stdout
+    or 'replaygain' not in media_beets_check.stdout
+  tags: [post_validation]

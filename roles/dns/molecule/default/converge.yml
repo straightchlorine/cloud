@@ -23,7 +23,7 @@
     # the role would on a real host instead of hardcoding one.
     - name: Detect the container's primary interface
       ansible.builtin.set_fact:
-        dns_pihole_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | first }}"
+        dns_pihole_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
 
     # main.yml's task files that are container-safe, in the same order the
     # role runs them. include_role tasks_from runs the real task file with

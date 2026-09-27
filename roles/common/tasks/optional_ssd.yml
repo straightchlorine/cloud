@@ -1,0 +1,159 @@
+---
+# Optional dedicated SSD for a stack's data: the mount path, journald and
+# Docker's data-root ride it when a drive is present (already mounted, or
+# freshly detected), the SD card otherwise. Publishes common_ssd_present.
+#
+# Contract:
+#   common_ssd_mount_path:      data path, doubling as the SSD mount point
+#   common_ssd_format:          true wipes the detected drive (DESTRUCTIVE)
+#   common_ssd_filesystem:      e.g. ext4
+#   common_ssd_mount_options:   fstab options
+#   common_ssd_journald_enabled: relocate journald onto the drive
+
+- name: Record whether a drive is already mounted at the data path
+  ansible.builtin.set_fact:
+    common_ssd_mounted: >-
+      {{ (ansible_mounts | selectattr('mount', 'equalto', common_ssd_mount_path)
+      | list | length) > 0 }}
+
+- name: Detect an unattached, unused SSD drive (skipped when one is already mounted)
+  ansible.builtin.include_tasks: detect_optional_drive.yml
+  when: not common_ssd_mounted
+
+- name: Resolve whether the stack data ride on a dedicated drive
+  ansible.builtin.set_fact:
+    common_ssd_present: >-
+      {{ common_ssd_mounted or (common_optional_drive_present | default(false)) }}
+
+- name: No dedicated SSD - the stack runs on the SD card
+  ansible.builtin.debug:
+    msg: >-
+      No unused dedicated SSD detected; the stack runs on the SD card
+      ({{ common_ssd_mount_path }}, docker data-root: default).
+  when: not common_ssd_present
+
+# Only a freshly detected, not-yet-mounted drive is prepared here; an existing
+# mount at common_ssd_mount_path is left untouched.
+- name: Prepare and mount the optional SSD
+  when:
+    - common_ssd_present
+    - not common_ssd_mounted
+  block:
+    - name: Determine whether the drive needs formatting
+      # Format unless the drive already carries our filesystem, plus an explicit
+      # opt-in wipe: a reused ext4 drive would otherwise never be recognized as
+      # needing one (once mounted, this block is skipped on every later run).
+      ansible.builtin.set_fact:
+        common_ssd_needs_format: >-
+          {{ (common_optional_drive_fstype != common_ssd_filesystem)
+          or (common_ssd_format | bool) }}
+
+    - name: Refuse to use an unformatted/foreign drive unless explicitly allowed
+      ansible.builtin.fail:
+        msg: >-
+          {{ common_optional_drive_device }} {{ 'has no usable filesystem'
+          if not common_optional_drive_has_filesystem else
+          "has '" + common_optional_drive_fstype + "', not '" + common_ssd_filesystem + "'" }}.
+          Format it yourself, or set common_ssd_format: true in host_vars to let
+          this role wipe {{ common_optional_drive_device }} and format it as
+          {{ common_ssd_filesystem }} (DESTRUCTIVE).
+      when:
+        - common_ssd_needs_format
+        - not common_ssd_format | bool
+
+    - name: Wipe any existing partition table before repartitioning
+      ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
+      become: true
+      changed_when: true
+      when:
+        - common_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Create a single partition spanning the whole disk
+      ansible.builtin.command:
+        cmd: "sfdisk {{ common_optional_drive_device }}"
+        stdin: "type=L"
+      become: true
+      changed_when: true
+      when:
+        - common_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Force the kernel to re-read the partition table
+      ansible.builtin.command: "partprobe {{ common_optional_drive_device }}"
+      become: true
+      changed_when: false
+      when:
+        - common_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Wait for the partition device to appear
+      ansible.builtin.stat:
+        path: "{{ common_optional_drive_device }}1"
+      register: common_ssd_new_partition
+      until: common_ssd_new_partition.stat.exists
+      retries: 10
+      delay: 1
+      when:
+        - common_ssd_needs_format
+        - common_optional_drive_is_whole_disk
+
+    - name: Determine the partition to format and mount
+      # The '1' suffix only applies to a partition we just created; a whole disk
+      # that already matched our filesystem was formatted bare, so use the device.
+      ansible.builtin.set_fact:
+        common_ssd_target: >-
+          {{ (common_optional_drive_device ~ '1')
+          if (common_optional_drive_is_whole_disk and common_ssd_needs_format)
+          else common_optional_drive_device }}
+
+    - name: Format the optional SSD (only runs when explicitly allowed above)
+      community.general.filesystem:
+        fstype: "{{ common_ssd_filesystem }}"
+        dev: "{{ common_ssd_target }}"
+        force: "{{ common_ssd_needs_format and not common_optional_drive_is_whole_disk }}"
+      become: true
+      when: common_ssd_needs_format
+
+    - name: Create the mount directory
+      ansible.builtin.file:
+        path: "{{ common_ssd_mount_path }}"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Mount the optional SSD at the data path
+      ansible.posix.mount:
+        path: "{{ common_ssd_mount_path }}"
+        src: "{{ common_ssd_target }}"
+        fstype: "{{ common_ssd_filesystem }}"
+        opts: "{{ common_ssd_mount_options }}"
+        state: mounted
+      become: true
+
+    - name: Force a Docker restart after a fresh SSD format
+      # dockerd does not re-initialize a data-root whose filesystem was wiped and
+      # remounted underneath it - it keeps writing into subdirectories that no
+      # longer exist ("no such file or directory" on the first image pull).
+      # state: started is a no-op when already running, so force the restart here.
+      ansible.builtin.debug:
+        msg: "Fresh SSD format - Docker will be restarted to reinitialize its data-root"
+      changed_when: true
+      notify: Restart docker
+      when: common_ssd_needs_format
+
+- name: Relocate systemd-journald storage onto the SSD
+  ansible.builtin.include_tasks: journald_relocate.yml
+  vars:
+    common_journald_path: "{{ common_ssd_mount_path }}/journal"
+  when:
+    - common_ssd_present
+    - common_ssd_journald_enabled | bool
+
+- name: Move Docker's data-root onto the SSD
+  # common/docker.yml only adds data-root when this fact is
+  # defined, so an SD-only run keeps Docker's default /var/lib/docker. The
+  # foreign prefix is intentional - the variable belongs to the common role.
+  ansible.builtin.set_fact:
+    common_docker_data_root: "{{ common_ssd_mount_path }}/docker"
+  when: common_ssd_present
