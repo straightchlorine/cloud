@@ -1,8 +1,11 @@
 ---
 
 - name: Check Node Exporter health
+  # Must target primary_ip, not 127.0.0.1: the unit binds
+  # --web.listen-address={{ primary_ip }}:port (see node_exporter.yml), so
+  # localhost refuses the connection.
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ prometheus_exporters_node_exporter_port }}/metrics"
+    url: "http://{{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
@@ -48,7 +51,7 @@
     set -o pipefail
     metrics_count=0
     {% if prometheus_exporters_node_exporter_enabled %}
-    NODE_URL="http://127.0.0.1:{{ prometheus_exporters_node_exporter_port }}/metrics"
+    NODE_URL="http://{{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}/metrics"
     if curl -s "$NODE_URL" | grep -c '^[a-zA-Z]' >/dev/null 2>&1; then
       node_metrics=$(curl -s "$NODE_URL" \
         | grep -c '^[a-zA-Z]' || echo 0)
