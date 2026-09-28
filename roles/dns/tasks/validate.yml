@@ -6,6 +6,16 @@
     name: os
   tags: [validation]
 
+- name: Gather network facts for dynamic configuration
+  # Same standalone-include rationale as the os discovery above: the NTP guard
+  # and the interface check below template host_vars values (primary_network_cidr,
+  # primary_interface) that only common/tasks/network_facts.yml defines. Cheap
+  # and idempotent - under main.yml this just re-gathers.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+  tags: [validation]
+
 - name: Run DNS services comprehensive validation
   ansible.builtin.include_role:
     name: common

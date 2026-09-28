@@ -32,6 +32,17 @@ check_absent() {
   fi
 }
 
+# Shared fleet state (ufw, node-exporter, the prometheus user) is installed by
+# the fleet play on the FIRST full site.yml run. A staging box whose full
+# deploy never completed (a fresh Zero whose manual Pi-hole was just torn
+# down) has none of it - absence there is "not deployed yet", not teardown
+# damage. ufw is the marker: the fleet play installs it alongside that state
+# on every host.
+shared_state_deployed="yes"
+if ! command -v ufw >/dev/null 2>&1; then
+  shared_state_deployed="no"
+fi
+
 echo "-- Pi-hole role state --"
 check_absent /usr/local/bin/pihole
 check_absent /etc/pihole
@@ -92,10 +103,14 @@ for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 "; do
     note_ok "no listener on ${port_line% }"
   fi
 done
-if printf '%s\n' "$listeners" | grep -qF ":9100"; then
-  note_ok "node-exporter still listening on 9100 (expected to remain)"
+if [ "$shared_state_deployed" = "yes" ]; then
+  if printf '%s\n' "$listeners" | grep -qF ":9100"; then
+    note_ok "node-exporter still listening on 9100 (expected to remain)"
+  else
+    note_left "node-exporter not listening on 9100 (expected to remain)"
+  fi
 else
-  note_left "node-exporter not listening on 9100 (expected to remain)"
+  note_ok "no node-exporter on 9100 (fleet play never ran here - not teardown damage)"
 fi
 
 echo "-- System resolver --"
@@ -169,45 +184,53 @@ if systemctl is-active --quiet pihole-exporter 2>/dev/null; then
 else
   note_ok "pihole-exporter service not active"
 fi
-if systemctl is-active --quiet node-exporter 2>/dev/null; then
-  note_ok "node-exporter still active (shared exporter state)"
-else
-  note_left "node-exporter not active (shared exporter state should remain)"
-fi
-# Shared exporters that must remain executable exactly as the deploy left them.
-for exp in \
-  /opt/prometheus-exporters/bin/node_exporter \
-  /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do
-  if [ -x "$exp" ]; then
-    note_ok "$exp remains (shared exporter state)"
+if [ "$shared_state_deployed" = "yes" ]; then
+  if systemctl is-active --quiet node-exporter 2>/dev/null; then
+    note_ok "node-exporter still active (shared exporter state)"
   else
-    note_left "$exp missing (shared exporter state should remain)"
+    note_left "node-exporter not active (shared exporter state should remain)"
   fi
-done
-if getent passwd prometheus >/dev/null 2>&1; then
-  note_ok "prometheus user remains (shared)"
+  # Shared exporters that must remain executable exactly as the deploy left them.
+  for exp in \
+    /opt/prometheus-exporters/bin/node_exporter \
+    /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do
+    if [ -x "$exp" ]; then
+      note_ok "$exp remains (shared exporter state)"
+    else
+      note_left "$exp missing (shared exporter state should remain)"
+    fi
+  done
+  if getent passwd prometheus >/dev/null 2>&1; then
+    note_ok "prometheus user remains (shared)"
+  else
+    note_left "prometheus user missing (shared state should remain)"
+  fi
 else
-  note_left "prometheus user missing (shared state should remain)"
+  note_ok "shared exporter state not deployed (fleet play never ran here - not teardown damage)"
 fi
 
 echo "-- UFW firewall --"
-ufw_status="$(sudo -n ufw status 2>/dev/null || true)"
-if [ -z "$ufw_status" ]; then
-  note_left "cannot read ufw status (sudo -n ufw status)"
-elif printf '%s\n' "$ufw_status" | grep -q "Status: active"; then
-  note_ok "ufw active"
-  if printf '%s\n' "$ufw_status" | grep -qE '22(/tcp|/udp)?.*ALLOW'; then
-    note_ok "ufw allows SSH (22)"
-  else
-    note_left "ufw SSH rule (22) missing"
-  fi
-  if printf '%s\n' "$ufw_status" | grep -q '9617'; then
-    note_left "ufw rule for 9617 (pihole-exporter) remains"
-  else
-    note_ok "ufw rule for 9617 removed"
-  fi
+if [ "$shared_state_deployed" = "no" ]; then
+  note_ok "ufw not installed (fleet play never ran here - not teardown damage)"
 else
-  note_left "ufw is not active"
+  ufw_status="$(sudo -n ufw status 2>/dev/null || true)"
+  if [ -z "$ufw_status" ]; then
+    note_left "cannot read ufw status (sudo -n ufw status)"
+  elif printf '%s\n' "$ufw_status" | grep -q "Status: active"; then
+    note_ok "ufw active"
+    if printf '%s\n' "$ufw_status" | grep -qE '22(/tcp|/udp)?.*ALLOW'; then
+      note_ok "ufw allows SSH (22)"
+    else
+      note_left "ufw SSH rule (22) missing"
+    fi
+    if printf '%s\n' "$ufw_status" | grep -q '9617'; then
+      note_left "ufw rule for 9617 (pihole-exporter) remains"
+    else
+      note_ok "ufw rule for 9617 removed"
+    fi
+  else
+    note_left "ufw is not active"
+  fi
 fi
 
 echo "-- /tmp leftovers --"

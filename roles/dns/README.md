@@ -232,7 +232,11 @@ What intentionally stays (shared/fleet state, re-applied idempotently by the nex
 - `unattended-upgrades`, `fail2ban` and other common-role state
 
 `scripts/dns/validate-clean.sh` verifies all of the above and exits non-zero
-on any leftover.
+on any leftover. On a box whose full deploy never completed (a fresh Zero
+after tearing down a manual Pi-hole install), the shared fleet state checks
+(node-exporter, prometheus user, ufw) report as "not deployed yet" instead of
+failing - ufw's presence is the marker that the fleet play has run here at
+least once.
 
 ## Validation
 
