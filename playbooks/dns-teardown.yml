@@ -76,3 +76,13 @@
       when:
         - teardown_confirmed | default(false) | bool
         - common_syncthing_enabled | default(false) | bool
+
+    - name: Tear down zram swap (common role, incl. foreign zram)
+      # Deliberately NOT gated on common_zram_enabled: the teardown leaves the
+      # box with no zram at all, whatever created it. A hand-configured box may
+      # carry systemd-zram-generator or a hand-rolled unit the role never
+      # installed - both collide with the next deploy's zramswap.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: zram_teardown
+      when: teardown_confirmed | default(false) | bool

@@ -159,6 +159,23 @@ else
   note_ok "journald.conf SystemMaxUse reverted"
 fi
 
+echo "-- zram swap removed --"
+if grep -q '^/dev/zram' /proc/swaps 2>/dev/null; then
+  note_left "zram swap still in /proc/swaps"
+else
+  note_ok "no zram swap in /proc/swaps"
+fi
+if apt list --installed 2>/dev/null | grep -qE '^(zram-tools|systemd-zram-generator)/'; then
+  note_left "zram package still installed"
+else
+  note_ok "zram packages purged"
+fi
+if ls /etc/systemd/system/*zram* >/dev/null 2>&1; then
+  note_left "zram unit file still present in /etc/systemd/system"
+else
+  note_ok "no zram unit files"
+fi
+
 echo "-- Optional attached drive --"
 if findmnt -n /mnt/data >/dev/null 2>&1; then
   note_left "/mnt/data is still mounted"

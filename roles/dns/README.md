@@ -219,9 +219,12 @@ The teardown playbook refuses to run without `dns_teardown_confirm=true` and
 hard-refuses the production DNS IP (`192.168.20.10`) - the staging IP is
 tear-down-able so the cycle above works on the Zero before cutover. It removes
 Pi-hole, its cron jobs, auto-update/backup scripts, chrony (restoring
-`systemd-timesyncd`), reverses the journald relocation and optional-drive mount,
-restores working DNS, and ends with a self-check that fails if Pi-hole artifacts
-or ports 53/80 are still present.
+`systemd-timesyncd`), zram swap (the role's zramswap **and** any foreign zram a
+hand-configured box carried - `zram_teardown.yml` swaps it off, purges
+`zram-tools`/`systemd-zram-generator` and deletes hand-rolled units), reverses
+the journald relocation and optional-drive mount, restores working DNS, and
+ends with a self-check that fails if Pi-hole artifacts or ports 53/80 are
+still present.
 
 What intentionally stays (shared/fleet state, re-applied idempotently by the next
 `site.yml` run):

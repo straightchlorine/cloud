@@ -19,6 +19,7 @@
         - /etc/chrony/chrony.conf
         - /etc/logrotate.d/weekly-updates
         - /etc/systemd/system/pihole-FTL.service
+        - /etc/systemd/system/foreign-zram.service
       register: dns_teardown_leftovers
 
     - name: Assert no role artifact survives the teardown

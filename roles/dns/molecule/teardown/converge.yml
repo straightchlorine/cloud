@@ -122,3 +122,24 @@
       ansible.builtin.include_role:
         name: dns
         tasks_from: teardown
+
+    # The zram teardown, with its gate satisfied the same way
+    # playbooks/dns-teardown.yml sets it - against a foreign unit fixture that
+    # stands in for what a hand-configured box carries.
+    - name: Create a foreign zram unit fixture
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Foreign zram fixture
+          [Service]
+          ExecStart=/bin/true
+        dest: /etc/systemd/system/foreign-zram.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
+    - name: Run the real zram teardown
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: zram_teardown
+      vars:
+        teardown_confirmed: true

@@ -173,6 +173,25 @@ else
   note_left "chrony not synced (chronyc tracking)"
 fi
 
+echo "-- zram swap --"
+# zram is the role's opt-in compressed swap (common_zram_enabled). Judge it by
+# the unit's presence, like the syncthing check above: a half-removed install
+# (unit present, no swap) is still a failure.
+if systemctl cat zramswap.service >/dev/null 2>&1; then
+  if systemctl is-active --quiet zramswap 2>/dev/null; then
+    note_ok "zramswap active"
+  else
+    note_left "zramswap not active"
+  fi
+  if grep -q '^/dev/zram' /proc/swaps 2>/dev/null; then
+    note_ok "zram swap in /proc/swaps"
+  else
+    note_left "no zram swap in /proc/swaps"
+  fi
+else
+  note_ok "zramswap not deployed (common_zram_enabled false)"
+fi
+
 echo "-- Optional attached drive + journald --"
 drive_fs="$(findmnt -n -o FSTYPE /mnt/data 2>/dev/null || true)"
 # A non-mmcblk whole disk is the USB/SATA candidate the role would have
