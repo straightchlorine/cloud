@@ -1,4 +1,15 @@
 ---
+- name: Recover any interrupted dpkg state
+  # A killed apt/dpkg run (an aborted deploy, a reboot mid-upgrade, or
+  # unattended-upgrades racing a deploy) leaves dpkg half-configured, and every
+  # later apt-get install fails with "dpkg was interrupted". Completing the
+  # pending configuration is a no-op on a healthy box, so this runs on every
+  # deploy - Ansible heals its own tooling rather than asking for a manual
+  # `dpkg --configure -a`.
+  ansible.builtin.command: dpkg --configure -a
+  become: true
+  changed_when: false
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
