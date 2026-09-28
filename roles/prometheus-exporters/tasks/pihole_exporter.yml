@@ -95,7 +95,9 @@
   ansible.builtin.uri:
     url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
     method: GET
-    timeout: 10
+    # The first scrape after FTL comes up runs the full v6 auth + 7-endpoint
+    # sequence sequentially; on a busy Zero that can exceed the default 10s.
+    timeout: 30
   register: prom_exp_pihole_exporter_health
   retries: 3
   delay: 5
