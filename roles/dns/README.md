@@ -1,6 +1,7 @@
 # DNS Role
 
-Pi-hole DNS server service on Raspberry Pi 3B.
+Pi-hole DNS server service on Raspberry Pi (3B+, Zero 2 W, or any
+Debian-family board).
 
 ## Services
 
@@ -13,7 +14,8 @@ Pi-hole DNS server service on Raspberry Pi 3B.
 
 ### Prerequisites
 
-- Raspberry Pi 3B or later
+- Raspberry Pi 3B+, Zero 2 W, or later (any Debian-family host the
+  `validate.yml` checks pass on)
 - Network connectivity
 - DNS and NTP ports available
 
@@ -44,11 +46,15 @@ vault_restic_dns_password: "32_character_secure_password"
 vault_backup_repository_base: "sftp:user@backup-server:/backups"
 ```
 
-### Host Variables (host_vars/pi-dns.yml)
+### Host Variables (host_vars/dns.yml)
 
 ```yaml
 # Device configuration
-device_type: rpi3b
+device_type: rpizero2w
+
+# Board tuning for low-power wireless operation
+common_wifi_powersave_tuning_enabled: true
+common_zram_enabled: true
 
 # Pi-hole configuration
 dns_pihole_interface: "{{ primary_interface }}"
@@ -67,6 +73,7 @@ common_ntp_allowed_networks:
   - "192.168.20.0/24"
 
 # Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
+common_syncthing_enabled: true
 dns_backup_enabled: true
 dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
 dns_backup_owner: "ansible"
@@ -140,6 +147,43 @@ Pi-hole as DNS server.
 Pi-hole forwards to firewall/router DNS by default. Modify `dns_pihole_dns_servers` in
 host_vars to change upstream servers.
 
+## Raspberry Pi Zero 2 W hosts
+
+At 512MB RAM and Wi-Fi-only, a Zero 2 W needs three host_vars changes beyond
+`pi-dns.yml`'s defaults:
+
+```yaml
+# host_vars/pi-dns.yml
+device_type: rpizero2w        # hardware role: 512MB-sized container caps
+
+# Wi-Fi-only board: power save must stay off or DNS answers suffer tens of ms
+# of latency and dropped UDP bursts (boot-time unit, common role).
+common_wifi_powersave_tuning_enabled: true
+
+# 512MB: compressed RAM swap keeps apt/pihole -g peaks from OOM-killing
+# pihole-FTL (zram-tools, common role).
+common_zram_enabled: true
+
+# Syncthing is the single biggest RAM consumer (~100MB). With the backup
+# coordinator already pulling /etc, /var/lib, /var/log and /opt/pihole over
+# SSHFS, dropping the local Syncthing copy is the sane trade on a Zero.
+dns_backup_enabled: false
+```
+
+The `hardware` role maps `rpizero2w` (aliases `rpi02w`, `rpizero2`) to the
+`rpizero2w` hardware profile - without it the `prometheus-exporters` dependency
+on `hardware` fails the deploy on the unknown platform.
+
+Before Ansible can reach the host at all, Wi-Fi has to be provisioned at flash
+time: Raspberry Pi Imager's advanced options (or `firstrun.sh` on the boot
+partition) set the SSID, key and country. Nothing in this repo can do that over
+a network that does not exist yet.
+
+The optional USB drive still works through an OTG adapter, but on a Zero it is
+usually skipped - `storage.yml` falls back to SD-card-only and the journal size
+cap it applies then matters more, not less (systemd would otherwise take 10% of
+the card for logs).
+
 ## Teardown & Re-test
 
 The role ships a repeatable teardown for disposable test hosts (e.g. `pi-dns-test`),
@@ -161,8 +205,11 @@ ansible-playbook -i inventory/production playbooks/site.yml --limit pi-dns-test 
 The two scripts form the full test cycle: `validate-clean.sh` proves the
 host is back to a near-bare state (exit 1 on any leftover), and
 `validate-deploy.sh` proves Pi-hole DNS + ad-blocking, the web UI, both
-exporters, chrony sync, the optional-drive mount + journald relocation and the
-firewall rules are all working (exit 1 on any failure).
+exporters, chrony sync, the journal size cap and the firewall rules are all
+working (exit 1 on any failure). Its drive and Syncthing checks are
+presence-driven: an SD-only host (no non-mmcblk disk attached) skips the
+mount/relocation checks, and a host with `dns_backup_enabled: false` skips the
+local-backup script/cron checks - both are legitimate Zero 2 W shapes.
 
 The teardown playbook refuses to run without `dns_teardown_confirm=true` and
 hard-refuses the production DNS host (`pi-dns` / `192.168.20.10`). It removes

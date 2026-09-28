@@ -2,8 +2,9 @@
 # Post-deployment check for a disposable DNS test host (default pi-dns-test -
 # not in the inventory while the spare Pi stages media as pi-test-media).
 # Run after a successful site.yml deploy to confirm Pi-hole, exporters,
-# NTP, drive/journald relocation and firewall all work. Pairs with
-# validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".
+# NTP, journald (relocation on drive hosts, the size cap everywhere) and
+# firewall all work. Pairs with validate-clean.sh: clean = "ready to deploy",
+# this = "deployed & healthy".
 # Usage: ./scripts/dns/validate-deploy.sh [ansible-host-alias]
 set -euo pipefail
 
@@ -74,7 +75,7 @@ else
 fi
 
 echo "-- Services --"
-for svc in pihole-FTL pihole-exporter node-exporter chrony syncthing; do
+for svc in pihole-FTL pihole-exporter node-exporter chrony; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     note_ok "$svc active"
   else
@@ -86,6 +87,24 @@ for svc in pihole-FTL pihole-exporter node-exporter chrony syncthing; do
     note_left "$svc not enabled"
   fi
 done
+# Syncthing is the role's optional local-backup daemon (dns_backup_enabled;
+# ~100MB RSS, deliberately off on 512MB hosts that lean on the coordinator's
+# restic pulls instead). Only a half-removed install - unit present but not
+# running - is a failure.
+if systemctl cat syncthing.service >/dev/null 2>&1; then
+  if systemctl is-active --quiet syncthing 2>/dev/null; then
+    note_ok "syncthing active"
+  else
+    note_left "syncthing not active"
+  fi
+  if systemctl is-enabled --quiet syncthing 2>/dev/null; then
+    note_ok "syncthing enabled"
+  else
+    note_left "syncthing not enabled"
+  fi
+else
+  note_ok "syncthing not deployed (dns_backup_enabled false)"
+fi
 if systemctl is-active --quiet systemd-timesyncd 2>/dev/null; then
   note_left "systemd-timesyncd still active (chrony should have replaced it)"
 else
@@ -154,24 +173,37 @@ else
   note_left "chrony not synced (chronyc tracking)"
 fi
 
-echo "-- Optional attached drive + journald relocation --"
+echo "-- Optional attached drive + journald --"
 drive_fs="$(findmnt -n -o FSTYPE /mnt/data 2>/dev/null || true)"
+# A non-mmcblk whole disk is the USB/SATA candidate the role would have
+# prepared. With none attached this is an SD-only host (a Pi Zero 2 W with no
+# room for a drive), where the mount + relocation checks do not apply - but the
+# journal size cap below must still be in place.
+drive_candidate="$(lsblk -pdno NAME,TYPE 2>/dev/null |
+  awk '$2 == "disk" && $1 ~ /^\/dev\/sd/ { print $1 }' | head -n 1)"
 if [ "$drive_fs" = "ext4" ]; then
   note_ok "/mnt/data mounted as ext4"
+  # findmnt shows the bind source as device-with-subpath (e.g.
+  # /dev/sda1[/journal]); just check /var/log/journal is its own mount.
+  if findmnt -n /var/log/journal >/dev/null 2>&1; then
+    note_ok "journald relocated (bind-mounted over /var/log/journal)"
+  else
+    note_left "/var/log/journal is not a separate mount (journald relocation missing)"
+  fi
+  if grep -qE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf; then
+    note_ok "journald Storage=persistent"
+  else
+    note_left "journald.conf missing Storage=persistent"
+  fi
+elif [ -n "$drive_candidate" ]; then
+  note_left "drive $drive_candidate attached but /mnt/data not mounted as ext4 (got: ${drive_fs:-nothing})"
 else
-  note_left "/mnt/data not mounted as ext4 (got: ${drive_fs:-nothing})"
+  note_ok "no optional drive attached - SD-only host (drive + relocation checks skipped)"
 fi
-# findmnt shows the bind source as device-with-subpath (e.g.
-# /dev/sda1[/journal]); just check /var/log/journal is its own mount.
-if findmnt -n /var/log/journal >/dev/null 2>&1; then
-  note_ok "journald relocated (bind-mounted over /var/log/journal)"
+if grep -qE '^[[:space:]]*SystemMaxUse=' /etc/systemd/journald.conf; then
+  note_ok "journald SystemMaxUse capped ($(sed -nE 's/^[[:space:]]*(SystemMaxUse=.*)/\1/p' /etc/systemd/journald.conf))"
 else
-  note_left "/var/log/journal is not a separate mount (journald relocation missing)"
-fi
-if grep -qE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf; then
-  note_ok "journald Storage=persistent"
-else
-  note_left "journald.conf missing Storage=persistent"
+  note_left "journald.conf missing the SystemMaxUse cap"
 fi
 
 echo "-- UFW firewall --"
@@ -193,13 +225,25 @@ fi
 
 echo "-- Cron + artifacts --"
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
-for cron_job in "Weekly Pi-hole updates" "Pi-hole Syncthing local backup"; do
+for cron_job in "Weekly Pi-hole updates"; do
   if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
     note_ok "cron present: $cron_job"
   else
     note_left "cron missing: $cron_job"
   fi
 done
+# The local-backup cron ships with dns_backup_enabled, which is off on hosts
+# that back up through the coordinator alone - judge it by the script's
+# presence rather than assuming.
+if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
+  if printf '%s\n' "$root_cron" | grep -qF -- "Pi-hole Syncthing local backup"; then
+    note_ok "cron present: Pi-hole Syncthing local backup"
+  else
+    note_left "cron missing: Pi-hole Syncthing local backup"
+  fi
+else
+  note_ok "no local-backup cron (dns_backup_enabled false)"
+fi
 # Reboot cron only exists on hosts that deploy reboot-notify
 # (common_auto_updates_reboot_if_required: true).
 if [ -e /usr/local/bin/reboot-notify ]; then
@@ -221,11 +265,24 @@ check_script /usr/local/bin/pihole
 # the runtime config that must exist (setupVars.conf is transient).
 check_present /etc/pihole/pihole.toml
 check_script /usr/local/bin/pihole-update 755
-# pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700 root-only.
-check_script /usr/local/bin/pihole-syncthing-backup 700
+if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
+  # pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700 root-only.
+  check_script /usr/local/bin/pihole-syncthing-backup 700
+else
+  note_ok "pihole-syncthing-backup absent (dns_backup_enabled false)"
+fi
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
-check_present /mnt/data/syncthing/backup
+if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
+  # The path comes from dns_backup_dir (default /home/ansible/syncthing/pihole-backup
+  # or /mnt/data/syncthing/backup when on a drive). Extract it from the script.
+  backup_dir="$(sed -nE 's/^DEST="([^"]+)"/\1/p' /usr/local/bin/pihole-syncthing-backup | head -n 1)"
+  if [ -n "$backup_dir" ]; then
+    check_present "$backup_dir"
+  fi
+else
+  note_ok "syncthing backup dir check skipped (dns_backup_enabled false)"
+fi
 
 echo "-- Notification helper + ntfy key (common role) --"
 check_script /usr/local/bin/ntfy-notify 755

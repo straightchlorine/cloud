@@ -65,3 +65,21 @@
       become_user: "{{ ansible_user }}"
       # Ignore errors - compose file or dependencies may not be available after failed deployment
       ignore_errors: true
+
+- name: Restart systemd-journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: restarted
+  become: true
+
+- name: Restart wifi-powersave
+  ansible.builtin.systemd:
+    name: wifi-powersave
+    state: restarted
+  become: true
+
+- name: Restart zramswap
+  ansible.builtin.systemd:
+    name: zramswap
+    state: restarted
+  become: true

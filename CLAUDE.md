@@ -35,7 +35,8 @@ file holds the standards it builds on.
 - **Single Source of Truth**: Common functionality must be centralized in shared roles
 - **DRY Principle**: Never duplicate code, tasks, or configuration
 - **Common Roles**: Use `roles/common/tasks/` for shared functionality (Docker,
-  packages, network facts, backup, syncthing, ntfy, etc.)
+  packages, network facts, backup, syncthing, ntfy, board tuning - Wi-Fi power
+  save, zram, journald limits, etc.)
 - **Consolidated Templates**: Reuse templates and configuration patterns across roles
 - **Cross-role invocation**: Roles invoke common tasks with role-specific
   variables via `include_role: name=common tasks_from=<task>`
@@ -145,8 +146,7 @@ inventory/production/
     prometheus.yml                # Monitored hosts: exporter config
     vault.yml.example             # Template for the vault-encrypted file
   host_vars/
-    pi-dns.yml                    # Production DNS host
-    pi-dns-test.yml               # Disposable DNS staging/test Pi
+    dns.yml                       # DNS host (Pi-hole)
     pi-automation.yml             # Automation-specific: traefik, subdomains
     pi-test-media.yml             # Disposable media staging/test Pi
     media.yml                     # Media stack host (navidrome, beets, yt-dlp)

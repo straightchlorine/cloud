@@ -1,5 +1,11 @@
 ---
-device_type: rpi3b
+# Raspberry Pi Zero 2 W (DNS host): Pi-hole + chrony NTP + prometheus exporters.
+# Running on SD card only with zram compressed swap and Wi-Fi power-save disabled.
+device_type: rpizero2w
+
+# Board tuning for low-power wireless operation
+common_wifi_powersave_tuning_enabled: true
+common_zram_enabled: true
 
 dns_pihole_dns_servers:
   - "192.168.20.1"
@@ -39,6 +45,7 @@ prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
 # Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as ansible user.
+common_syncthing_enabled: true
 dns_backup_enabled: true
 dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
 dns_backup_owner: "ansible"

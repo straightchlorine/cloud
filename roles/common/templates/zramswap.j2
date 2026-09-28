@@ -1,0 +1,13 @@
+# Managed by Ansible - see roles/common/tasks/zram.yml. Read by
+# zramswap.service as a shell fragment, so keys are plain shell assignments.
+
+# Compression algorithm. zstd compresses the best of the options available on
+# current Pi kernels; the extra CPU cost is worth it on a 512MB board.
+ALGO={{ common_zram_algorithm }}
+
+# Percentage of RAM the zram device may occupy. RAM is only consumed as pages
+# are actually stored (compressed), so this is a cap, not a reservation.
+PERCENT={{ common_zram_percent }}
+
+# Above the default swap file's priority, so zram is used before flash swap.
+PRIORITY={{ common_zram_priority }}

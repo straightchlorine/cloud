@@ -37,13 +37,15 @@
         quiet: true
 
     - name: Never tear down the production DNS host
+      # Production DNS host protection: refused if running against the production
+      # IP (192.168.20.10). When testing on a staging IP (like 192.168.20.2), teardown
+      # is allowed so the staging cycle can be tested end-to-end.
       ansible.builtin.assert:
         that:
-          - inventory_hostname != 'pi-dns'
           - (ansible_host | default('')) != '192.168.20.10'
         fail_msg: >-
           Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }})
-          is the PRODUCTION DNS host. Point --limit at your test Pi instead.
+          is the PRODUCTION DNS IP (192.168.20.10). Point --limit at your test IP instead.
         quiet: true
 
     - name: Mark this run as a confirmed teardown

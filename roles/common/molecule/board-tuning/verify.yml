@@ -1,0 +1,93 @@
+---
+- name: Verify board tuning
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Stat the deployed tuning artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: common_tuning_stat
+      loop:
+        - /usr/local/bin/wifi-powersave-off
+        - /etc/systemd/system/wifi-powersave.service
+        - /tmp/zramswap.rendered
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Assert every artifact was deployed
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "{{ item.item }} missing after converge"
+        success_msg: "[OK] {{ item.item }} present"
+      loop: "{{ common_tuning_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert the power-save script is executable root-only-writable
+      ansible.builtin.assert:
+        that:
+          - common_tuning_stat.results[0].stat.mode == '0755'
+          - common_tuning_stat.results[0].stat.pw_name == 'root'
+        fail_msg: >-
+          wifi-powersave-off mode/owner is
+          {{ common_tuning_stat.results[0].stat.mode }} /
+          {{ common_tuning_stat.results[0].stat.pw_name }}
+
+    - name: Read the script and the rendered zram config
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: common_tuning_contents
+      loop:
+        - /usr/local/bin/wifi-powersave-off
+        - /tmp/zramswap.rendered
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Extract the file contents
+      ansible.builtin.set_fact:
+        common_tuning_script: "{{ common_tuning_contents.results[0].content | b64decode }}"
+        common_zram_config: "{{ common_tuning_contents.results[1].content | b64decode }}"
+
+    - name: Assert the script targets wireless interfaces and disables power save
+      # Real content, not just existence: the
+      # /sys/class/net/*/wireless discovery and the iw call are what make the
+      # unit a no-op on wired hosts and a fix on Wi-Fi-only ones.
+      ansible.builtin.assert:
+        that:
+          - "'/sys/class/net/*/wireless' in common_tuning_script"
+          - "'set power_save off' in common_tuning_script"
+        fail_msg: "wifi-powersave-off does not contain the discovery + iw calls"
+
+    - name: Read the deployed unit's state
+      ansible.builtin.systemd:
+        name: wifi-powersave
+      register: common_tuning_unit
+
+    - name: Assert the unit is active and enabled
+      ansible.builtin.assert:
+        that:
+          - common_tuning_unit.status.ActiveState == 'active'
+          - common_tuning_unit.status.UnitFileState == 'enabled'
+        fail_msg: >-
+          wifi-powersave is
+          {{ common_tuning_unit.status.ActiveState }} /
+          {{ common_tuning_unit.status.UnitFileState }}
+
+    - name: Assert the zram config renders the role defaults
+      # The values mirror roles/common/defaults/main.yml, which converge renders
+      # from with no overrides - change a default and this fails until updated.
+      ansible.builtin.assert:
+        that:
+          - "'ALGO=zstd' in common_zram_config"
+          - "'PERCENT=50' in common_zram_config"
+          - "'PRIORITY=100' in common_zram_config"
+        fail_msg: "zramswap.j2 did not render the role defaults"
+
+    - name: Display the tuning results
+      ansible.builtin.debug:
+        msg: |
+          [OK] Board tuning:
+          - wifi-powersave unit: {{ common_tuning_unit.status.ActiveState }}
+          - zram config rendered from defaults

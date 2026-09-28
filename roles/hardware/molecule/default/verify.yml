@@ -3,7 +3,16 @@
   hosts: all
   gather_facts: true
   become: true
+  vars:
+    # Same value converge used - see the comment in converge.yml. Verify runs as
+    # a separate ansible-playbook, so converge's set_fact facts do not exist
+    # here: the read-only role is included again in this process instead.
+    device_type: "{{ lookup('env', 'MOLECULE_DEVICE_TYPE') | default('rpi4b', true) }}"
   tasks:
+    - name: Re-run the hardware role in the verify process
+      ansible.builtin.include_role:
+        name: hardware
+
     - name: Assert hardware facts are defined
       # hardware_limits is per-service (hardware_limits.traefik.memory, etc,
       # see hardware_profiles) - traefik is used here just because every
@@ -23,7 +32,7 @@
     - name: Verify hardware_platform is valid
       ansible.builtin.assert:
         that:
-          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'pc', 'unknown']
+          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'rpizero2w', 'pc', 'unknown']
         fail_msg: "Invalid hardware_platform: {{ hardware_platform }}"
 
     - name: Display hardware detection results

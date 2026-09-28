@@ -82,6 +82,46 @@ hardware_profiles:
       cpus: "0.25"
       memory_reservation: "64M"
       cpus_reservation: "0.1"
+  # Pi Zero 2 W: quad Cortex-A53 at 1GHz and 512MB RAM - an eighth of an rpi4's
+  # memory, and the reference DNS host for this profile. The caps exist so a
+  # container can never squeeze out Pi-hole/sshd on the same board; nothing in
+  # this fleet is expected to run the rpi3/rpi4 service sets here.
+  rpizero2w:
+    traefik:
+      memory: "128M"
+      cpus: "0.5"
+      memory_reservation: "64M"
+      cpus_reservation: "0.25"
+    influxdb3:
+      memory: "192M"
+      cpus: "0.75"
+      memory_reservation: "96M"
+      cpus_reservation: "0.5"
+    vaultwarden:
+      memory: "128M"
+      cpus: "0.5"
+      memory_reservation: "64M"
+      cpus_reservation: "0.25"
+    navidrome:
+      memory: "160M"
+      cpus: "0.75"
+      memory_reservation: "96M"
+      cpus_reservation: "0.5"
+    portainer:
+      memory: "128M"
+      cpus: "0.5"
+      memory_reservation: "64M"
+      cpus_reservation: "0.25"
+    beets:
+      memory: "96M"
+      cpus: "0.25"
+      memory_reservation: "48M"
+      cpus_reservation: "0.1"
+    dozzle:
+      memory: "64M"
+      cpus: "0.25"
+      memory_reservation: "32M"
+      cpus_reservation: "0.1"
   pc:
     traefik:
       memory: "1G"

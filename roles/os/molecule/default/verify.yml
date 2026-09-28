@@ -3,6 +3,12 @@
   hosts: all
   gather_facts: true
   tasks:
+    - name: Re-run the os role in the verify process
+      # Verify runs as a separate ansible-playbook, so converge's set_fact
+      # facts do not exist here - the read-only role is included again instead.
+      ansible.builtin.include_role:
+        name: os
+
     - name: Assert normalized OS/arch facts are defined
       ansible.builtin.assert:
         that:

@@ -22,11 +22,11 @@ backup_restic_version: "0.18.1"
 
 # Backup targets - pulled by coordinator
 coordinator_targets:
-  - service_name: pi-dns
+  - service_name: dns
     hostname: pihole
     target_host: pihole
     ssh_user: root
-    ssh_key: "{{ common_backup_base_path }}/.ssh/nodes/pi-dns"
+    ssh_key: "{{ common_backup_base_path }}/.ssh/nodes/dns"
     backup_schedule: "*-*-* 01:00:00"
     common_backup_paths:
       - /etc
@@ -45,8 +45,8 @@ coordinator_targets:
       - "/etc/issue*"
       - "/etc/.pihole/*"
       - "/etc/apt/apt.conf.d/*~"
-    restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-dns"
-    restic_password: "{{ vault_restic_pi_dns_password }}"
+    restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
+    restic_password: "{{ vault_restic_dns_password }}"
     retention_policy:
       daily: 14
       weekly: 8

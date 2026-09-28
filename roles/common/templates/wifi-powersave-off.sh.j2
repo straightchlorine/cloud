@@ -1,0 +1,26 @@
+#!/bin/bash
+# Managed by Ansible - see roles/common/tasks/wifi_powersave.yml.
+set -euo pipefail
+
+if ! command -v iw >/dev/null 2>&1; then
+    echo "iw is not installed - nothing to do"
+    exit 0
+fi
+
+found=0
+for link in /sys/class/net/*/wireless; do
+    # An unmatched glob or a wired-only host leaves the loop empty.
+    [ -e "$link" ] || continue
+    found=1
+    iface="$(basename "$(dirname "$link")")"
+    if iw dev "$iface" get power_save 2>/dev/null | grep -q 'Power save: on'; then
+        iw dev "$iface" set power_save off
+        echo "power save disabled on $iface"
+    else
+        echo "power save already off on $iface"
+    fi
+done
+
+if [ "$found" -eq 0 ]; then
+    echo "no wireless interfaces - nothing to do"
+fi

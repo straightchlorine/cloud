@@ -3,7 +3,7 @@ role_name_check: 0
 driver:
   name: podman
 platforms:
-  - name: test
+  - name: debian12-board
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
@@ -12,9 +12,11 @@ platforms:
 provisioner:
   name: ansible
   env:
-    # CI/local both run `cd roles/os && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/os - one level up is roles/,
-    # letting the converge's `include_role: name: os` resolve by name.
+    # CI/local both run `cd roles/common && molecule test`, so
+    # MOLECULE_PROJECT_DIRECTORY is roles/common - one level up is roles/,
+    # letting `include_role: name: common` resolve by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 verifier:
   name: ansible
+scenario:
+  name: board-tuning

@@ -140,6 +140,11 @@ if grep -qE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf; then
 else
   note_ok "journald.conf no longer persistent"
 fi
+if grep -qE '^[[:space:]]*SystemMaxUse=' /etc/systemd/journald.conf; then
+  note_left "journald.conf still caps SystemMaxUse"
+else
+  note_ok "journald.conf SystemMaxUse reverted"
+fi
 
 echo "-- Optional attached drive --"
 if findmnt -n /mnt/data >/dev/null 2>&1; then

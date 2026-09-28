@@ -62,6 +62,20 @@ common_no_new_privileges: "true"
 # Raspberry Pi kernel cgroup memory controller for Docker resource limits
 common_rpi_cgroup_memory_enabled: true
 
+# Board-level tuning, opt-in per host. A Wi-Fi-only board must not park its
+# radio between beacons (tasks/wifi_powersave.yml), and a 512MB board is much
+# better off with compressed RAM swap than SD-card swap (tasks/zram.yml).
+common_wifi_powersave_tuning_enabled: false
+common_zram_enabled: false
+common_zram_algorithm: "zstd"
+common_zram_percent: 50
+common_zram_priority: 100
+
+# Cap for the persistent journal. systemd's default is 10% of the filesystem -
+# gigabytes of flash writes on a large card or drive. Applied by callers that
+# own flash-wear concerns (tasks/journald_limits.yml).
+common_journald_system_max_use: "50M"
+
 # Backup integration defaults
 common_backup_nice_level: 19
 common_backup_io_class: "idle"

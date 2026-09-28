@@ -228,6 +228,17 @@
   become: true
   failed_when: false
 
+- name: Restore the default journald size cap
+  # storage.yml caps SystemMaxUse on every host it runs on; like the relocation
+  # above it is role-applied state, reverted so a retest starts from stock
+  # journald.conf (validate-clean.sh checks it).
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: '^#?SystemMaxUse='
+    line: "#SystemMaxUse="
+  become: true
+  failed_when: false
+
 - name: Start systemd-journald
   ansible.builtin.systemd:
     name: systemd-journald

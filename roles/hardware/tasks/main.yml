@@ -6,7 +6,7 @@
 
 - name: Fail if device_type is not set
   ansible.builtin.fail:
-    msg: "device_type must be set in host_vars (e.g. rpi4b, rpi3b, debian_vm, arch_linux)."
+    msg: "device_type must be set in host_vars (e.g. rpi4b, rpi3b, rpizero2w, debian_vm, arch_linux)."
   when: device_type is not defined
 
 - name: Gather system resources
@@ -28,6 +28,8 @@
         rpi3
       {%- elif device_type == 'rpi2b' -%}
         rpi2
+      {%- elif device_type in ['rpizero2w', 'rpi02w', 'rpizero2'] -%}
+        rpizero2w
       {%- elif device_type.endswith('_vm') or device_type.endswith('_pc') -%}
         pc
       {%- else -%}
