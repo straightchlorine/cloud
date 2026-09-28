@@ -75,8 +75,8 @@ common_ntp_allowed_networks:
 # Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
 common_syncthing_enabled: true
 dns_backup_enabled: true
-dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
-dns_backup_owner: "ansible"
+dns_backup_dir: "/home/zero/syncthing/pihole-backup"
+dns_backup_owner: "zero"
 
 # Off-site backup, run by the restic coordinator (not by this role)
 restic_repository: "{{ vault_backup_repository_base }}/dns"
@@ -149,11 +149,11 @@ host_vars to change upstream servers.
 
 ## Raspberry Pi Zero 2 W hosts
 
-At 512MB RAM and Wi-Fi-only, a Zero 2 W needs three host_vars changes beyond
-`pi-dns.yml`'s defaults:
+At 512MB RAM and Wi-Fi-only, a Zero 2 W needs a few host_vars changes beyond
+`dns.yml`'s defaults (all already set in the committed `host_vars/dns.yml`):
 
 ```yaml
-# host_vars/pi-dns.yml
+# host_vars/dns.yml
 device_type: rpizero2w        # hardware role: 512MB-sized container caps
 
 # Wi-Fi-only board: power save must stay off or DNS answers suffer tens of ms
@@ -164,10 +164,12 @@ common_wifi_powersave_tuning_enabled: true
 # pihole-FTL (zram-tools, common role).
 common_zram_enabled: true
 
-# Syncthing is the single biggest RAM consumer (~100MB). With the backup
-# coordinator already pulling /etc, /var/lib, /var/log and /opt/pihole over
-# SSHFS, dropping the local Syncthing copy is the sane trade on a Zero.
-dns_backup_enabled: false
+# Syncthing stays on: at ~50-80MB it fits the Zero's headroom (Pi-hole peaks
+# ~150MB), and with a 32GB card the default 14-archive retention costs ~50-80MB.
+common_syncthing_enabled: true
+dns_backup_enabled: true
+dns_backup_dir: "/home/zero/syncthing/pihole-backup"
+dns_backup_owner: "zero"
 ```
 
 The `hardware` role maps `rpizero2w` (aliases `rpi02w`, `rpizero2`) to the
@@ -177,7 +179,9 @@ on `hardware` fails the deploy on the unknown platform.
 Before Ansible can reach the host at all, Wi-Fi has to be provisioned at flash
 time: Raspberry Pi Imager's advanced options (or `firstrun.sh` on the boot
 partition) set the SSID, key and country. Nothing in this repo can do that over
-a network that does not exist yet.
+a network that does not exist yet. The deploy user is the board's first user
+(`zero`, see `hosts.yml`) - give it the controller's SSH key and a NOPASSWD
+sudoers drop-in before the first run (see "Deploy").
 
 The optional USB drive still works through an OTG adapter, but on a Zero it is
 usually skipped - `storage.yml` falls back to SD-card-only and the journal size
@@ -186,20 +190,20 @@ the card for logs).
 
 ## Teardown & Re-test
 
-The role ships a repeatable teardown for disposable test hosts (e.g. `pi-dns-test`),
-so the same box can be re-deployed and re-tested end-to-end:
+The role ships a repeatable teardown, so a staging box (the Zero at its
+staging IP) can be re-deployed and re-tested end-to-end:
 
 ```bash
-# 1. Tear down the DNS role + Pi-hole exporter on the test host
+# 1. Tear down the DNS role + Pi-hole exporter on the staging host
 ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
-  --limit pi-dns-test -e dns_teardown_confirm=true
+  --limit dns -e dns_teardown_confirm=true
 
 # 2. Verify the box is clean enough for a fresh test
-./scripts/dns/validate-clean.sh pi-dns-test
+./scripts/dns/validate-clean.sh dns
 
 # 3. Re-deploy, then verify the box is actually healthy end-to-end
-ansible-playbook -i inventory/production playbooks/site.yml --limit pi-dns-test --tags dns
-./scripts/dns/validate-deploy.sh pi-dns-test
+ansible-playbook -i inventory/production playbooks/site.yml --limit dns --tags dns
+./scripts/dns/validate-deploy.sh dns
 ```
 
 The two scripts form the full test cycle: `validate-clean.sh` proves the
@@ -212,7 +216,8 @@ mount/relocation checks, and a host with `dns_backup_enabled: false` skips the
 local-backup script/cron checks - both are legitimate Zero 2 W shapes.
 
 The teardown playbook refuses to run without `dns_teardown_confirm=true` and
-hard-refuses the production DNS host (`pi-dns` / `192.168.20.10`). It removes
+hard-refuses the production DNS IP (`192.168.20.10`) - the staging IP is
+tear-down-able so the cycle above works on the Zero before cutover. It removes
 Pi-hole, its cron jobs, auto-update/backup scripts, chrony (restoring
 `systemd-timesyncd`), reverses the journald relocation and optional-drive mount,
 restores working DNS, and ends with a self-check that fails if Pi-hole artifacts

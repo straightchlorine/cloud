@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Post-deployment check for a disposable DNS test host (default pi-dns-test -
-# not in the inventory while the spare Pi stages media as pi-test-media).
+# Post-deployment check for the DNS host (default: the `dns` inventory host -
+# the Zero 2 W at its staging IP until cutover).
 # Run after a successful site.yml deploy to confirm Pi-hole, exporters,
 # NTP, journald (relocation on drive hosts, the size cap everywhere) and
 # firewall all work. Pairs with validate-clean.sh: clean = "ready to deploy",
@@ -8,7 +8,7 @@
 # Usage: ./scripts/dns/validate-deploy.sh [ansible-host-alias]
 set -euo pipefail
 
-HOST="${1:-pi-dns-test}"
+HOST="${1:-dns}"
 
 echo "== Checking $HOST after DNS deploy =="
 

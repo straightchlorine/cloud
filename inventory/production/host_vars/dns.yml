@@ -44,11 +44,12 @@ prometheus_exporters_pihole_exporter_enabled: true
 prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 prometheus_role: "dns"
 
-# Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as ansible user.
+# Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as the ssh user
+# (zero). 32GB card - default retention is fine, ~50-80MB total.
 common_syncthing_enabled: true
 dns_backup_enabled: true
-dns_backup_dir: "/home/ansible/syncthing/pihole-backup"
-dns_backup_owner: "ansible"
+dns_backup_dir: "/home/zero/syncthing/pihole-backup"
+dns_backup_owner: "zero"
 
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
