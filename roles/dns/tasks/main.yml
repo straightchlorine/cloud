@@ -177,6 +177,28 @@
       ansible.builtin.fail:
         msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."
 
+- name: Pin the web interface to ports 80/443
+  # The v6 installer/upgrader silently falls back to 8080/8443 when it believes
+  # port 80/443 is in use during install (see webserver.port in pihole.toml),
+  # even when the "conflict" was transient. The firewall rules, the
+  # pihole-exporter and post-deploy validation all target port 80, so re-pin the
+  # standard ports on every deploy. FTL preserves existing values when it
+  # rewrites missing defaults, so a direct line edit persists. The regexp only
+  # matches the webserver port line - the dns.port line ("53,[::]:53,...") has
+  # no single-digit/digit+flag port value.
+  ansible.builtin.lineinfile:
+    path: /etc/pihole/pihole.toml
+    regexp: '^  port = "[0-9]+o.*'
+    line: '  port = "80o,[::]:80o,[::]:443os,443os"'
+  become: true
+  notify: Restart pihole-FTL
+
+- name: Flush handlers so FTL rebinds before validation
+  # post_deploy_validate.yml waits on port 80; without an explicit flush the
+  # restart notification above would only fire at the end of the play, after
+  # the validation already ran.
+  ansible.builtin.meta: flush_handlers
+
 - name: Configure automatic updates
   ansible.builtin.include_tasks: auto_updates.yml
   when: dns_auto_updates_enabled

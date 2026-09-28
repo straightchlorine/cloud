@@ -6,6 +6,10 @@ Debian-family board).
 ## Services
 
 - **Pi-hole DNS Server** (:53): Ad-blocking DNS resolver
+- **Pi-hole Web Interface** (:80/:443): Admin UI + v6 REST API; the installer's
+  8080/8443 fallback is explicitly re-pinned to 80/443 on every deploy
+  (firewall rules, the pihole-exporter and post-deploy validation all expect
+  port 80)
 - **Network Time Protocol** (:123): NTP server for time synchronization
 - **Monitoring**: Node Exporter and Pi-hole Exporter, deployed by the
   `prometheus-exporters` role (not by this one)
