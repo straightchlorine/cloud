@@ -12,7 +12,11 @@ ssh_port: 22
 enable_ufw: true
 
 # Common package cache settings
-package_cache_valid_time: 3600
+# 6h: apt-get update is heavy IO on SD-card boards (the Zero-class Pis), and
+# repeated deploy attempts were re-running it every hour. The nightly
+# apt-daily run (01:00) keeps the lists fresh anyway, so deploy-time updates
+# only need to catch gaps within a single day.
+package_cache_valid_time: 21600
 backup_retention_days: 30
 
 # Standardized backup configuration paths
