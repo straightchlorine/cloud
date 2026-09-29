@@ -1,4 +1,24 @@
 ---
+- name: Wait for the dpkg frontend lock to clear
+  # A legitimately running apt/unattended-upgrades (e.g. Debian's apt-daily
+  # timers, whose default 12h randomization can fire at any point of the day
+  # until the night-window override lands) holds the frontend lock. Racing it
+  # makes dpkg --configure -a below fail with rc 2 - wait it out instead.
+  # Bounded at 10 minutes so a wedged lock still fails loudly rather than
+  # hanging the deploy forever.
+  ansible.builtin.shell: |
+    if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+      echo "locked"
+    else
+      echo "free"
+    fi
+  register: common_dpkg_lock_state
+  until: common_dpkg_lock_state.stdout == "free"
+  retries: 60
+  delay: 10
+  changed_when: false
+  become: true
+
 - name: Recover any interrupted dpkg state
   # A killed apt/dpkg run (an aborted deploy, a reboot mid-upgrade, or
   # unattended-upgrades racing a deploy) leaves dpkg half-configured, and every
