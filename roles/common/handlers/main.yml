@@ -66,6 +66,16 @@
       # Ignore errors - compose file or dependencies may not be available after failed deployment
       ignore_errors: true
 
+- name: Restart apt timers
+  ansible.builtin.systemd:
+    name: "{{ item }}.timer"
+    state: restarted
+    enabled: true
+  loop:
+    - apt-daily
+    - apt-daily-upgrade
+  become: true
+
 - name: Restart systemd-journald
   ansible.builtin.systemd:
     name: systemd-journald

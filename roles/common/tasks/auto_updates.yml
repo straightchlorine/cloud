@@ -37,6 +37,24 @@
     mode: '0644'
   become: true
 
+- name: Schedule package maintenance in the night window
+  # Overrides Debian's apt-daily/apt-daily-upgrade timers (default ~06:00) so
+  # the daily dpkg run no longer stalls services during the day. The timers
+  # need a restart, not just a daemon-reload, to re-arm on the new calendar.
+  ansible.builtin.template:
+    src: apt-daily-timer-override.j2
+    dest: "/etc/systemd/system/{{ item }}.timer.d/override.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - apt-daily
+    - apt-daily-upgrade
+  become: true
+  notify:
+    - Reload systemd
+    - Restart apt timers
+
 - name: Compute reboot-pending notification time (12 hours before auto-reboot)
   ansible.builtin.set_fact:
     common_reboot_notify_total_minutes: >-

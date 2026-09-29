@@ -47,6 +47,26 @@ prometheus_exporters_pihole_exporter_enabled: true
 # makes the exporter's /metrics scrape (and therefore the fleet play's verify)
 # stall. Loopback fails instantly when the API is down instead of hanging.
 prometheus_exporters_pihole_exporter_target_host: "127.0.0.1"
+
+# 416MB board: skip node-exporter's heaviest collector. --collector.systemd
+# walks every unit's cgroup accounting on each scrape (RAM + slow metric
+# encoding on this box - it caused Prometheus's mid-stream connection resets),
+# and its metrics are the least used on this host. Re-add by deleting this
+# override to fall back to the role default list.
+node_exporter_enabled_collectors:
+  - textfile
+  - filesystem
+  - cpu
+  - meminfo
+  - loadavg
+  - diskstats
+  - netdev
+  - netstat
+  - stat
+  - time
+  - uname
+  - vmstat
+
 prometheus_role: "dns"
 
 # Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as the ssh user

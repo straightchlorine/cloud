@@ -43,6 +43,12 @@ monitoring_prometheus_retention_size: "10GB"
 monitoring_prometheus_scrape_interval: "15s"
 monitoring_prometheus_evaluation_interval: "15s"
 
+# Pi-hole exporter job tuning: every scrape is session auth + 7 sequential FTL
+# API calls, 15-25s typical on the Zero 2 W (40s worst case). It needs its own
+# budget instead of the global 15s interval / 10s default scrape timeout.
+monitoring_pihole_scrape_interval: "60s"
+monitoring_pihole_scrape_timeout: "45s"
+
 # Loki configuration
 monitoring_loki_retention_period: "30d"
 monitoring_loki_max_chunk_age: "2h"

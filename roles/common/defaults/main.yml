@@ -17,6 +17,12 @@ common_fail2ban_ssh_bantime: 600
 # per host so DNS is back before the others boot.
 common_auto_updates_reboot_if_required: false
 common_auto_updates_reboot_time: "05:00"
+# Package maintenance window (apt-daily + apt-daily-upgrade timers). 01:00
+# precedes the fleet's weekly app-update slot (02:00), the backup window
+# (03:00-05:00) and the reboot window (05:00) - Debian's default ~06:00 slot
+# landed on top of daytime traffic and stalled the 512MB Zero's services
+# during the daily dpkg run.
+common_auto_updates_run_time: "01:00"
 
 # Common System Packages (can be overridden in group_vars)
 common_packages:

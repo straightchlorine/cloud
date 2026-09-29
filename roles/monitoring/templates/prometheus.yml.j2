@@ -49,6 +49,13 @@ scrape_configs:
 
   # DNS Services (Pi-hole)
   - job_name: 'pihole-exporter'
+    # Each /metrics request triggers the exporter's full scrape: session auth
+    # plus 7 sequential FTL API calls. On the Zero 2 W that runs 15-25s
+    # typically (40s worst case: 8 requests x 5s per-request timeout), so the
+    # global interval / default 10s scrape timeout would mark it down
+    # constantly. Give this job its own, longer budget instead.
+    scrape_interval: {{ monitoring_pihole_scrape_interval }}
+    scrape_timeout: {{ monitoring_pihole_scrape_timeout }}
     static_configs:
 {% for host in groups['all'] %}
 {% if hostvars[host]['prometheus_role'] == 'dns' %}
