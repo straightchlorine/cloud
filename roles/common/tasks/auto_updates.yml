@@ -55,11 +55,15 @@
     - Reload systemd
     - Restart apt timers
 
-- name: Compute reboot-pending notification time (12 hours before auto-reboot)
+- name: Compute reboot-pending notification time (3 hours before auto-reboot)
+  # 3h lead: package maintenance now runs at 01:00 (see
+  # common_auto_updates_run_time) and the auto-reboot follows the same morning.
+  # A 12h lead would fire the notification after the reboot already happened
+  # and cleared /var/run/reboot-required - the heads-up would never send.
   ansible.builtin.set_fact:
     common_reboot_notify_total_minutes: >-
       {{ ((common_auto_updates_reboot_time.split(':')[0] | int * 60
-      + common_auto_updates_reboot_time.split(':')[1] | int - 720) % 1440) }}
+      + common_auto_updates_reboot_time.split(':')[1] | int - 180) % 1440) }}
   when: common_auto_updates_reboot_if_required
 
 - name: Create reboot-pending notification script
