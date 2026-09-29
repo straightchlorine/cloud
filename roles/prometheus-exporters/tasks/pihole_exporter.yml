@@ -1,14 +1,8 @@
 ---
-# Retries on the downloads: GitHub release downloads redirect through
-# objects.githubusercontent.com - occasional dropped connections on a Pi's
-# link are transient, not a real failure.
 - name: Download Pi-hole Exporter checksum
   ansible.builtin.get_url:
     url: "{{ prometheus_exporters_pihole_exporter_checksum_url }}"
     dest: "/tmp/pihole_exporter_checksum.txt"
-    # force: a partial file can be left by a dropped connection; without a checksum
-    # to validate against, get_url would accept the existing file and silently
-    # run grep against stale checksums.
     force: true
     timeout: 30
   register: prom_exp_pihole_exporter_checksum_download
@@ -87,21 +81,35 @@
   become: true
 
 - name: Flush pending handlers before verifying
-  # The handlers above only flush at the end of the play, so this verify would
-  # otherwise run against a unit whose file changed but whose process never restarted.
   ansible.builtin.meta: flush_handlers
 
 - name: Verify Pi-hole Exporter is responding
-  ansible.builtin.uri:
-    url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
-    method: GET
-    # The first scrape after FTL comes up runs the full v6 auth + 7-endpoint
-    # sequence sequentially; on a busy Zero that can exceed the default 10s.
-    timeout: 30
-  register: prom_exp_pihole_exporter_health
-  retries: 3
-  delay: 5
-  until: prom_exp_pihole_exporter_health.status == 200
+  block:
+    - name: Verify Pi-hole Exporter is responding
+      ansible.builtin.uri:
+        url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
+        method: GET
+        timeout: 30
+      register: prom_exp_pihole_exporter_health
+      retries: 3
+      delay: 5
+      until: prom_exp_pihole_exporter_health.status == 200
+  rescue:
+    - name: Restart the exporter to clear poisoned scrape state
+      ansible.builtin.systemd:
+        name: pihole-exporter
+        state: restarted
+      become: true
+
+    - name: Re-verify after restart
+      ansible.builtin.uri:
+        url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
+        method: GET
+        timeout: 60
+      register: prom_exp_pihole_exporter_health_after_restart
+      retries: 2
+      delay: 10
+      until: prom_exp_pihole_exporter_health_after_restart.status == 200
 
 - name: Test Pi-hole connectivity from exporter
   ansible.builtin.uri:
