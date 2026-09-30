@@ -49,8 +49,8 @@ scrape_configs:
 
   # DNS Services (Pi-hole)
   - job_name: 'pihole-exporter'
-    # Each scrape makes ~8 sequential FTL API calls and takes 15-40s on the Zero 2 W,
-    # longer than the global interval and default 10s timeout.
+    # Each scrape makes several sequential API calls and can be slow on weaker hosts,
+    # longer than the global interval and default timeout.
     scrape_interval: {{ monitoring_pihole_scrape_interval }}
     scrape_timeout: {{ monitoring_pihole_scrape_timeout }}
     static_configs:

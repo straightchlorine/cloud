@@ -34,7 +34,6 @@ check_absent() {
 
 # A staging box that never completed a full site.yml run lacks the shared fleet
 # state (ufw, node-exporter, prometheus user); that is not teardown damage.
-# ufw is the marker because the fleet play installs it with the rest.
 shared_state_deployed="yes"
 if ! command -v ufw >/dev/null 2>&1; then
   shared_state_deployed="no"

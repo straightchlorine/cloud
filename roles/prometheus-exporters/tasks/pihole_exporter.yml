@@ -47,9 +47,8 @@
     tasks_from: pihole_password_sync
 
 - name: Write the Pi-hole Exporter environment file
-  # Keeps the password out of ExecStart, which systemctl status and ps expose.
-  # Quoted and escaped because systemd treats backslashes and quotes in
-  # EnvironmentFile values as syntax, which corrupts passwords containing them.
+  # Keeps the password out of ExecStart, which ps exposes. Escaped because
+  # systemd parses backslashes and quotes in EnvironmentFile values.
   ansible.builtin.copy:
     content: |
       PIHOLE_PASSWORD="{{ vault_pihole_webpassword
@@ -75,17 +74,16 @@
   vars:
     service_description: "Pi-hole Prometheus Exporter"
     service_after: ["network.target", "pihole-FTL.service"]
-    # The exporter logs in once and never re-authenticates, so any FTL restart
-    # (which drops all API sessions) must restart it too.
+    # The exporter never re-authenticates, so an FTL restart (which drops all
+    # API sessions) must restart it too.
     service_part_of: ["pihole-FTL.service"]
     common_service_wants: ["network.target"]
     service_type: "simple"
     service_user: "{{ prometheus_exporters_user }}"
     service_group: "{{ prometheus_exporters_group }}"
     environment_file: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    # FTL is "started" before its API listens; login happens once at start, so
-    # wait here. $$ escapes systemd's own variable expansion. Worst case 80s,
-    # inside the 90s default start timeout; on failure Restart= retries.
+    # FTL is "started" before its API listens and the exporter logs in only
+    # once, so wait for the API. $$ escapes systemd's variable expansion.
     exec_start_pre:
       - >-
         /bin/sh -c 'for i in $$(seq 1 20); do curl -sf -m 2 -o /dev/null
@@ -139,9 +137,9 @@
           | grep -c '^pihole_status 1$' || true
       register: prom_exp_pihole_exporter_health
       changed_when: false
-      # The first scrape is slow on a Pi Zero, where FTL is also verifying a hashed password.
-      retries: 12
-      delay: 10
+      # On weaker hosts the first scrape can take a while.
+      retries: 4
+      delay: 30
       until: prom_exp_pihole_exporter_health.stdout | int == 1
   rescue:
     - name: Read the exporter's recent log
@@ -167,8 +165,8 @@
           | grep -c '^pihole_status 1$' || true
       register: prom_exp_pihole_exporter_health_after_restart
       changed_when: false
-      retries: 12
-      delay: 10
+      retries: 4
+      delay: 30
       until: prom_exp_pihole_exporter_health_after_restart.stdout | int == 1
 
 - name: Test Pi-hole connectivity from exporter

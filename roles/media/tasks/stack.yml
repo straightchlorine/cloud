@@ -25,7 +25,7 @@
 
 - name: Create the library data directories
   # Navidrome runs userns-remapped (host uid dockremap + media_uid), so only
-  # navidrome-data gets that owner. Only it recurses; walking the library is slow on a Pi.
+  # navidrome-data gets that owner. Only it recurses; walking the library is slow.
   ansible.builtin.file:
     path: "{{ media_library_path }}/{{ item }}"
     state: directory

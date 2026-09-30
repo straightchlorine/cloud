@@ -83,7 +83,7 @@ for svc in pihole-FTL pihole-exporter node-exporter chrony; do
     note_left "$svc not enabled"
   fi
 done
-# Syncthing is off on 512MB hosts (dns_backup_enabled); only a unit that is
+# Syncthing is off on low-RAM hosts (dns_backup_enabled); only a unit that is
 # present but not running is a failure.
 if systemctl cat syncthing.service >/dev/null 2>&1; then
   if systemctl is-active --quiet syncthing 2>/dev/null; then

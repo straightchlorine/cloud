@@ -1,6 +1,6 @@
 ---
-# zram instead of SD-card swap: no flash wear, and it keeps apt upgrade or
-# pihole -g from OOM-killing Pi-hole on 512MB boards.
+# zram avoids SD-card swap wear and keeps apt or gravity runs from OOM-killing
+# Pi-hole on low-RAM boards.
 
 - name: Install zram-tools
   ansible.builtin.apt:

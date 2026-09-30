@@ -1,6 +1,6 @@
 # Sourced by zramswap.service as a shell fragment, so keys are plain shell assignments.
 
-# zstd compresses best on current Pi kernels; worth the CPU on a 512MB board.
+# zstd compresses best; worth the CPU on low-RAM boards.
 ALGO={{ common_zram_algorithm }}
 
 # A cap, not a reservation: RAM is only used as compressed pages are stored.

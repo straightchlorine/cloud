@@ -29,8 +29,8 @@
         - "{{ media_library_path }}"
 
     - name: Publish fixture userns-remap facts
-      # The uid must be inside the nested rootless-podman mapping (0-65536);
-      # the real dockremap base 165536 makes chown fail with EINVAL.
+      # The uid must be inside the nested rootless-podman mapping (0-65536), or chown
+      # fails with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"

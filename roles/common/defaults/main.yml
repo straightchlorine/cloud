@@ -17,8 +17,8 @@ common_fail2ban_ssh_bantime: 600
 # per host so DNS is back before the others boot.
 common_auto_updates_reboot_if_required: false
 common_auto_updates_reboot_time: "05:00"
-# 01:00 runs before the app-update (02:00) and backup (03:00-05:00) slots; Debian's
-# default ~06:00 dpkg run stalled the 512MB Zero's services.
+# Runs before the 02:00 app-update and 03:00-05:00 backup slots; Debian's default
+# daytime dpkg run stalls small hosts.
 common_auto_updates_run_time: "01:00"
 
 # Common System Packages (can be overridden in group_vars)
@@ -64,8 +64,8 @@ common_no_new_privileges: "true"
 
 common_rpi_cgroup_memory_enabled: true
 
-# Opt-in per host: Wi-Fi-only boards must not park the radio between beacons,
-# and 512MB boards do better with zram than SD-card swap.
+# Opt-in per host: Wi-Fi-only boards must not park the radio, and low-RAM boards
+# do better with zram than SD-card swap.
 common_wifi_powersave_tuning_enabled: false
 common_zram_enabled: false
 common_zram_algorithm: "zstd"

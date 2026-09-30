@@ -12,7 +12,7 @@ ssh_port: 22
 enable_ufw: true
 
 # Common package cache settings
-# apt-get update is heavy IO on Zero-class SD cards; nightly apt-daily keeps lists fresh.
+# apt update is heavy IO on weaker hosts; the nightly timer keeps lists fresh.
 package_cache_valid_time: 21600
 backup_retention_days: 30
 
