@@ -1,5 +1,27 @@
 ---
 
+- name: Gather network facts
+  # primary_ip is used by the exporters' units and validation.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+    apply:
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
+        - validation
+  when: prometheus_exporters_enabled
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
+    - validation
+
 - name: Include validation tasks
   ansible.builtin.include_tasks: validate.yml
   tags:
@@ -8,26 +30,6 @@
 - name: Include common setup tasks
   ansible.builtin.include_tasks:
     file: common_setup.yml
-    apply:
-      tags:
-        - dns
-        - automation
-        - music
-        - monitoring
-        - backup
-  when: prometheus_exporters_enabled
-  tags:
-    - dns
-    - automation
-    - music
-    - monitoring
-    - backup
-
-- name: Gather network facts
-  # primary_ip is rendered into the exporters' systemd units.
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: network_facts
     apply:
       tags:
         - dns

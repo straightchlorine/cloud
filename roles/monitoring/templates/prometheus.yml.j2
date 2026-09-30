@@ -53,6 +53,11 @@ scrape_configs:
     # longer than the global interval and default timeout.
     scrape_interval: {{ monitoring_pihole_scrape_interval }}
     scrape_timeout: {{ monitoring_pihole_scrape_timeout }}
+    # The exporter labels every series hostname="127.0.0.1" (how it reaches
+    # Pi-hole); show the inventory name instead.
+    metric_relabel_configs:
+      - source_labels: [instance]
+        target_label: hostname
     static_configs:
 {% for host in groups['all'] %}
 {% if hostvars[host]['prometheus_role'] == 'dns' %}

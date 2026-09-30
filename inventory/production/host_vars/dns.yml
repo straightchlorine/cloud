@@ -36,9 +36,8 @@ common_firewall_ports:
   - {port: 9617, comment: "Pi-hole Exporter"}
 
 prometheus_exporters_pihole_exporter_enabled: true
-# Loopback, not primary_ip: over the saturated Wi-Fi link during deploys the dial
-# hangs and stalls the /metrics scrape; loopback fails instantly.
-prometheus_exporters_pihole_exporter_target_host: "127.0.0.1"
+# Primary IP so the exporter's hostname label is a real address, not 127.0.0.1.
+prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 
 # Omits the systemd collector: on this 416MB board its per-scrape cgroup walk
 # caused mid-stream connection resets from Prometheus.
