@@ -93,6 +93,7 @@
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
       -pihole_hostname {{ prometheus_exporters_pihole_exporter_target_host }}
+      -timeout {{ prometheus_exporters_pihole_exporter_api_timeout }}
       -port {{ prometheus_exporters_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"
@@ -133,7 +134,8 @@
     - name: Check the exporter reports pihole_status 1
       ansible.builtin.shell:
         cmd: >-
-          curl -s -m 30 http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
+          curl -s -m {{ prometheus_exporters_health_check_timeout }}
+          http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
           | grep -c '^pihole_status 1$' || true
       register: prom_exp_pihole_exporter_health
       changed_when: false
@@ -161,7 +163,8 @@
     - name: Check the exporter reports pihole_status 1 after restart
       ansible.builtin.shell:
         cmd: >-
-          curl -s -m 30 http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
+          curl -s -m {{ prometheus_exporters_health_check_timeout }}
+          http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
           | grep -c '^pihole_status 1$' || true
       register: prom_exp_pihole_exporter_health_after_restart
       changed_when: false

@@ -91,4 +91,7 @@ prometheus_exporters_ufw_enabled: true
 prometheus_exporters_health_check_enabled: true
 # Pi-hole exporter /metrics answers only after a full scrape (auth + several API
 # calls), which can take a while on weaker hosts.
-prometheus_exporters_health_check_timeout: 30
+prometheus_exporters_health_check_timeout: 60
+# Per-call limit for the exporter's own Pi-hole API requests; its 5s default
+# makes scrapes fail whenever FTL is briefly slow.
+prometheus_exporters_pihole_exporter_api_timeout: "15s"
