@@ -39,6 +39,13 @@
     path: "/tmp/pihole_exporter_checksum.txt"
     state: absent
 
+- name: Sync the Pi-hole admin password to the vault
+  # The dns play runs after this one, so a rotated password would otherwise
+  # fail the verification below before the dns role could apply it.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: pihole_password_sync
+
 - name: Write the Pi-hole Exporter environment file
   # Keeps the password out of ExecStart, which systemctl status and ps expose.
   # Quoted and escaped because systemd treats backslashes and quotes in
@@ -110,6 +117,13 @@
     state: started
     daemon_reload: true
   become: true
+
+- name: Restart the exporter so it logs in with the synced password
+  ansible.builtin.systemd:
+    name: pihole-exporter
+    state: restarted
+  become: true
+  when: common_pihole_password_synced
 
 - name: Flush pending handlers before verifying
   ansible.builtin.meta: flush_handlers
