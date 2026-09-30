@@ -1,40 +1,30 @@
 ---
-- name: Converge - board tuning (Wi-Fi power save, zram)
+- name: Converge board tuning
   hosts: all
   gather_facts: true
   become: true
   vars:
     common_wifi_powersave_tuning_enabled: true
-  # The role defaults, loaded here so the zram render below uses exactly what a
-  # host with common_zram_enabled would get (include_role loads defaults only
-  # for the included tasks' scope, and the render runs outside the role).
+  # Role defaults for the zram render, which runs outside the role's scope.
   vars_files:
     - ../../defaults/main.yml
   pre_tasks:
-    # The geerlingguy image's apt lists are empty - warm the cache so the role's
-    # plain `apt: name=iw` resolves, mirroring docker-installation's converge.
-    - name: Warm the apt cache for the role's package install
+    # The image ships with empty apt lists, so the role's `apt: name=iw` would fail.
+    - name: Warm the apt cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
       changed_when: false
   tasks:
-    # The real task file, end to end: installs iw, deploys the script + unit and
-    # starts it. A container has no wireless interface, so the script logs
-    # "no wireless interfaces" and exits 0 - the same no-op a wired host gets,
-    # which is exactly what the unit must not choke on.
-    - name: Run the real Wi-Fi power-save setup
+    # A container has no wireless interface; the script must exit 0 as on a wired host.
+    - name: Run Wi-Fi power-save setup
       ansible.builtin.include_role:
         name: common
         tasks_from: wifi_powersave
 
-    # zram.yml is deliberately NOT included: `zramswap start` needs
-    # CAP_SYS_MODULE (modprobe zram) and CAP_SYS_ADMIN (swapon + mkswap), which
-    # a podman container does not have. Its config is rendered from the role
-    # defaults loaded via vars_files above - no explicit vars, so the result is
-    # byte-for-byte what a host with common_zram_enabled gets. The service half
-    # is covered by the dns staging cycle on real hardware.
-    - name: Render the zram swap config from the role defaults
+    # zram.yml is not included: zramswap needs CAP_SYS_MODULE and CAP_SYS_ADMIN,
+    # which a podman container lacks. Only the config is rendered here.
+    - name: Render zram swap config
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/zramswap.j2"
         dest: /tmp/zramswap.rendered

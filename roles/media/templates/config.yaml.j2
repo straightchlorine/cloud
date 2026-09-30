@@ -9,10 +9,8 @@ import:
     write: yes
     # YouTube tracks are single songs, never whole releases.
     singletons: yes
-    # No confident MusicBrainz match: import with the tags yt-dlp wrote
-    # rather than leaving the file stranded in downloads/.
+    # Without a MusicBrainz match, import with yt-dlp's tags instead of stranding the file in downloads/.
     quiet_fallback: asis
-    # Never delete on import; `beet duplicates` lists them for review.
     duplicate_action: keep
     resume: no
     log: /config/import.log
@@ -25,7 +23,6 @@ paths:
 
 plugins: lyrics replaygain duplicates
 
-# Embedded into the files (import.write), where Navidrome reads them.
 lyrics:
     auto: yes
     # lrclib matches on duration, so a slowed/sped-up edit gets no lyrics

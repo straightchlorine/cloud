@@ -109,7 +109,6 @@
       - firefly
       - mariadb
       - watchtower
-    # Vault glue - the only place real secret values exist in the role.
     compose_env_vars: "{{ automation_env_vars | combine(common_watchtower_env_vars) }}"
     automation_env_vars:
       FIREFLY_APP_KEY: "{{ vault_firefly_app_key }}"

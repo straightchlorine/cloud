@@ -1,9 +1,6 @@
 ---
-# Raspberry Pi Zero 2 W (DNS host): Pi-hole + chrony NTP + prometheus exporters.
-# Running on SD card only with zram compressed swap and Wi-Fi power-save disabled.
 device_type: rpizero2w
 
-# Board tuning for low-power wireless operation
 common_wifi_powersave_tuning_enabled: true
 common_zram_enabled: true
 
@@ -16,16 +13,14 @@ dns_pihole_packages:
   - dnsutils
   - jq  # pihole-syncthing-backup.sh parses the Pi-hole API JSON with this
 
-# dns_auto_updates gates only the Pi-hole weekly cron; Debian updates + reboot
-# are fleet-wide via the common role.
+# Gates only the Pi-hole weekly cron; OS updates and reboot come from the common role.
 dns_auto_updates_enabled: true
 common_auto_updates_reboot_if_required: true
 # First in the fleet's reboot window: DNS is back before the others boot.
 common_auto_updates_reboot_time: "04:45"
 
-# Serves NTP to the VLAN (see common/templates/chrony.conf.j2 `allow` + firewall rule).
 common_ntp_server_enabled: true
-# OPNsense already runs NTP here - use it as the low-latency upstream.
+# OPNsense runs NTP on the LAN; lowest-latency upstream.
 common_ntp_upstream_server: "192.168.20.1"
 common_ntp_allowed_networks:
   - "{{ primary_network_cidr }}"
@@ -41,18 +36,12 @@ common_firewall_ports:
   - {port: 9617, comment: "Pi-hole Exporter"}
 
 prometheus_exporters_pihole_exporter_enabled: true
-# The exporter runs on the same host as FTL, so scrape the API over loopback.
-# Targeting primary_ip (the wlan0 address) forces traffic out over the Wi-Fi
-# hairpin - during deploys that link is saturated and the dial hangs, which
-# makes the exporter's /metrics scrape (and therefore the fleet play's verify)
-# stall. Loopback fails instantly when the API is down instead of hanging.
+# Loopback, not primary_ip: over the saturated Wi-Fi link during deploys the dial
+# hangs and stalls the /metrics scrape; loopback fails instantly.
 prometheus_exporters_pihole_exporter_target_host: "127.0.0.1"
 
-# 416MB board: skip node-exporter's heaviest collector. --collector.systemd
-# walks every unit's cgroup accounting on each scrape (RAM + slow metric
-# encoding on this box - it caused Prometheus's mid-stream connection resets),
-# and its metrics are the least used on this host. Re-add by deleting this
-# override to fall back to the role default list.
+# Omits the systemd collector: on this 416MB board its per-scrape cgroup walk
+# caused mid-stream connection resets from Prometheus.
 node_exporter_enabled_collectors:
   - textfile
   - filesystem
@@ -69,8 +58,7 @@ node_exporter_enabled_collectors:
 
 prometheus_role: "dns"
 
-# Local Syncthing backup (Teleporter + FTL DB); Syncthing runs as the ssh user
-# (zero). 32GB card - default retention is fine, ~50-80MB total.
+# Syncthing runs as the ssh user (zero), so the backup dir belongs to it.
 common_syncthing_enabled: true
 dns_backup_enabled: true
 dns_backup_dir: "/home/zero/syncthing/pihole-backup"

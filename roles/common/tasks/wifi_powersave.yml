@@ -1,10 +1,5 @@
 ---
-# Disable 802.11 power save on wireless interfaces. The kernel default parks the
-# radio between beacons - tens of milliseconds of extra latency and dropped UDP
-# bursts - which breaks DNS for the whole VLAN when the resolver answers over
-# Wi-Fi. A boot-time unit, not a deploy-time `iw` call: power save resets to on
-# at every boot. No-op on hosts with no wireless interface.
-# Opt in per host with common_wifi_powersave_tuning_enabled.
+# Boot-time unit rather than a one-off `iw` call: power save resets to on at every boot.
 
 - name: Ensure iw is installed
   ansible.builtin.apt:
@@ -32,13 +27,10 @@
   vars:
     service_description: "Disable 802.11 power save on wireless interfaces"
     service_type: "oneshot"
-    # RemainAfterExit so the unit reports as active (exited) - a dead oneshot
-    # would look like a failure to anyone checking `systemctl is-active`.
+    # Keeps the oneshot "active (exited)" instead of looking dead to is-active.
     common_remain_after_exit: "true"
-    # network.target, not network-online.target: the radio device exists by the
-    # time network.target is reached (brcmfmac loads at boot, ahead of the
-    # network managers), and online.target can stall for minutes on hosts
-    # without NetworkManager/systemd-networkd-wait-online.
+    # Not network-online.target: the radio exists by network.target, and online can
+    # stall for minutes on hosts without a wait-online service.
     service_after: ["network.target"]
     common_service_wants: ["network.target"]
     exec_start: "/usr/local/bin/wifi-powersave-off"

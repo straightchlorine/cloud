@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Post-deployment check for the DNS host (default: the `dns` inventory host -
-# the Zero 2 W at its staging IP until cutover).
 # Run after a successful site.yml deploy to confirm Pi-hole, exporters,
-# NTP, journald (relocation on drive hosts, the size cap everywhere) and
-# firewall all work. Pairs with validate-clean.sh: clean = "ready to deploy",
-# this = "deployed & healthy".
+# NTP, journald and firewall all work.
 # Usage: ./scripts/dns/validate-deploy.sh [ansible-host-alias]
 set -euo pipefail
 
@@ -87,10 +83,8 @@ for svc in pihole-FTL pihole-exporter node-exporter chrony; do
     note_left "$svc not enabled"
   fi
 done
-# Syncthing is the role's optional local-backup daemon (dns_backup_enabled;
-# ~100MB RSS, deliberately off on 512MB hosts that lean on the coordinator's
-# restic pulls instead). Only a half-removed install - unit present but not
-# running - is a failure.
+# Syncthing is off on 512MB hosts (dns_backup_enabled); only a unit that is
+# present but not running is a failure.
 if systemctl cat syncthing.service >/dev/null 2>&1; then
   if systemctl is-active --quiet syncthing 2>/dev/null; then
     note_ok "syncthing active"
@@ -174,9 +168,7 @@ else
 fi
 
 echo "-- zram swap --"
-# zram is the role's opt-in compressed swap (common_zram_enabled). Judge it by
-# the unit's presence, like the syncthing check above: a half-removed install
-# (unit present, no swap) is still a failure.
+# zram is opt-in; like syncthing, only a present-but-inactive unit fails.
 if systemctl cat zramswap.service >/dev/null 2>&1; then
   if systemctl is-active --quiet zramswap 2>/dev/null; then
     note_ok "zramswap active"
@@ -194,10 +186,8 @@ fi
 
 echo "-- Optional attached drive + journald --"
 drive_fs="$(findmnt -n -o FSTYPE /mnt/data 2>/dev/null || true)"
-# A non-mmcblk whole disk is the USB/SATA candidate the role would have
-# prepared. With none attached this is an SD-only host (a Pi Zero 2 W with no
-# room for a drive), where the mount + relocation checks do not apply - but the
-# journal size cap below must still be in place.
+# No USB/SATA disk means an SD-only host: skip mount/relocation checks, but
+# the journal size cap still applies.
 drive_candidate="$(lsblk -pdno NAME,TYPE 2>/dev/null |
   awk '$2 == "disk" && $1 ~ /^\/dev\/sd/ { print $1 }' | head -n 1)"
 if [ "$drive_fs" = "ext4" ]; then
@@ -251,9 +241,7 @@ for cron_job in "Weekly Pi-hole updates"; do
     note_left "cron missing: $cron_job"
   fi
 done
-# The local-backup cron ships with dns_backup_enabled, which is off on hosts
-# that back up through the coordinator alone - judge it by the script's
-# presence rather than assuming.
+# The local-backup cron exists only with dns_backup_enabled; key off the script.
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
   if printf '%s\n' "$root_cron" | grep -qF -- "Pi-hole Syncthing local backup"; then
     note_ok "cron present: Pi-hole Syncthing local backup"
@@ -293,8 +281,7 @@ fi
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
-  # The path comes from dns_backup_dir (default /home/ansible/syncthing/pihole-backup
-  # or /mnt/data/syncthing/backup when on a drive). Extract it from the script.
+  # dns_backup_dir varies by host (drive or home); read it from the script.
   backup_dir="$(sed -nE 's/^DEST="([^"]+)"/\1/p' /usr/local/bin/pihole-syncthing-backup | head -n 1)"
   if [ -n "$backup_dir" ]; then
     check_present "$backup_dir"

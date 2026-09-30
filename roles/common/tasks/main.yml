@@ -52,10 +52,10 @@
 - name: Deploy shared dotfiles
   ansible.builtin.include_tasks: dotfiles.yml
 
-- name: Configure Wi-Fi power-save tuning (optional)
+- name: Configure Wi-Fi power-save tuning
   ansible.builtin.include_tasks: wifi_powersave.yml
   when: common_wifi_powersave_tuning_enabled
 
-- name: Configure compressed RAM swap (optional)
+- name: Configure compressed RAM swap
   ansible.builtin.include_tasks: zram.yml
   when: common_zram_enabled

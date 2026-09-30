@@ -89,7 +89,6 @@ prometheus_exporters_ufw_enabled: true
 
 # Health check configuration
 prometheus_exporters_health_check_enabled: true
-# The Pi-hole exporter's /metrics answers only after its full scrape (session
-# auth + 7 sequential FTL API calls), which takes 15-25s on the Zero 2 W - the
-# old 10s ceiling reported a healthy exporter as [FAIL] in the health report.
+# Pi-hole exporter /metrics answers only after a full scrape (auth + 7 FTL API
+# calls), which takes 15-25s on a Zero 2 W.
 prometheus_exporters_health_check_timeout: 30

@@ -4,9 +4,8 @@
   gather_facts: true
   become: true
   vars:
-    # Same value converge used - see the comment in converge.yml. Verify runs as
-    # a separate ansible-playbook, so converge's set_fact facts do not exist
-    # here: the read-only role is included again in this process instead.
+    # Must match converge.yml. Verify is a separate process, so converge's
+    # facts are gone and the read-only role is re-included below.
     device_type: "{{ lookup('env', 'MOLECULE_DEVICE_TYPE') | default('rpi4b', true) }}"
   tasks:
     - name: Re-run the hardware role in the verify process

@@ -1,8 +1,4 @@
 ---
-# Recreate-from-zero set: the music library, the Navidrome DB (its own
-# nightly backups), the beets DB, the .env/JWT secret and the yt-dlp download
-# archive. Everything else is rebuilt by this role.
-
 - name: Install the nightly local snapshot backup
   ansible.builtin.include_role:
     name: common
@@ -40,13 +36,13 @@
         fi
   when: media_backup_enabled
 
-- name: Install Syncthing (common role, optional)
+- name: Install Syncthing
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing
   when: common_syncthing_enabled | default(false) | bool and media_backup_enabled
 
-- name: Share the backup snapshots and the music library over Syncthing
+- name: Share backups and music over Syncthing
   # Send-only: a peer's delete or move must never propagate back here.
   ansible.builtin.include_role:
     name: common
@@ -61,9 +57,8 @@
   when: common_syncthing_enabled | default(false) | bool and media_backup_enabled
 
 - name: Configure the off-site restic backup  # noqa: var-naming[no-role-prefix]
-  # No compose pause (unlike automation): a first run over the whole library
-  # would stop Navidrome for hours. The live DB is excluded; Navidrome's own
-  # backups in navidrome-data/backups are the consistent copies restic ships.
+  # No compose pause: a first run over the whole library would stop Navidrome for hours.
+  # The live DB is excluded; restic ships Navidrome's own backups instead.
   ansible.builtin.include_role:
     name: common
     tasks_from: restic_backup

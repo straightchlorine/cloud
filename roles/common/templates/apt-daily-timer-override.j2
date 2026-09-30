@@ -1,13 +1,7 @@
 # {{ ansible_managed }}
-# Drop-in override for Debian's package-maintenance timers. The packaged
-# defaults run apt-daily at 06:00/12:00 with 12h randomization and
-# apt-daily-upgrade at 06:00 + 60m - daytime dpkg runs on constrained boards
-# (512MB Pi) stall long-running services like Pi-hole's web server and the
-# exporters for the duration.
-#
-# OnCalendar is a list property in systemd: the empty assignment clears the
-# packaged values first, otherwise this drop-in would ADD 01:00 to the
-# existing 06:00/12:00 schedule instead of replacing it.
+# Daytime dpkg runs stall services on 512MB Pis, so move the timers off-hours.
+# OnCalendar is a list: the empty assignment clears the packaged times,
+# otherwise this schedule would be added to them.
 [Timer]
 OnCalendar=
 OnCalendar=*-*-* {{ common_auto_updates_run_time }}

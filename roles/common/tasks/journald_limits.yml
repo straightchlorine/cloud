@@ -1,8 +1,5 @@
 ---
-# Cap the persistent journal. systemd's default is 10% of the filesystem -
-# gigabytes of writes on a large card or drive - and flash capacity is better
-# spent on data than on logs nobody reads. Callers own the policy (when/where);
-# the value comes from common_journald_system_max_use.
+# systemd's default cap is 10% of the filesystem, too much log churn on flash storage.
 
 - name: Cap the persistent journal size
   ansible.builtin.lineinfile:

@@ -27,8 +27,8 @@
         success_msg: "[OK] backup script fully rendered"
 
     - name: Assert the backup script's paths array uses the real caller-supplied paths
-      # Regression guard: the template must loop over common_backup_directories
-      # (the vars: alias); no caller sets the bare backup_directories name.
+      # The template must loop over common_backup_directories; no caller sets
+      # the bare backup_directories name.
       ansible.builtin.assert:
         that:
           - "'\"/etc\"' in (common_backup_script_rendered.content | b64decode)"
@@ -37,8 +37,8 @@
         success_msg: "[OK] backup script's BACKUP_PATHS matches common_backup_paths"
 
     - name: Assert the backup script's excludes use the real caller-supplied patterns
-      # Regression guard: excludes come from backup_exclude_patterns (what
-      # host_vars set), not the never-set backup_excludes.
+      # Excludes come from backup_exclude_patterns (what host_vars set), not
+      # the never-set backup_excludes.
       ansible.builtin.assert:
         that:
           - "\"--exclude '*.log'\" in (common_backup_script_rendered.content | b64decode)"
@@ -46,9 +46,8 @@
         success_msg: "[OK] backup script applies the configured excludes"
 
     - name: Assert the restic sftp command is the shared, config-file-based form
-      # Regression guard: RESTIC_SFTP_COMMAND must use ssh_config.j2's shared
-      # form (-F); a hand-built "-i <key> -o ..." invocation bypasses its
-      # UserKnownHostsFile/ControlMaster settings.
+      # A hand-built "-i <key> -o ..." command bypasses the UserKnownHostsFile/
+      # ControlMaster settings in ssh_config.j2; it must use -F.
       ansible.builtin.assert:
         that:
           - "'ssh -F' in (common_backup_script_rendered.content | b64decode)"
@@ -62,8 +61,8 @@
       register: common_backup_timer_rendered
 
     - name: Assert the timer schedule is systemd OnCalendar syntax, not cron
-      # Regression guard: OnCalendar= takes systemd calendar syntax; cron syntax
-      # ("0 3 * * *") yields a timer that silently never fires as intended.
+      # Cron syntax ("0 3 * * *") in OnCalendar= yields a timer that never
+      # fires as intended.
       ansible.builtin.assert:
         that:
           - "'OnCalendar=*-*-*' in (common_backup_timer_rendered.content | b64decode)"
@@ -104,9 +103,8 @@
       register: common_backup_timer_state
       failed_when: common_backup_timer_state.status.UnitFileState != 'enabled'
 
-    # Regression-tests systemd-service.j2's section placement directly:
-    # StartLimitBurst/StartLimitIntervalSec must render in [Unit], not [Service]
-    # (some systemd versions silently ignore them under [Service]).
+    # Some systemd versions silently ignore StartLimit* under [Service], so
+    # the template must place them in [Unit].
     - name: Render systemd-service.j2 directly with start-limit fields set
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/systemd-service.j2"

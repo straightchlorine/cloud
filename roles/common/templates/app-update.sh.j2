@@ -1,7 +1,6 @@
 #!/bin/bash
-# Weekly {{ common_app_update_label }} update. No `apt upgrade` here:
-# unattended-upgrades (auto_updates.yml) does that daily and would race us
-# for the apt lock.
+# No `apt upgrade` here: unattended-upgrades runs daily and would race
+# this script for the apt lock.
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   echo "Usage: {{ common_app_update_name }}-update"

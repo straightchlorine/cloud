@@ -1,6 +1,5 @@
 # {{ ansible_managed }}
-# NOPASSWD lets the backup user run restic/rclone as root; env_keep carries the
-# RESTIC_* and TMPDIR variables through sudo's env_reset.
+# env_keep passes the RESTIC_* and TMPDIR variables through sudo's env_reset.
 Defaults:backup !requiretty
 Defaults:backup env_keep += "RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR RESTIC_SFTP_COMMAND TMPDIR"
 

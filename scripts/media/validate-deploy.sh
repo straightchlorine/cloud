@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Post-deployment check for a disposable media test host (default pi-test-media).
-# Run after a successful site.yml deploy to confirm compose, navidrome,
-# cadvisor, the pipeline, backups and the SSD layout all work. Pairs with
-# validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".
+# Post-deploy check for the disposable media test host; pairs with validate-clean.sh.
 # Usage: ./scripts/media/validate-deploy.sh [ansible-host-alias]
 set -euo pipefail
 
@@ -41,9 +38,7 @@ check_script() {
     note_left "$path missing"
     return
   fi
-  # -L: symlinks (e.g. /usr/local/bin/manage-media) always report lrwxrwxrwx for
-  # their own mode bits - the real permission lives on whatever the link
-  # points at, so dereference before checking.
+  # -L: a symlink's own mode is always lrwxrwxrwx; check the target's.
   got_mode="$(stat -L -c '%a' "$path" 2>/dev/null || echo "000")"
   if [ "$got_mode" = "$want_mode" ]; then
     note_ok "$path mode $want_mode"
@@ -52,7 +47,6 @@ check_script() {
   fi
 }
 
-# default-route source address, same as Ansible's primary_ip fact.
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
   PRIMARY_IP="$(hostname -I | awk '{print $1}')"
@@ -98,8 +92,7 @@ else
   note_left "/var/log/journal not a separate mount"
 fi
 
-# STACK_HOME follows the SSH user's home, mirroring the role's derived
-# media_home (/home/<ansible_user>/stack).
+# Mirrors the role's media_home (/home/<ansible_user>/stack).
 STACK_HOME="${HOME}/stack"
 
 echo "-- Compose file + secrets --"
@@ -115,10 +108,8 @@ if [ -f "$STACK_HOME/.env" ]; then
   fi
 fi
 
-# Compose file must not carry an INLINED secret value. The legit env line
-# references the JWT secret by NAME ("ND_JWTKEY=${NAVIDROME_JWT_SECRET}"), so
-# a '$' immediately after the key's '=' marks a reference; anything else
-# there is a real (inlined) value - which is exactly what we refuse.
+# The legit env line references the secret by name (ND_JWTKEY=${...}), so a '$'
+# right after '=' is a reference; anything else is an inlined value.
 if grep -qE 'ND_JWTKEY=[^$]' "$STACK_HOME/docker-compose.yml" 2>/dev/null; then
   note_left "compose file contains a secret value (!)"
 else
@@ -138,7 +129,6 @@ done
 echo "-- Containers --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   ps_out="$(docker compose -f "$STACK_HOME/docker-compose.yml" ps --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
-  # beets is an on-demand tools-profile container, never running.
   for svc in navidrome cadvisor; do
     line="$(printf '%s\n' "$ps_out" | grep -w "$svc" || true)"
     if [ -n "$line" ] && printf '%s\n' "$line" | grep -q 'running'; then
@@ -147,8 +137,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
       note_left "$svc not running ($line)"
     fi
   done
-  # /alive-style check: the web frontend proves the listener, only the
-  # container's own view of /data proves the bind mounts are writable.
+  # Only the container's own view of /data proves the bind mounts are writable.
   if docker compose -f "$STACK_HOME/docker-compose.yml" exec -T navidrome test -w /data 2>/dev/null; then
     note_ok "navidrome can write /data"
   else

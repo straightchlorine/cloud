@@ -12,9 +12,8 @@ platforms:
 provisioner:
   name: ansible
   env:
-    # CI/local both run `cd roles/os && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/os - one level up is roles/,
-    # letting the converge's `include_role: name: os` resolve by name.
+    # Molecule runs from roles/os, so the parent dir is roles/ and
+    # `include_role: name: os` resolves by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 verifier:
   name: ansible

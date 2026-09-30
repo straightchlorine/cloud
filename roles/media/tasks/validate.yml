@@ -1,6 +1,6 @@
 ---
-# Fail-fast configuration checks. site.yml includes this file directly, so it
-# runs os discovery itself; no Docker probing (Docker may not exist yet).
+# site.yml includes this file directly, so it runs OS discovery itself.
+# No Docker probing here; Docker may not exist yet.
 
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
@@ -27,7 +27,7 @@
       - { var: "vault_watchtower_api_token", value: "your-watchtower-api-token" }
   tags: [validation]
 
-- name: Require real playlists when the YouTube pipeline is on
+- name: Require real YouTube playlists
   ansible.builtin.assert:
     that:
       - vault_youtube_playlists is defined
@@ -53,7 +53,7 @@
       ({{ os_family }}).
   tags: [validation]
 
-- name: Validate the parent directories of the stack paths exist
+- name: Check stack path parent directories exist
   ansible.builtin.stat:
     path: "{{ item | dirname }}"
   register: media_parent_path_check
@@ -63,7 +63,7 @@
     - "{{ media_home }}"
   tags: [validation]
 
-- name: Refuse a stack home under /root for a non-root stack user
+- name: Refuse media_home under /root for non-root user
   # Usually means media_home came from the ansible_user_dir/_id facts, which
   # reflect root under become.
   ansible.builtin.fail:

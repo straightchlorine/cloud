@@ -121,14 +121,9 @@
   become: true
   gather_facts: true
   pre_tasks:
-    - name: Skip backup config until the host declares its backup role
-      # roles/backup validates `backup_role` per host; only the coordinator
-      # (backup_wyse) and standalone (station-arch) hosts set it today. End
-      # the play here for the rest - the backup rework will assign service
-      # hosts a backup_role and this guard goes away with it. Without the
-      # guard the play hard-fails on every service host, forcing callers to
-      # skip it via --skip-tags backup - which ALSO skips the exporter tasks
-      # tagged `backup` (a group-scope tag), breaking fresh-host deploys.
+    - name: Skip backup play without a backup_role
+      # Only backup_wyse and station-arch set backup_role. Ending the play avoids a hard fail on service hosts
+      # without forcing --skip-tags backup, which would also skip the group-scope exporter tasks.
       ansible.builtin.meta: end_play
       when: backup_role is not defined
   roles:

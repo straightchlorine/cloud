@@ -1,7 +1,5 @@
 ---
-# Automation stack: vaultwarden, firefly (+ mariadb, cron sidecar), calibre;
-# watchtower and cadvisor come from common. Application images float on
-# :latest for watchtower's opt-in (labelled) nightly sweep; mariadb is pinned.
+# Application images float on :latest under watchtower's labelled nightly sweep; mariadb is pinned.
 
 # Derived from the inventory's ansible_user, the control user that owns the stack
 # (as common_syncthing_home, stack_user and compose_owner do). Do NOT use the

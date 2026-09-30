@@ -82,6 +82,22 @@
         mode: "0644"
       tags: [molecule-idempotence-notest]
 
+    - name: Teardown refuses to run without the confirm fact
+      block:
+        - name: Run the automation teardown unconfirmed
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: teardown
+
+        - name: Fail if the unconfirmed teardown ran
+          ansible.builtin.fail:
+            msg: automation teardown ran without teardown_confirmed
+      rescue:
+        - name: Assert the refusal names teardown_confirmed
+          ansible.builtin.assert:
+            that:
+              - "'automation teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+
     # The real teardown, as playbooks/automation-teardown.yml runs it once
     # teardown_confirmed is set. Its own self-verification runs as part of this
     # include; docker compose down is skipped by the docker-info guard.

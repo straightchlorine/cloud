@@ -6,10 +6,8 @@
 #   - No prefix: variables passed by callers only when needed (e.g. service_user,
 #     exec_start, working_directory). Guarded by 'is defined' checks.
 #
-# Known issue: several guards test unprefixed names while rendering common_
-# prefixed values (working_directory vs common_working_directory, timeout_start_sec
-# vs common_timeout_start_sec, protect_system vs common_protect_system). Callers
-# pass the common_ prefixed names, so those sections do not render.
+# Known issue: working_directory, timeout_start_sec and protect_system guards test the
+# unprefixed name but render the common_ value. Callers pass common_, so they never render.
 
 [Unit]
 Description={{ service_description }}
@@ -21,6 +19,11 @@ Requires={{ req }}
 {% if service_after is defined %}
 {% for after in service_after %}
 After={{ after }}
+{% endfor %}
+{% endif %}
+{% if service_part_of is defined %}
+{% for unit in service_part_of %}
+PartOf={{ unit }}
 {% endfor %}
 {% endif %}
 {% if service_wants is defined %}

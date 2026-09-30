@@ -1,10 +1,4 @@
 ---
-# Reverse common/tasks/zram.yml - and remove foreign zram a hand-configured box
-# may carry (systemd-zram-generator, a hand-rolled unit): the teardown leaves
-# the box with no zram at all, whatever created it. Every step no-ops
-# idempotently when nothing zram exists. Gated on teardown_confirmed, set only
-# by a teardown playbook (see playbooks/dns-teardown.yml).
-
 - name: Tear down zram swap
   when: teardown_confirmed | default(false) | bool
   block:
@@ -18,8 +12,7 @@
       failed_when: false
 
     - name: Check whether zram0 is still in use as swap
-      # zramswap stop already swapped its own device off; anything left here is
-      # foreign (or from a box that never had zram-tools installed).
+      # Stopping zramswap already swaps its device off; anything left is foreign.
       ansible.builtin.shell: grep -q '^/dev/zram0 ' /proc/swaps
       register: common_zram_teardown_swap_active
       changed_when: false
@@ -28,11 +21,12 @@
     - name: Swap off zram0
       ansible.builtin.command: swapoff /dev/zram0
       become: true
-      changed_when: true
+      register: common_zram_teardown_swapoff
+      changed_when: common_zram_teardown_swapoff.rc == 0
       failed_when: false
       when: common_zram_teardown_swap_active.rc == 0
 
-    - name: Purge zram packages (the role's zram-tools and any foreign generator)
+    - name: Purge zram packages
       ansible.builtin.apt:
         name:
           - zram-tools
@@ -43,8 +37,7 @@
       become: true
 
     - name: Find any hand-rolled zram unit files
-      # The repo never writes a zram unit into /etc/systemd/system (the unit
-      # ships with zram-tools), so anything matching here is foreign.
+      # The repo writes no zram unit here (zram-tools ships its own), so matches are foreign.
       ansible.builtin.find:
         paths: /etc/systemd/system
         patterns: "*zram*"
@@ -66,10 +59,7 @@
       register: common_zram_teardown_device
 
     - name: Reset the zram device
-      # Frees whatever compressed pages a foreign device still held; the empty
-      # device node itself is harmless and disappears at reboot. Best-effort:
-      # a container's shared /sys is read-only, and a box without CAP_SYS_ADMIN
-      # cannot write the reset file - the swap-off above is the real state.
+      # Best-effort: a container's read-only /sys or missing CAP_SYS_ADMIN blocks the write.
       ansible.builtin.shell: echo 1 > /sys/block/zram0/reset
       become: true
       changed_when: false

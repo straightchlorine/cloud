@@ -4,9 +4,8 @@
   become: true
   tasks:
     - name: Install cron, iproute2 and logrotate
-      # crontab comes from cron, network facts need iproute2, and the weekly
-      # update config lands in /etc/logrotate.d (logrotate). None of the three
-      # is guaranteed in the minimal test image.
+      # The role needs crontab, network facts (iproute2) and /etc/logrotate.d;
+      # the minimal test image ships none of them.
       ansible.builtin.apt:
         name:
           - cron

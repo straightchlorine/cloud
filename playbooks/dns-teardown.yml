@@ -37,9 +37,7 @@
         quiet: true
 
     - name: Never tear down the production DNS host
-      # Production DNS host protection: refused if running against the production
-      # IP (192.168.20.10). When testing on a staging IP (like 192.168.20.2), teardown
-      # is allowed so the staging cycle can be tested end-to-end.
+      # Guard is by IP so a staging Pi can still run the full teardown cycle.
       ansible.builtin.assert:
         that:
           - (ansible_host | default('')) != '192.168.20.10'
@@ -77,11 +75,9 @@
         - teardown_confirmed | default(false) | bool
         - common_syncthing_enabled | default(false) | bool
 
-    - name: Tear down zram swap (common role, incl. foreign zram)
-      # Deliberately NOT gated on common_zram_enabled: the teardown leaves the
-      # box with no zram at all, whatever created it. A hand-configured box may
-      # carry systemd-zram-generator or a hand-rolled unit the role never
-      # installed - both collide with the next deploy's zramswap.
+    - name: Tear down zram swap
+      # Not gated on common_zram_enabled: foreign zram units (zram-generator,
+      # hand-rolled) would collide with the next deploy's zramswap.
       ansible.builtin.include_role:
         name: common
         tasks_from: zram_teardown

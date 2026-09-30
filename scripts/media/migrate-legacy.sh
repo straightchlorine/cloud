@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
-# One-time migration of the legacy music-stack host onto a freshly rebuilt Pi.
-# The SD card is wiped; the SSD keeps music/ and downloads/ plus the migration
-# dir this script writes. Run ON the Pi as the stack user (uses sudo).
+# One-time migration from the legacy music-stack Pi to a rebuilt one.
+# Run on the Pi as the stack user (uses sudo). The SSD survives the SD wipe.
 #
-#   1. old Pi:  migrate-legacy.sh export
-#               -> /mnt/data/migration: Navidrome DB (online sqlite backup),
-#                  beets DB, yt-dlp archive, Navidrome JWT secret.
-#               Copy that dir off the Pi too before wiping anything.
-#   2. fresh Pi: deploy with -e common_start_stack=false (dirs exist, owned
-#               for userns-remap, Navidrome never started), then:
-#               migrate-legacy.sh restore
-#   3. redeploy normally; the stack starts on the restored state.
+#   1. old Pi:   migrate-legacy.sh export  (writes /mnt/data/migration; copy it off-Pi too)
+#   2. fresh Pi: deploy with -e common_start_stack=false so Navidrome never starts,
+#                then migrate-legacy.sh restore
+#   3. redeploy normally
 #
-# Paths override via env: LIB (/mnt/data), OLD_STACK (~/music-stack),
-# STACK (~/stack).
+# Env overrides: LIB (/mnt/data), OLD_STACK (~/music-stack), STACK (~/stack).
 set -euo pipefail
 
 LIB="${LIB:-/mnt/data}"

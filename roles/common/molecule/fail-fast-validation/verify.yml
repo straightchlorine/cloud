@@ -5,8 +5,7 @@
   become: false
   tasks:
     - name: Stat the marker converge's rescue wrote
-      # Converge and verify run as separate processes, so converge records the
-      # expected failure as a marker file instead of a fact.
+      # Converge and verify are separate processes, so facts do not carry over.
       ansible.builtin.stat:
         path: /tmp/molecule-common-failfast.passed
       register: common_failfast_marker

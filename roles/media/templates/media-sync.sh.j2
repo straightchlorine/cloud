@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# YouTube playlists -> downloads/ (yt-dlp) -> music/ (beets: MusicBrainz,
-# lyrics, ReplayGain). Navidrome's file watcher picks up the results. Every
-# run ends in one ntfy: a summary on success, the failing line on error.
-#
 #   media-sync             download + import (nightly cron)
 #   media-sync --retag     retry MusicBrainz for recent as-is imports (weekly)
 #   media-sync --adopt     one-time: register the existing music/ with beets
 #   media-sync --backfill  one-time: lyrics + ReplayGain for adopted tracks
 #                          (hours on a Pi - run it under tmux)
-#
-# Managed by Ansible.
 set -euo pipefail
 
 LIB="{{ media_library_path }}"
 MODE="${1:-sync}"
 COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
-# s6-setuidgid abc: run as the image's PUID user, not root, so beets' moves
-# and tag writes stay owned by the stack user.
+# Run as the image's PUID user so beets' moves and tag writes stay owned by the stack user.
 BEET=("${COMPOSE[@]}" run --rm -T beets s6-setuidgid abc beet)
 
 notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
@@ -27,8 +20,7 @@ flock -n 9 || { echo "media-sync already running"; exit 0; }
 
 trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
 
-# beets never runs long enough for watchtower to see it; pull instead. A
-# failed pull keeps the cached image.
+# Watchtower never sees this short-lived container, so pull here; a failed pull keeps the cached image.
 "${COMPOSE[@]}" --profile tools pull -q beets || echo "beets pull failed; using the cached image"
 
 case "$MODE" in
@@ -54,8 +46,7 @@ esac
 
 mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
 
-# yt-dlp exits non-zero whenever a single video is gone; those are expected
-# (the archive retries nothing). Only other errors are worth an alert.
+# yt-dlp exits non-zero when a single video is gone; that is expected, other errors alert.
 run_log="$(mktemp)"
 trap 'rm -f "$run_log"' EXIT
 for url in "${playlists[@]}"; do

@@ -1,9 +1,6 @@
 ---
-# Compressed RAM swap for memory-constrained boards (512MB Zero-class Pis):
-# far faster than SD-card swap and it adds no flash wear, which is what stops
-# an `apt upgrade` or `pihole -g` rebuild from OOM-killing Pi-hole. Keeps the
-# tool's default priority above a swap file's, so zram is used first.
-# Opt in per host with common_zram_enabled.
+# zram instead of SD-card swap: no flash wear, and it keeps apt upgrade or
+# pihole -g from OOM-killing Pi-hole on 512MB boards.
 
 - name: Install zram-tools
   ansible.builtin.apt:

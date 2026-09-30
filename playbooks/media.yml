@@ -1,9 +1,4 @@
 ---
-# Media Stack deployment playbook for Raspberry Pi (see
-# roles/media/README.md). The role itself installs everything -
-# including the manage-media symlink - so this playbook is intentionally
-# thin; site.yml's dedicated play covers the same ground for the whole
-# 'music' group.
 - name: Deploy Media Stack
   hosts: music
   become: true

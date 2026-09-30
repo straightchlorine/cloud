@@ -1,7 +1,5 @@
 ---
-# Nightly local snapshot of a compose stack's databases and secrets into a
-# Syncthing-shared folder (the secondary, off-box copy; restic stays primary).
-# Installs /usr/local/bin/<name>-syncthing-backup and its root cron entry.
+# Syncthing is the secondary off-box copy; restic stays primary.
 #
 # Contract:
 #   common_snapshot_name:       stack name (script, log and cron names)

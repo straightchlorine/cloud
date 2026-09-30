@@ -1,5 +1,4 @@
 #!/bin/bash
-# Managed by Ansible - see roles/common/tasks/wifi_powersave.yml.
 set -euo pipefail
 
 if ! command -v iw >/dev/null 2>&1; then
@@ -9,7 +8,7 @@ fi
 
 found=0
 for link in /sys/class/net/*/wireless; do
-    # An unmatched glob or a wired-only host leaves the loop empty.
+    # An unmatched glob stays literal, so skip it on wired-only hosts.
     [ -e "$link" ] || continue
     found=1
     iface="$(basename "$(dirname "$link")")"

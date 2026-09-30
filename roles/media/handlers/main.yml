@@ -1,6 +1,5 @@
 ---
-# docker_stack_service's unit template notifies "Restart {{ stack_service_name }}"
-# whenever the unit file changes (first deploy or unit edit).
+# Notified from docker_stack_service's unit template, not from this role's tasks.
 - name: Restart stack
   ansible.builtin.systemd:
     name: stack

@@ -1,9 +1,4 @@
 ---
-# Reverse the media role so a disposable test Pi can be re-tested from
-# a near-clean state. Meant for test hosts (playbooks/media-teardown.yml
-# hard-refuses the production media host). User data under
-# media_library_path is intentionally left in place.
-
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.assert:
     that:
@@ -44,11 +39,8 @@
   failed_when: false
   changed_when: false
 
-- name: Tear down the compose project if a daemon is available
-  # The guard keeps the teardown exercisable in molecule (containers have no
-  # docker daemon) while still removing real containers on a Pi. The compose
-  # file is removed regardless, so a stale network may linger on a
-  # daemon-less run - acceptable on a disposable test box.
+- name: Tear down the compose project
+  # Molecule containers have no docker daemon; a stale network may linger there.
   community.docker.docker_compose_v2:
     project_src: "{{ media_home }}"
     state: absent
@@ -57,7 +49,7 @@
   when: media_docker_info.rc == 0
   ignore_errors: true
 
-- name: Remove the pipeline cron entries from the stack user's crontab
+- name: Remove stack user cron entries
   ansible.builtin.cron:
     name: "{{ item }}"
     env: "{{ item == 'PATH' }}"
@@ -69,7 +61,7 @@
     - "Media nightly sync"
     - "Media weekly retag"
 
-- name: Remove the root cron entries (snapshot backup, yt-dlp update)
+- name: Remove root cron entries
   ansible.builtin.cron:
     name: "{{ item }}"
     state: absent
@@ -99,14 +91,12 @@
     - /usr/local/bin/yt-dlp-update
     - /var/log/media-syncthing-backup.log
 
-- name: Tear down Syncthing (common role)
+- name: Tear down Syncthing
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing_teardown
   when: common_syncthing_enabled | default(false) | bool
 
-# Self-verification: fail loudly if anything the role installed is still
-# around.
 - name: Verify key media stack artifacts are gone
   ansible.builtin.stat:
     path: "{{ item }}"

@@ -12,9 +12,8 @@ platforms:
 provisioner:
   name: ansible
   env:
-    # CI/local both run `cd roles/common && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/common - one level up is roles/,
-    # letting `include_role: name: common` resolve by name.
+    # Molecule runs from roles/common, so the parent dir is roles/ and
+    # `include_role: name: common` resolves by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 verifier:
   name: ansible

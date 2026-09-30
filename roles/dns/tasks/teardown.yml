@@ -5,6 +5,15 @@
 # block at the end. Meant for disposable test Pis, never production
 # (playbooks/dns-teardown.yml enforces that guard).
 
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.assert:
+    that:
+      - teardown_confirmed | default(false) | bool
+    fail_msg: >-
+      dns teardown requires the shared teardown_confirmed fact - run
+      through playbooks/dns-teardown.yml instead.
+    quiet: true
+
 - name: Gather service facts (systemd-timesyncd/systemd-resolved presence varies by image)
   ansible.builtin.service_facts:
 
@@ -229,9 +238,7 @@
   failed_when: false
 
 - name: Restore the default journald size cap
-  # storage.yml caps SystemMaxUse on every host it runs on; like the relocation
-  # above it is role-applied state, reverted so a retest starts from stock
-  # journald.conf (validate-clean.sh checks it).
+  # Role-applied state; validate-clean.sh expects stock journald.conf on retest.
   ansible.builtin.lineinfile:
     path: /etc/systemd/journald.conf
     regexp: '^#?SystemMaxUse='

@@ -32,12 +32,9 @@ check_absent() {
   fi
 }
 
-# Shared fleet state (ufw, node-exporter, the prometheus user) is installed by
-# the fleet play on the FIRST full site.yml run. A staging box whose full
-# deploy never completed (a fresh Zero whose manual Pi-hole was just torn
-# down) has none of it - absence there is "not deployed yet", not teardown
-# damage. ufw is the marker: the fleet play installs it alongside that state
-# on every host.
+# A staging box that never completed a full site.yml run lacks the shared fleet
+# state (ufw, node-exporter, prometheus user); that is not teardown damage.
+# ufw is the marker because the fleet play installs it with the rest.
 shared_state_deployed="yes"
 if ! command -v ufw >/dev/null 2>&1; then
   shared_state_deployed="no"
@@ -207,7 +204,6 @@ if [ "$shared_state_deployed" = "yes" ]; then
   else
     note_left "node-exporter not active (shared exporter state should remain)"
   fi
-  # Shared exporters that must remain executable exactly as the deploy left them.
   for exp in \
     /opt/prometheus-exporters/bin/node_exporter \
     /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh; do

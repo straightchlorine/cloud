@@ -1,12 +1,11 @@
 ---
-- name: Resolve the stack user's uid/gid on this host
-  # Resolve the inventory's ansible_user, not the facts: under become:true
-  # ansible_user_uid reflects root.
+- name: Resolve the stack user's uid/gid
+  # ansible_user_uid reflects root under become, so look the user up.
   ansible.builtin.getent:
     database: passwd
     key: "{{ ansible_user }}"
 
-- name: Publish the stack user's uid/gid for the compose services
+- name: Publish the stack user's uid/gid
   ansible.builtin.set_fact:
     media_uid: "{{ getent_passwd[ansible_user][1] }}"
     media_gid: "{{ getent_passwd[ansible_user][2] }}"
@@ -25,10 +24,8 @@
     - "{{ media_home }}/scripts"
 
 - name: Create the library data directories
-  # navidrome runs as media_uid inside the userns-remapped container - host
-  # uid dockremap + media_uid - so only navidrome-data needs that owner. The
-  # rest belongs to the stack user, which yt-dlp and beets (userns host) write
-  # as. Only navidrome-data recurses: walking the library is slow on a Pi.
+  # Navidrome runs userns-remapped (host uid dockremap + media_uid), so only
+  # navidrome-data gets that owner. Only it recurses; walking the library is slow on a Pi.
   ansible.builtin.file:
     path: "{{ media_library_path }}/{{ item }}"
     state: directory
@@ -55,8 +52,8 @@
   when: media_jwt_secret_file.stat.exists
   no_log: true
 
-- name: Generate a Navidrome JWT secret when none is persisted
-  # Persisted so redeploys never rotate ND_JWTKEY and log everyone out.
+- name: Generate a Navidrome JWT secret
+  # Persisted so redeploys don't rotate ND_JWTKEY and log everyone out.
   ansible.builtin.command: openssl rand -hex 32
   register: media_jwt_secret_generated
   when: not media_jwt_secret_file.stat.exists
@@ -104,7 +101,7 @@
       + [common_watchtower_compose_service, common_cadvisor_compose_service] }}
     compose_networks: "{{ media_compose_networks }}"
     compose_volumes: "{{ media_compose_volumes }}"
-    # beets is a tools-profile container, never running with the stack.
+    # beets is a tools-profile container, not part of the running stack.
     compose_critical_services:
       - navidrome
       - watchtower
@@ -112,7 +109,7 @@
     compose_env_vars: >-
       {{ {'NAVIDROME_JWT_SECRET': media_jwt_secret} | combine(common_watchtower_env_vars) }}
     start_stack: "{{ common_start_stack }}"
-  # No notify: compose up -d already recreates containers on file changes.
+  # No notify: compose up -d recreates containers on file changes.
 
 - name: Install the stack management script
   ansible.builtin.template:

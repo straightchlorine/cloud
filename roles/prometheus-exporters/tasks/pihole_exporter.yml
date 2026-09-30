@@ -39,6 +39,18 @@
     path: "/tmp/pihole_exporter_checksum.txt"
     state: absent
 
+- name: Write the Pi-hole Exporter environment file
+  # Keeps the password out of ExecStart, which systemctl status and ps expose.
+  ansible.builtin.copy:
+    content: "PIHOLE_PASSWORD={{ vault_pihole_webpassword }}\n"
+    dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  become: true
+  notify: Restart pihole-exporter
+
 - name: Create Pi-hole Exporter systemd service
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/systemd-service.j2"
@@ -48,15 +60,27 @@
     mode: "0644"
   vars:
     service_description: "Pi-hole Prometheus Exporter"
-    service_after: ["network.target"]
+    service_after: ["network.target", "pihole-FTL.service"]
+    # The exporter logs in once and never re-authenticates, so any FTL restart
+    # (which drops all API sessions) must restart it too.
+    service_part_of: ["pihole-FTL.service"]
     common_service_wants: ["network.target"]
     service_type: "simple"
     service_user: "{{ prometheus_exporters_user }}"
     service_group: "{{ prometheus_exporters_group }}"
+    environment_file: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+    # FTL is "started" before its API listens; login happens once at start, so
+    # wait here. $$ escapes systemd's own variable expansion. Worst case 80s,
+    # inside the 90s default start timeout; on failure Restart= retries.
+    exec_start_pre:
+      - >-
+        /bin/sh -c 'for i in $$(seq 1 20); do curl -sf -m 2 -o /dev/null
+        http://{{ prometheus_exporters_pihole_exporter_target_host }}:{{
+        prometheus_exporters_pihole_exporter_target_port }}/api/info/login
+        && exit 0; sleep 2; done; exit 1'
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
       -pihole_hostname {{ prometheus_exporters_pihole_exporter_target_host }}
-      -pihole_password {{ vault_pihole_webpassword }}
       -port {{ prometheus_exporters_pihole_exporter_port }}
     restart_policy: "on-failure"
     restart_sec: "5"
@@ -83,17 +107,21 @@
 - name: Flush pending handlers before verifying
   ansible.builtin.meta: flush_handlers
 
-- name: Verify Pi-hole Exporter is responding
+- name: Verify Pi-hole Exporter is scraping Pi-hole
+  # /metrics answers 200 even when every scrape fails (e.g. a dead session), so
+  # pihole_status 1 is the proof it can actually read Pi-hole's API.
   block:
-    - name: Verify Pi-hole Exporter is responding
+    - name: Fetch exporter metrics
       ansible.builtin.uri:
         url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
         method: GET
+        return_content: true
         timeout: 30
       register: prom_exp_pihole_exporter_health
       retries: 3
       delay: 5
-      until: prom_exp_pihole_exporter_health.status == 200
+      until: prom_exp_pihole_exporter_health.status == 200 and
+        prom_exp_pihole_exporter_health.content is search('(?m)^pihole_status 1$')
   rescue:
     - name: Restart the exporter to clear poisoned scrape state
       ansible.builtin.systemd:
@@ -101,15 +129,17 @@
         state: restarted
       become: true
 
-    - name: Re-verify after restart
+    - name: Fetch exporter metrics after restart
       ansible.builtin.uri:
         url: "http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics"
         method: GET
+        return_content: true
         timeout: 60
       register: prom_exp_pihole_exporter_health_after_restart
       retries: 2
       delay: 10
-      until: prom_exp_pihole_exporter_health_after_restart.status == 200
+      until: prom_exp_pihole_exporter_health_after_restart.status == 200 and
+        prom_exp_pihole_exporter_health_after_restart.content is search('(?m)^pihole_status 1$')
 
 - name: Test Pi-hole connectivity from exporter
   ansible.builtin.uri:

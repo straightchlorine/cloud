@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Post-teardown check for a disposable media test host (default pi-test-media).
-# Run after playbooks/media-teardown.yml to confirm the box is clean enough for
-# a fresh media-role test. Pairs with validate-deploy.sh (deployed host check).
 # Usage: ./scripts/media/validate-clean.sh [ansible-host-alias]
 set -euo pipefail
 
@@ -39,7 +36,7 @@ check_absent /usr/local/bin/media-syncthing-backup
 check_absent /usr/local/bin/yt-dlp-update
 check_absent /usr/local/bin/yt-dlp
 check_absent /etc/systemd/system/stack.service
-# Stack home follows the SSH user's home (media_home derives from ansible_user).
+# Stack home lives under the SSH user's home.
 check_absent "$HOME/stack"
 
 if systemctl is-active --quiet stack 2>/dev/null; then
@@ -48,7 +45,6 @@ else
   note_ok "stack service not active"
 fi
 
-# Pipeline jobs run as ansible_user; snapshot + yt-dlp update as root.
 user_cron="$(crontab -l 2>/dev/null || true)"
 root_cron="$(sudo crontab -l -u root 2>/dev/null || true)"
 for job in "Media nightly sync" "Media weekly retag"; do
@@ -83,8 +79,7 @@ else
   note_ok "docker daemon unavailable on this host (nothing to check)"
 fi
 
-# The library dir is deliberately retained across a teardown (user data),
-# exactly like the automation role keeps automation_data_path.
+# Teardown deliberately keeps the library dir (user data).
 if [ -d /mnt/data ]; then
   note_ok "/mnt/data present (data intentionally left)"
 else

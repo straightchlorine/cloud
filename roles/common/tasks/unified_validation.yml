@@ -1,5 +1,4 @@
 ---
-# Shared validation framework: required vars, vault placeholders, backup paths.
 - name: Validate required validation parameters
   ansible.builtin.fail:
     msg: >-

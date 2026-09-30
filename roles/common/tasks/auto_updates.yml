@@ -1,11 +1,6 @@
 ---
-# Fleet-wide unattended-upgrades (daily apt upgrade). Pi-hole-specific
-# pihole -up/-g stays in the dns role; this file only knows Debian packages.
-
 - name: Set PATH for root's crontab
-  # Cron's default PATH often excludes /usr/local/bin, where this repo's
-  # cron-invoked scripts (and their commands like pihole, ntfy-notify)
-  # live. Set once, applies to every job in root's crontab.
+  # Cron's default PATH often excludes /usr/local/bin, where the cron-invoked scripts live.
   ansible.builtin.cron:
     name: PATH
     env: true
@@ -38,9 +33,7 @@
   become: true
 
 - name: Ensure apt timer drop-in directories exist
-  # The template module does not create parent directories, and Debian's
-  # apt-daily packages ship without drop-in dirs - the first run must make
-  # them before override.conf can be placed inside.
+  # The template module does not create parent directories and Debian ships no drop-in dirs.
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ item }}.timer.d"
     state: directory
@@ -53,9 +46,7 @@
   become: true
 
 - name: Schedule package maintenance in the night window
-  # Overrides Debian's apt-daily/apt-daily-upgrade timers (default ~06:00) so
-  # the daily dpkg run no longer stalls services during the day. The timers
-  # need a restart, not just a daemon-reload, to re-arm on the new calendar.
+  # The timers need a restart, not just a daemon-reload, to re-arm on the new calendar.
   ansible.builtin.template:
     src: apt-daily-timer-override.j2
     dest: "/etc/systemd/system/{{ item }}.timer.d/override.conf"
@@ -70,11 +61,9 @@
     - Reload systemd
     - Restart apt timers
 
-- name: Compute reboot-pending notification time (3 hours before auto-reboot)
-  # 3h lead: package maintenance now runs at 01:00 (see
-  # common_auto_updates_run_time) and the auto-reboot follows the same morning.
-  # A 12h lead would fire the notification after the reboot already happened
-  # and cleared /var/run/reboot-required - the heads-up would never send.
+- name: Compute reboot notification time
+  # Updates run at common_auto_updates_run_time and the reboot follows the same morning. A longer lead
+  # would fire after the reboot already cleared /var/run/reboot-required.
   ansible.builtin.set_fact:
     common_reboot_notify_total_minutes: >-
       {{ ((common_auto_updates_reboot_time.split(':')[0] | int * 60

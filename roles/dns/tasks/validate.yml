@@ -6,11 +6,9 @@
     name: os
   tags: [validation]
 
-- name: Gather network facts for dynamic configuration
-  # Same standalone-include rationale as the os discovery above: the NTP guard
-  # and the interface check below template host_vars values (primary_network_cidr,
-  # primary_interface) that only common/tasks/network_facts.yml defines. Cheap
-  # and idempotent - under main.yml this just re-gathers.
+- name: Gather network facts
+  # Needed when included standalone: primary_network_cidr and primary_interface
+  # are only defined by network_facts.
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
@@ -32,9 +30,6 @@
       - common_ntp_upstream_server
     vault_placeholders:
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
-    common_backup_directories:
-      - "/etc/pihole"
-      - "/opt/pihole"
   tags: [validation]
 
 - name: Confirm the host OS and architecture are supported

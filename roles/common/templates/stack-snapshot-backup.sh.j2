@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Local {{ common_snapshot_name }} stack -> Syncthing backup: {{ common_snapshot_summary }}
-#
-# Managed by Ansible.
 set -euo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
@@ -20,10 +17,8 @@ DEST="{{ common_snapshot_dest }}"
 RETENTION="{{ common_snapshot_retention }}"
 OWNER="{{ common_snapshot_owner }}"
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
-# Steps append caveats here; they end up in the success notification.
 NOTES=""
-# Built next to DEST (same filesystem) so the final mv is atomic: Syncthing
-# never sees a half-written snapshot.
+# Same filesystem as DEST so the final mv is atomic and Syncthing never sees a partial snapshot.
 WORK="$(mktemp -d "$(dirname "$DEST")/.{{ common_snapshot_name }}-backup.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -33,12 +28,10 @@ cd "$STACK_HOME"
 {{ step | trim }}
 
 {% endfor %}
-# Hand ownership to the Syncthing user before the snapshot becomes visible.
 chmod 0750 "$WORK"
 chown -R "$OWNER" "$WORK"
 mv "$WORK" "$DEST/$STAMP"
 
-# Retention: keep the newest $RETENTION snapshot directories; wipe the rest.
 shopt -s nullglob
 printf '%s\n' "$DEST"/20* "$DEST"/19* \
     | sort -r \

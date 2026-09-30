@@ -29,7 +29,7 @@
     role_specific_packages: "{{ automation_specific_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
-- name: Set up the optional SSD (mount + journald + docker data-root)
+- name: Set up SSD storage
   ansible.builtin.include_role:
     name: common
     tasks_from: optional_ssd

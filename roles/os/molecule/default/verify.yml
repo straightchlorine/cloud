@@ -4,8 +4,7 @@
   gather_facts: true
   tasks:
     - name: Re-run the os role in the verify process
-      # Verify runs as a separate ansible-playbook, so converge's set_fact
-      # facts do not exist here - the read-only role is included again instead.
+      # Verify is a separate playbook run, so converge's set_fact values are gone.
       ansible.builtin.include_role:
         name: os
 

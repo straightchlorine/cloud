@@ -1,7 +1,5 @@
 ---
-# Raspberry Pi kernel cgroup memory controller for Docker Compose resource limits.
-# /boot/firmware/cmdline.txt (older /boot/cmdline.txt) MUST remain a single line;
-# changes take effect on the next reboot.
+# The kernel reads cmdline.txt as one line; a second line is silently ignored.
 
 - name: Locate Raspberry Pi boot cmdline file
   ansible.builtin.stat:
@@ -33,7 +31,7 @@
     - common_rpi_cmdline_path | length > 0
   become: true
 
-- name: Append cgroup memory controller flags if missing
+- name: Append cgroup memory flags to cmdline
   vars:
     current_cmdline: "{{ common_rpi_cmdline_content.content | b64decode | trim }}"
     needs_cgroup_enable: "{{ 'cgroup_enable=memory' not in current_cmdline }}"
@@ -55,7 +53,7 @@
     - (needs_cgroup_enable or needs_cgroup_memory)
   register: common_rpi_cgroup_updated
 
-- name: Notify operator if reboot is required for cgroup limits
+- name: Announce reboot needed for cgroup limits
   ansible.builtin.debug:
     msg: >-
       Kernel boot arguments updated in {{ common_rpi_cmdline_path }} (cgroup_enable=memory cgroup_memory=1).

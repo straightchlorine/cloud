@@ -98,7 +98,7 @@
         fail_msg: "watchtower env would never run its schedule: {{ watchtower_env }}"
         success_msg: "[OK] watchtower schedule is 6-field and not disabled by the update API"
 
-    - name: Assert cAdvisor is updated by Watchtower and not exposed on 0.0.0.0
+    - name: Assert cAdvisor label and port binding
       vars:
         cadvisor: "{{ (automation_deployed_files.results[0].content | b64decode | from_yaml).services.cadvisor }}"
       ansible.builtin.assert:
@@ -116,8 +116,7 @@
       ansible.builtin.assert:
         that:
           - compose_file is search('\n# END networks')
-          # A non-empty line directly above '# END' means a block lost its
-          # trailing blank line (yamlfmt once rewrote |+ to |, dropping it).
+          # yamlfmt rewrites |+ to |, which drops a block's trailing blank line.
           - compose_file is not search('[^\n]\n# END ')
           - compose_file is not search('[ \t]\n')
         fail_msg: "compose layout wrong (no blank line before '# END', or trailing whitespace):\n{{ compose_file }}"
@@ -174,7 +173,6 @@
           # whole, so peers never receive half-written dumps.
           - "'mktemp -d' in backup_script"
           - "'mv \"$WORK\" \"$DEST/$STAMP\"' in backup_script"
-          # Calibre DB snapshots live in each dated snapshot (retention applies).
           - "'$WORK/calibre-databases' in backup_script"
           # 02:30, ahead of the restic timer whose unit pauses the stack.
           - automation_root_crontab.stdout is search('(?m)^30 0?2 \\* \\* \\* ')
@@ -202,3 +200,74 @@
           - "'RemainAfterExit=true' in unit"
         fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
         success_msg: "[OK] stack unit renders with explicit compose path"
+
+    - name: Assert the app services bind to the primary IP
+      vars:
+        services: "{{ (automation_deployed_files.results[0].content | b64decode | from_yaml).services }}"
+        primary_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
+      ansible.builtin.assert:
+        that:
+          - services[item.key].ports | length == 1
+          - services[item.key].ports[0] is match('^' ~ primary_ip ~ ':' ~ item.port ~ ':')
+        fail_msg: "{{ item.key }} ports wrong: {{ services[item.key].ports }}"
+        success_msg: "[OK] {{ item.key }} is bound to {{ primary_ip }}"
+      loop:
+        - { key: vaultwarden, port: 8081 }
+        - { key: firefly, port: 8082 }
+        - { key: calibre-web-automated, port: 8083 }
+
+    - name: Assert the remaining vault secrets reach the .env
+      vars:
+        env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'FIREFLY_APP_KEY=\"MoleculeTestAppKey0123456789abcd\"' in env_file"
+          - "'FIREFLY_STATIC_CRON_TOKEN=\"0123456789abcdef0123456789abcdef\"' in env_file"
+        fail_msg: ".env is missing a Firefly secret: {{ env_file }}"
+        success_msg: "[OK] .env carries the Firefly app key and cron token"
+
+    - name: Stat the data directories
+      ansible.builtin.stat:
+        path: /mnt/data/{{ item }}
+      loop:
+        - vaultwarden
+        - mariadb
+        - calibre/config
+        - calibre/ingest
+        - calibre/library
+        - firefly/upload
+      register: automation_data_dirs
+
+    - name: Assert userns-remap ownership of the data directories
+      ansible.builtin.assert:
+        that:
+          - item.stat.isdir
+          # The converge fixture remap base is 10000; firefly's www-data adds 33.
+          - item.stat.uid == (10033 if item.item == 'firefly/upload' else 10000)
+          - item.stat.gid == (10033 if item.item == 'firefly/upload' else 10000)
+        fail_msg: "/mnt/data/{{ item.item }} owned by {{ item.stat.uid }}:{{ item.stat.gid }}"
+        success_msg: "[OK] /mnt/data/{{ item.item }} owned by the remap range"
+      loop: "{{ automation_data_dirs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Stat the mariadb entrypoint wrapper
+      ansible.builtin.stat:
+        path: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh"
+      register: automation_entrypoint_stat
+
+    - name: Read the mariadb entrypoint wrapper
+      ansible.builtin.slurp:
+        src: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh"
+      register: automation_entrypoint
+
+    - name: Assert the mariadb entrypoint wrapper
+      vars:
+        wrapper: "{{ automation_entrypoint.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - automation_entrypoint_stat.stat.mode == '0755'
+          - "'rm -f /var/lib/mysql/tc.log' in wrapper"
+          - "'exec docker-entrypoint.sh \"$@\"' in wrapper"
+        fail_msg: "mariadb entrypoint wrapper wrong:\n{{ wrapper }}"
+        success_msg: "[OK] mariadb wrapper clears tc.log and hands off to the image entrypoint"

@@ -96,9 +96,8 @@ coordinator_targets:
       read_concurrency: 2
       compression: auto
 
-  # service_name must match the inventory hostname (rclone config reads
-  # hostvars[service_name]); the key, repository and password keep the
-  # pi-music names so the existing restic repository continues.
+  # service_name must match the inventory hostname (rclone config reads hostvars[service_name]).
+  # Key, repository and password keep the pi-music names to reuse the existing restic repo.
   - service_name: media
     hostname: media
     target_host: media

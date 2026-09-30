@@ -4,10 +4,6 @@
 # journald is relocated off the SD card - Pi-hole's own DB paths are baked
 # into the installer and fragile to move. dns_backup_dir is a plain var if you
 # also want that on the drive.
-#
-# The journal size cap at the end applies either way: with a drive it keeps the
-# journal from filling the data volume, without one it bounds flash wear on the
-# card itself (systemd's default is 10% of the filesystem).
 
 - name: Detect an optional attached drive
   ansible.builtin.include_role:
@@ -133,9 +129,7 @@
         common_journald_path: "{{ dns_optional_drive_mount_path }}/journal"
 
 - name: Cap the journal size
-  # Runs with or without a drive - see the file header. 50M is ~2-3 weeks of
-  # service logs on a DNS host; override common_journald_system_max_use per
-  # host if a host's journal is worth more than that.
+  # Runs with or without a drive: without one it bounds flash wear on the SD card.
   ansible.builtin.include_role:
     name: common
     tasks_from: journald_limits

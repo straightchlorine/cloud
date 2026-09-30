@@ -1,10 +1,4 @@
 ---
-#   ansible-playbook -i inventory/production playbooks/media-teardown.yml \
-#     --limit pi-test-media -e media_teardown_confirm=true
-#
-# Same pattern as playbooks/automation-teardown.yml: gate on this role's own
-# flag and refuse production, set teardown_confirmed, then run the teardown
-# manifest.
 - name: Tear down the media role for repeatable testing
   hosts: music
   become: true

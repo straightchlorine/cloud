@@ -82,10 +82,7 @@ hardware_profiles:
       cpus: "0.25"
       memory_reservation: "64M"
       cpus_reservation: "0.1"
-  # Pi Zero 2 W: quad Cortex-A53 at 1GHz and 512MB RAM - an eighth of an rpi4's
-  # memory, and the reference DNS host for this profile. The caps exist so a
-  # container can never squeeze out Pi-hole/sshd on the same board; nothing in
-  # this fleet is expected to run the rpi3/rpi4 service sets here.
+  # 512MB RAM: caps keep containers from starving Pi-hole and sshd on the same board.
   rpizero2w:
     traefik:
       memory: "128M"

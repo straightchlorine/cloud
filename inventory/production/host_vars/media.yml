@@ -1,7 +1,5 @@
 ---
-# Raspberry Pi 3 (production media host): navidrome + cadvisor, and the
-# nightly yt-dlp -> beets pipeline. TLS terminates at the central reverse
-# proxy; navidrome publishes plain HTTP on the host IP.
+# TLS terminates at the central reverse proxy, so navidrome serves plain HTTP.
 
 device_type: rpi3b
 
@@ -20,21 +18,17 @@ firewall_rules:
   - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
   - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
 
-# Stack-level
 common_start_stack: true
 common_auto_updates_reboot_if_required: true
 common_auto_updates_reboot_time: "05:15"
 
 prometheus_role: "music"
 
-# Primary/off-site backup - restic.
 restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/music"
 restic_password: "{{ vault_restic_music_password }}"
 common_backup_tmp_dir: "{{ media_library_path }}/backup-tmp"
 
-# Secondary local backup: nightly DB/secret snapshots into a Syncthing folder,
-# plus the music library shared send-only.
 common_syncthing_enabled: true
 media_backup_enabled: true
 media_backup_dir: "/mnt/data/syncthing/backup"

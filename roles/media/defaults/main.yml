@@ -1,12 +1,7 @@
 ---
-# Secretless by design: the compose file refers to ${VAR}s, interpolated from
-# the generated 0600 .env.
-
-# From the inventory's ansible_user, not the ansible_user_dir/_id facts: under
-# become those resolve to /root. Holds compose, .env and scripts (SD card);
-# everything else lives under media_library_path (the SSD when present).
+# Built from ansible_user, not ansible_user_dir: under become that resolves to /root.
 media_home: "/home/{{ ansible_user }}/stack"
-# media_library_path: REQUIRED in host_vars - data path and SSD mount point.
+# media_library_path: required in host_vars (data path and SSD mount point).
 
 # sqlite3: beets DB snapshot; unzip: deno install.
 media_specific_packages:
@@ -15,30 +10,26 @@ media_specific_packages:
 
 media_navidrome_port: 4545
 media_subdomain_navidrome: "navidrome"
-# Navidrome's own nightly DB backup, before watchtower's 02:00 sweep, so the
-# newest backup predates any image upgrade (its migrations are one-way). The
-# 02:30 snapshot ships that file to Syncthing; restic picks up all of them.
+# Runs before watchtower's 02:00 sweep so a backup predates any image upgrade
+# (navidrome migrations are one-way).
 media_navidrome_backup_schedule: "45 1 * * *"
 media_navidrome_backup_count: 7
 
-# First install only (yt-dlp: GPG-verified SHA2-256SUMS; deno: release
-# sha256sum); the weekly self-update keeps both current afterwards. Deno is
-# the JS runtime yt-dlp now needs for YouTube's challenges.
+# Initial install only; the weekly self-update takes over. Deno is the JS runtime
+# yt-dlp needs for YouTube's challenges.
 media_ytdlp_version: "2026.08.19"
 media_deno_version: "2.9.7"
 media_youtube_enabled: false
 
-# Beets query excluded from the one-time `media-sync --backfill`
-# (e.g. audiobooks). Empty = whole library.
+# Beets query excluded from `media-sync --backfill` (e.g. audiobooks). Empty = whole library.
 media_backfill_exclude: ""
 
-# Created under media_library_path.
 media_library_directories:
-  - music           # beets-organized library, read-only for navidrome
-  - downloads       # yt-dlp output, beets import source
+  - music
+  - downloads
   - navidrome-data
-  - beets           # beets config, library.db, import.log
-  - cache           # yt-dlp cache
+  - beets
+  - cache
   - logs
 
 media_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
@@ -46,17 +37,13 @@ media_ssd_filesystem: "ext4"
 media_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 media_ssd_journald_enabled: true
 
-# Secondary local backup (Syncthing-replicated snapshots of the databases and
-# secrets) plus a send-only Syncthing share of the music library. Primary
-# off-site backup is restic (restic_enabled).
+# Secondary local backup via Syncthing; the primary off-site backup is restic.
 media_backup_enabled: false
 media_backup_owner: "{{ ansible_user }}"
 media_backup_retention: 14
 # Before the 03:00 restic timer, so restic ships tonight's snapshot too.
 media_backup_schedule_hour: "02"
 media_backup_schedule_minute: "30"
-
-# --- Generated compose profile (secretless; env values come from .env) -----
 
 media_compose_networks:
   - name: stack

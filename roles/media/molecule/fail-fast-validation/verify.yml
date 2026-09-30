@@ -4,8 +4,7 @@
   become: true
   tasks:
     - name: Stat the per-case marker files converge wrote
-      # Converge and verify run as separate processes, so each case drops a
-      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      # Converge and verify are separate processes, so results cross via marker files, not set_fact.
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:

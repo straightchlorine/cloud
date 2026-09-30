@@ -25,7 +25,7 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Assert the power-save script is executable root-only-writable
+    - name: Assert power-save script mode and owner
       ansible.builtin.assert:
         that:
           - common_tuning_stat.results[0].stat.mode == '0755'
@@ -50,10 +50,8 @@
         common_tuning_script: "{{ common_tuning_contents.results[0].content | b64decode }}"
         common_zram_config: "{{ common_tuning_contents.results[1].content | b64decode }}"
 
-    - name: Assert the script targets wireless interfaces and disables power save
-      # Real content, not just existence: the
-      # /sys/class/net/*/wireless discovery and the iw call are what make the
-      # unit a no-op on wired hosts and a fix on Wi-Fi-only ones.
+    - name: Assert script disables power save on wireless
+      # The wireless discovery is what makes the unit a no-op on wired hosts.
       ansible.builtin.assert:
         that:
           - "'/sys/class/net/*/wireless' in common_tuning_script"
@@ -76,8 +74,7 @@
           {{ common_tuning_unit.status.UnitFileState }}
 
     - name: Assert the zram config renders the role defaults
-      # The values mirror roles/common/defaults/main.yml, which converge renders
-      # from with no overrides - change a default and this fails until updated.
+      # Values mirror roles/common/defaults/main.yml; update both together.
       ansible.builtin.assert:
         that:
           - "'ALGO=zstd' in common_zram_config"

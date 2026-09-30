@@ -31,9 +31,6 @@
         name: common
         tasks_from: chrony
 
-    # Hardware detection lives in the standalone 'hardware' role (own molecule
-    # scenario); nothing to include here.
-
     - name: Set timezone
       community.general.timezone:
         name: "{{ timezone }}"

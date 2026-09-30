@@ -1,8 +1,4 @@
 ---
-# Host side of the playlist pipeline: GPG-verified yt-dlp and its JS runtime
-# (deno), both kept current by a weekly self-update, plus media-sync and its
-# cron entries.
-
 - name: Resolve the yt-dlp release asset for this host
   # Upstream asset names; an unlisted architecture fails here, not as a 404.
   ansible.builtin.set_fact:
@@ -21,7 +17,7 @@
     media_ytdlp_installed: "{{ media_runtime_stat.results[0] }}"
     media_deno_installed: "{{ media_runtime_stat.results[1] }}"
 
-- name: Install the first yt-dlp release (the weekly update takes over after)
+- name: Install yt-dlp on first run
   when: not media_ytdlp_installed.stat.exists
   block:
     - name: Create a private download directory
@@ -74,7 +70,7 @@
         state: absent
       when: media_ytdlp_tmp.path is defined
 
-- name: Install deno (yt-dlp's default JS runtime for YouTube challenges)
+- name: Install deno
   # No armv7l build exists, so a 32-bit OS fails at the download.
   when: not media_deno_installed.stat.exists
   vars:
@@ -155,7 +151,7 @@
     force: true
   become: true
 
-- name: Give the stack user's cron /usr/local/bin (yt-dlp, ntfy-notify)
+- name: Add /usr/local/bin to the cron PATH
   ansible.builtin.cron:
     name: "PATH"
     env: true

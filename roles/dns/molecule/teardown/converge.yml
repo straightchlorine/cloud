@@ -115,6 +115,22 @@
         system: true
       tags: [molecule-idempotence-notest]
 
+    - name: Teardown refuses to run without the confirm fact
+      block:
+        - name: Run the dns teardown unconfirmed
+          ansible.builtin.include_role:
+            name: dns
+            tasks_from: teardown
+
+        - name: Fail if the unconfirmed teardown ran
+          ansible.builtin.fail:
+            msg: dns teardown ran without teardown_confirmed
+      rescue:
+        - name: Assert the refusal names teardown_confirmed
+          ansible.builtin.assert:
+            that:
+              - "'dns teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+
     # The real teardown, exactly as playbooks/dns-teardown.yml would run it
     # after setting teardown_confirmed. Its own trailing self-verification
     # (artifacts gone, no listeners on 53/80) runs as part of this include.
@@ -122,10 +138,9 @@
       ansible.builtin.include_role:
         name: dns
         tasks_from: teardown
+      vars:
+        teardown_confirmed: true
 
-    # The zram teardown, with its gate satisfied the same way
-    # playbooks/dns-teardown.yml sets it - against a foreign unit fixture that
-    # stands in for what a hand-configured box carries.
     - name: Create a foreign zram unit fixture
       ansible.builtin.copy:
         content: |

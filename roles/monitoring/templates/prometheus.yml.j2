@@ -49,11 +49,8 @@ scrape_configs:
 
   # DNS Services (Pi-hole)
   - job_name: 'pihole-exporter'
-    # Each /metrics request triggers the exporter's full scrape: session auth
-    # plus 7 sequential FTL API calls. On the Zero 2 W that runs 15-25s
-    # typically (40s worst case: 8 requests x 5s per-request timeout), so the
-    # global interval / default 10s scrape timeout would mark it down
-    # constantly. Give this job its own, longer budget instead.
+    # Each scrape makes ~8 sequential FTL API calls and takes 15-40s on the Zero 2 W,
+    # longer than the global interval and default 10s timeout.
     scrape_interval: {{ monitoring_pihole_scrape_interval }}
     scrape_timeout: {{ monitoring_pihole_scrape_timeout }}
     static_configs:
@@ -81,6 +78,7 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 
+  # Automation Stack Services - Watchtower
   - job_name: 'watchtower'
     metrics_path: '/v1/metrics'
     bearer_token: '{{ vault_watchtower_api_token }}'

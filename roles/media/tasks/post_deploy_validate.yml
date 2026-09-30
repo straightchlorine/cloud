@@ -1,6 +1,4 @@
 ---
-# Reads the running stack's state; changes nothing.
-
 - name: Verify the critical compose containers are running
   ansible.builtin.include_role:
     name: common
@@ -14,7 +12,7 @@
       - cadvisor
   tags: [post_validation]
 
-- name: Verify the Navidrome web frontend and the scraped metrics endpoints answer
+- name: Verify Navidrome and metrics endpoints respond
   ansible.builtin.uri:
     url: "{{ item }}"
     timeout: 10
@@ -31,8 +29,7 @@
   tags: [post_validation]
 
 - name: Verify Navidrome can write its data directory
-  # A uid mismatch on the bind mount fails silently while HTTP stays healthy;
-  # only the container's own view proves it.
+  # A uid mismatch on the bind mount fails silently while HTTP stays healthy.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     exec -T navidrome test -w /data
@@ -42,9 +39,8 @@
   tags: [post_validation]
 
 - name: Verify beets loads our config and plugins as the stack user
-  # media-sync's exact invocation. Proves the image resolves /config as its
-  # config dir (media-sync and the adopt overlay rely on it), the lyrics and
-  # replaygain plugins load, and ffmpeg (replaygain backend) is present.
+  # Mirrors media-sync's invocation: proves /config is the config dir, the
+  # lyrics and replaygain plugins load, and ffmpeg is present.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T beets s6-setuidgid abc sh -c 'beet config -p && beet version && ffmpeg -version'

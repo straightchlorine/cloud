@@ -17,11 +17,8 @@ common_fail2ban_ssh_bantime: 600
 # per host so DNS is back before the others boot.
 common_auto_updates_reboot_if_required: false
 common_auto_updates_reboot_time: "05:00"
-# Package maintenance window (apt-daily + apt-daily-upgrade timers). 01:00
-# precedes the fleet's weekly app-update slot (02:00), the backup window
-# (03:00-05:00) and the reboot window (05:00) - Debian's default ~06:00 slot
-# landed on top of daytime traffic and stalled the 512MB Zero's services
-# during the daily dpkg run.
+# 01:00 runs before the app-update (02:00) and backup (03:00-05:00) slots; Debian's
+# default ~06:00 dpkg run stalled the 512MB Zero's services.
 common_auto_updates_run_time: "01:00"
 
 # Common System Packages (can be overridden in group_vars)
@@ -65,21 +62,17 @@ common_wanted_by: "multi-user.target"
 common_enable_security_hardening: true
 common_no_new_privileges: "true"
 
-# Raspberry Pi kernel cgroup memory controller for Docker resource limits
 common_rpi_cgroup_memory_enabled: true
 
-# Board-level tuning, opt-in per host. A Wi-Fi-only board must not park its
-# radio between beacons (tasks/wifi_powersave.yml), and a 512MB board is much
-# better off with compressed RAM swap than SD-card swap (tasks/zram.yml).
+# Opt-in per host: Wi-Fi-only boards must not park the radio between beacons,
+# and 512MB boards do better with zram than SD-card swap.
 common_wifi_powersave_tuning_enabled: false
 common_zram_enabled: false
 common_zram_algorithm: "zstd"
 common_zram_percent: 50
 common_zram_priority: 100
 
-# Cap for the persistent journal. systemd's default is 10% of the filesystem -
-# gigabytes of flash writes on a large card or drive. Applied by callers that
-# own flash-wear concerns (tasks/journald_limits.yml).
+# systemd's default cap is 10% of the filesystem, i.e. gigabytes of flash writes.
 common_journald_system_max_use: "50M"
 
 # Backup integration defaults
@@ -107,9 +100,7 @@ common_syncthing_home: "/home/{{ ansible_user }}/.config/syncthing"
 # lives in the standalone 'hardware' role - see
 # roles/hardware/defaults/main.yml (hardware_profiles).
 
-
-# Watchtower, appended to a stack's compose services (automation, media). Only
-# updates containers labelled com.centurylinklabs.watchtower.enable=true, so
+# Only updates containers labelled com.centurylinklabs.watchtower.enable=true, so
 # pinned images stay put. Needs common_watchtower_env_vars in the stack .env.
 common_watchtower_port: 8084
 common_watchtower_schedule: "0 0 2 * * *"
@@ -150,15 +141,13 @@ common_watchtower_env_vars:
     (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
     if vault_ntfy_api_key is defined else '' }}
 
-# cAdvisor, appended to a stack's compose services (automation, media).
-# Prometheus scrapes it on primary_ip:common_cadvisor_port from the monitoring
-# host only (firewall_rules in host_vars).
+# Scraped by Prometheus from the monitoring host only (firewall_rules in host_vars).
 common_cadvisor_port: 8085
 common_cadvisor_compose_service:
   service_name: cadvisor
   # Patch releases only; bump the minor by hand.
   service_image: "ghcr.io/google/cadvisor:0.60"
-  # docker.sock access, as for watchtower.
+  # Needs docker.sock access, as watchtower does.
   service_userns_mode: "host"
   service_command:
     - "--housekeeping_interval=10s"

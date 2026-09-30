@@ -21,9 +21,8 @@
 
       rescue:
         - name: Record the expected failure for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps a rerun unchanged.
+          # A file, not set_fact: converge and verify run as separate processes.
+          # force: false keeps reruns idempotent.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-common-failfast.passed

@@ -37,11 +37,9 @@
   changed_when: false
   register: common_docker_warnings
 
-- name: Warn if Docker memory limits cannot be enforced
-  # Not a deploy failure - containers run fine without limits - but the compose
-  # deploy.resources block is silently DISCARDED when the memory controller is
-  # unavailable (cgroup v2 without "memory", or v1 without cgroup_enable=memory).
-  # Surface it every deploy; the hard FAIL gate is in validate-deploy.sh.
+- name: Warn on missing memory limit support
+  # Compose silently drops deploy.resources without the memory cgroup controller.
+  # Only a warning here; validate-deploy.sh is the hard gate.
   ansible.builtin.debug:
     msg: >-
       WARNING: Docker reports "No memory limit support" on this host - the

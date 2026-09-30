@@ -1,12 +1,10 @@
-# Audio-only playlist downloads for the media-sync pipeline. Tags matter more
-# than filenames: Navidrome groups purely by tags, and beets moves the files.
+# Tags matter more than filenames: Navidrome groups purely by tags, and beets renames the files.
 
 -x
 --format "bestaudio/best"
 --audio-format best
 --audio-quality 0
 
-# --- Tags ---------------------------------------------------------------------
 # Order matters: each rule sees the fields the previous ones wrote.
 # YouTube Music ("- Topic" channels) supplies track/artist/album; prefer them.
 --parse-metadata "%(track,title)s:%(title)s"
@@ -23,7 +21,7 @@
 --parse-metadata "%(artist)s:%(album_artist)s"
 --embed-metadata
 
-# The video thumbnail as cover art (jpg embeds in every container).
+# jpg embeds in every container.
 --embed-thumbnail
 --convert-thumbnails jpg
 
@@ -38,5 +36,4 @@
 --fragment-retries 3
 --limit-rate 2M
 
-# Strip only the non-music parts of music videos.
 --sponsorblock-remove music_offtopic

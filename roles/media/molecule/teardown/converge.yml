@@ -1,5 +1,5 @@
 ---
-- name: Converge - deploy what a container allows, then run the real teardown
+- name: Converge - deploy, then tear down
   hosts: all
   become: true
   vars:
@@ -19,7 +19,7 @@
     media_backup_enabled: true
     media_backup_dir: /tmp/molecule-media-backup
   pre_tasks:
-    - name: Create the path parents (validate.yml asserts they exist)
+    - name: Create the path parents
       ansible.builtin.file:
         path: "{{ item | dirname }}"
         state: directory
@@ -29,11 +29,8 @@
         - "{{ media_library_path }}"
 
     - name: Publish fixture userns-remap facts
-      # docker.yml (deliberately excluded here) publishes these on a real
-      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
-      # the nested rootless-podman mapping (container uids 0-65536 only - the
-      # canonical dockremap base 165536 is outside it and chown fails with
-      # EINVAL).
+      # The uid must be inside the nested rootless-podman mapping (0-65536);
+      # the real dockremap base 165536 makes chown fail with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"
@@ -43,7 +40,7 @@
         file: "{{ playbook_dir }}/../../defaults/main.yml"
         name: media_role_defaults
 
-    - name: Stub yt-dlp and deno (youtube.yml then runs offline)
+    - name: Stub yt-dlp and deno
       ansible.builtin.copy:
         dest: "/usr/local/bin/{{ item }}"
         mode: "0755"
@@ -52,11 +49,8 @@
       tags: [molecule-idempotence-notest]
 
   tasks:
-    # Deploy side (the ARRANGE phase): the container-safe parts of a real
-    # deploy, so the teardown has real things to remove. Tagged
-    # molecule-idempotence-notest because the teardown removes what this
-    # creates; the system under test is the teardown, which must converge on
-    # a rerun.
+    # Deploy tasks skip idempotence: the teardown removes what they create,
+    # and the teardown is what must converge on a rerun.
     - name: Gather network facts for dynamic configuration
       ansible.builtin.include_role:
         name: common
@@ -69,9 +63,7 @@
         tasks_from: stack
       tags: [molecule-idempotence-notest]
 
-    # Fixture: what docker_stack_service would have created on a real host (a
-    # container has no docker.service, so the unit is faked here only to give
-    # the teardown a real unit file to stop and remove).
+    # A container has no docker.service, so fake the unit the teardown removes.
     - name: Create the fake stack service unit
       ansible.builtin.copy:
         content: |
@@ -93,10 +85,24 @@
       loop: [backup, youtube]
       tags: [molecule-idempotence-notest]
 
-    # The real teardown, as playbooks/media-teardown.yml runs it once
-    # teardown_confirmed is set. Its own self-verification runs as part of
-    # this include; docker compose down is skipped by the docker-info guard.
-    - name: Run the real media role teardown
+    - name: Teardown refuses to run without the confirm fact
+      block:
+        - name: Run the media teardown unconfirmed
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: teardown
+
+        - name: Fail if the unconfirmed teardown ran
+          ansible.builtin.fail:
+            msg: media teardown ran without teardown_confirmed
+      rescue:
+        - name: Assert the refusal names teardown_confirmed
+          ansible.builtin.assert:
+            that:
+              - "'media teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+
+    # docker compose down is skipped by the docker-info guard.
+    - name: Run the media teardown
       ansible.builtin.include_role:
         name: media
         tasks_from: teardown
