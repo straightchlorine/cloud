@@ -193,6 +193,36 @@
   # already waited on port 80.
   ansible.builtin.meta: flush_handlers
 
+- name: Check Pi-hole accepts the vault admin password
+  # setpassword only runs inside the install block, so a rotated vault
+  # password would never reach an already-installed Pi-hole.
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}/api/auth"
+    method: POST
+    body_format: json
+    body:
+      password: "{{ vault_pihole_webpassword }}"
+    status_code: [200, 401]
+  register: dns_pihole_password_check
+  no_log: true
+
+- name: Log out of the password check session
+  ansible.builtin.uri:
+    url: "http://{{ primary_ip }}/api/auth"
+    method: DELETE
+    headers:
+      X-FTL-SID: "{{ dns_pihole_password_check.json.session.sid }}"
+    status_code: [200, 204]
+  when: dns_pihole_password_check.status == 200
+  no_log: true
+
+- name: Sync the Pi-hole admin password to the vault
+  ansible.builtin.command:
+    argv: [pihole, setpassword, "{{ vault_pihole_webpassword }}"]
+  become: true
+  no_log: true
+  when: dns_pihole_password_check.status == 401
+
 - name: Configure automatic updates
   ansible.builtin.include_tasks: auto_updates.yml
   when: dns_auto_updates_enabled
