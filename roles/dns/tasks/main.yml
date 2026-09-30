@@ -102,8 +102,8 @@
       notify: Restart pihole-FTL
 
     - name: Set Pi-hole web admin password
-      ansible.builtin.shell: |
-        pihole setpassword "{{ vault_pihole_webpassword }}"
+      ansible.builtin.command:
+        argv: [pihole, setpassword, "{{ vault_pihole_webpassword }}"]
       become: true
       no_log: true
 
