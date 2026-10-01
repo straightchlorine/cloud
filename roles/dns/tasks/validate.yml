@@ -54,6 +54,16 @@
     - common_ntp_server_enabled
     - common_ntp_allowed_networks | length == 0
 
+- name: Validate the Syncthing backup target is set when the local backup is enabled
+  ansible.builtin.fail:
+    msg: "{{ item }} must be set in host_vars when dns_backup_enabled is true"
+  when:
+    - dns_backup_enabled
+    - vars[item] is not defined
+  loop:
+    - dns_backup_dir
+    - dns_backup_owner
+
 - name: Validate specified interface exists
   ansible.builtin.fail:
     msg: |

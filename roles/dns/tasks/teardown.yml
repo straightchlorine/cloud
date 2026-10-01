@@ -68,6 +68,8 @@
     user: root
   loop:
     - "Weekly Pi-hole updates"
+    - "Pihole Syncthing local backup"
+    # Name used before the backup moved to common/stack_snapshot_backup.
     - "Pi-hole Syncthing local backup"
     - "Reboot pending notification"
   become: true

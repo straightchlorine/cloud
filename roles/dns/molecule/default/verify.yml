@@ -47,7 +47,7 @@
         that:
           - dns_deployed_files.results[0].stat.mode == '0755'
           - dns_deployed_files.results[0].stat.pw_name == 'root'
-          - dns_deployed_files.results[1].stat.mode == '0700'
+          - dns_deployed_files.results[1].stat.mode == '0755'
           - dns_deployed_files.results[1].stat.pw_name == 'root'
           - dns_deployed_files.results[2].stat.mode == '0644'
           - dns_deployed_files.results[3].stat.isdir
@@ -62,7 +62,7 @@
           logrotate={{ dns_deployed_files.results[2].stat.mode }},
           dir={{ dns_deployed_files.results[3].stat.mode }}/
           {{ dns_deployed_files.results[3].stat.pw_name }}
-        success_msg: "[OK] Script modes (0755/0700 root:root) and backup dir (0750 molecule) correct"
+        success_msg: "[OK] Script modes (0755 root:root) and backup dir (0750 molecule) correct"
 
     - name: Assert the update script content
       vars:
@@ -89,11 +89,12 @@
           - expected_dest in backup_script
           - expected_retention in backup_script
           - expected_owner in backup_script
-          - "'/api/teleporter' in backup_script"
+          - "'pihole-FTL --teleporter' in backup_script"
+          - "'molecule-test-password' not in backup_script"
           - "'ntfy-notify ' in backup_script"
           - "'/usr/local/bin/ntfy-notify' not in backup_script"
-        fail_msg: "pihole-syncthing-backup.sh rendered wrong: {{ backup_script }}"
-        success_msg: "[OK] Backup script embeds dir/retention/owner and the Teleporter flow"
+        fail_msg: "pihole-syncthing-backup rendered wrong: {{ backup_script }}"
+        success_msg: "[OK] Backup script embeds dir/retention/owner and the CLI Teleporter export, no secret"
 
     - name: Assert the cron jobs were scheduled
       ansible.builtin.assert:

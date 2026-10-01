@@ -12,6 +12,9 @@
     common_ntp_server_enabled: false
     common_ntp_upstream_server: pool.ntp.org
     common_ntp_allowed_networks: []
+    # Raw include_tasks loads no role defaults; mirror this one so the backup
+    # guard evaluates instead of erroring on an undefined flag.
+    dns_backup_enabled: false
   tasks:
     # The container's interface name varies by driver/network; cases 2 and 3
     # need a real one so they fail for the reason under test, not the
@@ -153,5 +156,40 @@
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"
+
+    # Case 5: the local-backup guard, which must fire before Pi-hole is installed.
+    - name: "Case 5: validate.yml fails when the local backup is enabled without dns_backup_dir"
+      block:
+        - name: Run the real validate.yml with dns_backup_enabled but no dns_backup_dir
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate.yml"
+          vars:
+            dns_pihole_interface: "{{ molecule_primary_interface }}"
+            dns_backup_enabled: true
+            dns_backup_owner: molecule
+
+        - name: Fail the test - the backup guard should have refused the missing target dir
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on dns_backup_enabled without dns_backup_dir"
+      rescue:
+        - name: Assert the failure was for the missing dns_backup_dir specifically
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['dns_backup_dir']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing dns_backup_dir): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml's backup guard correctly failed on the missing dns_backup_dir"
+
+        - name: Record case 5 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes - in-memory facts do not cross that
+          # boundary. force: false keeps the idempotence rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case5.passed
             force: false
             mode: "0644"

@@ -12,7 +12,6 @@ dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
-  - jq
 
 # Pi-hole itself; Debian package updates are fleet-wide via the common role.
 dns_auto_updates_enabled: true

@@ -243,10 +243,13 @@ for cron_job in "Weekly Pi-hole updates"; do
 done
 # The local-backup cron exists only with dns_backup_enabled; key off the script.
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
-  if printf '%s\n' "$root_cron" | grep -qF -- "Pi-hole Syncthing local backup"; then
-    note_ok "cron present: Pi-hole Syncthing local backup"
+  if printf '%s\n' "$root_cron" | grep -qF -- "Pihole Syncthing local backup"; then
+    note_ok "cron present: Pihole Syncthing local backup"
   else
-    note_left "cron missing: Pi-hole Syncthing local backup"
+    note_left "cron missing: Pihole Syncthing local backup"
+  fi
+  if printf '%s\n' "$root_cron" | grep -qF -- "Pi-hole Syncthing local backup"; then
+    note_left "stale cron present: Pi-hole Syncthing local backup (runs the backup twice)"
   fi
 else
   note_ok "no local-backup cron (dns_backup_enabled false)"
@@ -273,8 +276,7 @@ check_script /usr/local/bin/pihole
 check_present /etc/pihole/pihole.toml
 check_script /usr/local/bin/pihole-update 755
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
-  # pihole-syncthing-backup embeds the Pi-hole web password - must stay 0700 root-only.
-  check_script /usr/local/bin/pihole-syncthing-backup 700
+  check_script /usr/local/bin/pihole-syncthing-backup 755
 else
   note_ok "pihole-syncthing-backup absent (dns_backup_enabled false)"
 fi

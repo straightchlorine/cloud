@@ -1,13 +1,11 @@
 # Managed by Ansible - Do not edit manually
 #
 # Variable naming convention:
-#   - common_ prefix: variables with role-level defaults (e.g. common_restart_policy,
-#     common_wanted_by, common_enable_security_hardening). These are always available.
-#   - No prefix: variables passed by callers only when needed (e.g. service_user,
-#     exec_start, working_directory). Guarded by 'is defined' checks.
-#
-# Known issue: working_directory, timeout_start_sec and protect_system guards test the
-# unprefixed name but render the common_ value. Callers pass common_, so they never render.
+#   - common_ prefix: role-level defaults (e.g. common_restart_policy, common_wanted_by),
+#     plus the optional Wants/WorkingDirectory/TimeoutStartSec/Protect*/PrivateTmp/
+#     ReadWritePaths knobs, which render only when a caller passes them.
+#   - No prefix: other caller-supplied values (e.g. service_user, exec_start), each
+#     guarded by an 'is defined' check.
 
 [Unit]
 Description={{ service_description }}
@@ -26,8 +24,8 @@ After={{ after }}
 PartOf={{ unit }}
 {% endfor %}
 {% endif %}
-{% if service_wants is defined %}
-{% for want in service_wants %}
+{% if common_service_wants is defined %}
+{% for want in common_service_wants %}
 Wants={{ want }}
 {% endfor %}
 {% endif %}
@@ -54,7 +52,7 @@ User={{ service_user }}
 {% if service_group is defined %}
 Group={{ service_group }}
 {% endif %}
-{% if working_directory is defined %}
+{% if common_working_directory is defined %}
 WorkingDirectory={{ common_working_directory }}
 {% endif %}
 
@@ -104,7 +102,7 @@ SyslogIdentifier={{ syslog_identifier }}
 # Restart configuration
 Restart={{ restart_policy if restart_policy is defined else common_restart_policy }}
 RestartSec={{ restart_sec if restart_sec is defined else common_restart_sec }}
-{% if timeout_start_sec is defined %}
+{% if common_timeout_start_sec is defined %}
 TimeoutStartSec={{ common_timeout_start_sec }}
 {% endif %}
 {% if timeout_stop_sec is defined %}
@@ -118,13 +116,13 @@ KillMode={{ kill_mode }}
 {% if common_enable_security_hardening %}
 # Process security
 NoNewPrivileges={{ common_no_new_privileges }}
-{% if protect_system is defined %}
+{% if common_protect_system is defined %}
 ProtectSystem={{ common_protect_system }}
 {% endif %}
-{% if protect_home is defined %}
+{% if common_protect_home is defined %}
 ProtectHome={{ common_protect_home }}
 {% endif %}
-{% if private_tmp is defined %}
+{% if common_private_tmp is defined %}
 PrivateTmp={{ common_private_tmp }}
 {% endif %}
 {% if read_only_paths is defined %}
@@ -132,8 +130,8 @@ PrivateTmp={{ common_private_tmp }}
 ReadOnlyPaths={{ path }}
 {% endfor %}
 {% endif %}
-{% if read_write_paths is defined %}
-{% for path in read_write_paths %}
+{% if common_read_write_paths is defined %}
+{% for path in common_read_write_paths %}
 ReadWritePaths={{ path }}
 {% endfor %}
 {% endif %}

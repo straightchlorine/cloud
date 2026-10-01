@@ -119,7 +119,9 @@
     restart_policy: "always"
     restart_sec: "1"
     start_limit_interval_sec: "0"
-    common_protect_home: "true"
+    # read-only, not true: true swaps /home for an empty tmpfs inside the unit, so the
+    # filesystem collector would report it instead of a separate /home partition.
+    common_protect_home: "read-only"
     common_protect_system: "strict"
     protect_control_groups: "true"
     protect_kernel_modules: "true"

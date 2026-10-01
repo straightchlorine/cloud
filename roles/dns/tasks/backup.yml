@@ -1,41 +1,39 @@
 ---
-# Secondary LOCAL Pi-hole backup (Teleporter config archive + a consistent
-# pihole-FTL.db snapshot). The primary off-site backup is the restic role.
+# Secondary LOCAL Pi-hole backup into a Syncthing folder; restic is the
+# off-site copy. The target vars are asserted up front in validate.yml.
 
-- name: Validate local backup configuration
-  ansible.builtin.assert:
-    that:
-      - dns_backup_dir is defined
-      - dns_backup_owner is defined
-    fail_msg: >-
-      dns_backup_dir (the Syncthing-shared folder, ideally on the plugged drive)
-      and dns_backup_owner (the user that runs Syncthing) must be set in host_vars
-      when dns_backup_enabled is true.
-    quiet: true
+- name: Install the nightly local snapshot backup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_snapshot_backup
+  vars:
+    common_snapshot_name: "pihole"
+    common_snapshot_stack_home: "/etc/pihole"
+    common_snapshot_dest: "{{ dns_backup_dir }}"
+    common_snapshot_owner: "{{ dns_backup_owner }}"
+    common_snapshot_retention: "{{ dns_backup_retention }}"
+    common_snapshot_hour: "{{ dns_backup_schedule_hour }}"
+    common_snapshot_minute: "{{ dns_backup_schedule_minute }}"
+    common_snapshot_summary: "Teleporter config archive and a rolling pihole-FTL.db copy"
+    common_snapshot_steps:
+      # The FTL CLI export needs no API session, so no password lands in the script.
+      - |
+        (cd "$WORK" && pihole-FTL --teleporter)
+      # Query history is instance-local (docs/backup/restore.md): one rolling copy
+      # beside the dated snapshots, not one per retained day. sqlite .backup is
+      # consistent against the live FTL writer; the rename keeps it atomic.
+      - |
+        if [ -f /etc/pihole/pihole-FTL.db ]; then
+            pihole-FTL sqlite3 /etc/pihole/pihole-FTL.db ".backup '$WORK/pihole-FTL.db'"
+            chown "$OWNER" "$WORK/pihole-FTL.db"
+            mv "$WORK/pihole-FTL.db" "$DEST/pihole-FTL.db"
+        fi
 
-- name: Ensure the Syncthing backup directory exists
-  ansible.builtin.file:
-    path: "{{ dns_backup_dir }}"
-    state: directory
-    owner: "{{ dns_backup_owner }}"
-    mode: "0750"
-  become: true
-
-- name: Install the Pi-hole Syncthing backup script
-  # 0700: the rendered script embeds the Pi-hole web password.
-  ansible.builtin.template:
-    src: pihole-syncthing-backup.sh.j2
-    dest: /usr/local/bin/pihole-syncthing-backup
-    owner: root
-    group: root
-    mode: '0700'
-  become: true
-
-- name: Schedule the Pi-hole Syncthing backup
+- name: Remove the cron entry of the previous Pi-hole backup script
+  # The shared task names its entry "Pihole Syncthing local backup"; this one
+  # points at the same script path and would run it a second time.
   ansible.builtin.cron:
     name: "Pi-hole Syncthing local backup"
-    minute: "{{ dns_backup_schedule_minute }}"
-    hour: "{{ dns_backup_schedule_hour }}"
-    job: "/usr/local/bin/pihole-syncthing-backup >> /var/log/pihole-syncthing-backup.log 2>&1"
     user: root
+    state: absent
   become: true

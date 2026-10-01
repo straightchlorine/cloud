@@ -11,7 +11,6 @@ dns_pihole_packages:
   - curl
   - ca-certificates
   - dnsutils
-  - jq  # pihole-syncthing-backup.sh parses the Pi-hole API JSON with this
 
 # Gates only the Pi-hole weekly cron; OS updates and reboot come from the common role.
 dns_auto_updates_enabled: true

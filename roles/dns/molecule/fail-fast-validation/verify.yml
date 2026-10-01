@@ -13,9 +13,10 @@
         - /tmp/molecule-case2.passed
         - /tmp/molecule-case3.passed
         - /tmp/molecule-case4.passed
+        - /tmp/molecule-case5.passed
       register: dns_failfast_markers
 
-    - name: Assert all four fail-fast cases completed
+    - name: Assert all five fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -36,6 +37,7 @@
           Case 2 - placeholder vault secret (vault_pihole_webpassword): FAILED as expected
           Case 3 - NTP guard, empty common_ntp_allowed_networks: FAILED as expected
           Case 4 - non-existent dns_pihole_interface: FAILED as expected
+          Case 5 - backup guard, dns_backup_enabled without dns_backup_dir: FAILED as expected
 
-          All four cases ran the real roles/dns/tasks/validate.yml end to end -
+          All five cases ran the real roles/dns/tasks/validate.yml end to end -
           no hand-copied guards anywhere in this scenario.
