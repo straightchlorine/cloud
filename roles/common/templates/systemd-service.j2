@@ -102,8 +102,8 @@ SyslogIdentifier={{ syslog_identifier }}
 {% endif %}
 
 # Restart configuration
-Restart={{ common_restart_policy }}
-RestartSec={{ common_restart_sec }}
+Restart={{ restart_policy if restart_policy is defined else common_restart_policy }}
+RestartSec={{ restart_sec if restart_sec is defined else common_restart_sec }}
 {% if timeout_start_sec is defined %}
 TimeoutStartSec={{ common_timeout_start_sec }}
 {% endif %}

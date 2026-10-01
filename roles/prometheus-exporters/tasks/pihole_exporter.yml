@@ -139,9 +139,8 @@
           | grep -c '^pihole_status 1$' || true
       register: prom_exp_pihole_exporter_health
       changed_when: false
-      # On weaker hosts the first scrape can take a while.
       retries: 4
-      delay: 30
+      delay: "{{ prometheus_exporters_pihole_exporter_check_delay }}"
       until: prom_exp_pihole_exporter_health.stdout | int == 1
   rescue:
     - name: Read the exporter's recent log
@@ -169,7 +168,7 @@
       register: prom_exp_pihole_exporter_health_after_restart
       changed_when: false
       retries: 4
-      delay: 30
+      delay: "{{ prometheus_exporters_pihole_exporter_check_delay }}"
       until: prom_exp_pihole_exporter_health_after_restart.stdout | int == 1
 
 - name: Test Pi-hole connectivity from exporter
