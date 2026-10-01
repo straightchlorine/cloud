@@ -220,8 +220,8 @@ mount/relocation checks, and a host with `dns_backup_enabled: false` skips the
 local-backup script/cron checks - both are legitimate Zero 2 W shapes.
 
 The teardown playbook refuses to run without `dns_teardown_confirm=true` and
-hard-refuses the production DNS IP (`192.168.20.10`) - the staging IP is
-tear-down-able so the cycle above works on the Zero before cutover. It removes
+refuses a host marked `teardown_protected: true` (the production `dns` host) -
+a staging host leaves it unset, so the cycle above works on the Zero before cutover. It removes
 Pi-hole, its cron jobs, auto-update/backup scripts, chrony (restoring
 `systemd-timesyncd`), zram swap (the role's zramswap **and** any foreign zram a
 hand-configured box carried - `zram_teardown.yml` swaps it off, purges

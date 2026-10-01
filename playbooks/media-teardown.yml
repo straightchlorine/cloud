@@ -4,29 +4,12 @@
   become: true
   gather_facts: true
   tasks:
-    - name: Require explicit teardown confirmation
-      ansible.builtin.assert:
-        that:
-          - media_teardown_confirm | default(false) | bool
-        fail_msg: >-
-          Refusing media teardown. Re-run with -e media_teardown_confirm=true
-          and --limit <your-test-host>.
-        quiet: true
-
-    - name: Never tear down the production media host
-      ansible.builtin.assert:
-        that:
-          - inventory_hostname != 'media'
-          - (ansible_host | default('')) != '192.168.20.15'
-        fail_msg: >-
-          Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }})
-          is the PRODUCTION media host. Point --limit at your test Pi instead.
-        quiet: true
-
-    - name: Mark this run as a confirmed teardown
-      ansible.builtin.set_fact:
-        teardown_confirmed: true
-
+    - name: Gate the teardown
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: media
     - name: Run media role teardown
       ansible.builtin.include_role:
         name: media

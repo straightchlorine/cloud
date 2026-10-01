@@ -1,4 +1,6 @@
 ---
+# Refused by the *-teardown playbooks; a staging host leaves this unset.
+teardown_protected: true
 # TLS terminates at the central reverse proxy, so navidrome serves plain HTTP.
 
 device_type: rpi3b

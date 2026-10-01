@@ -4,8 +4,8 @@
 #     --limit <your-test-host> -e dns_teardown_confirm=true
 #
 # Pattern (shared by every teardown playbook):
-#   1. Gate on this role's own flag (dns_teardown_confirm) and hard-refuse
-#      the production host.
+#   1. Gate on this role's own flag (dns_teardown_confirm) and refuse any host
+#      marked teardown_protected in the inventory.
 #   2. Set the shared fact teardown_confirmed: true.
 #   3. Run the teardown manifest below - every included teardown task file
 #      checks teardown_confirmed, so nothing can run outside a confirmed
@@ -27,31 +27,12 @@
         tasks_from: network_facts
 
   tasks:
-    - name: Require explicit teardown confirmation
-      ansible.builtin.assert:
-        that:
-          - dns_teardown_confirm | default(false) | bool
-        fail_msg: >-
-          Refusing DNS teardown. Re-run with -e dns_teardown_confirm=true
-          and --limit <your-test-host>.
-        quiet: true
-
-    - name: Never tear down the production DNS host
-      # Guard is by IP so a staging Pi can still run the full teardown cycle.
-      ansible.builtin.assert:
-        that:
-          - (ansible_host | default('')) != '192.168.20.10'
-        fail_msg: >-
-          Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }})
-          is the PRODUCTION DNS IP (192.168.20.10). Point --limit at your test IP instead.
-        quiet: true
-
-    - name: Mark this run as a confirmed teardown
-      # Single point of truth: every teardown task file below (and in other
-      # roles) checks this fact before removing anything.
-      ansible.builtin.set_fact:
-        teardown_confirmed: true
-
+    - name: Gate the teardown
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: dns
     - name: Run DNS role teardown
       ansible.builtin.include_role:
         name: dns

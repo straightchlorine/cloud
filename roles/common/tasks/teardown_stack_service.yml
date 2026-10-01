@@ -1,0 +1,34 @@
+---
+# Stops and removes the `stack` unit and takes the compose project down.
+# common_teardown_stack_home: compose project directory
+# common_teardown_stack_user: user the stack runs as
+- name: Stop and disable the stack systemd unit
+  ansible.builtin.systemd:
+    name: stack
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  become: true
+  failed_when: false
+
+- name: Remove the stack systemd unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/stack.service
+    state: absent
+  become: true
+
+- name: Check whether a Docker daemon is available
+  ansible.builtin.command: docker info
+  register: common_teardown_docker_info
+  failed_when: false
+  changed_when: false
+
+- name: Tear down the compose project
+  # Molecule containers have no docker daemon; a stale network may linger there.
+  community.docker.docker_compose_v2:
+    project_src: "{{ common_teardown_stack_home }}"
+    state: absent
+  become: true
+  become_user: "{{ common_teardown_stack_user }}"
+  when: common_teardown_docker_info.rc == 0
+  ignore_errors: true

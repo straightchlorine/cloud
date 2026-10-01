@@ -1,0 +1,27 @@
+---
+# Playbook-side gate for every teardown: the role's own confirm flag, a refusal
+# for hosts the inventory marks teardown_protected, then the shared
+# teardown_confirmed fact that each teardown task file checks.
+# common_teardown_name: role name; the flag is <name>_teardown_confirm
+- name: Require explicit teardown confirmation
+  ansible.builtin.assert:
+    that: vars[common_teardown_name ~ '_teardown_confirm'] | default(false) | bool
+    fail_msg: >-
+      Refusing {{ common_teardown_name }} teardown. Re-run with
+      -e {{ common_teardown_name }}_teardown_confirm=true and --limit <your-test-host>.
+    quiet: true
+
+- name: Never tear down a protected host
+  # Set teardown_protected: true in the production host's host_vars; a staging
+  # host stays unset so it can run the full teardown cycle. Undefined by design
+  # on unprotected hosts, which no role's defaults cover.
+  ansible.builtin.assert:
+    that: not (teardown_protected | default(false) | bool)
+    fail_msg: >-
+      Refusing: {{ inventory_hostname }} ({{ ansible_host | default('?') }}) is marked
+      teardown_protected. Point --limit at your test host instead.
+    quiet: true
+
+- name: Mark this run as a confirmed teardown
+  ansible.builtin.set_fact:
+    teardown_confirmed: true  # noqa: var-naming[no-role-prefix]

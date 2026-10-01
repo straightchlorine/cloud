@@ -1,0 +1,9 @@
+---
+# common_teardown_name: role name, used in the refusal message
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.assert:
+    that: teardown_confirmed | default(false) | bool
+    fail_msg: >-
+      {{ common_teardown_name }} teardown requires the shared teardown_confirmed fact - run
+      through playbooks/{{ common_teardown_name }}-teardown.yml instead.
+    quiet: true

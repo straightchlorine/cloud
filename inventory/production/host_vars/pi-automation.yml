@@ -1,4 +1,6 @@
 ---
+# Refused by the *-teardown playbooks; a staging host leaves this unset.
+teardown_protected: true
 # Raspberry Pi 4 (production automation host): vaultwarden, firefly + mariadb,
 # watchtower. TLS terminates at the central reverse proxy; services publish
 # plain HTTP on the host IP.

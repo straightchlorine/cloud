@@ -200,8 +200,8 @@ ansible-playbook -i inventory/production playbooks/site.yml \
 ```
 
 The teardown playbook refuses to run without
-`automation_teardown_confirm=true` and hard-refuses the production host
-(`pi-automation` / `192.168.20.20`). It stops and removes the systemd unit,
+`automation_teardown_confirm=true` and refuses a host marked
+`teardown_protected: true` (`pi-automation`). It stops and removes the systemd unit,
 the compose project (when a Docker daemon answers), the management script, the
 backup script + cron and Syncthing, and ends with a self-check that fails if
 any role artifact survives. `automation_data_path` (user data) intentionally

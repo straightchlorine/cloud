@@ -1,0 +1,36 @@
+---
+# Removes cron entries and then proves they are gone, from one list so the two
+# cannot drift.
+# common_teardown_cron_jobs: list of {name, user, env (optional, default false)}
+- name: Remove the cron entries
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    user: "{{ item.user }}"
+    env: "{{ item.env | default(false) }}"
+    state: absent
+  loop: "{{ common_teardown_cron_jobs }}"
+  loop_control:
+    label: "{{ item.user }}: {{ item.name }}"
+  become: true
+
+- name: Read the crontabs
+  ansible.builtin.command: "crontab -l -u {{ item }}"
+  loop: "{{ common_teardown_cron_jobs | map(attribute='user') | unique | list }}"
+  register: common_teardown_crontabs
+  failed_when: false
+  changed_when: false
+  become: true
+
+- name: Assert no cron entry survives
+  ansible.builtin.assert:
+    that: >-
+      common_teardown_cron_jobs
+      | selectattr('user', 'equalto', item.item)
+      | map(attribute='name')
+      | select('in', item.stdout | default(''))
+      | list | length == 0
+    fail_msg: "Cron entries survived the teardown for {{ item.item }}: {{ item.stdout | default('') }}"
+    success_msg: "[OK] {{ item.item }} cron entries removed"
+  loop: "{{ common_teardown_crontabs.results }}"
+  loop_control:
+    label: "{{ item.item }}"

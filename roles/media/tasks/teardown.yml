@@ -1,91 +1,45 @@
 ---
+# Reverse the media role so a disposable test Pi can be re-tested from a
+# near-clean state. User data under media_library_path is intentionally left
+# in place.
+
 - name: Refuse to run outside a confirmed teardown
-  ansible.builtin.assert:
-    that:
-      - teardown_confirmed | default(false) | bool
-    fail_msg: >-
-      media teardown requires the shared teardown_confirmed fact - run
-      through playbooks/media-teardown.yml instead.
-    quiet: true
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_gate
+  vars:
+    common_teardown_name: media
 
-- name: Stop and disable the stack systemd unit
-  ansible.builtin.systemd:
-    name: stack
-    enabled: false
-    state: stopped
-    daemon_reload: true
-  become: true
-  failed_when: false
+- name: Tear down the stack service and compose project
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_stack_service
+  vars:
+    common_teardown_stack_home: "{{ media_home }}"
+    common_teardown_stack_user: "{{ ansible_user }}"
 
-- name: Remove the stack systemd unit
-  ansible.builtin.file:
-    path: /etc/systemd/system/stack.service
-    state: absent
-  become: true
+- name: Remove the cron entries
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_cron
+  vars:
+    common_teardown_cron_jobs:
+      - { name: "PATH", user: "{{ ansible_user }}", env: true }
+      - { name: "Media nightly sync", user: "{{ ansible_user }}" }
+      - { name: "Media weekly retag", user: "{{ ansible_user }}" }
+      - { name: "Media Syncthing local backup", user: root }
+      - { name: "Weekly yt-dlp updates", user: root }
 
-- name: Remove the role-installed symlinks
+- name: Remove the role file artifacts
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   become: true
-  failed_when: false
   loop:
     - /usr/local/bin/manage-media
     - /usr/local/bin/media-sync
-
-- name: Check whether a Docker daemon is available
-  ansible.builtin.command: docker info
-  register: media_docker_info
-  failed_when: false
-  changed_when: false
-
-- name: Tear down the compose project
-  # Molecule containers have no docker daemon; a stale network may linger there.
-  community.docker.docker_compose_v2:
-    project_src: "{{ media_home }}"
-    state: absent
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: media_docker_info.rc == 0
-  ignore_errors: true
-
-- name: Remove stack user cron entries
-  ansible.builtin.cron:
-    name: "{{ item }}"
-    env: "{{ item == 'PATH' }}"
-    state: absent
-    user: "{{ ansible_user }}"
-  become: true
-  loop:
-    - "PATH"
-    - "Media nightly sync"
-    - "Media weekly retag"
-
-- name: Remove root cron entries
-  ansible.builtin.cron:
-    name: "{{ item }}"
-    state: absent
-    user: root
-  become: true
-  loop:
-    - "Media Syncthing local backup"
-    - "Weekly yt-dlp updates"
-
-- name: Remove the yt-dlp and deno binaries
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
     - /usr/local/bin/yt-dlp
     - /usr/local/bin/deno
-
-- name: Remove the media stack role file artifacts
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
     - "{{ media_home }}"
     - /usr/local/bin/media-syncthing-backup
     - /usr/local/bin/yt-dlp-update
@@ -97,46 +51,17 @@
     tasks_from: syncthing_teardown
   when: common_syncthing_enabled | default(false) | bool
 
-- name: Verify key media stack artifacts are gone
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - /usr/local/bin/manage-media
-    - /usr/local/bin/media-sync
-    - /usr/local/bin/media-syncthing-backup
-    - /usr/local/bin/yt-dlp
-    - /usr/local/bin/deno
-    - /etc/systemd/system/stack.service
-    - "{{ media_home }}"
-  register: media_teardown_verify
-
-- name: Assert key media stack artifacts are gone
-  ansible.builtin.assert:
-    that:
-      - not item.stat.exists
-    fail_msg: "{{ item.item }} still exists after teardown"
-    success_msg: "[OK] {{ item.item }} removed"
-  loop: "{{ media_teardown_verify.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Read the stack user's crontab
-  ansible.builtin.command: "crontab -l -u {{ ansible_user }}"
-  register: media_teardown_crontab
-  failed_when: false
-  changed_when: false
-
-- name: Read root's crontab
-  ansible.builtin.command: crontab -l -u root
-  register: media_teardown_root_crontab
-  failed_when: false
-  changed_when: false
-
-- name: Assert no media stack cron survives
-  ansible.builtin.assert:
-    that:
-      - "'Media nightly sync' not in (media_teardown_crontab.stdout | default(''))"
-      - "'Media weekly retag' not in (media_teardown_crontab.stdout | default(''))"
-      - "'Media Syncthing local backup' not in (media_teardown_root_crontab.stdout | default(''))"
-    fail_msg: "Media Stack cron jobs survived the teardown: {{ media_teardown_crontab.stdout | default('') }}"
-    success_msg: "[OK] media stack cron jobs removed"
+- name: Verify the media artifacts are gone
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_verify_absent
+  vars:
+    common_teardown_name: media
+    common_teardown_paths:
+      - /usr/local/bin/manage-media
+      - /usr/local/bin/media-sync
+      - /usr/local/bin/media-syncthing-backup
+      - /usr/local/bin/yt-dlp
+      - /usr/local/bin/deno
+      - /etc/systemd/system/stack.service
+      - "{{ media_home }}"
