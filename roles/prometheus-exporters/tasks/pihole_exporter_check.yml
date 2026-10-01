@@ -1,0 +1,12 @@
+---
+- name: Count pihole_status 1 in the exporter metrics
+  ansible.builtin.shell:
+    cmd: >-
+      curl -s -m {{ prometheus_exporters_health_check_timeout }}
+      http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
+      | grep -cE '^pihole_status(\{[^}]*\})? 1$' || true
+  register: prom_exp_pihole_exporter_health
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: prom_exp_pihole_exporter_health.stdout | int == 1

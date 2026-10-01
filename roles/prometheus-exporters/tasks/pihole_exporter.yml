@@ -132,16 +132,7 @@
   # pihole_status 1 is the proof it can actually read Pi-hole's API.
   block:
     - name: Check the exporter reports pihole_status 1
-      ansible.builtin.shell:
-        cmd: >-
-          curl -s -m {{ prometheus_exporters_health_check_timeout }}
-          http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
-          | grep -cE '^pihole_status(\{[^}]*\})? 1$' || true
-      register: prom_exp_pihole_exporter_health
-      changed_when: false
-      retries: 6
-      delay: 10
-      until: prom_exp_pihole_exporter_health.stdout | int == 1
+      ansible.builtin.include_tasks: pihole_exporter_check.yml
   rescue:
     - name: Read the exporter's recent log
       ansible.builtin.command: journalctl -u pihole-exporter -n 5 --no-pager
@@ -160,28 +151,4 @@
       become: true
 
     - name: Check the exporter reports pihole_status 1 after restart
-      ansible.builtin.shell:
-        cmd: >-
-          curl -s -m {{ prometheus_exporters_health_check_timeout }}
-          http://localhost:{{ prometheus_exporters_pihole_exporter_port }}/metrics
-          | grep -cE '^pihole_status(\{[^}]*\})? 1$' || true
-      register: prom_exp_pihole_exporter_health_after_restart
-      changed_when: false
-      retries: 6
-      delay: 10
-      until: prom_exp_pihole_exporter_health_after_restart.stdout | int == 1
-
-- name: Test Pi-hole connectivity from exporter
-  ansible.builtin.uri:
-    url: >-
-      http://{{ prometheus_exporters_pihole_exporter_target_host
-      }}:{{ prometheus_exporters_pihole_exporter_target_port }}/api/info/login
-    method: GET
-    timeout: 5
-  register: prom_exp_pihole_api_test
-  failed_when: false
-
-- name: Warn if Pi-hole API not accessible
-  ansible.builtin.debug:
-    msg: "WARNING: Pi-hole API not accessible. Pi-hole Exporter may not collect all metrics."
-  when: prom_exp_pihole_api_test.status != 200
+      ansible.builtin.include_tasks: pihole_exporter_check.yml

@@ -1,7 +1,6 @@
 ---
 
-# The os role must run first: validate.yml asserts on its facts (os_family,
-# os_arch_download) and the installer downloads arch-specific binaries.
+# The os role must run first: validate.yml asserts on its os_family fact.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -29,7 +28,31 @@
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
 
+- name: Check the installed Pi-hole version
+  # A reinstall wipes /etc/pihole, so it only runs for a first install, a
+  # version change or an explicit request. A missing binary also lands here.
+  ansible.builtin.command: pihole -v -c
+  register: dns_pihole_installed_version
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Check for an existing Pi-hole gravity database
+  ansible.builtin.stat:
+    path: /etc/pihole/gravity.db
+  register: dns_pihole_gravity
+  become: true
+
+- name: Decide whether Pi-hole needs (re)installing
+  ansible.builtin.set_fact:
+    dns_pihole_needs_install: >-
+      {{ dns_pihole_force_reinstall
+      or not dns_pihole_gravity.stat.exists
+      or (dns_pihole_installed_version.stdout | default(''))
+      is not search('Core version is ' ~ (dns_pihole_version | regex_escape) ~ '(?![0-9.])') }}
+
 - name: Deploy Pi-hole with rollback on failure
+  when: dns_pihole_needs_install
   block:
     - name: Check for an existing Pi-hole configuration
       ansible.builtin.stat:
@@ -126,16 +149,13 @@
 
   rescue:
     - name: Pi-hole deployment failed - stopping service
+      # The installer can fail before FTL exists (e.g. its binary download
+      # 404s), so a missing unit is not an error here.
       ansible.builtin.systemd:
         name: pihole-FTL
         state: stopped
       become: true
-      ignore_errors: true
-      # The installer can fail before FTL is ever created (e.g. its FTL binary
-      # download 404s) - in that case there is no unit to stop, and systemd
-      # would emit a confusing "service not found" error for a service that
-      # never existed. Guard on the gathered service facts instead.
-      when: ansible_facts['services']['pihole-FTL'] is defined
+      failed_when: false
 
     - name: Restore Pi-hole configuration from backup, or clear a failed fresh install
       ansible.builtin.shell: |
@@ -153,8 +173,7 @@
         name: pihole-FTL
         state: started
       become: true
-      ignore_errors: true
-      when: ansible_facts['services']['pihole-FTL'] is defined
+      failed_when: false
 
     - name: Clean up Pi-hole repository after failed deployment
       ansible.builtin.file:
@@ -176,6 +195,38 @@
     - name: Fail with deployment error
       ansible.builtin.fail:
         msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."
+
+- name: Read the running Pi-hole DNS settings
+  # The installer reads these once; on an installed host they are applied here.
+  ansible.builtin.command: "pihole-FTL --config {{ item }}"
+  loop:
+    - dns.interface
+    - dns.upstreams
+  register: dns_pihole_running_config
+  changed_when: false
+  become: true
+  when: not dns_pihole_needs_install
+
+- name: Apply the DNS interface from host_vars
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, dns.interface, "{{ dns_pihole_interface }}"]
+  become: true
+  notify: Restart pihole-FTL
+  when:
+    - not dns_pihole_needs_install
+    - dns_pihole_running_config.results[0].stdout | trim != dns_pihole_interface
+
+- name: Apply the upstream DNS servers from host_vars
+  # IPv4 upstreams: the current list is compared by address, ignoring formatting.
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, dns.upstreams, "{{ dns_pihole_dns_servers | to_json }}"]
+  become: true
+  notify: Restart pihole-FTL
+  when:
+    - not dns_pihole_needs_install
+    - >-
+      dns_pihole_running_config.results[1].stdout | regex_findall('[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+') | sort
+      != dns_pihole_dns_servers | sort
 
 - name: Pin the web interface to ports 80/443
   # The v6 installer falls back to 8080/8443 if 80/443 look busy during install,
@@ -206,22 +257,25 @@
   ansible.builtin.include_tasks: backup.yml
   when: dns_backup_enabled
 
-- name: Install Syncthing (common role, optional)
-  # Undefined under `--tags dns` (the fleet play that loads the common role's
-  # defaults is skipped) - acceptable cross-role flag default per CLAUDE.md.
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: syncthing
-  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+- name: Share the backup folder through Syncthing
+  # The flag is undefined under `--tags dns` (the fleet play that loads the common
+  # role's defaults is skipped) - acceptable cross-role flag default per CLAUDE.md.
+  when:
+    - dns_backup_enabled
+    - common_syncthing_enabled | default(false) | bool
+  block:
+    - name: Install Syncthing
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: syncthing
 
-- name: Register the DNS Syncthing backup folder
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: syncthing_folder
-  vars:
-    common_syncthing_folder_id: "backup"
-    common_syncthing_folder_path: "{{ dns_backup_dir }}"
-  when: common_syncthing_enabled | default(false) | bool and dns_backup_enabled
+    - name: Register the backup folder
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: syncthing_folder
+      vars:
+        common_syncthing_folder_id: "backup"
+        common_syncthing_folder_path: "{{ dns_backup_dir }}"
 
 - name: Configure firewall
   ansible.builtin.include_role:

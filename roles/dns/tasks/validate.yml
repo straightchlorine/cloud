@@ -32,19 +32,11 @@
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
   tags: [validation]
 
-- name: Confirm the host OS and architecture are supported
+- name: Confirm the host runs a Debian-family OS
   ansible.builtin.assert:
-    that:
-      - os_family == "Debian"
-      - os_arch_download is defined
-    fail_msg: >-
-      DNS requires a Debian-family OS; got
-      {{ os_family | default('unknown') }}
-      ({{ os_name | default('?') }} {{ os_version | default('?') }}) on
-      {{ os_arch_machine | default('unknown') }}.
-    success_msg: >-
-      [OK] Supported OS/arch: {{ os_name }} {{ os_version }}
-      ({{ os_arch_machine }}, download suffix '{{ os_arch_download }}')
+    that: os_family == "Debian"
+    fail_msg: "DNS requires a Debian-family OS; got {{ os_family }} ({{ os_name }} {{ os_version }})."
+    quiet: true
   tags: [validation]
 
 - name: Validate NTP allowed networks are set when serving NTP to the VLAN

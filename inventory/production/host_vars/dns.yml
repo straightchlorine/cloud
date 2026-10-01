@@ -6,14 +6,7 @@ common_zram_enabled: true
 
 dns_pihole_dns_servers:
   - "192.168.20.1"
-dns_pihole_interface: "{{ primary_interface }}"
-dns_pihole_packages:
-  - curl
-  - ca-certificates
-  - dnsutils
 
-# Gates only the Pi-hole weekly cron; OS updates and reboot come from the common role.
-dns_auto_updates_enabled: true
 common_auto_updates_reboot_if_required: true
 # First in the fleet's reboot window: DNS is back before the others boot.
 common_auto_updates_reboot_time: "04:45"
