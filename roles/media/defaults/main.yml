@@ -111,9 +111,10 @@ media_compose_services:
     service_restart: "no"
     service_profiles:
       - tools
-    # Host user namespace: beets moves files yt-dlp wrote on the host, so its
-    # PUID must be the real stack uid, not dockremap + uid.
-    service_userns_mode: "host"
+    # Runs userns-remapped like navidrome: linuxserver/s6-overlay cannot start
+    # under userns_mode:host on a userns-remapped daemon (its SUID preinit can't
+    # chown /run), so beets' PUID/PGID map to dockremap + media_uid on the host
+    # and music/ + beets/ are owned to match (see stack.yml).
     service_environment:
       - "PUID={{ media_uid }}"
       - "PGID={{ media_gid }}"

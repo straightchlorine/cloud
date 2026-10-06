@@ -59,7 +59,7 @@
           - "'ND_PROMETHEUS_ENABLED=true' in navidrome.environment"
           - "'ND_BASEURL=https://navidrome.example.test' in navidrome.environment"
           - navidrome.ports | select('match', '.*:4545:4533$') | list | length == 1
-          - compose.services.beets.userns_mode == 'host'
+          - "'userns_mode' not in compose.services.beets"
           - compose.services.beets.profiles == ['tools']
           - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
           - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
@@ -88,11 +88,11 @@
       ansible.builtin.assert:
         that:
           - media_stats.results[4].stat.uid == 10000
-          - media_stats.results[5].stat.uid == 0
+          - media_stats.results[5].stat.uid == 10000
         fail_msg: >-
           navidrome-data uid {{ media_stats.results[4].stat.uid }} (want 10000),
-          music uid {{ media_stats.results[5].stat.uid }} (want 0)
-        success_msg: "[OK] navidrome-data owned by the remapped stack uid"
+          music uid {{ media_stats.results[5].stat.uid }} (want 10000)
+        success_msg: "[OK] navidrome-data and music owned by the remapped stack uid"
 
     - name: Assert the beets config imports YouTube singles unattended
       ansible.builtin.assert:
