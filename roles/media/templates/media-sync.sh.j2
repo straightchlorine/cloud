@@ -9,8 +9,10 @@ set -euo pipefail
 LIB="{{ media_library_path }}"
 MODE="${1:-sync}"
 COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
-# Run as the image's PUID user so beets' moves and tag writes stay owned by the stack user.
-BEET=("${COMPOSE[@]}" run --rm -T beets s6-setuidgid abc beet)
+# --entrypoint skips /init (and the beets web UI) so each run is a one-off that
+# exits; service_user sets the uid so beets' moves and tag writes stay owned by
+# the remapped stack user.
+BEET=("${COMPOSE[@]}" run --rm -T --entrypoint beet beets)
 
 notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
 count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }

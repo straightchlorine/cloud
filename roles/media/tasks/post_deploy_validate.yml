@@ -47,11 +47,12 @@
   tags: [post_validation]
 
 - name: Verify beets loads our config and plugins as the stack user
-  # Mirrors media-sync's invocation: proves /config is the config dir, the
-  # lyrics and replaygain plugins load, and ffmpeg is present.
+  # Mirrors media-sync's invocation (--entrypoint skips /init and the web UI):
+  # proves /config is the config dir, the lyrics and replaygain plugins load,
+  # and ffmpeg is present.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
-    run --rm -T beets s6-setuidgid abc sh -c 'beet config -p && beet version && ffmpeg -version'
+    run --rm -T --entrypoint /bin/sh beets -c 'beet config -p && beet version && ffmpeg -version'
   become: true
   become_user: "{{ ansible_user }}"
   register: media_beets_check

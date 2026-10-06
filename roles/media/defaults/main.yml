@@ -113,11 +113,10 @@ media_compose_services:
       - tools
     # Runs userns-remapped like navidrome: linuxserver/s6-overlay cannot start
     # under userns_mode:host on a userns-remapped daemon (its SUID preinit can't
-    # chown /run), so beets' PUID/PGID map to dockremap + media_uid on the host
-    # and music/ + beets/ are owned to match (see stack.yml).
+    # chown /run). One-off CLI only - media-sync bypasses /init via --entrypoint
+    # so the beets web UI never starts, and this user: directive sets the uid.
+    service_user: "{{ media_uid }}:{{ media_gid }}"
     service_environment:
-      - "PUID={{ media_uid }}"
-      - "PGID={{ media_gid }}"
       - "TZ={{ timezone }}"
     service_volumes:
       - "{{ media_library_path }}/beets:/config"
