@@ -12,7 +12,7 @@
       - cadvisor
   tags: [post_validation]
 
-- name: Verify Navidrome and metrics endpoints respond
+- name: Verify Navidrome endpoints respond
   ansible.builtin.uri:
     url: "{{ item }}"
     timeout: 10
@@ -25,7 +25,15 @@
   loop:
     - "http://{{ primary_ip }}:{{ media_navidrome_port }}/"
     - "http://{{ primary_ip }}:{{ media_navidrome_port }}/metrics"
-    - "http://{{ primary_ip }}:{{ common_cadvisor_port }}/metrics"
+  tags: [post_validation]
+
+- name: Verify the cAdvisor metrics endpoint
+  # cAdvisor is a shared common service; its port (common_cadvisor_port) is in
+  # common's scope, so the check runs there rather than referencing the default
+  # from this role's task files.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: verify_cadvisor_metrics
   tags: [post_validation]
 
 - name: Verify Navidrome can write its data directory

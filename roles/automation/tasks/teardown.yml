@@ -43,10 +43,14 @@
     - /var/log/automation-syncthing-backup.log
 
 - name: Tear down Syncthing
+  # Unconditional: the install is opt-in per host (common_syncthing_enabled),
+  # but a re-test host can carry Syncthing from an earlier run whose flag no
+  # longer matches the current inventory. Every task here is idempotent (apt
+  # state=absent, file state=absent, unit stop with failed_when:false), so
+  # always running it is safe and guarantees no Syncthing leftovers remain.
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing_teardown
-  when: common_syncthing_enabled | default(false) | bool
 
 - name: Verify the automation artifacts are gone
   ansible.builtin.include_role:
@@ -60,3 +64,7 @@
       - /etc/systemd/system/stack.service
       - /var/log/automation-syncthing-backup.log
       - "{{ automation_stack_home }}"
+      - /etc/systemd/system/syncthing.service
+      - /etc/apt/preferences.d/syncthing.pref
+      - /etc/apt/keyrings/syncthing-archive-keyring.gpg
+      - /usr/bin/syncthing
