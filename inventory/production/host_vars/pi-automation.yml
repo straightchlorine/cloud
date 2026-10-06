@@ -15,7 +15,7 @@ device_specs:
 # data-root live under it too (both optional/auto-detected, mirroring DNS).
 automation_data_path: "/mnt/data"
 
-automation_subdomain_vaultwarden: "vault"
+automation_subdomain_vaultwarden: "vaultwarden"
 automation_subdomain_firefly: "firefly"
 
 # Only the CIDRs that actually send requests: the LAN reverse proxy (192.168.20.30)

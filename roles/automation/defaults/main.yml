@@ -17,7 +17,7 @@ automation_vaultwarden_port: 8081
 automation_firefly_port: 8082
 automation_calibre_port: 8083
 
-automation_subdomain_vaultwarden: "vault"
+automation_subdomain_vaultwarden: "vaultwarden"
 automation_subdomain_firefly: "firefly"
 
 # Request source allow-list for Firefly's TRUSTED_PROXIES - host-defined and

@@ -91,7 +91,7 @@ follow from this role's compose config, so the role carries no workaround:
 
 - Raspberry Pi 4B (production) with an optional SSD (auto-detected if attached — the
   stack runs on the SD card without one; see "Storage" below)
-- Reverse proxy in place fronting `vault.*` / `firefly.*` over the tailnet
+- Reverse proxy in place fronting `vaultwarden.*` / `firefly.*` over the tailnet
 
 ### Deploy
 
