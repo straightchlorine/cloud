@@ -52,7 +52,8 @@
   # and ffmpeg is present.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
-    run --rm -T --entrypoint /bin/sh beets -c 'beet config -p && beet version && ffmpeg -version'
+    run --rm -T --entrypoint /bin/sh beets -c
+    '/lsiopy/bin/beet config -p && /lsiopy/bin/beet version && ffmpeg -version'
   become: true
   become_user: "{{ ansible_user }}"
   register: media_beets_check
