@@ -59,10 +59,10 @@ One per event, success or failure:
 | weekly retag | `media-sync retag done` | how many as-is tracks matched MusicBrainz |
 | adopt / backfill | `media-sync adopt/backfill done` | tracks tracked by beets / tracks with lyrics |
 | local snapshot | `media stack backup successful` | including a note when no Navidrome backup existed yet |
-| restic | `music restic backup successful` / `failed` | (every host's restic unit) |
+| restic | `restic backup successful` / `failed` | (every host's restic unit) |
 | yt-dlp + deno update | `yt-dlp update successful` / `failed` | |
-| Watchtower | image updated | (Watchtower's own ntfy) |
-| reboot | `Reboot pending` | 12h ahead |
+| Watchtower | `Watchtower updates on <host>` | image updated; Watchtower's own ntfy |
+| reboot | `reboot pending` | 12h ahead |
 
 Any failed step sends `... failed` with the line number, at high priority.
 

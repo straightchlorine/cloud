@@ -102,6 +102,11 @@ common_syncthing_home: "/home/{{ ansible_user }}/.config/syncthing"
 
 # Only updates containers labelled com.centurylinklabs.watchtower.enable=true, so
 # pinned images stay put. Needs common_watchtower_env_vars in the stack .env.
+#
+# The HTTP API port below is published for Prometheus, and by default Watchtower
+# skips its (rename-based) self-update whenever it has a published port - the new
+# container would collide with the old one's port. WATCHTOWER_EPHEMERAL_SELF_UPDATE
+# swaps in a short-lived orchestrator container instead, so self-update works anyway.
 common_watchtower_port: 8084
 common_watchtower_schedule: "0 0 2 * * *"
 common_watchtower_compose_service:
@@ -117,10 +122,14 @@ common_watchtower_compose_service:
     - "WATCHTOWER_SCHEDULE={{ common_watchtower_schedule }}"
     - "WATCHTOWER_CLEANUP=true"
     - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
-    - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ inventory_hostname }}"
+    # The machine's own hostname (fact), not the inventory alias: the title reads
+    # "Watchtower updates on <hostname>", and pi-test-media is "rpi", pi-automation
+    # is "automation".
+    - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ ansible_facts['hostname'] }}"
     - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
     - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics"
     - "WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}"
+    - "WATCHTOWER_EPHEMERAL_SELF_UPDATE=true"
   service_volumes:
     - "/var/run/docker.sock:/var/run/docker.sock"
   service_networks:

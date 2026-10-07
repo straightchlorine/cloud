@@ -95,6 +95,10 @@
             or watchtower_env.WATCHTOWER_HTTP_API_PERIODIC_POLLS | default('false') | bool
           # Watchtower's cron has a leading seconds field.
           - watchtower_env.WATCHTOWER_SCHEDULE.split() | length == 6
+          # A published port otherwise disables the rename-based self-update.
+          - watchtower_env.WATCHTOWER_EPHEMERAL_SELF_UPDATE == 'true'
+          # The notification hostname is the machine's hostname, not the alias.
+          - watchtower_env.WATCHTOWER_NOTIFICATIONS_HOSTNAME == ansible_facts['hostname']
         fail_msg: "watchtower env would never run its schedule: {{ watchtower_env }}"
         success_msg: "[OK] watchtower schedule is 6-field and not disabled by the update API"
 

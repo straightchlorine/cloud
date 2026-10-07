@@ -19,7 +19,11 @@ common_auto_updates_reboot_if_required: true
 
 prometheus_role: "music"
 
-media_youtube_enabled: false
+# Pipeline enabled for testing: installs yt-dlp + deno, the media-sync script,
+# the nightly sync / weekly retag crons and the weekly yt-dlp self-update.
+# validate.yml refuses the deploy until vault_youtube_playlists holds a real
+# (non-placeholder) playlist URL.
+media_youtube_enabled: true
 
 # Placeholder repo must never write into the production media backup.
 restic_enabled: false

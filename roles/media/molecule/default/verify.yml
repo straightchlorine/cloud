@@ -45,6 +45,8 @@
     - name: Assert the compose services
       vars:
         navidrome: "{{ compose.services.navidrome }}"
+        watchtower: "{{ compose.services.watchtower }}"
+        watchtower_hostname: "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ ansible_facts['hostname'] }}"
       ansible.builtin.assert:
         that:
           - compose.services | list | sort == ['beets', 'cadvisor', 'navidrome', 'watchtower']
@@ -63,6 +65,8 @@
           - compose.services.beets.profiles == ['tools']
           - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
           - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
+          - "'WATCHTOWER_EPHEMERAL_SELF_UPDATE=true' in watchtower.environment"
+          - "watchtower_hostname in watchtower.environment"
         fail_msg: "compose rendered wrong: {{ compose.services }}"
         success_msg: "[OK] navidrome (watchtower-managed, own backups) + watchtower + cadvisor + on-demand beets"
 

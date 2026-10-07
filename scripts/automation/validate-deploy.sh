@@ -127,7 +127,6 @@ else
 fi
 
 check_script /usr/local/bin/manage-automation 755
-check_script /usr/local/bin/automation-syncthing-backup 755
 
 if [ -L /usr/local/bin/manage-automation ] || [ -e /usr/local/bin/manage-automation ]; then
   note_ok "manage-automation reachable in PATH"
@@ -135,11 +134,18 @@ else
   note_left "manage-automation missing"
 fi
 
-root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
-if printf '%s\n' "$root_cron" | grep -qF -- 'Automation Syncthing local backup'; then
-  note_ok "cron present: Automation Syncthing local backup"
+# The local backup script + its cron exist only when the local backup is
+# enabled (automation_backup_enabled); key off the script, as scripts/dns does.
+if [ -e /usr/local/bin/automation-syncthing-backup ]; then
+  check_script /usr/local/bin/automation-syncthing-backup 755
+  root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
+  if printf '%s\n' "$root_cron" | grep -qF -- 'Automation Syncthing local backup'; then
+    note_ok "cron present: Automation Syncthing local backup"
+  else
+    note_left "cron missing: Automation Syncthing local backup"
+  fi
 else
-  note_left "cron missing: Automation Syncthing local backup"
+  note_ok "automation-syncthing-backup + cron absent (automation_backup_enabled false - optional, not a failure)"
 fi
 
 echo "-- Containers --"

@@ -199,9 +199,9 @@
       {{ (common_backup_exec_stop_post | default([])) + [common_backup_ntfy_stop_post] }}
     common_backup_ntfy_stop_post: >-
       +/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ];
-      then /usr/local/bin/ntfy-notify "$$(hostname): {{ common_backup_service_name }} restic backup successful"
+      then /usr/local/bin/ntfy-notify "$$(hostname): restic backup successful"
       "Snapshot uploaded to the off-site repository." default white_check_mark;
-      else /usr/local/bin/ntfy-notify "$$(hostname): {{ common_backup_service_name }} restic backup failed"
+      else /usr/local/bin/ntfy-notify "$$(hostname): restic backup failed"
       "$$SERVICE_RESULT/$$EXIT_STATUS - see {{ common_backup_base_path }}/logs." high rotating_light,error; fi'
     common_standard_output: |
       append:{{ common_backup_base_path }}/logs/systemd-backup-{{ common_backup_service_name }}.log

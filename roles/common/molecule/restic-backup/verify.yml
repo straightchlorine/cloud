@@ -83,7 +83,7 @@
         that:
           - "'ExecStopPost=+/bin/sh -c' in unit"
           - "'$$SERVICE_RESULT' in unit"
-          - "'molecule-test restic backup failed' in unit"
+          - "'restic backup failed' in unit"
         fail_msg: "backup service lacks the ntfy ExecStopPost:\n{{ unit }}"
         success_msg: "[OK] backup service notifies on success and failure"
 

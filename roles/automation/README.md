@@ -17,7 +17,8 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
   dump via the `firefly` user, and maintenance uses the image's built-in
   `unix_socket` auth: `docker exec -it mariadb mariadb`
 - **firefly-cron** (compose-internal): drives Firefly's recurring transactions
-- **Watchtower** (`:8084` on `primary_ip`, monitoring host only): nightly container updates, label-gated
+- **Watchtower** (`:8084` on `primary_ip`, monitoring host only): nightly container updates,
+  label-gated; self-updates via the ephemeral orchestrator
 - **cAdvisor** (`:8085` on `primary_ip`, monitoring host only): per-container CPU/memory/IO metrics
 - **Calibre-Web Automated** (`:8083` on `primary_ip`): ebook library - ingest,
   auto-convert, EPUB-fix, read in-browser and send to e-readers
@@ -164,9 +165,11 @@ restic_password: "{{ vault_restic_automation_password }}"
   `SHOW_PASSWORD_HINT=false` on Vaultwarden
 - **TRUSTED_PROXIES**: scoped to the tailnet CIDR (validate.yml refuses `**`)
 - **Watchtower**: opt-in per container (`com.centurylinklabs.watchtower.enable=true`);
-  MariaDB is pinned and unlabelled — DB upgrades are never automatic
+  MariaDB is pinned and unlabelled — DB upgrades are never automatic. Its own
+  image self-updates via the ephemeral orchestrator, so the published metrics port
+  does not disable self-update
 - **Ports**: service ports bound to `primary_ip` (tailnet-reachable), Watchtower
-  metrics API on `127.0.0.1` only
+  metrics API bound to `primary_ip` too
 - **Storage**: a dedicated SSD is optional, mirroring the dns role. When a drive
   is present (auto-detected, or already mounted at `automation_data_path`) the
   stack data, Docker's `data-root` and journald all live on it — off the SD card;

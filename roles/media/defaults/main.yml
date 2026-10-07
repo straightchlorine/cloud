@@ -67,6 +67,8 @@ media_compose_services:
       - "ND_BASEURL=https://{{ media_subdomain_navidrome }}.{{ domain_name }}"
       - "ND_JWTKEY=${NAVIDROME_JWT_SECRET}"
       - "ND_AUTOIMPORTPLAYLISTS=false"
+      # Anonymous usage/telemetry is opt-out (EnableInsightsCollector, default
+      # true) - keep it disabled (navidrome.org anonymous-data-collection).
       - "ND_ENABLEINSIGHTSCOLLECTOR=false"
       # The watcher picks up beets' moves; no scheduled scans needed.
       - "ND_SCANNER_WATCHERWAIT=10s"

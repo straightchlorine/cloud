@@ -13,6 +13,6 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
 fi
 
 if [ -f /var/run/reboot-required ]; then
-  ntfy-notify "$(hostname): Reboot pending" \
+  ntfy-notify "$(hostname): reboot pending" \
     "System will reboot at {{ common_auto_updates_reboot_time }} for pending updates." default warning
 fi

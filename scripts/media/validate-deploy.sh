@@ -117,14 +117,31 @@ else
 fi
 
 check_script /usr/local/bin/manage-media 755
-check_script /usr/local/bin/media-syncthing-backup 755
-for cron_job in "Media Syncthing local backup" "Reboot pending notification"; do
-  if sudo crontab -l -u root 2>/dev/null | grep -q "$cron_job"; then
-    note_ok "root cron: $cron_job"
+
+# The local snapshot script + its cron exist only when the local backup is
+# enabled (media_backup_enabled); key off the script, as scripts/dns does.
+if [ -e /usr/local/bin/media-syncthing-backup ]; then
+  check_script /usr/local/bin/media-syncthing-backup 755
+  if sudo crontab -l -u root 2>/dev/null | grep -qF -- "Media Syncthing local backup"; then
+    note_ok "root cron: Media Syncthing local backup"
   else
-    note_left "root cron missing: $cron_job"
+    note_left "root cron missing: Media Syncthing local backup"
   fi
-done
+else
+  note_ok "media-syncthing-backup + cron absent (media_backup_enabled false - optional, not a failure)"
+fi
+
+# The reboot cron exists only on hosts that deploy reboot-notify
+# (common_auto_updates_reboot_if_required: true).
+if [ -e /usr/local/bin/reboot-notify ]; then
+  if sudo crontab -l -u root 2>/dev/null | grep -qF -- "Reboot pending notification"; then
+    note_ok "root cron: Reboot pending notification"
+  else
+    note_left "root cron missing: Reboot pending notification"
+  fi
+else
+  note_ok "no reboot cron (host has no reboot-notify - optional)"
+fi
 
 echo "-- Containers --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
