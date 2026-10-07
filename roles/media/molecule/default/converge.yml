@@ -80,20 +80,22 @@
         name: media
         tasks_from: validate
 
-    - name: Run the stack deployment
-      ansible.builtin.include_role:
-        name: media
-        tasks_from: stack
-
     - name: Run the backup deployment
       ansible.builtin.include_role:
         name: media
         tasks_from: backup
 
     - name: Run the pipeline deployment
+      # main.yml runs the youtube pipeline BEFORE stack.yml; mirror that order here
+      # so a fresh deploy (no stack dirs yet) is actually exercised.
       ansible.builtin.include_role:
         name: media
         tasks_from: youtube
+
+    - name: Run the stack deployment
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: stack
 
     - name: Render the stack systemd unit
       # Rendered standalone so a broken template variable still fails CI.

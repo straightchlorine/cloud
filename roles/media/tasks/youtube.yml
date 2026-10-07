@@ -122,6 +122,21 @@
     common_app_update_hour: "0"
     common_app_update_minute: "30"
 
+- name: Create the pipeline config and script directories
+  # main.yml runs this pipeline BEFORE stack.yml, which is what normally creates
+  # the stack home. On a fresh host those dirs don't exist yet, so create the
+  # ones this file writes into (file state=directory also makes media_home).
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+  loop:
+    - "{{ media_home }}/config"
+    - "{{ media_home }}/scripts"
+
 - name: Write the yt-dlp configuration and playlist list
   ansible.builtin.copy:
     content: "{{ item.content }}"
