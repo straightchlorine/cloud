@@ -31,8 +31,8 @@
       - |
         cp "$STACK_HOME/.env" "$WORK/media.env"
       - |
-        if [ -f "{{ media_library_path }}/youtube-archive.txt" ]; then
-            cp "{{ media_library_path }}/youtube-archive.txt" "$WORK/"
+        if [ -f "{{ media_library_path }}/state/youtube-archive.txt" ]; then
+            cp "{{ media_library_path }}/state/youtube-archive.txt" "$WORK/"
         fi
   when: media_backup_enabled
 

@@ -3,10 +3,13 @@
 media_home: "/home/{{ ansible_user }}/stack"
 # media_library_path: required in host_vars (data path and SSD mount point).
 
-# sqlite3: beets DB snapshot; unzip: deno install.
+# sqlite3: beets DB snapshot; unzip: deno install; ffmpeg: yt-dlp's
+# extract-audio / embed-metadata / thumbnail-convert postprocessing (the beets
+# image ships its own ffmpeg for ReplayGain, but yt-dlp runs on the host).
 media_specific_packages:
   - sqlite3
   - unzip
+  - ffmpeg
 
 media_navidrome_port: 4545
 media_subdomain_navidrome: "navidrome"
@@ -31,6 +34,10 @@ media_library_directories:
   - beets
   - cache
   - logs
+  # Pipeline state (the yt-dlp download archive) - kept out of the /mnt/data
+  # root so the data path stays folders-only. Backed up by restic and the
+  # nightly snapshot (unlike cache/, which is excluded).
+  - state
 
 media_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
 media_ssd_filesystem: "ext4"

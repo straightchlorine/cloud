@@ -73,7 +73,7 @@ Any failed step sends `... failed` with the line number, at high priority.
                             config/yt-dlp.conf  config/playlists.txt (0600)
                             scripts/manage-media.sh  scripts/media-sync.sh
 /mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/
-                            cache/  logs/  youtube-archive.txt
+                            cache/  logs/  state/youtube-archive.txt
                             syncthing/backup/  docker/  journal/  backup-tmp/
 ```
 

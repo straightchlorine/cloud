@@ -127,7 +127,7 @@
       ansible.builtin.assert:
         that:
           - "'%(artist,uploader)s:%(artist)s' in ytdlp_conf"
-          - "'--download-archive \"/mnt/music/youtube-archive.txt\"' in ytdlp_conf"
+          - "'--download-archive \"/mnt/music/state/youtube-archive.txt\"' in ytdlp_conf"
           - "'media_library_path' not in ytdlp_conf"
         fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"
         success_msg: "[OK] yt-dlp.conf rendered with the tag rules and archive"

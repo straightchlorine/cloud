@@ -21,7 +21,7 @@ export_legacy() {
     # .backup is consistent against the running Navidrome.
     sudo sqlite3 -cmd '.timeout 10000' "$LIB/navidrome-data/navidrome.db" ".backup '$MIG/navidrome.db'"
     sqlite3 "$OLD_STACK/config/beets/library.db" ".backup '$MIG/beets-library.db'"
-    cp "$LIB/youtube-archive.txt" "$MIG/"
+    cp "$LIB/youtube-archive.txt" "$MIG/"  # legacy layout kept it at the data root
     grep '^NAVIDROME_JWT_SECRET=' "$OLD_STACK/.env" | cut -d= -f2- | tr -d '"' > "$MIG/navidrome_jwt_secret"
     sudo chown -R "$(id -un):" "$MIG"
     chmod 600 "$MIG/navidrome_jwt_secret"
@@ -41,7 +41,7 @@ restore_legacy() {
     for f in navidrome.db beets-library.db youtube-archive.txt navidrome_jwt_secret; do
         [ -f "$MIG/$f" ] || { echo "$MIG/$f missing - run export on the old Pi first" >&2; exit 1; }
     done
-    [ -d "$LIB/navidrome-data" ] && [ -d "$LIB/beets" ] && [ -d "$STACK" ] \
+    [ -d "$LIB/navidrome-data" ] && [ -d "$LIB/beets" ] && [ -d "$LIB/state" ] && [ -d "$STACK" ] \
         || { echo "role layout missing - deploy with -e common_start_stack=false first" >&2; exit 1; }
     if docker ps --format '{{.Names}}' | grep -qx navidrome; then
         echo "navidrome is running - restore needs it never started (common_start_stack=false)" >&2
@@ -58,7 +58,7 @@ restore_legacy() {
     sudo install -o "$((remap_uid + $(id -u)))" -g "$((remap_gid + $(id -g)))" -m 0644 \
         "$MIG/navidrome.db" "$LIB/navidrome-data/navidrome.db"
     install -m 0644 "$MIG/beets-library.db" "$LIB/beets/library.db"
-    install -m 0644 "$MIG/youtube-archive.txt" "$LIB/youtube-archive.txt"
+    install -m 0644 "$MIG/youtube-archive.txt" "$LIB/state/youtube-archive.txt"
     # The next deploy reads this into .env: existing logins stay valid.
     install -m 0600 "$MIG/navidrome_jwt_secret" "$STACK/.navidrome_jwt_secret"
 

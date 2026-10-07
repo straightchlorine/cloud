@@ -21,7 +21,7 @@ MUSIC = os.environ.get("MUSIC", "/mnt/data/music")
 DOWNLOADS = os.environ.get("DOWNLOADS", "/mnt/data/downloads")
 BEETS_DB = os.environ.get("BEETS_DB", "/mnt/data/beets/library.db")
 NAVIDROME_DB = os.environ.get("NAVIDROME_DB", "/mnt/data/navidrome-data/navidrome.db")
-ARCHIVE = os.environ.get("ARCHIVE", "/mnt/data/youtube-archive.txt")
+ARCHIVE = os.environ.get("ARCHIVE", "/mnt/data/state/youtube-archive.txt")
 TAG_SAMPLE = int(os.environ.get("TAG_SAMPLE", "400"))  # ffprobe is slow on a Pi 3
 SHOW = 25
 

@@ -27,7 +27,7 @@
 
 # Flat and transient: beets renames on import.
 --output "{{ media_library_path }}/downloads/%(artist)s - %(title)s [%(id)s].%(ext)s"
---download-archive "{{ media_library_path }}/youtube-archive.txt"
+--download-archive "{{ media_library_path }}/state/youtube-archive.txt"
 --cache-dir "{{ media_library_path }}/cache"
 
 --ignore-errors
