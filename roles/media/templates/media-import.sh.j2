@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# media-import - interactive beets import for the leftovers the quiet nightly
+# media-sync SKIPPED (it imports only clean MusicBrainz matches). This runs the
+# importer with quiet:no, so beets shows the candidates and asks per track.
+# Needs an interactive terminal.
+#
+#   media-import              import everything left in /downloads
+#   media-import /music       re-import the library in place
+#   media-import "<query>"    import only e.g. album:C418 (beets query)
+set -euo pipefail
+
+COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
+
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+    echo "media-import needs an interactive terminal - run it from a shell." >&2
+    exit 2
+fi
+
+exec "${COMPOSE[@]}" run --rm -it --entrypoint /lsiopy/bin/beet beets \
+    --config /config/interactive.yaml import "${1:-/downloads}"

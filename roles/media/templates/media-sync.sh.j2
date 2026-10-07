@@ -66,7 +66,9 @@ left="$(find "$LIB/downloads" -type f | wc -l)"
 
 summary="$(grep -cv '^\s*$' "{{ media_home }}/config/playlists.txt") playlist(s): $((new - left)) track(s) imported, $left left in downloads/, $errors unexpected yt-dlp error(s)."
 if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ]; then
-    notify "needs a look" "$summary See $LIB/logs/media-sync.log." default warning
+    notify "needs a look" \
+        "$summary Run 'media-import' to resolve what is left, interactively. See $LIB/logs/media-sync.log." \
+        default warning
 else
     notify done "$summary"
 fi

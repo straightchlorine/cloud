@@ -80,7 +80,7 @@
     mode: "0600"
   no_log: true
 
-- name: Write the beets config and the adopt overlay
+- name: Write the beets config, adopt and interactive overlays
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "{{ media_library_path }}/beets/{{ item }}"
@@ -90,6 +90,23 @@
   loop:
     - config.yaml
     - adopt.yaml
+    - interactive.yaml
+
+- name: Install the interactive import script
+  ansible.builtin.template:
+    src: media-import.sh.j2
+    dest: "{{ media_home }}/scripts/media-import.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Symlink media-import into PATH
+  ansible.builtin.file:
+    src: "{{ media_home }}/scripts/media-import.sh"
+    dest: /usr/local/bin/media-import
+    state: link
+    force: true
+  become: true
 
 - name: Render compose + .env and bring up the stack
   ansible.builtin.include_role:

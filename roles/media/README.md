@@ -38,13 +38,17 @@ Sun 04:15  media-sync --retag  retry MusicBrainz for the last 4 weeks' as-is imp
   `yt-dlp.conf` prefers YouTube Music's own artist/album/track, falls back to
   the channel, splits `Artist - Title` reposts, strips `(Official Video)`
   noise and `- Topic`/`VEVO` suffixes, and gives singles `album = title`.
-- **beets** imports each download as a singleton. A confident MusicBrainz
-  match adds MusicBrainz IDs, which give Navidrome stable IDs plus better
-  similar-songs and artist data. Otherwise beets keeps yt-dlp's tags
-  (`quiet_fallback: asis`), so nothing is left stranded in `downloads/`.
-  It also embeds **lyrics** (LRCLIB, synced when available) and
-  **ReplayGain** (R128 tags for Opus). Navidrome reads both. Duplicates are
-  never deleted; `beet duplicates` lists them.
+- **beets** imports each download as a singleton. Matches are drawn from
+  MusicBrainz and — via **chroma** + **musicbrainz** — from acoustic
+  fingerprints (AcoustID); a match adds MusicBrainz IDs plus **cover art**
+  (`fetchart`/`embedart`), and **lastgenre** fills in real genres. It also
+  embeds **lyrics** (LRCLIB, synced when available) and **ReplayGain** (R128
+  tags for Opus). Navidrome reads all of it. Duplicates are never deleted;
+  `beet duplicates` lists them.
+- **Two import modes.** The nightly `media-sync` is unattended
+  (`quiet_fallback: skip`): only clean matches are imported, and anything else
+  is left in `downloads/`. Run **`media-import`** (interactive, `quiet: no`) to
+  see the candidates and decide per track.
 - One playlist URL per line in `vault_youtube_playlists` (rendered to
   `config/playlists.txt`); each is downloaded separately and the download
   archive makes reruns cheap.

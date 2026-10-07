@@ -17,6 +17,7 @@
         - "{{ media_home }}/config/yt-dlp.conf"
         - /usr/local/bin/media-syncthing-backup
         - "{{ media_library_path }}/beets/adopt.yaml"
+        - "{{ media_library_path }}/beets/interactive.yaml"
       register: media_files
 
     - name: Parse the deployed files
@@ -28,6 +29,7 @@
         ytdlp_conf: "{{ media_files.results[4].content | b64decode }}"
         snapshot_script: "{{ media_files.results[5].content | b64decode }}"
         adopt: "{{ media_files.results[6].content | b64decode | from_yaml }}"
+        interactive: "{{ media_files.results[7].content | b64decode | from_yaml }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -40,6 +42,7 @@
         - "{{ media_library_path }}/navidrome-data"
         - "{{ media_library_path }}/music"
         - /tmp/molecule-media-backup
+        - /usr/local/bin/media-import
       register: media_stats
 
     - name: Assert the compose services
@@ -107,13 +110,20 @@
           - beets.library == '/config/library.db'
           - beets['import'].quiet
           - beets['import'].singletons
-          - beets['import'].quiet_fallback == 'asis'
+          - beets['import'].quiet_fallback == 'skip'
           - beets['import'].duplicate_action == 'keep'
-          - beets.plugins.split() | sort == ['duplicates', 'lyrics', 'replaygain']
+          - >-
+            beets.plugins.split() | sort ==
+            ['chroma', 'duplicates', 'embedart', 'fetchart', 'lastgenre',
+            'lyrics', 'musicbrainz', 'replaygain']
           - beets.replaygain.backend == 'ffmpeg'
           - beets.lyrics.synced
+          - beets.chroma.auto
+          - beets.lastgenre.force
+          - beets.fetchart.auto
+          - beets.embedart.auto
         fail_msg: "beets config wrong: {{ beets }}"
-        success_msg: "[OK] beets: quiet singleton import, as-is fallback, lyrics + ReplayGain"
+        success_msg: "[OK] beets: quiet, skip-unmatched, MB + chroma + lastgenre + covers + lyrics/gain"
 
     - name: Assert the adopt overlay leaves existing files untouched
       ansible.builtin.assert:
@@ -124,6 +134,16 @@
           - not adopt['import']['write']
         fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
         success_msg: "[OK] adopt overlay: no autotag, move, copy or write"
+
+    - name: Assert the interactive import overlay and script
+      ansible.builtin.assert:
+        that:
+          - not interactive['import']['quiet']
+          - media_stats.results[7].stat.islnk
+        fail_msg: >-
+          interactive overlay/script wrong: {{ interactive }} /
+          {{ media_stats.results[7].stat }}
+        success_msg: "[OK] media-import + interactive overlay (quiet:no) installed"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:

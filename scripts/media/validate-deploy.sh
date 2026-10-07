@@ -117,6 +117,7 @@ else
 fi
 
 check_script /usr/local/bin/manage-media 755
+check_script /usr/local/bin/media-import 755
 
 # The local snapshot script + its cron exist only when the local backup is
 # enabled (media_backup_enabled); key off the script, as scripts/dns does.

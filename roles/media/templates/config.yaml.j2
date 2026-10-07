@@ -9,8 +9,10 @@ import:
     write: yes
     # YouTube tracks are single songs, never whole releases.
     singletons: yes
-    # Without a MusicBrainz match, import with yt-dlp's tags instead of stranding the file in downloads/.
-    quiet_fallback: asis
+    # Unmatched tracks are SKIPPED and left in downloads/ so the nightly
+    # unattended run imports only clean MusicBrainz matches; run `media-import`
+    # (interactive) to resolve whatever is left.
+    quiet_fallback: skip
     duplicate_action: keep
     resume: no
     log: /config/import.log
@@ -21,7 +23,7 @@ paths:
     singleton: $artist/$title
     comp: Compilations/$album%aunique{}/%if{$track,$track }$title
 
-plugins: lyrics replaygain duplicates
+plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart
 
 lyrics:
     auto: yes
@@ -35,3 +37,30 @@ replaygain:
     auto: yes
     backend: ffmpeg
     threads: 2
+
+# Acoustic fingerprinting (Chromaprint/AcoustID, resolved through MusicBrainz):
+# matches by how the audio sounds, so popular tracks resolve even when the text
+# tags alone yield no autotagger candidate. Requires fpcalc + pyacoustid (both
+# ship in the linuxserver/beets image); imports get slower (fingerprinting is
+# CPU-heavy on a Pi).
+chroma:
+    auto: yes
+
+# Genres from Last.fm (whitelist-filtered). force: yes replaces yt-dlp's useless
+# "Music" genre with real ones; count keeps a few, comma-separated.
+lastgenre:
+    auto: yes
+    force: yes
+    count: 3
+
+# Official cover art from the Cover Art Archive (reached via the MusicBrainz
+# match), which replaces yt-dlp's video thumbnail; embedart writes the chosen
+# art back into the file. Sources are tried in order.
+fetchart:
+    auto: yes
+    sources:
+        - coverart
+        - itunes
+embedart:
+    auto: yes
+    maxwidth: 1200
