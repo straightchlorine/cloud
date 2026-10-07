@@ -18,6 +18,7 @@
         - /usr/local/bin/media-syncthing-backup
         - "{{ media_library_path }}/beets/adopt.yaml"
         - "{{ media_library_path }}/beets/interactive.yaml"
+        - "{{ media_library_path }}/beets/album.yaml"
       register: media_files
 
     - name: Parse the deployed files
@@ -30,6 +31,7 @@
         snapshot_script: "{{ media_files.results[5].content | b64decode }}"
         adopt: "{{ media_files.results[6].content | b64decode | from_yaml }}"
         interactive: "{{ media_files.results[7].content | b64decode | from_yaml }}"
+        album: "{{ media_files.results[8].content | b64decode | from_yaml }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -43,6 +45,7 @@
         - "{{ media_library_path }}/music"
         - /tmp/molecule-media-backup
         - /usr/local/bin/media-import
+        - /usr/local/bin/media-import-album
       register: media_stats
 
     - name: Assert the compose services
@@ -111,6 +114,7 @@
           - beets['import'].quiet
           - beets['import'].singletons
           - beets['import'].quiet_fallback == 'skip'
+          - beets.match.distance_weights.source == 0
           - beets['import'].duplicate_action == 'keep'
           - >-
             beets.plugins.split() | sort ==
@@ -135,15 +139,17 @@
         fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
         success_msg: "[OK] adopt overlay: no autotag, move, copy or write"
 
-    - name: Assert the interactive import overlay and script
+    - name: Assert the album overlay and both import scripts
       ansible.builtin.assert:
         that:
           - not interactive['import']['quiet']
+          - not album['import']['singletons']
           - media_stats.results[7].stat.islnk
+          - media_stats.results[8].stat.islnk
         fail_msg: >-
-          interactive overlay/script wrong: {{ interactive }} /
-          {{ media_stats.results[7].stat }}
-        success_msg: "[OK] media-import + interactive overlay (quiet:no) installed"
+          overlays/scripts wrong: {{ interactive }} / {{ album }} /
+          {{ media_stats.results[7].stat }} / {{ media_stats.results[8].stat }}
+        success_msg: "[OK] media-import (+ interactive overlay) and media-import-album (+ album overlay)"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:

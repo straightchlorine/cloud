@@ -45,10 +45,13 @@ Sun 04:15  media-sync --retag  retry MusicBrainz for the last 4 weeks' as-is imp
   embeds **lyrics** (LRCLIB, synced when available) and **ReplayGain** (R128
   tags for Opus). Navidrome reads all of it. Duplicates are never deleted;
   `beet duplicates` lists them.
-- **Two import modes.** The nightly `media-sync` is unattended
-  (`quiet_fallback: skip`): only clean matches are imported, and anything else
-  is left in `downloads/`. Run **`media-import`** (interactive, `quiet: no`) to
-  see the candidates and decide per track.
+- **Import paths.** The nightly `media-sync` is unattended
+  (`quiet_fallback: skip`): it imports only the singleton matches it deems
+  strong, and leaves the rest in `downloads/`. Run **`media-import`** when you
+  have time — it does an **album (release) pass first** (whole albums matched to
+  a MusicBrainz release, with their track numbers) and then an **interactive
+  singleton pass** over whatever is left, asking per track.
+  **`media-import-album`** runs just the album pass (e.g. for a full ripped CD).
 - One playlist URL per line in `vault_youtube_playlists` (rendered to
   `config/playlists.txt`); each is downloaded separately and the download
   archive makes reruns cheap.

@@ -17,6 +17,15 @@ import:
     resume: no
     log: /config/import.log
 
+# Match tuning: a freshly-imported item has no data source, so it always
+# "differs" from the MusicBrainz candidate and picks up a fixed ~0.11 penalty -
+# enough to push even a perfect match above strong_rec_thresh (0.04) and get it
+# skipped in quiet mode. Ignore the source component; a correct match then scores
+# ~100% and is applied, while ambiguous candidates stay below the bar.
+match:
+    distance_weights:
+        source: 0
+
 # Navidrome groups by tags only; paths just keep music/ browsable.
 paths:
     default: $albumartist/$album%aunique{}/%if{$track,$track }$title
