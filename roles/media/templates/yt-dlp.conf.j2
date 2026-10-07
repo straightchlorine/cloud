@@ -19,6 +19,9 @@
 # single instead of one "[Unknown Album]" per artist.
 --parse-metadata "%(album,title)s:%(album)s"
 --parse-metadata "%(artist)s:%(album_artist)s"
+# Keep the source link in the comment tag (shows in Navidrome's Info panel);
+# filenames stay lean, the link lives in the metadata.
+--parse-metadata "%(webpage_url)s:%(comment)s"
 --embed-metadata
 
 # jpg embeds in every container.
@@ -29,6 +32,11 @@
 --output "{{ media_library_path }}/downloads/%(artist)s - %(title)s [%(id)s].%(ext)s"
 --download-archive "{{ media_library_path }}/state/youtube-archive.txt"
 --cache-dir "{{ media_library_path }}/cache"
+
+# YouTube's JS challenges need a runtime; pin deno's path from youtube.yml so it
+# is found regardless of the invoking PATH (yt-dlp otherwise warns "No supported
+# JavaScript runtime could be found" and may drop some formats).
+--js-runtimes "deno:/usr/local/bin/deno"
 
 --ignore-errors
 --no-abort-on-error

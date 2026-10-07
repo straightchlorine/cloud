@@ -120,10 +120,14 @@ media_compose_services:
     service_restart: "no"
     service_profiles:
       - tools
-    # Runs userns-remapped like navidrome: linuxserver/s6-overlay cannot start
-    # under userns_mode:host on a userns-remapped daemon (its SUID preinit can't
-    # chown /run). One-off CLI only - media-sync bypasses /init via --entrypoint
-    # so the beets web UI never starts, and this user: directive sets the uid.
+    # userns_mode:host so beets runs as the REAL stack uid (= media_uid), the
+    # same uid yt-dlp writes the host's downloads/ as. Userns-remapped, beets
+    # could read /downloads but not rename out of it, so imports failed with
+    # "Permission denied while moving". The image's s6 /init (the reason the
+    # earlier revision avoided userns_mode:host) is bypassed - media-sync uses
+    # --entrypoint - so no SUID preinit runs. music/, beets/ and downloads/ are
+    # owned by the stack uid to match (see stack.yml).
+    service_userns_mode: "host"
     service_user: "{{ media_uid }}:{{ media_gid }}"
     service_environment:
       - "TZ={{ timezone }}"

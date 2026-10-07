@@ -24,18 +24,20 @@
     - "{{ media_home }}/scripts"
 
 - name: Create the library data directories
-  # Containers run userns-remapped (host uid dockremap + media_uid): navidrome
-  # owns navidrome-data and beets owns music/ + beets/. Only navidrome-data
-  # recurses; walking the library is slow.
+  # navidrome runs userns-remapped (host uid dockremap + media_uid) and owns
+  # navidrome-data. beets runs userns_mode:host as the real stack uid so it can
+  # move the files yt-dlp wrote on the host, so music/, beets/ and downloads/
+  # stay owned by ansible_user. Only navidrome-data recurses; walking the
+  # library is slow.
   ansible.builtin.file:
     path: "{{ media_library_path }}/{{ item }}"
     state: directory
     owner: >-
       {{ ((common_dockremap_uid | int) + (media_uid | int))
-      if item in ['navidrome-data', 'music', 'beets'] else ansible_user }}
+      if item == 'navidrome-data' else ansible_user }}
     group: >-
       {{ ((common_dockremap_gid | int) + (media_gid | int))
-      if item in ['navidrome-data', 'music', 'beets'] else ansible_user }}
+      if item == 'navidrome-data' else ansible_user }}
     mode: "0755"
     recurse: "{{ item == 'navidrome-data' }}"
   become: true
