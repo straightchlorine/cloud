@@ -146,9 +146,11 @@
         that:
           - not interactive['import']['quiet']
           - not album['import']['singletons']
-          - album.match.distance_weights.year == 0
+          - "'year' not in album.match.distance_weights"
           - album.match.distance_weights.missing_tracks == 0
           - "'unmatched_tracks' not in album.match.distance_weights"
+          - album.match.preferred.media == ['Digital Media', 'CD']
+          - album.match.preferred.original_year
           - "'unmatched_tracks' not in album.match.max_rec"
           - album.match.max_rec.missing_tracks == 'strong'
           - album.original_date

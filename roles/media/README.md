@@ -49,17 +49,19 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   (R128 tags for Opus). Navidrome reads all of it. Duplicates are never
   deleted; `beet duplicates` lists them.
 - **Partial sets are accepted, sloppy groups are not.** A YouTube rip is one
-  track taken out of a release, so `album.yaml` zeroes the weights for what
+  track taken out of a release, so `album.yaml` zeroes the weight for what
   YouTube cannot know — `missing_tracks` (one track of a 30-track release is not
-  "29 tracks missing") and `year` (yt-dlp stamps the *upload* date, not the
-  release date) — and `config.yaml` zeroes `data_source`. `unmatched_tracks` is
-  deliberately left at its default: a group holding files the release does *not*
-  have is a bad group (e.g. a playlist where every file shares one album tag),
-  and that penalty is what steers the match to the release that actually
-  contains the files rather than a reissue missing a third of them. That is also
-  why the release pass runs **one file at a time** — a shared album tag cannot
-  lump unrelated tracks into one album. The year written is the release group's
-  **original** year (`original_date`), not the matched pressing's.
+  "29 tracks missing") — and `config.yaml` zeroes `data_source`. `unmatched_tracks`
+  is deliberately left at its default: a group holding files the release does *not*
+  have is a bad group (e.g. a playlist where every file shares one album tag), and
+  that penalty is what steers the match to the release that actually contains the
+  files. That is also why the release pass runs **one file at a time** — a shared
+  album tag cannot lump unrelated tracks into one album. And because every
+  pressing containing a track scores identically, `preferred` picks the winner:
+  **Digital Media** then **CD** (never a cassette/vinyl reissue) and the
+  **earliest** release of the group, so all tracks of an album land on the same
+  edition. The year written is the release group's **original** year
+  (`original_date`), not the matched pressing's.
 - **Import paths.** The nightly `media-sync` is unattended
   (`quiet_fallback: skip`): release pass then singleton pass, applying only what
   beets deems a strong match and leaving the rest in `downloads/`. Run

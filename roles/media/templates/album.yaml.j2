@@ -15,14 +15,21 @@ import:
 # track title, track length - keep their defaults.
 match:
     distance_weights:
-        # yt-dlp writes the video's UPLOAD date, which is not the release year:
-        # a 2013 album uploaded in 2026 takes a full year penalty, enough on its
-        # own to sink an otherwise perfect one-track match. The release year is
-        # what MusicBrainz returns, so the upload date is replaced either way.
-        year: 0
         # One track of a 30-track release is not "29 tracks missing": missing
         # tracks are exactly what a partial album means.
         missing_tracks: 0
+    preferred:
+        # Digital Media first, CD second, anything else last: a cassette/vinyl
+        # reissue must never win. (The 2015 CD of Volume Alpha lost to the 2011
+        # digital release this way.)
+        media: ['Digital Media', 'CD']
+        # Prefer the EARLIEST release of the group. Every pressing that contains
+        # the track scores identically, so without this the winner is arbitrary -
+        # and tracks of one album then land on different editions, with different
+        # titles, splitting one album into several in Navidrome. This also routes
+        # the year through `album_info`, so yt-dlp's upload date never takes part
+        # in the distance and no `year: 0` override is needed.
+        original_year: yes
     # `unmatched_tracks` is deliberately LEFT at its default (0.6). It is the
     # opposite signal, and the useful one: a group holding files the release does
     # NOT have is a bad group (a playlist where every file shares one album tag),
