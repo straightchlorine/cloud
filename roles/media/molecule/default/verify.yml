@@ -114,7 +114,7 @@
           - beets['import'].quiet
           - beets['import'].singletons
           - beets['import'].quiet_fallback == 'skip'
-          - beets.match.distance_weights.source == 0
+          - beets.match.distance_weights.data_source == 0
           - beets['import'].duplicate_action == 'keep'
           - >-
             beets.plugins.split() | sort ==
