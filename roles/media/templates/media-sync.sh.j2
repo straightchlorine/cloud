@@ -15,10 +15,29 @@ COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
 # --entrypoint skips /init (and the beets web UI) so each run is a one-off that
 # exits; service_user sets the uid so beets' moves and tag writes stay owned by
 # the remapped stack user.
-BEET=("${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/beet beets)
+# PYTHONUNBUFFERED: without a TTY stdout is block-buffered, so a long album
+# pass looks dead while it works.
+BEET=("${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+    --entrypoint /lsiopy/bin/beet beets)
 
 notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
 count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
+
+# Give already-imported bare tracks their release. beets only applies RELEASE
+# metadata during an album import, and `beet import -L` re-imports the library
+# item as whatever it already is - a singleton stays a singleton, so the track
+# match is a no-op (beets' own SingletonImportTask: "a single track that is not
+# associated to an album"). So hand the FILES to the importer instead: drop the
+# rows (no -d, the files stay on disk), then import those paths in album mode.
+# Anything that finds no release stays untracked but keeps playing; re-register
+# it with `media-sync --adopt`. Optional beets query as "$@".
+upgrade_releases() {
+    local files
+    mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' "$@")
+    [ -n "${files[*]:-}" ] || return 0
+    "${BEET[@]}" remove -f 'mb_albumid::^$' "$@"
+    "${BEET[@]}" --config /config/album.yaml import "${files[@]}"
+}
 
 exec 9>"$LIB/logs/.media-sync.lock"
 flock -n 9 || { echo "media-sync already running"; exit 0; }
@@ -34,16 +53,15 @@ case "$MODE" in
         "${BEET[@]}" import -L 'mb_trackid::^$' added:-4w..
         after="$(count 'mb_trackid::^$' added:-4w..)"
         # A track match can never carry the release (year, release ID, cover
-        # art), so push the recent matches through the ALBUM pass too. Same
-        # window as above.
+        # art), so give the recent matches their release too. Same window.
         albums_before="$(count 'mb_albumid::^$' added:-4w..)"
-        "${BEET[@]}" --config /config/album.yaml import -L 'mb_albumid::^$' added:-4w..
+        upgrade_releases added:-4w..
         albums_after="$(count 'mb_albumid::^$' added:-4w..)"
         notify done "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $((albums_before - albums_after)) of $albums_before got a release."
         exit 0 ;;
     --upgrade)
-        # The album pass above, on demand: give tracks that were imported as
-        # bare tracks their release (year, release ID, label, track numbers,
+        # The release half of --retag, on demand: give tracks that were imported
+        # as bare tracks their release (year, release ID, label, track numbers,
         # Cover Art Archive art). Narrow it with a beets query, or pass `all`.
         case "${2:-}" in
             all) scope=() ;;
@@ -51,9 +69,9 @@ case "$MODE" in
             *) scope=("$2") ;;
         esac
         before="$(count 'mb_albumid::^$' "${scope[@]}")"
-        "${BEET[@]}" --config /config/album.yaml import -L 'mb_albumid::^$' "${scope[@]}"
+        upgrade_releases "${scope[@]}"
         after="$(count 'mb_albumid::^$' "${scope[@]}")"
-        notify done "$((before - after)) of $before track(s) upgraded with release metadata."
+        notify done "$((before - after)) of $before track(s) got a release; the rest found no MusicBrainz release and can be re-registered with 'media-sync --adopt'."
         exit 0 ;;
     --adopt)
         "${BEET[@]}" -c /config/adopt.yaml import /music
@@ -83,11 +101,18 @@ errors="$(grep '^ERROR:' "$run_log" \
 
 new="$(find "$LIB/downloads" -type f | wc -l)"
 if [ "$new" -gt 0 ]; then
-    # ALBUM (release) pass first: whatever maps to a MusicBrainz release gets the
-    # whole release - real year, release ID, label, track numbers and Cover Art
-    # Archive art (fetchart only runs for releases). Partial sets and true
-    # singles find no release and stay put for the pass below.
-    "${BEET[@]}" --config /config/album.yaml import /downloads
+    # ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
+    # many files can share one (or the wrong) album tag; a group like that holds
+    # tracks the release does not have, which beets scores badly - and rightly so.
+    # Judging each file on its own lets the release that actually CONTAINS the
+    # track win, so it gets the album year, release ID, track number and Cover Art
+    # Archive art (fetchart only runs for releases, so a singleton never gets it).
+    # A track whose "album" does not contain it is refused and falls through.
+    "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
+        for track in /downloads/*; do
+            [ -f "$track" ] || continue
+            /lsiopy/bin/beet --config /config/album.yaml import "$track"
+        done'
     # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
     # lookup carries no album-level metadata by design, so this is the fallback.
     "${BEET[@]}" import /downloads

@@ -148,25 +148,26 @@
           - not album['import']['singletons']
           - album.match.distance_weights.year == 0
           - album.match.distance_weights.missing_tracks == 0
-          - album.match.distance_weights.unmatched_tracks == 0
+          - "'unmatched_tracks' not in album.match.distance_weights"
+          - "'unmatched_tracks' not in album.match.max_rec"
           - album.match.max_rec.missing_tracks == 'strong'
-          - album.match.max_rec.unmatched_tracks == 'strong'
+          - album.original_date
           - media_stats.results[7].stat.islnk
           - media_stats.results[8].stat.islnk
         fail_msg: >-
           overlays/scripts wrong: {{ interactive }} / {{ album }} /
           {{ media_stats.results[7].stat }} / {{ media_stats.results[8].stat }}
-        success_msg: "[OK] album overlay: partial releases accepted, wrong ones still rejected"
+        success_msg: "[OK] album overlay: partial releases accepted, unmatched tracks kept as the guard"
 
     - name: Assert the nightly script takes the release pass before the singleton pass
       ansible.builtin.assert:
         that:
-          - "'--config /config/album.yaml import /downloads' in media_sync"
+          - "'/config/album.yaml import \"$track\"' in media_sync"
           - >-
-            media_sync.index('--config /config/album.yaml import /downloads')
+            media_sync.index('/config/album.yaml import "$track"')
             < media_sync.index('" import /downloads')
         fail_msg: "media-sync import order wrong:\n{{ media_sync }}"
-        success_msg: "[OK] media-sync: release pass, then singleton pass"
+        success_msg: "[OK] media-sync: per-file release pass, then singleton pass"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:

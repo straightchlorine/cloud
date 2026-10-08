@@ -12,9 +12,7 @@ import:
 # not be punished for what YouTube never told us. Each weight zeroed here is a
 # "we cannot know this" component (`data_source` is zeroed in config.yaml for
 # the same reason); the components that carry real signal - album name, artist,
-# track title, track length - keep their defaults, and that is what still keeps
-# a WRONG release out: an album-name mismatch alone scores ~89%, far outside
-# strong_rec_thresh (0.04).
+# track title, track length - keep their defaults.
 match:
     distance_weights:
         # yt-dlp writes the video's UPLOAD date, which is not the release year:
@@ -22,12 +20,21 @@ match:
         # own to sink an otherwise perfect one-track match. The release year is
         # what MusicBrainz returns, so the upload date is replaced either way.
         year: 0
-        # One track of a 30-track release is not "29 tracks missing".
+        # One track of a 30-track release is not "29 tracks missing": missing
+        # tracks are exactly what a partial album means.
         missing_tracks: 0
-        unmatched_tracks: 0
-    # Belt and braces. A zero weight already drops these from `Distance.keys()`
-    # (items() only reports non-zero penalties), so the max-rec downgrade cannot
-    # fire - pinned in case a future beets changes that.
+    # `unmatched_tracks` is deliberately LEFT at its default (0.6). It is the
+    # opposite signal, and the useful one: a group holding files the release does
+    # NOT have is a bad group (a playlist where every file shares one album tag),
+    # and the penalty is what steers the match to the release that actually
+    # contains our files rather than, say, a reissue missing a third of them.
+    # Belt and braces for the zero weight: it already drops `missing_tracks` from
+    # `Distance.keys()` (items() only reports non-zero penalties), so the max-rec
+    # downgrade cannot fire - pinned in case a future beets changes that.
     max_rec:
         missing_tracks: strong
-        unmatched_tracks: strong
+
+# Write the album's ORIGINAL year - the release group's first release - and not
+# the year of whichever pressing the match landed on, so a track from a 2013
+# album cannot inherit a 2025 reissue's year.
+original_date: yes

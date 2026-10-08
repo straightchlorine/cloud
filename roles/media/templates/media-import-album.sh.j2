@@ -11,5 +11,9 @@ set -euo pipefail
 
 COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
 
-exec "${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/beet beets \
+# PYTHONUNBUFFERED: a release pass makes several rate-limited MusicBrainz calls
+# per album, so without a TTY (block-buffered stdout) it looks dead while it
+# works.
+exec "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+    --entrypoint /lsiopy/bin/beet beets \
     --config /config/album.yaml import "${1:-/downloads}"

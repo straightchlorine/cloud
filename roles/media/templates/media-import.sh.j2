@@ -23,7 +23,15 @@ if [ ! -t 0 ] || [ ! -t 1 ]; then
 fi
 
 echo "== media-import: album (release) pass =="
-"${BEET[@]}" --config /config/album.yaml import "$TARGET" || true
+# One FILE at a time: a shared or wrong album tag over many files groups
+# unrelated tracks into one "album", and beets scores such a group against the
+# tracks the release does not have. Per file, the release that actually contains
+# the track wins. See album.yaml.
+"${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
+    for track in "$1"/*; do
+        [ -f "$track" ] || continue
+        /lsiopy/bin/beet --config /config/album.yaml import "$track"
+    done' media-import "$TARGET" || true
 
 echo "== media-import: singleton pass =="
 exec "${BEET[@]}" --config /config/interactive.yaml import "$TARGET"

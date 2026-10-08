@@ -38,23 +38,28 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   `yt-dlp.conf` prefers YouTube Music's own artist/album/track, falls back to
   the channel, splits `Artist - Title` reposts, strips `(Official Video)`
   noise and `- Topic`/`VEVO` suffixes, and gives singles `album = title`.
-- **beets** imports each download in two passes: an **album (release) pass**
-  first, which matches the file to a whole MusicBrainz release (the real album
-  year, release ID, label, track number and **Cover Art Archive art**), then a
-  **singleton pass** for whatever has no release — a track lookup carries no
-  album-level metadata by design, so it can never supply the year or the art.
+- **beets** imports each download in two passes: a **release pass** first, one
+  **file at a time**, matching it to a whole MusicBrainz release (the original
+  album year, release ID, label, track number and **Cover Art Archive art**),
+  then a **singleton pass** for whatever has no release — a track lookup carries
+  no album-level metadata by design, so it can never supply the year or the art.
   Matches are drawn from MusicBrainz and — via **chroma** + **musicbrainz** —
   from acoustic fingerprints (AcoustID); **lastgenre** fills in real genres. It
   also embeds **lyrics** (LRCLIB, synced when available) and **ReplayGain**
   (R128 tags for Opus). Navidrome reads all of it. Duplicates are never
   deleted; `beet duplicates` lists them.
-- **Partial sets are accepted.** A YouTube rip is one track taken out of a
-  release, so the release pass ignores what YouTube cannot know: `album.yaml`
-  zeroes the `missing_tracks`, `unmatched_tracks` and `year` weights (the upload
-  date is not the release year) and `config.yaml` zeroes `data_source`. One
-  track of a 30-track release therefore still matches the release, while a
-  *wrong* release is still rejected — an album-name mismatch alone scores ~89%,
-  against `strong_rec_thresh: 0.04`.
+- **Partial sets are accepted, sloppy groups are not.** A YouTube rip is one
+  track taken out of a release, so `album.yaml` zeroes the weights for what
+  YouTube cannot know — `missing_tracks` (one track of a 30-track release is not
+  "29 tracks missing") and `year` (yt-dlp stamps the *upload* date, not the
+  release date) — and `config.yaml` zeroes `data_source`. `unmatched_tracks` is
+  deliberately left at its default: a group holding files the release does *not*
+  have is a bad group (e.g. a playlist where every file shares one album tag),
+  and that penalty is what steers the match to the release that actually
+  contains the files rather than a reissue missing a third of them. That is also
+  why the release pass runs **one file at a time** — a shared album tag cannot
+  lump unrelated tracks into one album. The year written is the release group's
+  **original** year (`original_date`), not the matched pressing's.
 - **Import paths.** The nightly `media-sync` is unattended
   (`quiet_fallback: skip`): release pass then singleton pass, applying only what
   beets deems a strong match and leaving the rest in `downloads/`. Run
@@ -62,10 +67,14 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   pass is **interactive** and asks per track. **`media-import-album`** runs just
   the release pass (e.g. for a full ripped CD).
 - **Retagging.** `media-sync --retag` (weekly) retries MusicBrainz for the last
-  4 weeks' unmatched imports *and* pushes the recent track matches through the
-  release pass. `media-sync --upgrade [all|<query>]` runs that second part on
-  demand — the last 4 weeks by default, `all` for the whole library — which is
-  how already-imported tracks get their release year and cover art.
+  4 weeks' unmatched imports *and* gives the recent bare tracks their release;
+  `media-sync --upgrade [all|<query>]` runs that second part on demand — the
+  last 4 weeks by default, `all` for the whole library. beets only applies
+  release metadata during an album import, and a library item stored as a
+  singleton re-imports as a singleton (`beet import -L` is a no-op for it), so
+  both drop those items' rows — the files stay on disk — and hand the **files**
+  back to the release pass. A file that finds no MusicBrainz release stays
+  untracked but keeps playing; `media-sync --adopt` re-registers it.
 - One playlist URL per line in `vault_youtube_playlists` (rendered to
   `config/playlists.txt`); each is downloaded separately and the download
   archive makes reruns cheap.
