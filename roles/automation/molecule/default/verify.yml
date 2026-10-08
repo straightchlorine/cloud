@@ -246,11 +246,13 @@
       ansible.builtin.assert:
         that:
           - item.stat.isdir
-          # The converge fixture remap base is 10000; firefly's www-data adds 33.
+          # The converge fixture remap base is 10000 and its PUID/PGID is 0
+          # (ansible_user: root), so calibre's mapped base+uid lands on 10000
+          # too; firefly's www-data adds 33 to the base.
           - item.stat.uid == (10033 if item.item == 'firefly/upload' else 10000)
           - item.stat.gid == (10033 if item.item == 'firefly/upload' else 10000)
         fail_msg: "/mnt/data/{{ item.item }} owned by {{ item.stat.uid }}:{{ item.stat.gid }}"
-        success_msg: "[OK] /mnt/data/{{ item.item }} owned by the remap range"
+        success_msg: "[OK] /mnt/data/{{ item.item }} owned by its expected remap-range uid/gid"
       loop: "{{ automation_data_dirs.results }}"
       loop_control:
         label: "{{ item.item }}"

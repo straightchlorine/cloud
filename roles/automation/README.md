@@ -33,7 +33,14 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
   deleted after processing - ideal as a Syncthing folder for drop-from-phone
   ingestion (a deliberate follow-up, not wired by default)
 - Runs as the stack user (`PUID`/`PGID` resolved on-host from `ansible_user`),
-  never root - root-owned library files break ingestion
+  never root - root-owned library files break ingestion. The role seeds the
+  three mounts owned by the *host-side mapping* of `PUID`/`PGID` (dockremap
+  base + stack uid), not by the remap base itself: `cps.py` reopens its SQLite
+  databases per request, so re-owning a live container's files to the base
+  would leave them writable only by container-root and each book page would
+  500 on `sqlite3.OperationalError: attempt to write a readonly database`
+  until the container restarts (a stopped container is chowned by CWA's init
+  either way). The post-deploy check probes the mounts as `abc`, not root.
 - **Synced live to other devices** via a dedicated send-only Syncthing folder on
   `/mnt/data/calibre` (id `calibre`): books, covers, metadata sidecars and the
   non-database config reach the peer within seconds of ingest, with no second

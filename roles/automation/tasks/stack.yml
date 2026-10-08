@@ -28,9 +28,10 @@
 
 - name: Create data directories owned by Docker's userns-remap range
   # Under userns-remap, container root is common_dockremap_uid/gid and can only
-  # chown directories it owns. mariadb and calibre chown their bind mounts at
-  # startup, and vaultwarden matches no other uid - so these dirs must start
-  # owned by the remap range, including after a teardown that keeps the data.
+  # chown ids that map into its own namespace. vaultwarden runs as that root
+  # outright, and mariadb chowns its datadir to the image's mysql user at
+  # startup - so these dirs must start owned by the remap range, including
+  # after a teardown that keeps the data.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
@@ -42,6 +43,28 @@
   loop:
     - vaultwarden
     - mariadb
+
+- name: Create the Calibre data directories owned by the remap-mapped PUID/PGID
+  # Different owner on purpose: CWA's init chowns /config, /cwa-book-ingest and
+  # /calibre-library to abc (PUID/PGID) at every container start, and cps.py -
+  # running as abc - then reopens its SQLite databases per request. Unlike
+  # mariadb it holds no write fds across the day, so a recursive chown back to
+  # the remap base while the stack is live leaves every file writable only by
+  # container-root and each book page 500s on sqlite3 "attempt to write a
+  # readonly database" until the container restarts. Owning the dirs as the
+  # HOST-side mapping of PUID/PGID (dockremap base + stack uid) keeps a live
+  # abc writable, while a stopped/new container is unaffected: CWA's init
+  # re-chowns either way, since only ids inside the container's namespace are
+  # chownable from within it at all.
+  ansible.builtin.file:
+    path: "{{ automation_data_path }}/{{ item }}"
+    state: directory
+    owner: "{{ (common_dockremap_uid | int) + (automation_stack_uid | int) }}"
+    group: "{{ (common_dockremap_gid | int) + (automation_stack_gid | int) }}"
+    mode: "0755"
+    recurse: true
+  become: true
+  loop:
     - calibre/config
     - calibre/ingest
     - calibre/library

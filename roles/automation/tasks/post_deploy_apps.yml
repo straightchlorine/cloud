@@ -67,6 +67,21 @@
   delay: 3
   tags: [post_validation]
 
+- name: Verify Calibre-Web Automated can write its data mounts
+  # The UI check above only proves the Flask listener answers - cps.py opens
+  # its SQLite databases on every request, so a host/container uid mismatch
+  # turns each book page into a 500 ("attempt to write a readonly database")
+  # while "/" still redirects to the login page. Probe as the container's app
+  # user (abc honours PUID), not root: root writes through the mismatch.
+  ansible.builtin.command: >-
+    docker compose -f {{ automation_stack_home }}/docker-compose.yml
+    exec -T -u abc calibre-web-automated sh -c
+    'test -w /config && test -w /cwa-book-ingest && test -w /calibre-library'
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  tags: [post_validation]
+
 - name: Verify MariaDB answers ping
   # root@localhost has no known password (MARIADB_RANDOM_ROOT_PASSWORD is never
   # captured), so authenticate as the vault-managed firefly user instead. MYSQL_PWD
