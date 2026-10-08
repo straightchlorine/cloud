@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #   media-sync             download + import (nightly cron)
 #   media-sync --retag     retry MusicBrainz for recent as-is imports (weekly)
+#   media-sync --upgrade   pull release metadata for tracks imported as bare
+#                          tracks (default: the last 4 weeks, `all`: whole
+#                          library - see the case below)
 #   media-sync --adopt     one-time: register the existing music/ with beets
 #   media-sync --backfill  one-time: lyrics + ReplayGain for adopted tracks
 #                          (slow - run it under tmux)
@@ -30,7 +33,27 @@ case "$MODE" in
         before="$(count 'mb_trackid::^$' added:-4w..)"
         "${BEET[@]}" import -L 'mb_trackid::^$' added:-4w..
         after="$(count 'mb_trackid::^$' added:-4w..)"
-        notify done "$((before - after)) of $before recent as-is track(s) matched MusicBrainz."
+        # A track match can never carry the release (year, release ID, cover
+        # art), so push the recent matches through the ALBUM pass too. Same
+        # window as above.
+        albums_before="$(count 'mb_albumid::^$' added:-4w..)"
+        "${BEET[@]}" --config /config/album.yaml import -L 'mb_albumid::^$' added:-4w..
+        albums_after="$(count 'mb_albumid::^$' added:-4w..)"
+        notify done "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $((albums_before - albums_after)) of $albums_before got a release."
+        exit 0 ;;
+    --upgrade)
+        # The album pass above, on demand: give tracks that were imported as
+        # bare tracks their release (year, release ID, label, track numbers,
+        # Cover Art Archive art). Narrow it with a beets query, or pass `all`.
+        case "${2:-}" in
+            all) scope=() ;;
+            '') scope=(added:-4w..) ;;
+            *) scope=("$2") ;;
+        esac
+        before="$(count 'mb_albumid::^$' "${scope[@]}")"
+        "${BEET[@]}" --config /config/album.yaml import -L 'mb_albumid::^$' "${scope[@]}"
+        after="$(count 'mb_albumid::^$' "${scope[@]}")"
+        notify done "$((before - after)) of $before track(s) upgraded with release metadata."
         exit 0 ;;
     --adopt)
         "${BEET[@]}" -c /config/adopt.yaml import /music
@@ -43,7 +66,7 @@ case "$MODE" in
         exit 0 ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--adopt|--backfill]"; exit 2 ;;
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--adopt|--backfill]"; exit 2 ;;
 esac
 
 mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
@@ -60,6 +83,13 @@ errors="$(grep '^ERROR:' "$run_log" \
 
 new="$(find "$LIB/downloads" -type f | wc -l)"
 if [ "$new" -gt 0 ]; then
+    # ALBUM (release) pass first: whatever maps to a MusicBrainz release gets the
+    # whole release - real year, release ID, label, track numbers and Cover Art
+    # Archive art (fetchart only runs for releases). Partial sets and true
+    # singles find no release and stay put for the pass below.
+    "${BEET[@]}" --config /config/album.yaml import /downloads
+    # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
+    # lookup carries no album-level metadata by design, so this is the fallback.
     "${BEET[@]}" import /downloads
 fi
 left="$(find "$LIB/downloads" -type f | wc -l)"

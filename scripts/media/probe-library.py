@@ -154,7 +154,8 @@ if os.path.exists(BEETS_DB):
     print("items:", q("select count(*) from items")[0][0],
           "| albums:", q("select count(*) from albums")[0][0],
           "| singletons:", q("select count(*) from items where album_id is null")[0][0],
-          "| without mb_trackid:", q("select count(*) from items where mb_trackid = ''")[0][0])
+          "| without mb_trackid:", q("select count(*) from items where mb_trackid = ''")[0][0],
+          "| without mb_albumid:", q("select count(*) from items where mb_albumid = ''")[0][0])
     show("path prefixes", [f"{c:5d}  {p}" for p, c in q(
         "select substr(cast(path as text), 1, 20) p, count(*) c from items group by p order by c desc")])
     show("top artists", [f"{c:5d}  {a}" for a, c in q(

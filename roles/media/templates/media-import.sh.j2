@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # media-import - resolve downloads/ (or a given dir) in one go:
-#   1. ALBUM (release) pass  - matches whole albums to a MusicBrainz release
-#      (strong: uses the album name + tracklist). Incomplete sets and singles
-#      are left untouched (quiet + skip).
-#   2. SINGLETON pass        - interactive, per track, for whatever is left.
+#   1. ALBUM (release) pass  - matches whole albums AND single tracks to a
+#      MusicBrainz release (strong: the album name + tracklist, ignoring what a
+#      YouTube rip cannot know - see album.yaml), so they get the release's
+#      year, release ID, track numbers and Cover Art Archive art. Unattended:
+#      only strong matches are applied.
+#   2. SINGLETON pass        - interactive, per track, for whatever is left (a
+#      track lookup carries no album-level metadata, by design).
 # Run it whenever you have time. Needs an interactive terminal.
 #
 #   media-import              process /downloads

@@ -19,6 +19,7 @@
         - "{{ media_library_path }}/beets/adopt.yaml"
         - "{{ media_library_path }}/beets/interactive.yaml"
         - "{{ media_library_path }}/beets/album.yaml"
+        - "{{ media_home }}/scripts/media-sync.sh"
       register: media_files
 
     - name: Parse the deployed files
@@ -32,6 +33,7 @@
         adopt: "{{ media_files.results[6].content | b64decode | from_yaml }}"
         interactive: "{{ media_files.results[7].content | b64decode | from_yaml }}"
         album: "{{ media_files.results[8].content | b64decode | from_yaml }}"
+        media_sync: "{{ media_files.results[9].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -139,17 +141,32 @@
         fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
         success_msg: "[OK] adopt overlay: no autotag, move, copy or write"
 
-    - name: Assert the album overlay and both import scripts
+    - name: Assert the album overlay accepts partial releases
       ansible.builtin.assert:
         that:
           - not interactive['import']['quiet']
           - not album['import']['singletons']
+          - album.match.distance_weights.year == 0
+          - album.match.distance_weights.missing_tracks == 0
+          - album.match.distance_weights.unmatched_tracks == 0
+          - album.match.max_rec.missing_tracks == 'strong'
+          - album.match.max_rec.unmatched_tracks == 'strong'
           - media_stats.results[7].stat.islnk
           - media_stats.results[8].stat.islnk
         fail_msg: >-
           overlays/scripts wrong: {{ interactive }} / {{ album }} /
           {{ media_stats.results[7].stat }} / {{ media_stats.results[8].stat }}
-        success_msg: "[OK] media-import (+ interactive overlay) and media-import-album (+ album overlay)"
+        success_msg: "[OK] album overlay: partial releases accepted, wrong ones still rejected"
+
+    - name: Assert the nightly script takes the release pass before the singleton pass
+      ansible.builtin.assert:
+        that:
+          - "'--config /config/album.yaml import /downloads' in media_sync"
+          - >-
+            media_sync.index('--config /config/album.yaml import /downloads')
+            < media_sync.index('" import /downloads')
+        fail_msg: "media-sync import order wrong:\n{{ media_sync }}"
+        success_msg: "[OK] media-sync: release pass, then singleton pass"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:

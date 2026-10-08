@@ -1,8 +1,33 @@
-# Merged over config.yaml by `media-import-album`: ALBUM (release) mode. beets
-# groups the files in the target by their album tag and matches each group to a
-# whole MusicBrainz release, so a full ripped CD (or a complete downloaded
-# album) gets album / albumartist / track-number / release metadata. Partial
-# sets and singles find no release match and stay in downloads/ for the
-# singleton path (media-sync / media-import). quiet + skip are inherited.
+# Merged over config.yaml by every ALBUM (release) import: the release pass at
+# the start of `media-sync` and of `media-import`, `media-import-album`, and
+# `media-sync --upgrade`. beets groups the target's files by their album tag and
+# matches each group to a whole MusicBrainz release, so a ripped CD (or a
+# downloaded album) gets album / albumartist / track-number / release metadata -
+# and, unlike a singleton import, real Cover Art Archive art (fetchart only runs
+# for releases). quiet + skip are inherited from config.yaml.
 import:
     singletons: no
+
+# A YouTube rip is ONE track taken out of a release, so the release match must
+# not be punished for what YouTube never told us. Each weight zeroed here is a
+# "we cannot know this" component (`data_source` is zeroed in config.yaml for
+# the same reason); the components that carry real signal - album name, artist,
+# track title, track length - keep their defaults, and that is what still keeps
+# a WRONG release out: an album-name mismatch alone scores ~89%, far outside
+# strong_rec_thresh (0.04).
+match:
+    distance_weights:
+        # yt-dlp writes the video's UPLOAD date, which is not the release year:
+        # a 2013 album uploaded in 2026 takes a full year penalty, enough on its
+        # own to sink an otherwise perfect one-track match. The release year is
+        # what MusicBrainz returns, so the upload date is replaced either way.
+        year: 0
+        # One track of a 30-track release is not "29 tracks missing".
+        missing_tracks: 0
+        unmatched_tracks: 0
+    # Belt and braces. A zero weight already drops these from `Distance.keys()`
+    # (items() only reports non-zero penalties), so the max-rec downgrade cannot
+    # fire - pinned in case a future beets changes that.
+    max_rec:
+        missing_tracks: strong
+        unmatched_tracks: strong

@@ -30,7 +30,7 @@ Mon 00:30  yt-dlp-update       yt-dlp -U + deno upgrade, ntfy on the result
     02:00  Watchtower          may upgrade Navidrome - after that backup
     02:30  snapshot            newest Navidrome backup, beets DB, .env, archive -> Syncthing
     03:00  restic              media_home + media_library_path (live Navidrome DB excluded)
-Sun 04:15  media-sync --retag  retry MusicBrainz for the last 4 weeks' as-is imports
+Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
     05:15  reboot              only when unattended-upgrades requires one
 ```
 
@@ -38,20 +38,34 @@ Sun 04:15  media-sync --retag  retry MusicBrainz for the last 4 weeks' as-is imp
   `yt-dlp.conf` prefers YouTube Music's own artist/album/track, falls back to
   the channel, splits `Artist - Title` reposts, strips `(Official Video)`
   noise and `- Topic`/`VEVO` suffixes, and gives singles `album = title`.
-- **beets** imports each download as a singleton. Matches are drawn from
-  MusicBrainz and — via **chroma** + **musicbrainz** — from acoustic
-  fingerprints (AcoustID); a match adds MusicBrainz IDs plus **cover art**
-  (`fetchart`/`embedart`), and **lastgenre** fills in real genres. It also
-  embeds **lyrics** (LRCLIB, synced when available) and **ReplayGain** (R128
-  tags for Opus). Navidrome reads all of it. Duplicates are never deleted;
-  `beet duplicates` lists them.
+- **beets** imports each download in two passes: an **album (release) pass**
+  first, which matches the file to a whole MusicBrainz release (the real album
+  year, release ID, label, track number and **Cover Art Archive art**), then a
+  **singleton pass** for whatever has no release — a track lookup carries no
+  album-level metadata by design, so it can never supply the year or the art.
+  Matches are drawn from MusicBrainz and — via **chroma** + **musicbrainz** —
+  from acoustic fingerprints (AcoustID); **lastgenre** fills in real genres. It
+  also embeds **lyrics** (LRCLIB, synced when available) and **ReplayGain**
+  (R128 tags for Opus). Navidrome reads all of it. Duplicates are never
+  deleted; `beet duplicates` lists them.
+- **Partial sets are accepted.** A YouTube rip is one track taken out of a
+  release, so the release pass ignores what YouTube cannot know: `album.yaml`
+  zeroes the `missing_tracks`, `unmatched_tracks` and `year` weights (the upload
+  date is not the release year) and `config.yaml` zeroes `data_source`. One
+  track of a 30-track release therefore still matches the release, while a
+  *wrong* release is still rejected — an album-name mismatch alone scores ~89%,
+  against `strong_rec_thresh: 0.04`.
 - **Import paths.** The nightly `media-sync` is unattended
-  (`quiet_fallback: skip`): it imports only the singleton matches it deems
-  strong, and leaves the rest in `downloads/`. Run **`media-import`** when you
-  have time — it does an **album (release) pass first** (whole albums matched to
-  a MusicBrainz release, with their track numbers) and then an **interactive
-  singleton pass** over whatever is left, asking per track.
-  **`media-import-album`** runs just the album pass (e.g. for a full ripped CD).
+  (`quiet_fallback: skip`): release pass then singleton pass, applying only what
+  beets deems a strong match and leaving the rest in `downloads/`. Run
+  **`media-import`** when you have time — same two passes, but the singleton
+  pass is **interactive** and asks per track. **`media-import-album`** runs just
+  the release pass (e.g. for a full ripped CD).
+- **Retagging.** `media-sync --retag` (weekly) retries MusicBrainz for the last
+  4 weeks' unmatched imports *and* pushes the recent track matches through the
+  release pass. `media-sync --upgrade [all|<query>]` runs that second part on
+  demand — the last 4 weeks by default, `all` for the whole library — which is
+  how already-imported tracks get their release year and cover art.
 - One playlist URL per line in `vault_youtube_playlists` (rendered to
   `config/playlists.txt`); each is downloaded separately and the download
   archive makes reruns cheap.
@@ -63,7 +77,8 @@ One per event, success or failure:
 | Event | Title | Body |
 |---|---|---|
 | nightly sync | `media-sync sync done` / `needs a look` | tracks imported, left in `downloads/`, unexpected yt-dlp errors |
-| weekly retag | `media-sync retag done` | how many as-is tracks matched MusicBrainz |
+| weekly retag | `media-sync retag done` | as-is tracks matched MusicBrainz, matches given a release |
+| upgrade | `media-sync upgrade done` | tracks that gained release metadata |
 | adopt / backfill | `media-sync adopt/backfill done` | tracks tracked by beets / tracks with lyrics |
 | local snapshot | `media stack backup successful` | including a note when no Navidrome backup existed yet |
 | restic | `restic backup successful` / `failed` | (every host's restic unit) |
