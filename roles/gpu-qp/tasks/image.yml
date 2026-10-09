@@ -1,6 +1,5 @@
 ---
-# The GPU image: either clone + compile for gpu_qp_cuda_arch, or pull a prebuilt
-# one. Needs a Docker daemon, so molecule never runs this file.
+# Needs a Docker daemon, so molecule never runs this file.
 
 - name: Clone the quantum-pipeline source for a local build
   ansible.builtin.git:
@@ -19,9 +18,9 @@
   when: gpu_qp_image_mode == 'build'
 
 - name: Compose the pinned build Dockerfile and its fingerprint
-  # Pins the CUDA base from gpu_qp_cuda_version and, when enabled, appends the
-  # forward-compat strip. Composed as a string rather than edited in place, so
-  # the write below is content-idempotent and the git checkout stays clean.
+  # Pins the CUDA base from gpu_qp_cuda_version and appends the compat strip.
+  # Composed as a string rather than edited in place, so the write below stays
+  # idempotent and the git checkout is never dirtied.
   ansible.builtin.set_fact:
     gpu_qp_build_dockerfile: >-
       {{ (gpu_qp_upstream_dockerfile.content | b64decode)
@@ -53,12 +52,10 @@
   when: gpu_qp_image_mode == 'build'
 
 - name: Build the GPU image for the target CUDA architecture
-  # qiskit-aer is compiled from source with the CUDA thrust backend for
-  # gpu_qp_cuda_arch - the only way to run a non-Ampere card, since the published
-  # :gpu tag is compiled for sm_86. docker_image skips a build whenever the tag
-  # exists, so it cannot notice a changed build definition by itself: force_source
-  # is driven by the fingerprint instead. A forced rebuild stays cheap because it
-  # leaves Docker's layer cache intact.
+  # qiskit-aer is compiled with the CUDA thrust backend for gpu_qp_cuda_arch -
+  # the only way to run a non-Ampere card, since the published :gpu tag is built
+  # for sm_86. docker_image skips a build whenever the tag exists, so force_source
+  # comes from the fingerprint instead.
   community.docker.docker_image:
     name: "{{ gpu_qp_image_name }}"
     source: build
@@ -78,8 +75,8 @@
   when: gpu_qp_image_mode == 'build'
 
 - name: Record the build fingerprint of the image just built
-  # Absent or stale next run -> the build above runs again; matching -> it is
-  # skipped, which is what makes the deploy idempotent from the second run on.
+  # Written only after a successful build, so a stale or absent fingerprint makes
+  # the next run rebuild while a matching one leaves the image alone.
   ansible.builtin.copy:
     content: "{{ gpu_qp_build_fingerprint }}\n"
     dest: "{{ gpu_qp_build_fingerprint_file }}"

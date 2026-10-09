@@ -1,6 +1,5 @@
 ---
-# Data directories, the molecules input and the run wrapper. No Docker here, so
-# molecule exercises this file directly.
+# Docker-free, so molecule converges this file directly.
 
 - name: Create the gpu-qp directories
   ansible.builtin.file:

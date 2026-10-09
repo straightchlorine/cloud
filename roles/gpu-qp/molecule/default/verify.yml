@@ -53,7 +53,7 @@
           - exporter.deploy.resources.reservations.devices[0].capabilities == ['gpu']
           - exporter.ports | select('match', '.*:9835:9835$') | list | length == 1
         fail_msg: "compose stack wrong:\n{{ compose }}"
-        success_msg: "[OK] compose renders nvidia runtime + device reservations correctly"
+        success_msg: "[OK] compose renders the GPU device reservations correctly"
 
     - name: Assert the rendered molecules input
       ansible.builtin.assert:

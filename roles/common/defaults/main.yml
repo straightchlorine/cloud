@@ -186,8 +186,7 @@ common_cadvisor_compose_service:
       memory: 64M
       cpus: "0.05"
 
-# NVIDIA container toolkit (consumed by common/tasks/nvidia_container_toolkit.yml,
-# which any GPU-container role includes). NVIDIA publishes per-arch repo paths.
+# NVIDIA publishes the container toolkit apt repository under a per-arch path.
 common_nvidia_arch_map:
   x86_64: "amd64"
   aarch64: "arm64"

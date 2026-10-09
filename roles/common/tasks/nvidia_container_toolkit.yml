@@ -1,19 +1,10 @@
 ---
-# Reusable NVIDIA Container Toolkit setup. Adds NVIDIA's apt repository,
-# installs the toolkit, and registers the nvidia runtime with Docker so compose
-# services can request `runtime: nvidia`. Callers must have run
-# common/tasks/docker.yml first - the runtime registration edits the existing
-# /etc/docker/daemon.json (and must come before any userns-remap rewrite, or the
-# runtimes key has to be preserved by that rewrite).
+# Reusable NVIDIA Container Toolkit setup: adds NVIDIA's apt repository, installs
+# the toolkit, and registers the nvidia runtime with Docker. Any role that runs
+# GPU containers can include it.
 #
-# Lives in common because any role that runs GPU containers needs it (the
-# gpu-qp role is the first consumer); the toolkit version is whatever NVIDIA's
-# stable channel currently ships.
-#
-# Ends by restarting Docker whenever the RUNNING daemon does not list the nvidia
-# runtime - nvidia-ctk only writes daemon.json and never reloads the daemon, so
-# without that restart compose fails with
-# "could not select device driver \"nvidia\" with capabilities: [[gpu]]".
+# Callers must run common/tasks/docker.yml first: the registration edits the
+# daemon.json it wrote.
 
 - name: Install the NVIDIA container toolkit prerequisites
   ansible.builtin.apt:
@@ -32,8 +23,8 @@
   become: true
 
 - name: Add the NVIDIA container toolkit apt repository
-  # The repo path carries an architecture segment; derive it from the fact, never
-  # hardcode amd64. The install task below refreshes the apt cache.
+  # The repo path carries an architecture segment; derive it from the fact rather
+  # than hardcoding amd64.
   ansible.builtin.copy:
     content: >-
       deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
@@ -61,9 +52,8 @@
   become: true
 
 - name: Register the nvidia runtime with Docker
-  # nvidia-ctk reports success on every run (no idempotence signal), so guard on
-  # the daemon.json contents. It only writes the file - it never reloads the
-  # daemon, which the restart below handles.
+  # nvidia-ctk reports success on every run, so guard on the daemon.json contents
+  # instead. It never reloads the daemon - the restart task below does.
   ansible.builtin.command:
     cmd: nvidia-ctk runtime configure --runtime=docker
   become: true
@@ -81,11 +71,8 @@
   become: true
 
 - name: Restart Docker so a registered nvidia runtime becomes active
-  # Gated on the RUNNING daemon, not the file: daemon.json can already list
-  # nvidia while a daemon started before that write does not - exactly the state
-  # a deploy that failed at `compose up` leaves behind (handlers do not run for
-  # a failed host, so the restart was skipped). Gating on the file would then
-  # skip forever, and compose keeps failing with
+  # Gated on the running daemon, not the file: daemon.json can already list nvidia
+  # while a daemon started before that write does not, and compose then fails with
   # "could not select device driver \"nvidia\"".
   ansible.builtin.systemd:
     name: docker

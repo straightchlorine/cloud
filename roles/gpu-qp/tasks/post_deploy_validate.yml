@@ -1,7 +1,4 @@
 ---
-# Prove real behavior, not side effects: a GPU container must actually see the
-# NVIDIA device, and a real (short) GPU VQE must complete.
-
 - name: Verify the persistent compose services are running
   ansible.builtin.include_role:
     name: common
@@ -11,42 +8,15 @@
     compose_owner: "{{ ansible_user }}"
     compose_critical_services: >-
       {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
-  # The flag is owned by common: under `--tags gpu-qp` the fleet play that loads
-  # common's defaults is skipped, so it can legitimately be undefined here. The
-  # default mirrors common's own (true) - acceptable cross-role flag default per
-  # CLAUDE.md.
+  # common_start_stack is owned by common, whose defaults are not loaded under
+  # `--tags gpu-qp`; the default mirrors common's own (CLAUDE.md Acceptable
+  # Default Patterns).
   when: common_start_stack | default(true) | bool
   tags: [post_validation]
 
-- name: Prove a GPU container can see the NVIDIA device
-  # The image entrypoint is `python -m quantum_pipeline`, so override it to reach
-  # nvidia-smi. Exercises the same runtime path the worker uses.
-  ansible.builtin.command:
-    cmd: >-
-      docker run --rm --runtime=nvidia --entrypoint nvidia-smi
-      -e NVIDIA_VISIBLE_DEVICES={{ gpu_qp_worker_device }}
-      {{ gpu_qp_active_image }} -L
-  become: true
-  become_user: "{{ ansible_user }}"
-  register: gpu_qp_container_gpus
-  changed_when: false
-  tags: [post_validation]
-
-- name: Assert the container sees at least one GPU
-  ansible.builtin.assert:
-    that:
-      - "'GPU 0' in gpu_qp_container_gpus.stdout"
-    fail_msg: >-
-      A GPU container could not see any NVIDIA device. nvidia-smi said:
-      {{ gpu_qp_container_gpus.stdout | default('') }}
-      {{ gpu_qp_container_gpus.stderr | default('') }}
-    quiet: true
-  tags: [post_validation]
-
 - name: Prove the worker service container can see the NVIDIA device
-  # Same mechanism the smoke test below uses (compose run + the service's device
-  # reservation), so a compose-level GPU gap fails here with a clear message
-  # instead of surfacing as "No CUDA device available" deep inside Aer.
+  # Same mechanism the smoke test uses, so a GPU gap fails here with a clear
+  # message instead of surfacing as "No CUDA device available" inside Aer.
   ansible.builtin.shell: |
     set -o pipefail
     docker compose -f {{ gpu_qp_home }}/docker-compose.yml run --rm \

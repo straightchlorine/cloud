@@ -1,6 +1,5 @@
 ---
-# Teardown playbook for the gpu-qp role - the reference pattern from
-# playbooks/dns-teardown.yml.
+# Teardown playbook for the gpu-qp role, following playbooks/dns-teardown.yml.
 #   ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml \
 #     --limit gpu-station -e gpu_qp_teardown_confirm=true
 - name: Tear down the gpu-qp role for repeatable testing

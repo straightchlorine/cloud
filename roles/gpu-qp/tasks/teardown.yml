@@ -1,8 +1,7 @@
 ---
-# Reverse the gpu-qp role so a disposable GPU host redeploys clean. The NVIDIA
-# driver and container toolkit are deliberately left in place - they are
-# host-level prerequisites, not role-owned state, and reinstalling the driver is
-# expensive. Only the stack, the wrapper and the local image are removed.
+# The NVIDIA driver and container toolkit are deliberately left in place - they
+# are host prerequisites, not role-owned state. The stack, the wrapper and the
+# local image are what this removes.
 
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.include_role:

@@ -47,7 +47,7 @@
             tasks_from: validate
           when: "'monitoring' in group_names"
 
-        - name: GPU host validation for gpu-qp hosts
+        - name: GPU validation for gpu_qp hosts
           ansible.builtin.include_role:
             name: gpu-qp
             tasks_from: validate
@@ -136,7 +136,7 @@
     - role: backup
       tags: [backup]
 
-- name: Configure the GPU research host
+- name: Configure the GPU hosts
   hosts: gpu_qp
   become: true
   gather_facts: true

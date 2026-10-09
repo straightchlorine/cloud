@@ -1,8 +1,4 @@
 ---
-# Render the compose stack and bring it up. The batch worker carries
-# profiles: [batch], so `up` starts only the persistent services (the GPU
-# exporter); the worker is launched on demand by gpu-qp-run.
-
 - name: Render compose + .env and bring up the stack
   ansible.builtin.include_role:
     name: common

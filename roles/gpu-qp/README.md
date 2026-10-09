@@ -41,9 +41,8 @@ Two independent CUDA variables, and they are **not** the same thing:
 | `gpu_qp_cuda_arch` | the `CUDA_ARCH` build arg (compute capability) | the card: `6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada |
 | `gpu_qp_cuda_version` | the CUDA toolkit base the image compiles against | something compatible with the guest **driver** (`nvidia-smi` prints its max, e.g. `12.4` for the 550 branch) |
 
-The role pins `gpu_qp_cuda_version` into a copy of the upstream
-`docker/Dockerfile.gpu` at build time, so the version can be moved without
-dirtying the git checkout.
+The role pins `gpu_qp_cuda_version` into the Dockerfile it builds from, so the
+version can be moved without dirtying the git checkout.
 
 **Compat strip (`gpu_qp_strip_cuda_compat`, on by default).** The stock CUDA
 image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, and

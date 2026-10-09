@@ -1,9 +1,4 @@
 ---
-# Thin orchestrator: os facts -> network facts -> validate -> packages -> driver
-# -> docker -> toolkit -> firewall -> image -> stack -> verify.
-# The stack bring-up is the finishing step: every host-side control (driver,
-# toolkit, firewall) must exist before any GPU container runs.
-
 # The os role must run first: validate.yml asserts on its os_family fact.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
@@ -40,9 +35,8 @@
   tags: [docker]
 
 - name: Install the NVIDIA container toolkit
-  # Must follow docker.yml: nvidia-ctk edits the daemon.json docker.yml wrote.
-  # The task file itself restarts Docker when the running daemon lacks the
-  # runtime, so no handler flush is needed before the stack bring-up.
+  # Must follow docker.yml: nvidia-ctk edits the daemon.json it wrote, and the
+  # task file restarts Docker itself when the running daemon lacks the runtime.
   ansible.builtin.include_role:
     name: common
     tasks_from: nvidia_container_toolkit

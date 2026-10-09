@@ -17,7 +17,6 @@
     validation_role: "gpu-qp"
     required_variables:
       - gpu_qp_cuda_arch
-      - gpu_qp_home
   tags: [validation]
 
 - name: Confirm the host runs a Debian-family OS
@@ -28,9 +27,8 @@
   tags: [validation]
 
 - name: Confirm gpu_qp_cuda_arch is a known compute capability
-  # A wrong value builds a wheel that dies at runtime with
-  # "CUDA error: no kernel image is available" - catch it before the 40-minute
-  # image build rather than after.
+  # A wrong value builds a wheel that fails at runtime with "CUDA error: no kernel
+  # image is available" - catch it before the image build rather than after.
   ansible.builtin.assert:
     that:
       - gpu_qp_cuda_arch in gpu_qp_supported_cuda_arches
@@ -41,8 +39,7 @@
   tags: [validation]
 
 - name: Look for an NVIDIA PCI device
-  # Reads sysfs directly (vendor 0x10de) so the check does not depend on
-  # pciutils being installed yet.
+  # Reads sysfs directly so it works before pciutils is installed.
   ansible.builtin.shell:
     cmd: grep -ilx 0x10de /sys/bus/pci/devices/*/vendor
   register: gpu_qp_nvidia_devices

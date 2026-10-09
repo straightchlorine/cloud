@@ -1,13 +1,7 @@
 ---
-# gpu-qp defaults - cloud-agnostic preparation of a GPU host so the
-# quantum-pipeline VQE solver runs with NVIDIA GPU acceleration. Software only:
-# Docker, the NVIDIA driver (optional), the container toolkit, the GPU image and
-# a compose stack. No provider/cloud provisioning lives here.
-#
-# Required in host_vars (validated in validate.yml - no default, because a wrong
-# value builds an image that dies at runtime with
-# "CUDA error: no kernel image is available"):
-#   gpu_qp_cuda_arch   CUDA compute capability: "6.1" Pascal, "7.5" Turing,
+# Required in host_vars - no default, because a wrong value builds a wheel that
+# fails at runtime with "CUDA error: no kernel image is available":
+#   gpu_qp_cuda_arch   the card's compute capability: "6.1" Pascal, "7.5" Turing,
 #                      "8.6" Ampere, "8.9" Ada.
 
 # Home derived from the inventory ansible_user, not ansible_user_dir (which
@@ -16,6 +10,7 @@ gpu_qp_home: "/home/{{ ansible_user }}/gpu-qp"
 gpu_qp_data_path: "{{ gpu_qp_home }}/data"
 gpu_qp_gen_path: "{{ gpu_qp_home }}/gen"
 
+# pciutils: lspci, for inspecting the GPU and passthrough by hand.
 gpu_qp_specific_packages:
   - pciutils
 
@@ -44,34 +39,31 @@ gpu_qp_cuda_version: "12.6.3"
 # the source checkout, so pinning the CUDA version never dirties the git checkout.
 gpu_qp_pinned_dockerfile: "docker/Dockerfile.gpu.pinned"
 
-# The stock CUDA image ships forward-compatibility libcuda libraries under
-# /usr/local/cuda-*/compat, and ldconfig resolves them first. Forward
-# compatibility is only supported on datacenter (Tesla) GPUs: on a GeForce card
-# the compat libcuda makes cuInit return
-# CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE (804), which qiskit-aer surfaces as
-# "No CUDA device available!" - even though nvidia-smi works (NVML does not use
-# libcuda). With this on, the role appends a strip step to the build Dockerfile
-# so the driver's own libcuda is used. Build mode only.
+# The stock CUDA image ships forward-compatibility libcuda under
+# /usr/local/cuda-*/compat and ldconfig resolves it before the driver's own
+# library. Forward compatibility is datacenter-GPU only: on GeForce the compat
+# libcuda fails cuInit with CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE (804),
+# which qiskit-aer reports as "No CUDA device available!" - nvidia-smi still
+# works, because NVML does not use libcuda. Stripping it lets the driver's
+# libcuda be used instead. Build mode only.
 gpu_qp_strip_cuda_compat: true
-# Appended to the build Dockerfile when the strip is on. Leading blank lines keep
-# it clear of whatever the upstream file ends with, and it lands in the runtime
-# stage (the Dockerfile's last stage).
+# Appended to the build Dockerfile when the strip is on. The leading blank lines
+# separate it from the upstream file's last line; appending lands it in the
+# runtime stage, the Dockerfile's final stage.
 gpu_qp_compat_strip_block: |+
 
 
-  # Added by the gpu-qp role (gpu_qp_strip_cuda_compat): CUDA's forward-compat
-  # libcuda works only on datacenter GPUs, not GeForce.
+  # CUDA's forward-compat libcuda is datacenter-only; GeForce cannot use it.
   RUN rm -rf /usr/local/cuda/compat /usr/local/cuda-*/compat \
    && rm -f /etc/ld.so.conf.d/*compat* \
    && ldconfig
 # Fingerprint of the last successful build. docker_image skips a build whenever
-# the tag already exists, so it cannot notice a Dockerfile change by itself; a
-# mismatched fingerprint forces the rebuild, which stays fast because Docker's
-# layer cache is left intact.
+# the tag exists, so a changed Dockerfile alone would never rebuild; a mismatched
+# fingerprint forces it, and that rebuild stays fast - Docker's layer cache is
+# intact.
 gpu_qp_build_fingerprint_file: "{{ gpu_qp_home }}/.image-build.fingerprint"
 
-# The image compose actually runs: derived from the mode, so the worker service
-# does not have to branch on it.
+# The image compose runs, derived from the mode so the services don't branch.
 gpu_qp_active_image: >-
   {{ gpu_qp_image_pull_name if gpu_qp_image_mode == 'pull' else gpu_qp_image_name }}
 
@@ -154,10 +146,9 @@ gpu_qp_supported_cuda_arches:
   - "8.9"
   - "9.0"
 
-# Worker GPU reservation. Compose's legacy `runtime:` field is not reliably
-# honored (notably by `docker compose run`), so request the device the supported
-# way; docker/compose#8722. `count` is omitted when unpinned - compose then uses
-# every GPU on the host.
+# Worker GPU reservation. `runtime:` is a legacy field that `docker compose run`
+# does not honor, so the device is requested through deploy.resources instead.
+# `count` is omitted when unpinned, which makes compose use every GPU on the host.
 gpu_qp_worker_devices: >-
   {{ [{'driver': 'nvidia', 'capabilities': ['gpu']}]
      if gpu_qp_worker_device == 'all'
@@ -183,7 +174,6 @@ gpu_qp_compose_services:
     service_restart: "no"
     service_profiles:
       - batch
-    # Device reservation, not `runtime: nvidia` - see gpu_qp_worker_devices.
     service_devices: "{{ gpu_qp_worker_devices }}"
     service_volumes:
       - "{{ gpu_qp_data_path }}:/usr/src/quantum_pipeline/data:ro"
@@ -198,9 +188,8 @@ gpu_qp_compose_services:
         memory: "{{ gpu_qp_worker_memory_reservation }}"
         cpus: "{{ gpu_qp_worker_cpu_reservation }}"
 
-# Persistent metrics endpoint; scraped by Prometheus from the monitoring host
-# (firewall_rules in host_vars). Device reservation (rather than runtime: nvidia)
-# so this service also exercises the template's deploy.resources.devices path.
+# Persistent GPU metrics endpoint; scraped by Prometheus from the monitoring host
+# (firewall_rules in host_vars). It reports on every card, so it reserves them all.
 gpu_qp_gpu_exporter_services:
   - service_name: nvidia-gpu-exporter
     service_image: "{{ gpu_qp_gpu_exporter_image }}"
