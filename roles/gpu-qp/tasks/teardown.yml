@@ -28,17 +28,13 @@
     - /usr/local/bin/gpu-qp-run
     - "{{ gpu_qp_home }}"
 
-- name: Remove the locally built GPU images
-  # Both tags: the pinned upstream build and the compat-stripped derived image.
+- name: Remove the locally built GPU image
   community.docker.docker_image:
-    name: "{{ item }}"
+    name: "{{ gpu_qp_image_name }}"
     state: absent
   become: true
   become_user: "{{ ansible_user }}"
   failed_when: false
-  loop:
-    - "{{ gpu_qp_image_name }}"
-    - "{{ gpu_qp_upstream_image }}"
   when: not gpu_qp_teardown_keep_image
 
 - name: Verify the gpu-qp artifacts are gone

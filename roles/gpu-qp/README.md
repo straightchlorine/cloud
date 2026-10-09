@@ -51,8 +51,15 @@ image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, an
 is datacenter-GPU only: on a GeForce card the shim makes `cuInit` fail with
 `CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE` (804), which qiskit-aer reports as
 `No CUDA device available!` — while `nvidia-smi` keeps working, because NVML
-never touches `libcuda`. The role therefore builds a thin derived image with
-those libraries removed, so the driver's `libcuda` is used.
+never touches `libcuda`. The role therefore appends a strip step to the build
+Dockerfile so those libraries are gone and the driver's `libcuda` is used.
+
+**Build fingerprint.** `community.docker.docker_image` skips a build whenever the
+tag already exists, so it cannot see a Dockerfile change on its own. The role
+records a fingerprint of the effective build definition (pinned Dockerfile plus
+`CUDA_ARCH`/`AER_VERSION`) and forces the rebuild when it changes — a forced
+rebuild is still fast, since Docker's layer cache is untouched. Bump
+`gpu_qp_image_force_rebuild` to force one regardless.
 
 ## Running a simulation
 

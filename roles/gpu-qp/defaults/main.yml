@@ -50,13 +50,25 @@ gpu_qp_pinned_dockerfile: "docker/Dockerfile.gpu.pinned"
 # the compat libcuda makes cuInit return
 # CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE (804), which qiskit-aer surfaces as
 # "No CUDA device available!" - even though nvidia-smi works (NVML does not use
-# libcuda). With this on, the role builds a thin derived image without those
-# libraries so the driver's own libcuda is used. Build mode only.
+# libcuda). With this on, the role appends a strip step to the build Dockerfile
+# so the driver's own libcuda is used. Build mode only.
 gpu_qp_strip_cuda_compat: true
-# Tag of the upstream build the derived image is layered on.
-gpu_qp_upstream_image: "{{ gpu_qp_image_name }}-upstream"
-# Build context for the derived image (holds the generated Dockerfile).
-gpu_qp_compat_build_dir: "{{ gpu_qp_home }}/compatless"
+# Appended to the build Dockerfile when the strip is on. Leading blank lines keep
+# it clear of whatever the upstream file ends with, and it lands in the runtime
+# stage (the Dockerfile's last stage).
+gpu_qp_compat_strip_block: |+
+
+
+  # Added by the gpu-qp role (gpu_qp_strip_cuda_compat): CUDA's forward-compat
+  # libcuda works only on datacenter GPUs, not GeForce.
+  RUN rm -rf /usr/local/cuda/compat /usr/local/cuda-*/compat \
+   && rm -f /etc/ld.so.conf.d/*compat* \
+   && ldconfig
+# Fingerprint of the last successful build. docker_image skips a build whenever
+# the tag already exists, so it cannot notice a Dockerfile change by itself; a
+# mismatched fingerprint forces the rebuild, which stays fast because Docker's
+# layer cache is left intact.
+gpu_qp_build_fingerprint_file: "{{ gpu_qp_home }}/.image-build.fingerprint"
 
 # The image compose actually runs: derived from the mode, so the worker service
 # does not have to branch on it.
