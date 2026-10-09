@@ -69,18 +69,20 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   - nightly **`media-sync`** — unattended (`quiet_fallback: skip`): release pass
     then singleton pass, applying only strong matches and leaving the rest in
     `downloads/`.
-  - **`media-import [<dir>]`** — the same two passes, but the singleton one asks
-    per track (needs a terminal: the interactive modes refuse to run without one,
-    so a stray cron entry fails fast instead of hanging on a prompt nobody sees).
-  - **`media-import --review [<dir>]`** — a full review session: the release pass
-    asks per file, then the singleton pass asks per track. Releases come first
-    because a release match supplies the year, release id, track numbers and
-    Cover Art Archive art that a track match can never add later. This is
-    interactive only — the nightly run stays the quiet two passes above.
+  - **`media-import [<dir>]`** — a review session: the release pass asks per file
+    (pick a candidate by number, `E` to search MusicBrainz yourself, `I` to paste
+    a release id), then the singleton pass asks per track. Worth the asking: it
+    surfaces releases the automatic pass can never pick (a "Deluxe Collector's
+    Edition" carrying the 7" single version, say). Needs a terminal: the
+    interactive modes refuse to run without one, so a stray cron entry fails fast
+    instead of hanging on a prompt nobody sees.
   - **`media-import --singles [<dir>]`** — only the judging pass. This is the one
     for the morning after a nightly run: the release pass has already run and
     left its leftovers, so there is nothing to gain by waiting through it again
     just to reach the per-track questions.
+  - **`media-import --interactive [<dir>]`** — the nightly pairing (quiet release
+    pass, then the singleton pass) but asking per track: the lean version, when
+    you trust the automatic release matching.
   - **`media-import --release [<dir>]`** — the *release* pass asking per track,
     for the near misses automatic matching refuses (a correct release can score
     0.05 against the 0.04 `strong_rec_thresh` and get skipped).

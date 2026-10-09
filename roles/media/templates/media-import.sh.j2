@@ -3,17 +3,15 @@
 # overlay and beets invocation lives in media-sync (see its header), so there is
 # nothing to keep in sync here. Needs a terminal.
 #
-#   media-import [<dir>]            the nightly two passes, but the singleton one
-#                                   asks per track (Apply / as-is / Skip / ...)
-#   media-import --review [<dir>]   a full review session: the release pass asks
-#                                   per file, then the singleton pass asks per
-#                                   track - the way to accept a near miss the
-#                                   automatic run refused
+#   media-import [<dir>]            a review session: the release pass asks per
+#                                   file (pick a candidate by number, E to search
+#                                   MusicBrainz, I for a release id), then the
+#                                   singleton pass asks per track
 #   media-import --singles [<dir>]  the judging pass on its own - after a nightly
 #                                   run, go straight to the leftovers
-#   media-import --release [<dir>]  the RELEASE pass asking per track - for the
-#                                   near misses automatic matching refuses (a
-#                                   match just under the strong threshold)
+#   media-import --release [<dir>]  the release pass asking, on its own
+#   media-import --interactive [<dir>]  the nightly pairing (quiet release pass,
+#                                   then the singleton pass) but asking per track
 #
 # Answering "use as-is" marks the track reviewed (see reviewed.py), so no later
 # `--upgrade`/`--retag` re-matches something you chose to keep as it is.
@@ -25,9 +23,9 @@ if [ ! -t 0 ] || [ ! -t 1 ]; then
     exit 2
 fi
 
-mode=--interactive
+mode=--review
 case "${1:-}" in
-    --singles | --release | --review)
+    --singles | --release | --review | --interactive)
         mode="$1"
         shift
         ;;

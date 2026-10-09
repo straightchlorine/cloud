@@ -36,6 +36,7 @@ common_packages:
   - htop
   - vim
   - tmux
+  - fzf
   - ufw
   - fail2ban
   - logrotate

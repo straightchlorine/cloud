@@ -29,6 +29,8 @@ common_packages:
   - htop
   - vim
   - tmux
+  # fzf: scripts/media/pick.sh (album assignment, quarantine removal)
+  - fzf
   - ufw
   - fail2ban
   - logrotate

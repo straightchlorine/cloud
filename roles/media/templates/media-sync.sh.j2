@@ -76,9 +76,19 @@ release_pass() {  # [<dir>] [<overlay>] [tty]
     if [ "${3:-}" = tty ]; then
         run=(-it)
     fi
+    # Stoppable by one ^C, which needs care: `sh -c` with a single command execs
+    # it (so find would be PID 1, and PID 1 has no default signal dispositions -
+    # that is why every ^C used to kill only the current beets child while find
+    # marched on to the next file), and a trap on its own is not enough either,
+    # because a shell defers traps until its foreground child exits. Background
+    # the loop and wait: wait is interruptible, so the trap fires immediately,
+    # kills find and the container goes with PID 1.
     "${COMPOSE[@]}" run "${run[@]}" --rm -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
+        trap "kill \$pid 2>/dev/null; exit 130" INT TERM
         find "$1" -type f ! -name ".*" \
-            -exec /lsiopy/bin/beet --config "$2" import {} \;' \
+            -exec /lsiopy/bin/beet --config "$2" import {} \; &
+        pid=$!
+        wait $pid' \
         release-pass "${1:-/downloads}" "${2:-/config/album.yaml}"
 }
 

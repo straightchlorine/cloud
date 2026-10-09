@@ -188,6 +188,10 @@
           - "'for track in /downloads/*' not in media_sync"
           # ... used by the nightly run before the singleton pass ...
           - "'release_pass /downloads /config/album.yaml' in media_sync"
+          # One ^C must stop the release pass: the container's PID 1 needs a
+          # handler and the loop has to be backgrounded for the trap to fire.
+          - "'trap \"kill \\$pid' in media_sync"
+          - "'wait $pid' in media_sync"
           - >-
             media_sync.index('release_pass /downloads /config/album.yaml')
             < media_sync.index('" import /downloads')
@@ -224,6 +228,7 @@
         that:
           - "'exec /usr/local/bin/media-sync' in media_import"
           - "'docker compose' not in media_import"
+          - "'mode=--review' in media_import"
         fail_msg: "media-import should be a wrapper, not a second implementation:\n{{ media_import }}"
         success_msg: "[OK] media-import: interactive wrapper over media-sync"
 
@@ -250,12 +255,22 @@
       ansible.builtin.assert:
         that:
           - "'%(artist,uploader)s:%(artist)s' in ytdlp_conf"
+          - "'music\\s*official$' in ytdlp_conf"
           - "'--download-archive \"/mnt/music/state/youtube-archive.txt\"' in ytdlp_conf"
           - "'media_library_path' not in ytdlp_conf"
         fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"
         success_msg: "[OK] yt-dlp.conf rendered with the tag rules and archive"
 
-    - name: Assert the scripts, symlinks and playlist file
+    - name: Assert the interactive tools the role leans on are installed
+      # tmux for the long backfill run (see the README), fzf for
+      # scripts/media/pick.sh. Both come from common_packages.
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - tmux -V
+        - fzf --version
+      register: media_tools
+      changed_when: false
+      failed_when: media_tools.rc != 0
       ansible.builtin.assert:
         that:
           - media_stats.results[1].stat.islnk
