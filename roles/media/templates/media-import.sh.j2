@@ -26,12 +26,14 @@ echo "== media-import: album (release) pass =="
 # One FILE at a time: a shared or wrong album tag over many files groups
 # unrelated tracks into one "album", and beets scores such a group against the
 # tracks the release does not have. Per file, the release that actually contains
-# the track wins. See album.yaml.
+# the track wins. The whole tree is walked (`find`), not just its top level, so a
+# target holding per-artist/per-playlist subdirectories still gets a release
+# match per file instead of falling through to the album-less singleton pass.
+# See album.yaml.
 "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
-    for track in "$1"/*; do
-        [ -f "$track" ] || continue
-        /lsiopy/bin/beet --config /config/album.yaml import "$track"
-    done' media-import "$TARGET" || true
+    find "$1" -type f ! -name ".*" \
+        -exec /lsiopy/bin/beet --config /config/album.yaml import {} \;' \
+    media-import "$TARGET" || true
 
 echo "== media-import: singleton pass =="
 exec "${BEET[@]}" --config /config/interactive.yaml import "$TARGET"

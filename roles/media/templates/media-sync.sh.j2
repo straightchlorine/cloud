@@ -108,11 +108,16 @@ if [ "$new" -gt 0 ]; then
     # track win, so it gets the album year, release ID, track number and Cover Art
     # Archive art (fetchart only runs for releases, so a singleton never gets it).
     # A track whose "album" does not contain it is refused and falls through.
+    # WALK THE WHOLE TREE: downloads/ is not necessarily flat. A per-artist or
+    # per-playlist subdirectory (older yt-dlp templates, a hand-dropped album) with
+    # a top-level glob hands this pass NOTHING, and every nested file then falls to
+    # the singleton pass - which by design can never carry a release (no year, no
+    # Cover Art Archive art). find -exec keeps the one-file-at-a-time property,
+    # needs no shell loop and survives odd filenames; `! -name ".*"` keeps the old
+    # glob's habit of ignoring hidden files (a half-written .part/thumbnail).
     "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
-        for track in /downloads/*; do
-            [ -f "$track" ] || continue
-            /lsiopy/bin/beet --config /config/album.yaml import "$track"
-        done'
+        find /downloads -type f ! -name ".*" \
+            -exec /lsiopy/bin/beet --config /config/album.yaml import {} \;'
     # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
     # lookup carries no album-level metadata by design, so this is the fallback.
     "${BEET[@]}" import /downloads

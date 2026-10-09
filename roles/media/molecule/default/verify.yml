@@ -164,12 +164,17 @@
     - name: Assert the nightly script takes the release pass before the singleton pass
       ansible.builtin.assert:
         that:
-          - "'/config/album.yaml import \"$track\"' in media_sync"
+          # The release pass must walk the whole downloads tree (a per-artist or
+          # per-playlist subdirectory would otherwise be invisible to it and fall
+          # through to the album-less singleton pass), one file at a time.
+          - "'find /downloads -type f' in media_sync"
+          - "'/config/album.yaml import {}' in media_sync"
+          - "'for track in /downloads/*' not in media_sync"
           - >-
-            media_sync.index('/config/album.yaml import "$track"')
+            media_sync.index('/config/album.yaml import {}')
             < media_sync.index('" import /downloads')
         fail_msg: "media-sync import order wrong:\n{{ media_sync }}"
-        success_msg: "[OK] media-sync: per-file release pass, then singleton pass"
+        success_msg: "[OK] media-sync: per-file release pass over the whole downloads tree, then singleton pass"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:
