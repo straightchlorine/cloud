@@ -70,7 +70,13 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
     then singleton pass, applying only strong matches and leaving the rest in
     `downloads/`.
   - **`media-import [<dir>]`** — the same two passes, but the singleton one asks
-    per track (needs a terminal).
+    per track (needs a terminal: the interactive modes refuse to run without one,
+    so a stray cron entry fails fast instead of hanging on a prompt nobody sees).
+  - **`media-import --review [<dir>]`** — a full review session: the release pass
+    asks per file, then the singleton pass asks per track. Releases come first
+    because a release match supplies the year, release id, track numbers and
+    Cover Art Archive art that a track match can never add later. This is
+    interactive only — the nightly run stays the quiet two passes above.
   - **`media-import --singles [<dir>]`** — only the judging pass. This is the one
     for the morning after a nightly run: the release pass has already run and
     left its leftovers, so there is nothing to gain by waiting through it again

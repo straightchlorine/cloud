@@ -23,6 +23,9 @@
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
 #                                     track (this is what `media-import` runs)
+#   media-sync --review [<dir>]       a full session: the release pass asking per
+#                                     file first (accept a near miss by number, or
+#                                     dismiss it), then the singleton pass
 #   media-sync --singles [<dir>]      just the judging pass - what you want in the
 #                                     morning after a nightly run, instead of
 #                                     waiting through a release pass that would
@@ -65,8 +68,15 @@ count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
 # the one-file-at-a-time property, needs no shell loop and survives odd
 # filenames; `! -name ".*"` keeps the old glob's habit of ignoring hidden files
 # (a half-written .part or thumbnail).
-release_pass() {  # [<dir>] [<overlay>]
-    "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
+release_pass() {  # [<dir>] [<overlay>] [tty]
+    # `tty` hands beets a terminal so it can ask (used by --review); the default
+    # is unattended, where only strong matches are applied and the rest are
+    # printed as "Skipping.".
+    local run=(-T)
+    if [ "${3:-}" = tty ]; then
+        run=(-it)
+    fi
+    "${COMPOSE[@]}" run "${run[@]}" --rm -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
         find "$1" -type f ! -name ".*" \
             -exec /lsiopy/bin/beet --config "$2" import {} \;' \
         release-pass "${1:-/downloads}" "${2:-/config/album.yaml}"
@@ -155,6 +165,19 @@ on_interrupt() {
 trap on_interrupt INT TERM
 trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
 
+# The interactive modes are for a human at a terminal. Refuse to run without one,
+# before anything else happens: the cron only ever runs `sync` and `--retag`, and
+# while media-import checks this too, the engine is the place that must never sit
+# on a prompt nobody can answer.
+case "$MODE" in
+    --interactive | --review | --singles | --release)
+        if [ ! -t 0 ] || [ ! -t 1 ]; then
+            echo "media-sync ${MODE#--} needs an interactive terminal - run it from a shell (or use media-import)." >&2
+            exit 2
+        fi
+        ;;
+esac
+
 # Watchtower never sees this short-lived container, so pull here; a failed pull keeps the cached image.
 "${COMPOSE[@]}" --profile tools pull -q beets || echo "beets pull failed; using the cached image"
 
@@ -218,6 +241,18 @@ case "$MODE" in
         "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
         notify "done" "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
         exit 0 ;;
+    --review)
+        # A full review session: the release pass WITH prompts, so a near miss the
+        # automatic run refuses can be accepted by number or dismissed, followed by
+        # the singleton pass per track. Releases first on purpose - a release
+        # carries the year, release id, track numbers and Cover Art Archive art
+        # that a track match can never supply, and the singleton pass is the one
+        # that can no longer reach an album afterwards.
+        overlay release
+        echo "== media-import: album (release) pass, asking =="
+        release_pass "${2:-/downloads}" /config/.run.yaml tty || true
+        echo "== media-import: singleton pass =="
+        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
     --singles)
         # The judging half on its own. After a nightly run the release pass has
         # already had its say and left its leftovers, so `media-import --singles`
@@ -238,7 +273,7 @@ case "$MODE" in
         interactive_pass -c /config/.run.yaml import "${2:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--singles [<dir>]|--release [<dir>]]"
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>]]"
         exit 2 ;;
 esac
 

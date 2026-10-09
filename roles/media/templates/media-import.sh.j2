@@ -5,6 +5,10 @@
 #
 #   media-import [<dir>]            the nightly two passes, but the singleton one
 #                                   asks per track (Apply / as-is / Skip / ...)
+#   media-import --review [<dir>]   a full review session: the release pass asks
+#                                   per file, then the singleton pass asks per
+#                                   track - the way to accept a near miss the
+#                                   automatic run refused
 #   media-import --singles [<dir>]  the judging pass on its own - after a nightly
 #                                   run, go straight to the leftovers
 #   media-import --release [<dir>]  the RELEASE pass asking per track - for the
@@ -23,7 +27,7 @@ fi
 
 mode=--interactive
 case "${1:-}" in
-    --singles | --release)
+    --singles | --release | --review)
         mode="$1"
         shift
         ;;

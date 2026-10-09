@@ -195,6 +195,7 @@
           - "'--albums)' in media_sync"
           - "'--keep)' in media_sync"
           - "'--interactive)' in media_sync"
+          - "'--review)' in media_sync"
           - "'--singles)' in media_sync"
           - "'--release)' in media_sync"
           # The reviewer's decisions survive the repair paths.
@@ -234,6 +235,16 @@
       register: media_import_nott
       changed_when: false
       failed_when: media_import_nott.rc != 2
+
+    - name: Assert the engine refuses an interactive mode without a terminal
+      # The same guarantee one level down, where it also covers a hand-typed
+      # `media-sync --singles` (or --review) with no terminal attached.
+      ansible.builtin.command: /usr/local/bin/media-sync --singles
+      register: media_sync_nott
+      changed_when: false
+      failed_when: >-
+        media_sync_nott.rc != 2
+        or 'needs an interactive terminal' not in media_sync_nott.stderr
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:
