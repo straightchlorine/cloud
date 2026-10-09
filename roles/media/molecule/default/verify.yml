@@ -20,6 +20,8 @@
         - "{{ media_library_path }}/beets/interactive.yaml"
         - "{{ media_library_path }}/beets/album.yaml"
         - "{{ media_home }}/scripts/media-sync.sh"
+        - "{{ media_home }}/scripts/media-import.sh"
+        - "{{ media_library_path }}/beets/plugins/reviewed.py"
       register: media_files
 
     - name: Parse the deployed files
@@ -34,6 +36,8 @@
         interactive: "{{ media_files.results[7].content | b64decode | from_yaml }}"
         album: "{{ media_files.results[8].content | b64decode | from_yaml }}"
         media_sync: "{{ media_files.results[9].content | b64decode }}"
+        media_import: "{{ media_files.results[10].content | b64decode }}"
+        reviewed_plugin: "{{ media_files.results[11].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -47,8 +51,14 @@
         - "{{ media_library_path }}/music"
         - /tmp/molecule-media-backup
         - /usr/local/bin/media-import
-        - /usr/local/bin/media-import-album
       register: media_stats
+
+    - name: Stat the retired command
+      # media-import-album folded into `media-sync --albums`; a stale symlink on a
+      # long-lived host would shadow the new usage.
+      ansible.builtin.stat:
+        path: /usr/local/bin/media-import-album
+      register: media_import_album_retired
 
     - name: Assert the compose services
       vars:
@@ -121,7 +131,8 @@
           - >-
             beets.plugins.split() | sort ==
             ['chroma', 'duplicates', 'embedart', 'fetchart', 'lastgenre',
-            'lyrics', 'musicbrainz', 'replaygain']
+            'lyrics', 'musicbrainz', 'replaygain', 'reviewed']
+          - beets.pluginpath == '/config/plugins'
           - beets.replaygain.backend == 'ffmpeg'
           - beets.lyrics.synced
           - beets.chroma.auto
@@ -145,6 +156,7 @@
       ansible.builtin.assert:
         that:
           - not interactive['import']['quiet']
+          - interactive.reviewed.mark
           - not album['import']['singletons']
           - "'year' not in album.match.distance_weights"
           - album.match.distance_weights.missing_tracks == 0
@@ -155,26 +167,60 @@
           - album.match.max_rec.missing_tracks == 'strong'
           - album.original_date
           - media_stats.results[7].stat.islnk
-          - media_stats.results[8].stat.islnk
         fail_msg: >-
           overlays/scripts wrong: {{ interactive }} / {{ album }} /
-          {{ media_stats.results[7].stat }} / {{ media_stats.results[8].stat }}
+          {{ media_stats.results[7].stat }}
         success_msg: "[OK] album overlay: partial releases accepted, unmatched tracks kept as the guard"
 
-    - name: Assert the nightly script takes the release pass before the singleton pass
+    - name: Assert the pipeline is one engine whose passes stay in order
       ansible.builtin.assert:
         that:
-          # The release pass must walk the whole downloads tree (a per-artist or
-          # per-playlist subdirectory would otherwise be invisible to it and fall
-          # through to the album-less singleton pass), one file at a time.
-          - "'find /downloads -type f' in media_sync"
-          - "'/config/album.yaml import {}' in media_sync"
+          # One overlay-parameterised release-pass function for every mode, and
+          # it walks the whole downloads tree (a per-artist or per-playlist
+          # subdirectory would otherwise be invisible to it and fall through to
+          # the album-less singleton pass), one file at a time.
+          - "'release_pass() {' in media_sync"
+          - "'find \"$1\" -type f ! -name \".*\"' in media_sync"
+          - "'-exec /lsiopy/bin/beet --config \"$2\" import {} \\;' in media_sync"
           - "'for track in /downloads/*' not in media_sync"
+          # ... used by the nightly run before the singleton pass ...
+          - "'release_pass /downloads /config/album.yaml' in media_sync"
           - >-
-            media_sync.index('/config/album.yaml import {}')
+            media_sync.index('release_pass /downloads /config/album.yaml')
             < media_sync.index('" import /downloads')
-        fail_msg: "media-sync import order wrong:\n{{ media_sync }}"
-        success_msg: "[OK] media-sync: per-file release pass over the whole downloads tree, then singleton pass"
+          # ... and every other mode is a flag on the same engine.
+          - "'--albums)' in media_sync"
+          - "'--keep)' in media_sync"
+          - "'--interactive)' in media_sync"
+          - "'--release)' in media_sync"
+          # The reviewer's decisions survive the repair paths.
+          - "'reviewed::^$' in media_sync"
+          # Folded scalar on purpose: two adjacent quoted literals in a Jinja
+          # expression concatenate ('a' 'b' == 'ab'), which silently searches for
+          # the wrong text.
+          - >-
+            "'mb_trackid::^$' 'reviewed::^$'" in media_sync
+        fail_msg: "media-sync structure wrong:\n{{ media_sync }}"
+        success_msg: "[OK] media-sync: one engine, per-file release pass, marker-aware repair"
+
+    - name: Assert the reviewed plugin is deployed and gated
+      ansible.builtin.assert:
+        that:
+          - "'ReviewedPlugin' in reviewed_plugin"
+          - "'import_task_files' in reviewed_plugin"
+          - "'Action.ASIS' in reviewed_plugin"
+          - "'reviewed | ' in reviewed_plugin"
+          - "'item.try_write()' in reviewed_plugin"
+        fail_msg: "reviewed.py wrong:\n{{ reviewed_plugin }}"
+        success_msg: "[OK] reviewed.py: marks an as-is answer, file tag included"
+
+    - name: Assert media-import only delegates to the engine
+      ansible.builtin.assert:
+        that:
+          - "'exec /usr/local/bin/media-sync' in media_import"
+          - "'docker compose' not in media_import"
+        fail_msg: "media-import should be a wrapper, not a second implementation:\n{{ media_import }}"
+        success_msg: "[OK] media-import: interactive wrapper over media-sync"
 
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:
@@ -191,8 +237,9 @@
           - media_stats.results[1].stat.islnk
           - media_stats.results[2].stat.islnk
           - media_stats.results[3].stat.mode == '0600'
-        fail_msg: manage/media-sync symlinks or playlists.txt wrong
-        success_msg: "[OK] manage-media + media-sync in PATH, playlists.txt 0600"
+          - not media_import_album_retired.stat.exists
+        fail_msg: manage/media-sync symlinks, playlists.txt or a stale media-import-album
+        success_msg: "[OK] manage-media + media-sync in PATH, playlists.txt 0600, media-import-album retired"
 
     - name: Run the deployed media-sync against the stub yt-dlp
       # The stub downloads nothing, so beets is skipped.
@@ -259,3 +306,8 @@
           - media_stats.results[6].stat.mode == '0750'
         fail_msg: "snapshot script wrong:\n{{ snapshot_script }}"
         success_msg: "[OK] snapshot covers navidrome + beets DBs and the yt-dlp archive"
+
+    # The plugin's *runtime* load check lives in tasks/post_deploy_validate.yml:
+    # this molecule container has no docker, so no beets container can be started
+    # here (the smoke test's `docker compose pull` is non-fatal by design). The
+    # grep asserts above plus that post-deploy check cover reviewed.py.

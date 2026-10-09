@@ -49,11 +49,15 @@
 - name: Verify beets loads our config and plugins as the stack user
   # Mirrors media-sync's invocation (--entrypoint skips /init and the web UI):
   # proves /config is the config dir, the lyrics and replaygain plugins load,
-  # and ffmpeg is present.
+  # and ffmpeg is present. The last step imports the reviewed plugin the way
+  # beets would, because beets only *warns* when a plugin fails to load and
+  # carries on - so a broken reviewed.py would otherwise go unnoticed.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T --entrypoint /bin/sh beets -c
-    '/lsiopy/bin/beet config -p && /lsiopy/bin/beet version && ffmpeg -version'
+    '/lsiopy/bin/beet config -p && /lsiopy/bin/beet version && ffmpeg -version &&
+    PYTHONPATH=/config/plugins /lsiopy/bin/python3 -c
+    "import reviewed; print(reviewed.ReviewedPlugin)"'
   become: true
   become_user: "{{ ansible_user }}"
   register: media_beets_check
@@ -63,4 +67,26 @@
     or '/config/config.yaml' not in media_beets_check.stdout
     or 'lyrics' not in media_beets_check.stdout
     or 'replaygain' not in media_beets_check.stdout
+    or 'ReviewedPlugin' not in media_beets_check.stdout
+  tags: [post_validation]
+
+- name: Verify the reviewed plugin loads and reads its flag
+  # beets only *warns* when a plugin fails to load, and the reviewed hook reads
+  # `reviewed.mark` on every import with the flag absent (the nightly run,
+  # --adopt and the album pass never set it), so read it here the way the hook
+  # does: a missing key without the plugin's seeded default raises mid-import.
+  ansible.builtin.command: >-
+    docker compose -f {{ media_home }}/docker-compose.yml
+    run --rm -T --entrypoint /lsiopy/bin/python3 beets -c
+    "import sys; sys.path.insert(0, '/config/plugins'); import reviewed;
+    plugin = reviewed.ReviewedPlugin();
+    print('plugin', reviewed.ReviewedPlugin, 'mark', plugin.config['mark'].get(bool))"
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: media_reviewed_check
+  changed_when: false
+  failed_when: >-
+    media_reviewed_check.rc != 0
+    or 'ReviewedPlugin' not in media_reviewed_check.stdout
+    or 'mark False' not in media_reviewed_check.stdout
   tags: [post_validation]

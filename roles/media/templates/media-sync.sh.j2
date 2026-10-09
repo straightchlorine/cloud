@@ -1,12 +1,32 @@
 #!/usr/bin/env bash
-#   media-sync             download + import (nightly cron)
-#   media-sync --retag     retry MusicBrainz for recent as-is imports (weekly)
-#   media-sync --upgrade   pull release metadata for tracks imported as bare
-#                          tracks (default: the last 4 weeks, `all`: whole
-#                          library - see the case below)
-#   media-sync --adopt     one-time: register the existing music/ with beets
-#   media-sync --backfill  one-time: lyrics + ReplayGain for adopted tracks
-#                          (slow - run it under tmux)
+# shellcheck disable=SC2016  # beets format/query strings ('$id', 'mb_albumid::^$',
+# 'reviewed::^$') are literal beets syntax, never shell expansion - hence quoted.
+# media-sync - the whole YouTube -> yt-dlp -> beets -> Navidrome pipeline, one
+# engine for every mode, so the beets invocation, the overlays and the two
+# import passes exist exactly once:
+#
+#   media-sync                        nightly: pull the playlists, then import
+#                                     whatever landed (release pass, then a
+#                                     singleton pass for the rest)  [cron 01:00]
+#   media-sync --retag                retry MusicBrainz for recent as-is imports
+#                                     and give them their release [cron Sun 4:15]
+#   media-sync --upgrade [all|<q>]    give bare tracks their release (last 4
+#                                     weeks by default)
+#   media-sync --albums [<dir>]       release pass only, grouped: a ripped CD or
+#                                     a complete album dropped in one directory
+#   media-sync --keep [<dir>]         register a directory as-is (no matching)
+#                                     and mark it reviewed, so nothing re-matches
+#                                     it later
+#   media-sync --adopt                one-time: register an existing music/ with
+#                                     beets and restore the reviewed markers
+#   media-sync --backfill             one-time: lyrics + ReplayGain for adopted
+#                                     tracks (slow - run it under tmux)
+#   media-sync --interactive [<dir>]  both passes, the singleton one asking per
+#                                     track (this is what `media-import` runs)
+#   media-sync --release [<dir>]      the RELEASE pass asking per track - for the
+#                                     near misses automatic matching refuses
+#
+# The two interactive modes need a terminal; run them through `media-import`.
 set -euo pipefail
 
 LIB="{{ media_library_path }}"
@@ -14,14 +34,62 @@ MODE="${1:-sync}"
 COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
 # --entrypoint skips /init (and the beets web UI) so each run is a one-off that
 # exits; service_user sets the uid so beets' moves and tag writes stay owned by
-# the remapped stack user.
-# PYTHONUNBUFFERED: without a TTY stdout is block-buffered, so a long album
-# pass looks dead while it works.
+# the remapped stack user. PYTHONUNBUFFERED: without a TTY stdout is
+# block-buffered, so a long release pass looks dead while it works.
 BEET=("${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+    --entrypoint /lsiopy/bin/beet beets)
+# The same, but with a TTY: for the modes that prompt.
+BEET_TTY=("${COMPOSE[@]}" run --rm -it -e PYTHONUNBUFFERED=1 \
     --entrypoint /lsiopy/bin/beet beets)
 
 notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
 count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
+
+# ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
+# many files can share one (or the wrong) album tag; a group like that holds
+# tracks the release does not have, which beets scores badly - and rightly so.
+# Judging each file on its own lets the release that actually CONTAINS the track
+# win, so it gets the album year, release ID, track number and Cover Art Archive
+# art (fetchart only runs for releases, so a singleton never gets it). A track
+# whose "album" does not contain it is refused and falls through.
+# WALK THE WHOLE TREE: downloads/ is not necessarily flat. A per-artist or
+# per-playlist subdirectory (older yt-dlp templates, a hand-dropped album) with a
+# top-level glob hands this pass NOTHING, and every nested file then falls to the
+# singleton pass - which by design can never carry a release. find -exec keeps
+# the one-file-at-a-time property, needs no shell loop and survives odd
+# filenames; `! -name ".*"` keeps the old glob's habit of ignoring hidden files
+# (a half-written .part or thumbnail).
+release_pass() {  # [<dir>] [<overlay>]
+    "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
+        find "$1" -type f ! -name ".*" \
+            -exec /lsiopy/bin/beet --config "$2" import {} \;' \
+        release-pass "${1:-/downloads}" "${2:-/config/album.yaml}"
+}
+
+# Compose an overlay with one extra setting, inside the container, so each
+# overlay stays the single source of truth: beets --config takes a single file
+# and `beet import --quiet` can only ever turn quiet ON, never off. Writes
+# /config/.run.yaml, regenerated on every use.
+#
+#   release -> album.yaml + import.quiet: no   (prompt with release candidates)
+#   keep    -> adopt.yaml + import.move: yes   (register a directory as-is)
+#
+# Both are interactive, human-driven runs, so both let reviewed.py turn a
+# "use as-is" answer into a marker.
+overlay() {  # <release|keep>
+    "${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets -c "
+import sys, yaml
+base, imp, top = {
+    'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
+    'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
+}[sys.argv[1]]
+conf = yaml.safe_load(open(base))
+for key, value in top.items():
+    conf.setdefault(key, {}).update(value)
+conf.setdefault('import', {}).update(imp)
+yaml.safe_dump(conf, open('/config/.run.yaml', 'w'))
+" "$1"
+}
 
 # Give already-imported bare tracks their release. beets only applies RELEASE
 # metadata during an album import, and `beet import -L` re-imports the library
@@ -29,18 +97,28 @@ count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
 # match is a no-op (beets' own SingletonImportTask: "a single track that is not
 # associated to an album"). So hand the FILES to the importer instead: drop the
 # rows (no -d, the files stay on disk), then import those paths in album mode.
-# Anything that finds no release stays untracked but keeps playing; re-register
-# it with `media-sync --adopt`. Optional beets query as "$@".
+# `reviewed::^$` leaves the reviewer's decisions alone: a track they chose to
+# keep as-is is never given a release behind their back (the marker is written
+# by reviewed.py, see interactive.yaml). Anything that finds no release stays
+# untracked but keeps playing; re-register it with `media-sync --adopt`.
+# Optional beets query as "$@".
 upgrade_releases() {
     local files
-    mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' "$@")
+    mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' 'reviewed::^$' "$@")
     [ -n "${files[*]:-}" ] || return 0
-    "${BEET[@]}" remove -f 'mb_albumid::^$' "$@"
+    "${BEET[@]}" remove -f 'mb_albumid::^$' 'reviewed::^$' "$@"
     "${BEET[@]}" --config /config/album.yaml import "${files[@]}"
 }
 
 exec 9>"$LIB/logs/.media-sync.lock"
-flock -n 9 || { echo "media-sync already running"; exit 0; }
+# One writer at a time, interactive sessions included - an interactive run can
+# hold this for an hour, so a skipped nightly sync says so instead of staying
+# silent (no lock, no beets writes while a reviewer is answering prompts).
+flock -n 9 || {
+    echo "media-sync already running; skipping this run"
+    notify "needs a look" "another media-sync run is in progress; this run skipped." default warning
+    exit 0
+}
 
 trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
 
@@ -49,15 +127,18 @@ trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_
 
 case "$MODE" in
     --retag)
-        before="$(count 'mb_trackid::^$' added:-4w..)"
-        "${BEET[@]}" import -L 'mb_trackid::^$' added:-4w..
-        after="$(count 'mb_trackid::^$' added:-4w..)"
+        # `reviewed::^$` here too: a track the reviewer kept as-is carries no
+        # MusicBrainz ids, so without it this would re-match it and overwrite the
+        # tags they chose to keep.
+        before="$(count 'mb_trackid::^$' 'reviewed::^$' added:-4w..)"
+        "${BEET[@]}" import -L 'mb_trackid::^$' 'reviewed::^$' added:-4w..
+        after="$(count 'mb_trackid::^$' 'reviewed::^$' added:-4w..)"
         # A track match can never carry the release (year, release ID, cover
         # art), so give the recent matches their release too. Same window.
-        albums_before="$(count 'mb_albumid::^$' added:-4w..)"
+        albums_before="$(count 'mb_albumid::^$' 'reviewed::^$' added:-4w..)"
         upgrade_releases added:-4w..
-        albums_after="$(count 'mb_albumid::^$' added:-4w..)"
-        notify done "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $((albums_before - albums_after)) of $albums_before got a release."
+        albums_after="$(count 'mb_albumid::^$' 'reviewed::^$' added:-4w..)"
+        notify "done" "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $((albums_before - albums_after)) of $albums_before got a release."
         exit 0 ;;
     --upgrade)
         # The release half of --retag, on demand: give tracks that were imported
@@ -68,23 +149,58 @@ case "$MODE" in
             '') scope=(added:-4w..) ;;
             *) scope=("$2") ;;
         esac
-        before="$(count 'mb_albumid::^$' "${scope[@]}")"
+        before="$(count 'mb_albumid::^$' 'reviewed::^$' "${scope[@]}")"
         upgrade_releases "${scope[@]}"
-        after="$(count 'mb_albumid::^$' "${scope[@]}")"
-        notify done "$((before - after)) of $before track(s) got a release; the rest found no MusicBrainz release and can be re-registered with 'media-sync --adopt'."
+        after="$(count 'mb_albumid::^$' 'reviewed::^$' "${scope[@]}")"
+        notify "done" "$((before - after)) of $before track(s) got a release; the rest found no MusicBrainz release and can be re-registered with 'media-sync --adopt'."
+        exit 0 ;;
+    --albums)
+        # Release pass only, GROUPED: beets sees the directory as album tasks, so
+        # a complete album (or a ripped CD) is matched as a whole. The nightly run
+        # makes the opposite trade-off - every file judged on its own - because a
+        # playlist dump cannot be trusted to group correctly; see release_pass.
+        exec "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+            --entrypoint /lsiopy/bin/beet beets \
+            --config /config/album.yaml import "${2:-/downloads}" ;;
+    --keep)
+        # "I know what this is and I want it as it is": register the files with
+        # beets without matching them (adopt.yaml), move them into music/ so the
+        # nightly run stops retrying them, and let reviewed.py mark them - the
+        # marker is what keeps --upgrade and --retag away from them later.
+        overlay keep
+        before="$(count)"
+        "${BEET[@]}" -c /config/.run.yaml import "${2:-/downloads}"
+        after="$(count)"
+        notify "done" "$((after - before)) new track(s) registered as-is and marked reviewed."
         exit 0 ;;
     --adopt)
         "${BEET[@]}" -c /config/adopt.yaml import /music
-        notify done "beets now tracks $(count) track(s) in music/."
+        # A rebuilt library loses the reviewed markers: the flexible field lives
+        # only in library.db, but the comments prefix travelled with the files.
+        "${BEET[@]}" modify -y reviewed=1 'comments::^reviewed'
+        notify "done" "beets now tracks $(count) track(s) in music/, $(count 'reviewed::.') of them marked reviewed."
         exit 0 ;;
     --backfill)
         "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
         "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
-        notify done "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
+        notify "done" "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
         exit 0 ;;
+    --interactive)
+        # Both passes, the singleton one interactive (what `media-import` runs).
+        echo "== media-import: album (release) pass =="
+        release_pass "${2:-/downloads}" /config/album.yaml || true
+        echo "== media-import: singleton pass =="
+        exec "${BEET_TTY[@]}" --config /config/interactive.yaml import "${2:-/downloads}" ;;
+    --release)
+        # The release pass WITH prompts, for the near misses automatic matching
+        # refuses (verified: a correct release can score 0.05 against the 0.04
+        # strong_rec_thresh and be skipped). Answering as-is marks the track.
+        overlay release
+        exec "${BEET_TTY[@]}" -c /config/.run.yaml import "${2:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--adopt|--backfill]"; exit 2 ;;
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--release [<dir>]]"
+        exit 2 ;;
 esac
 
 mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
@@ -101,23 +217,9 @@ errors="$(grep '^ERROR:' "$run_log" \
 
 new="$(find "$LIB/downloads" -type f | wc -l)"
 if [ "$new" -gt 0 ]; then
-    # ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
-    # many files can share one (or the wrong) album tag; a group like that holds
-    # tracks the release does not have, which beets scores badly - and rightly so.
-    # Judging each file on its own lets the release that actually CONTAINS the
-    # track win, so it gets the album year, release ID, track number and Cover Art
-    # Archive art (fetchart only runs for releases, so a singleton never gets it).
-    # A track whose "album" does not contain it is refused and falls through.
-    # WALK THE WHOLE TREE: downloads/ is not necessarily flat. A per-artist or
-    # per-playlist subdirectory (older yt-dlp templates, a hand-dropped album) with
-    # a top-level glob hands this pass NOTHING, and every nested file then falls to
-    # the singleton pass - which by design can never carry a release (no year, no
-    # Cover Art Archive art). find -exec keeps the one-file-at-a-time property,
-    # needs no shell loop and survives odd filenames; `! -name ".*"` keeps the old
-    # glob's habit of ignoring hidden files (a half-written .part/thumbnail).
-    "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
-        find /downloads -type f ! -name ".*" \
-            -exec /lsiopy/bin/beet --config /config/album.yaml import {} \;'
+    # Release pass, one file at a time (see release_pass), then a singleton pass
+    # for whatever is left.
+    release_pass /downloads /config/album.yaml
     # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
     # lookup carries no album-level metadata by design, so this is the fallback.
     "${BEET[@]}" import /downloads
@@ -130,5 +232,5 @@ if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ]; then
         "$summary Run 'media-import' to resolve what is left, interactively. See $LIB/logs/media-sync.log." \
         default warning
 else
-    notify done "$summary"
+    notify "done" "$summary"
 fi

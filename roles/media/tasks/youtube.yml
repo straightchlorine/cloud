@@ -150,22 +150,6 @@
   loop_control:
     label: "{{ item.dest }}"
 
-- name: Install the media-sync pipeline script
-  ansible.builtin.template:
-    src: media-sync.sh.j2
-    dest: "{{ media_home }}/scripts/media-sync.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
-
-- name: Symlink media-sync into PATH
-  ansible.builtin.file:
-    src: "{{ media_home }}/scripts/media-sync.sh"
-    dest: /usr/local/bin/media-sync
-    state: link
-    force: true
-  become: true
-
 - name: Add /usr/local/bin to the cron PATH
   ansible.builtin.cron:
     name: "PATH"

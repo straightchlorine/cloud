@@ -33,7 +33,11 @@ paths:
     singleton: $artist/$title
     comp: Compilations/$album%aunique{}/%if{$track,$track }$title
 
-plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart
+plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed
+# reviewed.py records a reviewer's "use as-is" answer as a `reviewed` field plus
+# a `reviewed | ` comments prefix (see the file in /config/plugins). It is only
+# active when an overlay sets `reviewed.mark: yes`, i.e. the interactive runs.
+pluginpath: /config/plugins
 
 lyrics:
     auto: yes

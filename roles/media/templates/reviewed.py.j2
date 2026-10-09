@@ -1,0 +1,60 @@
+"""Turn a reviewer's "use as-is" decision into a durable, queryable marker.
+
+Deployed to /config/plugins/reviewed.py (see config.yaml's `pluginpath`) and
+loaded on every beets run in this container. It records two things:
+
+* the flexible field `reviewed` - what the pipeline queries. `media-sync
+  --upgrade` and `--retag` add `reviewed::^$`, so a track the reviewer
+  deliberately left alone is never re-matched behind their back.
+  (`reviewed::^$` matches unmarked items: an absent flexible field reads as
+  empty, the same idiom `mb_albumid::^$` already uses.)
+* a `reviewed | ` prefix on `comments` - a native field, so it is written into
+  the file and read back by `--adopt` after a library rebuild (the flexible
+  field lives only in library.db). It is also what Navidrome's info panel shows.
+
+It only runs when the import opted in via `reviewed.mark: yes`, which just
+interactive.yaml and the `media-sync --keep` overlay set. Neither the nightly
+sync (quiet, and `quiet_fallback: skip` means it never settles on as-is) nor
+`--adopt` (it re-imports a whole rebuilt library as-is, and marking all of it
+reviewed would be wrong) opt in.
+"""
+
+from beets import importer
+from beets.plugins import BeetsPlugin
+
+FIELD = "reviewed"
+MARK = "reviewed"
+PREFIX = MARK + " | "
+
+
+class ReviewedPlugin(BeetsPlugin):
+    """Mark the items of a task the reviewer answered "use as-is" for."""
+
+    def __init__(self):
+        super().__init__()
+        # Seed the default so reading it can never raise: confuse's
+        # ConfigView.get() throws NotFoundError for a missing key, and the
+        # nightly run, --adopt and the album pass all import with the flag
+        # absent (only interactive.yaml and the --keep overlay set it).
+        self.config.add({"mark": False})
+        # import_task_files fires for every import path, after the files are in
+        # place, so this is the one place the decision can be recorded.
+        self.register_listener("import_task_files", self.mark_asis)
+
+    def mark_asis(self, session, task):
+        if not self.config["mark"].get(bool):
+            return
+        if task.choice_flag is not importer.Action.ASIS:
+            return
+
+        marked = 0
+        for item in task.imported_items():
+            item[FIELD] = "1"
+            if not (item.comments or "").startswith(MARK):
+                item.comments = PREFIX + item.comments if item.comments else MARK
+            # try_write persists the comments tag (the decision has to outlive
+            # library.db); store persists the flexible field.
+            item.try_write()
+            item.store()
+            marked += 1
+        self._log.info("{0}: marked {1} item(s)", MARK, marked)

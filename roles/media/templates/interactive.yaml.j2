@@ -3,3 +3,9 @@
 # (Apply / as-is / Skip / ...) instead of auto-skipping unmatched files.
 import:
     quiet: no
+
+# A reviewer answering "use as-is" is a decision, not a failure to match: let
+# reviewed.py mark those tracks so no later `--upgrade`/`--retag` re-matches
+# them. Only interactive runs opt in; the nightly pass and --adopt never do.
+reviewed:
+    mark: yes

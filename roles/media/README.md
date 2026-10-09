@@ -62,12 +62,28 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   **earliest** release of the group, so all tracks of an album land on the same
   edition. The year written is the release group's **original** year
   (`original_date`), not the matched pressing's.
-- **Import paths.** The nightly `media-sync` is unattended
-  (`quiet_fallback: skip`): release pass then singleton pass, applying only what
-  beets deems a strong match and leaving the rest in `downloads/`. Run
-  **`media-import`** when you have time — same two passes, but the singleton
-  pass is **interactive** and asks per track. **`media-import-album`** runs just
-  the release pass (e.g. for a full ripped CD).
+- **Import paths — two commands, one engine.** `media-sync` is the whole
+  pipeline (one flag per mode); `media-import` is the interactive half and a
+  thin wrapper over it, so every pass, overlay and beets invocation has exactly
+  one implementation.
+  - nightly **`media-sync`** — unattended (`quiet_fallback: skip`): release pass
+    then singleton pass, applying only strong matches and leaving the rest in
+    `downloads/`.
+  - **`media-import [<dir>]`** — the same two passes, but the singleton one asks
+    per track (needs a terminal).
+  - **`media-import --release [<dir>]`** — the *release* pass asking per track,
+    for the near misses automatic matching refuses (a correct release can score
+    0.05 against the 0.04 `strong_rec_thresh` and get skipped).
+  - **`media-sync --albums [<dir>]`** — the release pass only, grouped, for a
+    complete album or a ripped CD.
+- **Keeping something as it is.** `media-sync --keep [<dir>]` registers a
+  directory without matching it (no MusicBrainz calls), moves it into `music/`
+  so the nightly run stops retrying it, and marks it reviewed. Answering "use
+  as-is" in an interactive run marks it the same way (see `reviewed.py` under
+  `beets/plugins`). A reviewed track is never handed to `--upgrade`/`--retag`
+  again; the marker is a `reviewed` field plus a `reviewed` prefix on
+  `comments`, so it rides along in the files and `--adopt` restores it after a
+  library rebuild.
 - **Retagging.** `media-sync --retag` (weekly) retries MusicBrainz for the last
   4 weeks' unmatched imports *and* gives the recent bare tracks their release;
   `media-sync --upgrade [all|<query>]` runs that second part on demand — the
@@ -90,6 +106,7 @@ One per event, success or failure:
 | nightly sync | `media-sync sync done` / `needs a look` | tracks imported, left in `downloads/`, unexpected yt-dlp errors |
 | weekly retag | `media-sync retag done` | as-is tracks matched MusicBrainz, matches given a release |
 | upgrade | `media-sync upgrade done` | tracks that gained release metadata |
+| keep | `media-sync keep done` | files registered as-is and marked reviewed |
 | adopt / backfill | `media-sync adopt/backfill done` | tracks tracked by beets / tracks with lyrics |
 | local snapshot | `media stack backup successful` | including a note when no Navidrome backup existed yet |
 | restic | `restic backup successful` / `failed` | (every host's restic unit) |
@@ -105,6 +122,7 @@ Any failed step sends `... failed` with the line number, at high priority.
 ~/stack/ (SD, media_home)   docker-compose.yml  .env (0600)  .navidrome_jwt_secret
                             config/yt-dlp.conf  config/playlists.txt (0600)
                             scripts/manage-media.sh  scripts/media-sync.sh
+                            scripts/media-import.sh
 /mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/
                             cache/  logs/  state/youtube-archive.txt
                             syncthing/backup/  docker/  journal/  backup-tmp/

@@ -39,6 +39,8 @@
     - /usr/local/bin/manage-media
     - /usr/local/bin/media-sync
     - /usr/local/bin/media-import
+    # Retired (folded into `media-sync --albums`): still removed so a host
+    # deployed before the refactor cannot keep a symlink to an unmanaged script.
     - /usr/local/bin/media-import-album
     - /usr/local/bin/yt-dlp
     - /usr/local/bin/deno
