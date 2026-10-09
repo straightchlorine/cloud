@@ -47,6 +47,12 @@
             tasks_from: validate
           when: "'monitoring' in group_names"
 
+        - name: GPU host validation for gpu-qp hosts
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: validate
+          when: "'gpu_qp' in group_names"
+
 - name: Configure all hosts with common setup
   hosts: all:!honeypot
   become: true
@@ -129,6 +135,14 @@
   roles:
     - role: backup
       tags: [backup]
+
+- name: Configure the GPU research host
+  hosts: gpu_qp
+  become: true
+  gather_facts: true
+  roles:
+    - role: gpu-qp
+      tags: [gpu-qp, gpu, quantum, docker]
 
 - name: Configure the honeypot host
   hosts: honeypot

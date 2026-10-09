@@ -28,6 +28,7 @@ matrix:
     - automation
     - media
     - honeypot
+    - gpu-qp
 
 steps:
   - name: checkout

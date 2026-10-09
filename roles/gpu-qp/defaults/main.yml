@@ -1,0 +1,173 @@
+---
+# gpu-qp defaults - cloud-agnostic preparation of a GPU host so the
+# quantum-pipeline VQE solver runs with NVIDIA GPU acceleration. Software only:
+# Docker, the NVIDIA driver (optional), the container toolkit, the GPU image and
+# a compose stack. No provider/cloud provisioning lives here.
+#
+# Required in host_vars (validated in validate.yml - no default, because a wrong
+# value builds an image that dies at runtime with
+# "CUDA error: no kernel image is available"):
+#   gpu_qp_cuda_arch   CUDA compute capability: "6.1" Pascal, "7.5" Turing,
+#                      "8.6" Ampere, "8.9" Ada.
+
+# Home derived from the inventory ansible_user, not ansible_user_dir (which
+# reflects root under become).
+gpu_qp_home: "/home/{{ ansible_user }}/gpu-qp"
+gpu_qp_data_path: "{{ gpu_qp_home }}/data"
+gpu_qp_gen_path: "{{ gpu_qp_home }}/gen"
+
+gpu_qp_specific_packages:
+  - pciutils
+
+# --- GPU image -------------------------------------------------------------
+# build: clone the quantum-pipeline source and compile qiskit-aer for
+#        gpu_qp_cuda_arch - the only way to run a non-Ampere card, since the
+#        published :gpu tag is compiled for sm_86.
+# pull:  use gpu_qp_image_pull_name (only valid if it matches gpu_qp_cuda_arch).
+gpu_qp_image_mode: "build"
+gpu_qp_image_repo: "https://github.com/straightchlorine/quantum-pipeline.git"
+gpu_qp_image_ref: "master"
+gpu_qp_source_path: "{{ gpu_qp_home }}/src/quantum-pipeline"
+gpu_qp_image_name: "quantum-pipeline:gpu"
+gpu_qp_image_pull_name: "ghcr.io/straightchlorine/quantum-pipeline:gpu"
+gpu_qp_aer_version: "0.17.2"
+gpu_qp_image_force_rebuild: false
+
+# The image compose actually runs: derived from the mode, so the worker service
+# does not have to branch on it.
+gpu_qp_active_image: >-
+  {{ gpu_qp_image_pull_name if gpu_qp_image_mode == 'pull' else gpu_qp_image_name }}
+
+# --- NVIDIA driver ---------------------------------------------------------
+# Provider GPU images (NVIDIA NGC, most cloud vendor images) ship the driver and
+# only need the toolkit - set false there. On a plain OS image, true installs the
+# driver plus the kernel headers matching the running kernel and builds the DKMS
+# module.
+gpu_qp_driver_install: true
+# Debian's metapackage. Ubuntu names the driver per branch (nvidia-driver-550);
+# override in host_vars there. Provider GPU images ship the driver already, so
+# set gpu_qp_driver_install: false instead of listing packages.
+gpu_qp_driver_packages:
+  - nvidia-driver
+# The running kernel's headers package (cloud kernels included) - never the plain
+# linux-headers-amd64, which targets a different kernel and builds a module the
+# running kernel cannot load.
+gpu_qp_driver_headers_packages:
+  - "linux-headers-{{ ansible_kernel }}"
+
+# --- Containers ------------------------------------------------------------
+gpu_qp_container_toolkit_enabled: true
+gpu_qp_gpu_exporter_enabled: true
+gpu_qp_gpu_exporter_image: "utkuozdemir/nvidia_gpu_exporter:1.2.0"
+gpu_qp_gpu_exporter_port: 9835
+
+# validate.yml asserts a real NVIDIA device is present (vendor 0x10de). Turn this
+# off only to exercise the role's validation on a host without a GPU (molecule);
+# a real deploy must keep it on.
+gpu_qp_require_nvidia_device: true
+
+# --- Simulation ------------------------------------------------------------
+# Which GPU the worker sees: "all", or a device index ("0"/"1") to pin one card.
+gpu_qp_worker_device: "all"
+gpu_qp_worker_memory_limit: "4G"
+gpu_qp_worker_cpu_limit: "2.0"
+gpu_qp_worker_memory_reservation: "1G"
+gpu_qp_worker_cpu_reservation: "0.5"
+
+gpu_qp_basis: "sto3g"
+gpu_qp_max_iterations: 100
+gpu_qp_optimizer: "L-BFGS-B"
+# Path inside the container (gpu_qp_data_path is mounted at
+# /usr/src/quantum_pipeline/data, the image's working directory).
+gpu_qp_container_molecules_path: "data/molecules.json"
+
+# Rendered into gpu_qp_data_path/molecules.json; override in host_vars to run a
+# different molecule set. Schema per quantum-pipeline/data/molecules.json.
+gpu_qp_molecules:
+  - symbols: ["H", "H"]
+    coords: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
+    multiplicity: 1
+    charge: 0
+    units: "angstrom"
+    masses: [1.008, 1.008]
+  - symbols: ["Li", "H"]
+    coords: [[0.0, 0.0, 0.0], [0.0, 0.0, 1.6]]
+    multiplicity: 1
+    charge: 0
+    units: "angstrom"
+    masses: [6.94, 1.008]
+
+# post_deploy_validate proves the whole path with a short real GPU run.
+gpu_qp_smoke_test_enabled: true
+gpu_qp_smoke_test_molecule_index: 0
+gpu_qp_smoke_test_max_iterations: 2
+
+gpu_qp_supported_cuda_arches:
+  - "6.0"
+  - "6.1"
+  - "7.0"
+  - "7.5"
+  - "8.0"
+  - "8.6"
+  - "8.9"
+  - "9.0"
+
+# --- Generated compose profile ---------------------------------------------
+gpu_qp_compose_networks:
+  - name: stack
+    compose_name: stack
+    driver: bridge
+
+gpu_qp_compose_volumes: []
+
+# Batch worker: not started by `up` (profiles: [batch]) - invoked on demand by
+# the gpu-qp-run wrapper or `docker compose run`. userns_mode: host because the
+# NVIDIA runtime cannot run inside Docker's userns-remap (the same reason
+# watchtower/cadvisor/beets set it).
+gpu_qp_compose_services:
+  - service_name: quantum-pipeline-gpu
+    service_image: "{{ gpu_qp_active_image }}"
+    service_runtime: nvidia
+    service_userns_mode: "host"
+    service_restart: "no"
+    service_profiles:
+      - batch
+    service_environment:
+      - "NVIDIA_VISIBLE_DEVICES={{ gpu_qp_worker_device }}"
+    service_volumes:
+      - "{{ gpu_qp_data_path }}:/usr/src/quantum_pipeline/data:ro"
+      - "{{ gpu_qp_gen_path }}:/usr/src/quantum_pipeline/gen"
+    service_networks:
+      - stack
+    service_resources:
+      limits:
+        memory: "{{ gpu_qp_worker_memory_limit }}"
+        cpus: "{{ gpu_qp_worker_cpu_limit }}"
+      reservations:
+        memory: "{{ gpu_qp_worker_memory_reservation }}"
+        cpus: "{{ gpu_qp_worker_cpu_reservation }}"
+
+# Persistent metrics endpoint; scraped by Prometheus from the monitoring host
+# (firewall_rules in host_vars). Device reservation (rather than runtime: nvidia)
+# so this service also exercises the template's deploy.resources.devices path.
+gpu_qp_gpu_exporter_services:
+  - service_name: nvidia-gpu-exporter
+    service_image: "{{ gpu_qp_gpu_exporter_image }}"
+    service_userns_mode: "host"
+    service_devices:
+      - driver: nvidia
+        count: all
+        capabilities: [gpu]
+    service_ports:
+      - host: "{{ gpu_qp_gpu_exporter_port }}"
+        container: 9835
+        bind_ip: "{{ primary_ip }}"
+    service_networks:
+      - stack
+    service_resources:
+      limits:
+        memory: "256M"
+        cpus: "0.5"
+      reservations:
+        memory: "64M"
+        cpus: "0.1"

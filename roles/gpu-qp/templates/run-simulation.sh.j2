@@ -1,0 +1,21 @@
+#!/bin/sh
+# Run a quantum-pipeline VQE simulation with GPU acceleration through the
+# gpu-qp compose stack. Extra arguments are appended straight to the CLI, so any
+# default below can be overridden:
+#
+#   gpu-qp-run                                     # defaults
+#   gpu-qp-run --molecule-index 3 --report         # extra flags appended
+#   gpu-qp-run --basis cc-pvdz --max-iterations 250
+#
+# Reports and plots land in {{ gpu_qp_gen_path }} (bind-mounted into the
+# container's gen/).
+set -eu
+exec docker compose -f "{{ gpu_qp_home }}/docker-compose.yml" run --rm \
+  quantum-pipeline-gpu \
+  --file {{ gpu_qp_container_molecules_path }} \
+  --basis {{ gpu_qp_basis }} \
+  --max-iterations {{ gpu_qp_max_iterations }} \
+  --optimizer {{ gpu_qp_optimizer }} \
+  --gpu \
+  --report \
+  "$@"

@@ -1,0 +1,9 @@
+---
+# Notified from docker_stack_service's unit template (common), not from this
+# role's tasks.
+- name: Restart stack
+  ansible.builtin.systemd:
+    name: stack
+    state: restarted
+    daemon_reload: true
+  become: true

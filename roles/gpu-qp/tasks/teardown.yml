@@ -1,0 +1,48 @@
+---
+# Reverse the gpu-qp role so a disposable GPU host redeploys clean. The NVIDIA
+# driver and container toolkit are deliberately left in place - they are
+# host-level prerequisites, not role-owned state, and reinstalling the driver is
+# expensive. Only the stack, the wrapper and the local image are removed.
+
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_gate
+  vars:
+    common_teardown_name: gpu-qp
+
+- name: Tear down the stack service and compose project
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_stack_service
+  vars:
+    common_teardown_stack_home: "{{ gpu_qp_home }}"
+    common_teardown_stack_user: "{{ ansible_user }}"
+
+- name: Remove the role file artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /usr/local/bin/gpu-qp-run
+    - "{{ gpu_qp_home }}"
+
+- name: Remove the locally built GPU image
+  community.docker.docker_image:
+    name: "{{ gpu_qp_image_name }}"
+    state: absent
+  become: true
+  become_user: "{{ ansible_user }}"
+  failed_when: false
+
+- name: Verify the gpu-qp artifacts are gone
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_verify_absent
+  vars:
+    common_teardown_name: gpu-qp
+    common_teardown_paths:
+      - /usr/local/bin/gpu-qp-run
+      - /etc/systemd/system/stack.service
+      - "{{ gpu_qp_home }}"

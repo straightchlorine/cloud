@@ -1,0 +1,33 @@
+---
+# Data directories, the molecules input and the run wrapper. No Docker here, so
+# molecule exercises this file directly.
+
+- name: Create the gpu-qp directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+  loop:
+    - "{{ gpu_qp_home }}"
+    - "{{ gpu_qp_data_path }}"
+    - "{{ gpu_qp_gen_path }}"
+
+- name: Render the molecules input file
+  ansible.builtin.template:
+    src: molecules.json.j2
+    dest: "{{ gpu_qp_data_path }}/molecules.json"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Install the simulation run wrapper
+  ansible.builtin.template:
+    src: run-simulation.sh.j2
+    dest: /usr/local/bin/gpu-qp-run
+    owner: root
+    group: root
+    mode: "0755"
+  become: true

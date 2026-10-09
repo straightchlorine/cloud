@@ -1,0 +1,22 @@
+---
+role_name_check: 0
+driver:
+  name: podman
+
+platforms:
+  - name: test
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian13-ansible:latest}
+    pre_build_image: true
+    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+provisioner:
+  name: ansible
+  env:
+    # The project dir is roles/gpu-qp, so its parent lets include_role resolve
+    # sibling roles (os, common, firewall) by name.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+
+verifier:
+  name: ansible

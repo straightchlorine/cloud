@@ -1,0 +1,22 @@
+---
+# Render the compose stack and bring it up. The batch worker carries
+# profiles: [batch], so `up` starts only the persistent services (the GPU
+# exporter); the worker is launched on demand by gpu-qp-run.
+
+- name: Render compose + .env and bring up the stack
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: deploy_compose_stack
+  vars:  # noqa: var-naming[no-role-prefix]
+    stack_name: "gpu-qp"
+    compose_file_path: "{{ gpu_qp_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_services: >-
+      {{ gpu_qp_compose_services
+      + (gpu_qp_gpu_exporter_services if gpu_qp_gpu_exporter_enabled else []) }}
+    compose_networks: "{{ gpu_qp_compose_networks }}"
+    compose_volumes: "{{ gpu_qp_compose_volumes }}"
+    compose_critical_services: >-
+      {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
+    start_stack: "{{ common_start_stack }}"
+  # No notify: compose up -d already recreates containers on file changes.

@@ -1,0 +1,25 @@
+---
+# GPU research host - runs the quantum-pipeline VQE solver with NVIDIA
+# acceleration. See roles/gpu-qp/README.md.
+
+device_role: gpu-qp
+device_type: cloud_vm
+
+# CUDA compute capability of the installed card(s):
+#   6.1 Pascal (GTX 10xx) | 7.5 Turing | 8.6 Ampere | 8.9 Ada.
+gpu_qp_cuda_arch: "6.1"
+
+# Built on-host for gpu_qp_cuda_arch: the published :gpu tag is compiled for
+# Ampere (sm_86) and will not run on a Pascal/Turing card.
+gpu_qp_image_mode: "build"
+
+# GPU the worker container sees: "all", or a device index ("0"/"1") to pin one.
+gpu_qp_worker_device: "all"
+
+# Auth: inherits the fleet-wide ansible_ssh_private_key_file
+# (~/.ssh/ansible_controller_key, hosts.yml all: vars) with ansible_user: debian
+# (set on this host in hosts.yml) - no per-host override. The controller key's
+# public half must be in /home/debian/.ssh/authorized_keys on the instance.
+
+# A cloud instance is disposable - never block a teardown on it.
+teardown_protected: false

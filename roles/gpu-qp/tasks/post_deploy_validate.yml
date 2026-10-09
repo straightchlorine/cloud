@@ -1,0 +1,67 @@
+---
+# Prove real behavior, not side effects: a GPU container must actually see the
+# NVIDIA device, and a real (short) GPU VQE must complete.
+
+- name: Verify the persistent compose services are running
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: compose_containers_check
+  vars:  # noqa: var-naming[no-role-prefix]
+    compose_file_path: "{{ gpu_qp_home }}/docker-compose.yml"
+    compose_owner: "{{ ansible_user }}"
+    compose_critical_services: >-
+      {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
+  when: common_start_stack | bool
+  tags: [post_validation]
+
+- name: Prove a GPU container can see the NVIDIA device
+  # The image entrypoint is `python -m quantum_pipeline`, so override it to reach
+  # nvidia-smi. Exercises the same runtime path the worker uses.
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --runtime=nvidia --entrypoint nvidia-smi
+      -e NVIDIA_VISIBLE_DEVICES={{ gpu_qp_worker_device }}
+      {{ gpu_qp_active_image }} -L
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: gpu_qp_container_gpus
+  changed_when: false
+  tags: [post_validation]
+
+- name: Assert the container sees at least one GPU
+  ansible.builtin.assert:
+    that:
+      - "'GPU 0' in gpu_qp_container_gpus.stdout"
+    fail_msg: >-
+      A GPU container could not see any NVIDIA device. nvidia-smi said:
+      {{ gpu_qp_container_gpus.stdout | default('') }}
+      {{ gpu_qp_container_gpus.stderr | default('') }}
+    quiet: true
+  tags: [post_validation]
+
+- name: Run a short GPU-accelerated VQE to prove the full path
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker compose -f {{ gpu_qp_home }}/docker-compose.yml run --rm \
+      quantum-pipeline-gpu \
+      --file {{ gpu_qp_container_molecules_path }} \
+      --molecule-index {{ gpu_qp_smoke_test_molecule_index }} \
+      --basis {{ gpu_qp_basis }} \
+      --max-iterations {{ gpu_qp_smoke_test_max_iterations }} \
+      --gpu
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: gpu_qp_smoke_test
+  changed_when: false
+  when: gpu_qp_smoke_test_enabled
+  tags: [post_validation]
+
+- name: Report the smoke test outcome
+  ansible.builtin.debug:
+    msg: >-
+      GPU VQE smoke test completed ({{ gpu_qp_smoke_test_max_iterations }}
+      iterations on molecule index {{ gpu_qp_smoke_test_molecule_index }}).
+  when: gpu_qp_smoke_test_enabled
+  tags: [post_validation]

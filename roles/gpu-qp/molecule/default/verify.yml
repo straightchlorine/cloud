@@ -1,0 +1,83 @@
+---
+- name: Verify the gpu-qp role's deployed state
+  hosts: all
+  become: true
+  vars:
+    gpu_qp_home: /home/gpu/gpu-qp
+  tasks:
+    - name: Read the deployed files
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ gpu_qp_home }}/docker-compose.yml"
+        - "{{ gpu_qp_home }}/data/molecules.json"
+        - /usr/local/bin/gpu-qp-run
+        - /tmp/gpu-qp.service.rendered
+      register: gpu_qp_files
+
+    - name: Parse the deployed files
+      ansible.builtin.set_fact:
+        compose: "{{ gpu_qp_files.results[0].content | b64decode | from_yaml }}"
+        molecules: "{{ gpu_qp_files.results[1].content | b64decode | from_json }}"
+        run_wrapper: "{{ gpu_qp_files.results[2].content | b64decode }}"
+        unit: "{{ gpu_qp_files.results[3].content | b64decode }}"
+
+    - name: Stat the run wrapper
+      ansible.builtin.stat:
+        path: /usr/local/bin/gpu-qp-run
+      register: gpu_qp_run_stat
+
+    - name: Assert the compose services and the GPU worker definition
+      vars:
+        worker: "{{ compose.services['quantum-pipeline-gpu'] }}"
+        exporter: "{{ compose.services['nvidia-gpu-exporter'] }}"
+      ansible.builtin.assert:
+        that:
+          - compose.services | list | sort == ['nvidia-gpu-exporter', 'quantum-pipeline-gpu']
+          # Worker: nvidia runtime, batch-only profile, pinned device, bind mounts.
+          - worker.runtime == 'nvidia'
+          - worker.userns_mode == 'host'
+          - worker.profiles == ['batch']
+          # `restart: no` is parsed by YAML as boolean false, not the string 'no'.
+          - worker.restart == false
+          - "'NVIDIA_VISIBLE_DEVICES=0' in worker.environment"
+          - "'/home/gpu/gpu-qp/data:/usr/src/quantum_pipeline/data:ro' in worker.volumes"
+          - "'/home/gpu/gpu-qp/gen:/usr/src/quantum_pipeline/gen' in worker.volumes"
+          # Exporter: device reservation path, capabilities from the role default.
+          - exporter.deploy.resources.reservations.devices[0].driver == 'nvidia'
+          - exporter.deploy.resources.reservations.devices[0].count == 'all'
+          - exporter.deploy.resources.reservations.devices[0].capabilities == ['gpu']
+          - exporter.ports | select('match', '.*:9835:9835$') | list | length == 1
+        fail_msg: "compose stack wrong:\n{{ compose }}"
+        success_msg: "[OK] compose renders nvidia runtime + device reservations correctly"
+
+    - name: Assert the rendered molecules input
+      ansible.builtin.assert:
+        that:
+          - molecules | length == 2
+          - molecules[0].symbols == ['H', 'H']
+          - molecules[1].symbols == ['Li', 'H']
+          - molecules[0].units == 'angstrom'
+        fail_msg: "molecules.json wrong: {{ molecules }}"
+        success_msg: "[OK] molecules.json rendered from gpu_qp_molecules"
+
+    - name: Assert the run wrapper content and mode
+      ansible.builtin.assert:
+        that:
+          - gpu_qp_run_stat.stat.mode == '0755'
+          - "'docker compose' in run_wrapper"
+          - "'/home/gpu/gpu-qp/docker-compose.yml' in run_wrapper"
+          - "'run --rm' in run_wrapper"
+          - "'--file data/molecules.json' in run_wrapper"
+          - "'--gpu' in run_wrapper"
+          - "'--report' in run_wrapper"
+        fail_msg: "gpu-qp-run wrapper wrong:\n{{ run_wrapper }}"
+        success_msg: "[OK] gpu-qp-run runs the worker with --gpu"
+
+    - name: Assert the rendered systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'GPU_QP_HOME=/home/gpu/gpu-qp' in unit"
+          - "'ExecStart=/usr/bin/docker compose -f /home/gpu/gpu-qp/docker-compose.yml up -d' in unit"
+        fail_msg: "unit render wrong:\n{{ unit }}"
+        success_msg: "[OK] stack systemd unit renders with the explicit compose file"

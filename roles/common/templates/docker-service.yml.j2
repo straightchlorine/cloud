@@ -33,6 +33,9 @@
 {% if service_userns_mode is defined %}
     userns_mode: "{{ service_userns_mode }}"
 {% endif %}
+{% if service_runtime is defined %}
+    runtime: {{ service_runtime }}
+{% endif %}
 {% if service_env_file is defined %}
     env_file: {{ service_env_file }}
 {% endif %}
@@ -85,13 +88,30 @@
       retries: {{ service_healthcheck.retries | default('3') }}
       start_period: {{ service_healthcheck.start_period | default('40s') }}
 {% endif %}
-{% if service_resources is defined %}
+{% if service_resources is defined or service_devices is defined %}
     deploy:
       resources:
+{% if service_resources is defined %}
         limits:
           memory: {{ service_resources.limits.memory }}
           cpus: "{{ service_resources.limits.cpus }}"
+{% endif %}
         reservations:
+{% if service_resources is defined %}
           memory: {{ service_resources.reservations.memory }}
           cpus: "{{ service_resources.reservations.cpus }}"
+{% endif %}
+{% if service_devices is defined %}
+          devices:
+{% for device in service_devices %}
+            - driver: {{ device.driver }}
+{% if device.count is defined %}
+              count: {{ device.count }}
+{% endif %}
+{% if device.device_ids is defined %}
+              device_ids: {{ device.device_ids }}
+{% endif %}
+              capabilities: {{ device.capabilities }}
+{% endfor %}
+{% endif %}
 {% endif %}

@@ -1,0 +1,27 @@
+---
+# Not published to Galaxy; kept minimal (see roles/common/meta/main.yml).
+galaxy_info:
+  namespace: homelab
+  role_name: gpu_qp
+  description: Prepare a GPU host to run the quantum-pipeline VQE solver with NVIDIA acceleration
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm # Debian 12
+        - trixie # Debian 13
+
+    - name: Ubuntu
+      versions:
+        - jammy # Ubuntu 22.04 LTS
+        - noble # Ubuntu 24.04 LTS
+
+collections:
+  - community.docker
+  - community.general
+
+# No dependencies - the role includes os/common/firewall explicitly, so it also
+# works under a scoped `--tags gpu-qp` run.
+dependencies: []

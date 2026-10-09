@@ -1,0 +1,24 @@
+---
+- name: Verify the gpu-qp teardown left nothing behind
+  hosts: all
+  become: true
+  vars:
+    gpu_qp_home: /home/gpu/gpu-qp
+  tasks:
+    - name: Stat the artifacts the teardown must remove
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/gpu-qp-run
+        - /etc/systemd/system/stack.service
+        - "{{ gpu_qp_home }}"
+      register: gpu_qp_teardown_stats
+
+    - name: Assert every gpu-qp artifact is gone
+      ansible.builtin.assert:
+        that: not item.stat.exists
+        fail_msg: "{{ item.item }} still exists after teardown"
+        success_msg: "[OK] {{ item.item }} removed"
+      loop: "{{ gpu_qp_teardown_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"

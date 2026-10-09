@@ -1,0 +1,22 @@
+---
+- name: Verify every gpu-qp fail-fast validation case fired
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat the case markers written by converge
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+      register: gpu_qp_case_markers
+
+    - name: Assert every fail-fast case fired for the expected reason
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "{{ item.item }} is missing - that fail-fast case did not fire as expected"
+        success_msg: "[OK] {{ item.item }} present"
+      loop: "{{ gpu_qp_case_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"

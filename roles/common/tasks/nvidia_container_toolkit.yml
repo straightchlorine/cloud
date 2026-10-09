@@ -1,0 +1,71 @@
+---
+# Reusable NVIDIA Container Toolkit setup. Adds NVIDIA's apt repository,
+# installs the toolkit, and registers the nvidia runtime with Docker so compose
+# services can request `runtime: nvidia`. Callers must have run
+# common/tasks/docker.yml first - the runtime registration edits the existing
+# /etc/docker/daemon.json (and must come before any userns-remap rewrite, or the
+# runtimes key has to be preserved by that rewrite).
+#
+# Lives in common because any role that runs GPU containers needs it (the
+# gpu-qp role is the first consumer); the toolkit version is whatever NVIDIA's
+# stable channel currently ships.
+#
+# Notifies "Restart docker" (common/handlers) so a newly registered runtime is
+# active before any container that depends on it starts.
+
+- name: Install the NVIDIA container toolkit prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+  become: true
+
+- name: Add the NVIDIA container toolkit signing key
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    mode: "0644"
+  become: true
+
+- name: Add the NVIDIA container toolkit apt repository
+  # The repo path carries an architecture segment; derive it from the fact, never
+  # hardcode amd64. The install task below refreshes the apt cache.
+  ansible.builtin.copy:
+    content: >-
+      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
+      https://nvidia.github.io/libnvidia-container/stable/deb/{{ common_nvidia_arch_map[ansible_architecture] }} /
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Install the NVIDIA container toolkit
+  # update_cache refreshes apt so the repository added above is visible.
+  ansible.builtin.apt:
+    name: nvidia-container-toolkit
+    state: present
+    update_cache: true
+  become: true
+  notify: Restart docker
+
+- name: Read Docker's daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: common_nvidia_daemon_json
+  failed_when: false
+  become: true
+
+- name: Register the nvidia runtime with Docker
+  # nvidia-ctk reports success on every run (no idempotence signal), so guard on
+  # the daemon.json contents rather than letting it flap as changed each deploy.
+  ansible.builtin.command:
+    cmd: nvidia-ctk runtime configure --runtime=docker
+  become: true
+  when: >-
+    common_nvidia_daemon_json.content is not defined
+    or 'nvidia' not in (common_nvidia_daemon_json.content | b64decode)
+  changed_when: true
+  notify: Restart docker

@@ -1,0 +1,41 @@
+---
+# The GPU image: either clone + compile for gpu_qp_cuda_arch, or pull a prebuilt
+# one. Needs a Docker daemon, so molecule never runs this file.
+
+- name: Clone the quantum-pipeline source for a local build
+  ansible.builtin.git:
+    repo: "{{ gpu_qp_image_repo }}"
+    dest: "{{ gpu_qp_source_path }}"
+    version: "{{ gpu_qp_image_ref }}"
+    depth: 1
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'build'
+
+- name: Build the GPU image for the target CUDA architecture
+  # qiskit-aer is compiled from source with the CUDA thrust backend for
+  # gpu_qp_cuda_arch - the only way to run a non-Ampere card, since the published
+  # :gpu tag is compiled for sm_86. This is a slow C++/CUDA compile, so an
+  # existing image is reused unless gpu_qp_image_force_rebuild is set.
+  community.docker.docker_image:
+    name: "{{ gpu_qp_image_name }}"
+    source: build
+    build:
+      path: "{{ gpu_qp_source_path }}"
+      dockerfile: docker/Dockerfile.gpu
+      args:
+        CUDA_ARCH: "{{ gpu_qp_cuda_arch }}"
+        AER_VERSION: "{{ gpu_qp_aer_version }}"
+    state: present
+    force_source: "{{ gpu_qp_image_force_rebuild | bool }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'build'
+
+- name: Pull the prebuilt GPU image
+  community.docker.docker_image:
+    name: "{{ gpu_qp_image_pull_name }}"
+    source: pull
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'pull'

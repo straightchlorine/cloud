@@ -1,0 +1,72 @@
+---
+# Also included directly by site.yml's pre-validation (not via main.yml), so it
+# re-runs os discovery itself - cheap and idempotent.
+
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run gpu-qp comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "gpu-qp"
+    validation_type: "full"
+    validation_role: "gpu-qp"
+    required_variables:
+      - gpu_qp_cuda_arch
+      - gpu_qp_home
+  tags: [validation]
+
+- name: Confirm the host runs a Debian-family OS
+  ansible.builtin.assert:
+    that: os_family == "Debian"
+    fail_msg: "gpu-qp requires a Debian-family OS; got {{ os_family }} ({{ os_name }} {{ os_version }})."
+    quiet: true
+  tags: [validation]
+
+- name: Confirm gpu_qp_cuda_arch is a known compute capability
+  # A wrong value builds a wheel that dies at runtime with
+  # "CUDA error: no kernel image is available" - catch it before the 40-minute
+  # image build rather than after.
+  ansible.builtin.assert:
+    that:
+      - gpu_qp_cuda_arch in gpu_qp_supported_cuda_arches
+    fail_msg: >-
+      gpu_qp_cuda_arch '{{ gpu_qp_cuda_arch }}' is not a supported CUDA compute
+      capability. Valid values: {{ gpu_qp_supported_cuda_arches | join(', ') }}.
+    quiet: true
+  tags: [validation]
+
+- name: Look for an NVIDIA PCI device
+  # Reads sysfs directly (vendor 0x10de) so the check does not depend on
+  # pciutils being installed yet.
+  ansible.builtin.shell:
+    cmd: grep -ilx 0x10de /sys/bus/pci/devices/*/vendor
+  register: gpu_qp_nvidia_devices
+  changed_when: false
+  failed_when: false
+  when: gpu_qp_require_nvidia_device
+  tags: [validation]
+
+- name: Require at least one NVIDIA GPU on the host
+  ansible.builtin.assert:
+    that: gpu_qp_nvidia_devices.stdout_lines | length > 0
+    fail_msg: >-
+      No NVIDIA PCI device found (vendor 0x10de). Attach the GPU (or passthrough)
+      before deploying - there is nothing to accelerate.
+    quiet: true
+  when: gpu_qp_require_nvidia_device
+  tags: [validation]
+
+- name: Validate the worker device selector
+  ansible.builtin.assert:
+    that:
+      - gpu_qp_worker_device == "all" or gpu_qp_worker_device is match("^[0-9,]+$")
+    fail_msg: >-
+      gpu_qp_worker_device must be "all" or a comma-separated GPU index list
+      (e.g. "0" or "0,1"); got '{{ gpu_qp_worker_device }}'.
+    quiet: true
+  tags: [validation]

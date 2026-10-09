@@ -1,0 +1,80 @@
+---
+- name: Converge - the gpu-qp role's container-testable task files
+  hosts: all
+  become: true
+  vars:
+    # Pinned: the role's ownership/become wiring reads ansible_user directly.
+    ansible_user: root
+    timezone: UTC
+    domain_name: example.test
+    common_start_stack: false
+    # No GPU in a container; validate.yml's device check is a real-host gate.
+    gpu_qp_require_nvidia_device: false
+    gpu_qp_cuda_arch: "6.1"
+    gpu_qp_home: /home/gpu/gpu-qp
+    gpu_qp_worker_device: "0"
+    gpu_qp_gpu_exporter_enabled: true
+  pre_tasks:
+    - name: Create the home parent
+      ansible.builtin.file:
+        path: "{{ gpu_qp_home | dirname }}"
+        state: directory
+        mode: "0755"
+  tasks:
+    # Deliberately not run here:
+    #   - packages.yml / docker.yml (apt installs; no docker-in-docker)
+    #   - nvidia_driver.yml (no GPU, no DKMS build)
+    #   - image.yml / nvidia_container_toolkit.yml (need a live Docker daemon)
+    #   - firewall (ufw cannot apply rules inside a container)
+    #   - post_deploy_validate.yml (needs a live stack and a real GPU)
+    - name: Gather network facts
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
+    - name: Run the pre-deployment validation
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: validate
+
+    - name: Prepare the data directories and the run wrapper
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: data
+
+    - name: Render the stack (compose only; start_stack is false)
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: stack
+
+    - name: Render the stack systemd unit
+      # Rendered standalone so a broken unit template variable still fails CI.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
+        dest: /tmp/gpu-qp.service.rendered
+        mode: "0644"
+      vars:
+        service_description: "gpu-qp stack (molecule render)"
+        service_requires: ["docker.service"]
+        service_after: ["docker.service", "network-online.target"]
+        common_service_wants: ["network.target"]
+        service_type: "oneshot"
+        common_remain_after_exit: "true"
+        common_working_directory: "{{ gpu_qp_home }}"
+        service_user: "{{ ansible_user }}"
+        service_group: "{{ ansible_user }}"
+        service_environment:
+          - "GPU_QP_HOME={{ gpu_qp_home }}"
+        exec_start: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml up -d"
+        exec_stop: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml down"
+        exec_reload: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml restart"
+        syslog_identifier: "stack"
+        common_timeout_start_sec: "0"
+        kill_mode: "none"
+        common_standard_output: "journal"
+        common_standard_error: "journal"
+        common_restart_policy: "on-failure"
+        common_restart_sec: "5"
+        common_wanted_by: "multi-user.target"
+        common_enable_security_hardening: true
+        common_no_new_privileges: "true"

@@ -1,0 +1,102 @@
+---
+# Thin orchestrator: os facts -> network facts -> validate -> packages -> driver
+# -> docker -> toolkit -> firewall -> image -> stack -> verify.
+# The stack bring-up is the finishing step: every host-side control (driver,
+# toolkit, firewall) must exist before any GPU container runs.
+
+# The os role must run first: validate.yml asserts on its os_family fact.
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [gpu-qp, validation, facts]
+
+- name: Gather network facts for dynamic configuration
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: network_facts
+  tags: [network, facts]
+
+- name: Run gpu-qp deployment validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
+- name: Include common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages: "{{ gpu_qp_specific_packages }}"  # noqa: var-naming[no-role-prefix]
+  tags: [packages]
+
+- name: Install the NVIDIA driver
+  ansible.builtin.include_tasks: nvidia_driver.yml
+  when: gpu_qp_driver_install
+  tags: [driver, nvidia]
+
+- name: Include common Docker setup
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker
+  tags: [docker]
+
+- name: Install the NVIDIA container toolkit
+  # Must follow docker.yml: nvidia-ctk edits the daemon.json docker.yml wrote.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: nvidia_container_toolkit
+  when: gpu_qp_container_toolkit_enabled
+  tags: [docker, nvidia, toolkit]
+
+- name: Configure firewall
+  ansible.builtin.include_role:
+    name: firewall
+  tags: [firewall, security]
+
+- name: Prepare the data directories and the run wrapper
+  ansible.builtin.include_tasks: data.yml
+  tags: [data]
+
+- name: Prepare the GPU image
+  ansible.builtin.include_tasks: image.yml
+  tags: [image, build]
+
+- name: Create Docker stack systemd service  # noqa: var-naming[no-role-prefix]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_stack_service
+  vars:
+    stack_service_name: "stack"
+    stack_description: "gpu-qp stack (quantum-pipeline GPU worker + nvidia exporter)"
+    stack_home_directory: "{{ gpu_qp_home }}"
+    stack_user: "{{ ansible_user }}"
+    stack_environment_vars:
+      - "GPU_QP_HOME={{ gpu_qp_home }}"
+    # Explicit -f: the shared systemd template's WorkingDirectory guard is a
+    # known-open issue (see its header), so don't rely on the unit's cwd.
+    stack_exec_start: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml up -d"
+    stack_exec_stop: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml down"
+    stack_exec_reload: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml restart"
+  tags: [systemd, auto-start]
+
+- name: Deploy the gpu-qp stack
+  # Last on purpose: the driver, toolkit and firewall must be in place before
+  # the GPU containers are exposed.
+  ansible.builtin.include_tasks: stack.yml
+  tags: [stack, deploy]
+
+- name: Activate the stack auto-start unit
+  # Starting now proves the boot path: RemainAfterExit runs ExecStart immediately.
+  ansible.builtin.systemd:
+    name: "stack"
+    state: started
+  become: true
+  tags: [systemd, auto-start, stack]
+
+- name: Flush pending handlers before validation
+  # A changed unit notifies "Restart stack"; unflushed it would restart the
+  # stack after validation already passed.
+  ansible.builtin.meta: flush_handlers
+
+- name: Run post-deployment validation
+  ansible.builtin.include_tasks: post_deploy_validate.yml
+  tags: [post_validation]

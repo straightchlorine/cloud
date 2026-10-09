@@ -1,0 +1,107 @@
+---
+- name: Converge - gpu-qp Fail-Fast Validation
+  hosts: all
+  become: true
+  vars:
+    ansible_user: root
+    # The device-presence check is a real-host gate; the cases below must fail
+    # for the variable/condition under test, not for a missing GPU.
+    gpu_qp_require_nvidia_device: false
+  tasks:
+    # Case 1: the required gpu_qp_cuda_arch is undefined (not in role defaults).
+    - name: "Case 1: validate.yml fails when gpu_qp_cuda_arch is missing"
+      block:
+        - name: Run the real validate.yml with gpu_qp_cuda_arch undefined
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: validate
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on a missing gpu_qp_cuda_arch"
+      rescue:
+        - name: Assert the failure was for the missing gpu_qp_cuda_arch variable specifically
+          # A looped fail task's own top-level msg is the generic "One or more
+          # items failed" - the per-item detail lives in .results.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['gpu_qp_cuda_arch']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing gpu_qp_cuda_arch): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing gpu_qp_cuda_arch variable"
+
+        - name: Record case 1 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes. force: false keeps the idempotence rerun
+          # unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
+
+    # Case 2: a syntactically valid but unsupported compute capability.
+    - name: "Case 2: validate.yml fails when gpu_qp_cuda_arch is not a known capability"
+      block:
+        - name: Run the real validate.yml with gpu_qp_cuda_arch 5.0
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: validate
+          vars:
+            gpu_qp_cuda_arch: "5.0"
+
+        - name: Fail the test - validate.yml should have rejected the capability
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on the unsupported gpu_qp_cuda_arch 5.0"
+      rescue:
+        - name: Assert the failure named the unsupported capability
+          ansible.builtin.assert:
+            that:
+              - "'5.0' in ansible_failed_result.msg"
+              - "'not a supported CUDA compute capability' in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (unsupported gpu_qp_cuda_arch): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml rejected the unsupported CUDA capability"
+
+        - name: Record case 2 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
+
+    # Case 3: a worker device selector that is neither "all" nor an index list.
+    - name: "Case 3: validate.yml fails when gpu_qp_worker_device is malformed"
+      block:
+        - name: Run the real validate.yml with a bogus gpu_qp_worker_device
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: validate
+          vars:
+            gpu_qp_cuda_arch: "6.1"
+            gpu_qp_worker_device: "gpu0"
+
+        - name: Fail the test - validate.yml should have rejected the device selector
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on gpu_qp_worker_device 'gpu0'"
+      rescue:
+        - name: Assert the failure was the worker-device guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - "'gpu_qp_worker_device' in ansible_failed_result.msg"
+              - "'gpu0' in ansible_failed_result.msg"
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (malformed gpu_qp_worker_device): {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml rejected the malformed worker device selector"
+
+        - name: Record case 3 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"

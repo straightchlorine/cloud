@@ -1,0 +1,65 @@
+---
+# Deploy the container-safe parts of the role, then run the REAL teardown with
+# its gate satisfied and prove nothing survives. The NVIDIA driver/toolkit are
+# deliberately out of scope here (not role-owned state, and not installable in a
+# container).
+- name: Converge - gpu-qp teardown
+  hosts: all
+  become: true
+  vars:
+    ansible_user: root
+    common_start_stack: false
+    gpu_qp_require_nvidia_device: false
+    gpu_qp_cuda_arch: "6.1"
+    gpu_qp_home: /home/gpu/gpu-qp
+    gpu_qp_worker_device: "all"
+  pre_tasks:
+    - name: Create the home parent
+      ansible.builtin.file:
+        path: "{{ gpu_qp_home | dirname }}"
+        state: directory
+        mode: "0755"
+  tasks:
+    # ARRANGE phase, tagged molecule-idempotence-notest: the teardown below
+    # removes everything these create, so the idempotence rerun must skip them
+    # (re-running would re-create state and report changed). The system under
+    # test is the teardown, which stays untagged and must converge.
+    - name: Gather network facts
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+
+    - name: Deploy the data directories and the run wrapper (real)
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: data
+      tags: [molecule-idempotence-notest]
+
+    - name: Render the stack (real, no `up`)
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: stack
+      tags: [molecule-idempotence-notest]
+
+    - name: Fixture the stack systemd unit
+      # Owned by docker_stack_service in a real deploy; stood up here so the
+      # teardown's unit removal is actually exercised.
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=gpu-qp stack (molecule fixture)
+        dest: /etc/systemd/system/stack.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
+    - name: Flush handlers between deploy and teardown
+      # On a real host these are separate playbook runs; a handler left pending
+      # would fire after the teardown removed its service.
+      ansible.builtin.meta: flush_handlers
+
+    - name: Run the real teardown with the gate satisfied
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: teardown
+      vars:
+        teardown_confirmed: true

@@ -1,0 +1,49 @@
+---
+# Installs the NVIDIA driver and compiles its DKMS module for the running kernel.
+# Skipped entirely when gpu_qp_driver_install is false (provider GPU images ship
+# the driver already).
+
+- name: Install the kernel headers matching the running kernel
+  # The running kernel's own headers package - not linux-headers-amd64, whose
+  # DKMS-built module the running (cloud) kernel cannot load.
+  ansible.builtin.apt:
+    name: "{{ gpu_qp_driver_headers_packages }}"
+    state: present
+    update_cache: true
+  become: true
+
+- name: Install the NVIDIA driver packages
+  ansible.builtin.apt:
+    name: "{{ gpu_qp_driver_packages }}"
+    state: present
+  become: true
+
+- name: Check whether the NVIDIA kernel module is already built
+  ansible.builtin.stat:
+    path: "/lib/modules/{{ ansible_kernel }}/updates/dkms/nvidia.ko"
+  register: gpu_qp_nvidia_module
+  become: true
+
+- name: Build the NVIDIA kernel module with DKMS
+  # nvidia-kernel-dkms ships source only; dkms compiles it against the headers
+  # installed above. Guarded on the built artifact so a converged host is a
+  # no-op instead of a always-changed rebuild.
+  ansible.builtin.command:
+    cmd: dkms autoinstall
+  become: true
+  when: not gpu_qp_nvidia_module.stat.exists
+  changed_when: true
+
+- name: Refresh the initramfs so the new module loads at boot
+  ansible.builtin.command:
+    cmd: update-initramfs -u -k all
+  become: true
+  when: not gpu_qp_nvidia_module.stat.exists
+  changed_when: true
+
+- name: Load the NVIDIA kernel module now
+  community.general.modprobe:
+    name: nvidia
+    state: present
+  become: true
+  when: not gpu_qp_nvidia_module.stat.exists
