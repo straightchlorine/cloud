@@ -34,13 +34,17 @@
       ansible.builtin.assert:
         that:
           - compose.services | list | sort == ['nvidia-gpu-exporter', 'quantum-pipeline-gpu']
-          # Worker: nvidia runtime, batch-only profile, pinned device, bind mounts.
-          - worker.runtime == 'nvidia'
+          # Worker: batch-only profile, a PINNED GPU device reservation, bind mounts.
           - worker.userns_mode == 'host'
           - worker.profiles == ['batch']
           # `restart: no` is parsed by YAML as boolean false, not the string 'no'.
           - worker.restart == false
-          - "'NVIDIA_VISIBLE_DEVICES=0' in worker.environment"
+          - worker.deploy.resources.reservations.devices[0].driver == 'nvidia'
+          - worker.deploy.resources.reservations.devices[0].capabilities == ['gpu']
+          # gpu_qp_worker_device is '0' here, so the pinned branch renders device_ids
+          # and omits count (count and device_ids are mutually exclusive in compose).
+          - worker.deploy.resources.reservations.devices[0].device_ids == ['0']
+          - worker.deploy.resources.reservations.devices[0].count is not defined
           - "'/home/gpu/gpu-qp/data:/usr/src/quantum_pipeline/data:ro' in worker.volumes"
           - "'/home/gpu/gpu-qp/gen:/usr/src/quantum_pipeline/gen' in worker.volumes"
           # Exporter: device reservation path, capabilities from the role default.

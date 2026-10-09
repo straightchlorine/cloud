@@ -117,6 +117,16 @@ gpu_qp_supported_cuda_arches:
   - "8.9"
   - "9.0"
 
+# Worker GPU reservation. Compose's legacy `runtime:` field is not reliably
+# honored (notably by `docker compose run`), so request the device the supported
+# way; docker/compose#8722. `count` is omitted when unpinned - compose then uses
+# every GPU on the host.
+gpu_qp_worker_devices: >-
+  {{ [{'driver': 'nvidia', 'capabilities': ['gpu']}]
+     if gpu_qp_worker_device == 'all'
+     else [{'driver': 'nvidia', 'capabilities': ['gpu'],
+            'device_ids': gpu_qp_worker_device.split(',')}] }}
+
 # --- Generated compose profile ---------------------------------------------
 gpu_qp_compose_networks:
   - name: stack
@@ -132,13 +142,12 @@ gpu_qp_compose_volumes: []
 gpu_qp_compose_services:
   - service_name: quantum-pipeline-gpu
     service_image: "{{ gpu_qp_active_image }}"
-    service_runtime: nvidia
     service_userns_mode: "host"
     service_restart: "no"
     service_profiles:
       - batch
-    service_environment:
-      - "NVIDIA_VISIBLE_DEVICES={{ gpu_qp_worker_device }}"
+    # Device reservation, not `runtime: nvidia` - see gpu_qp_worker_devices.
+    service_devices: "{{ gpu_qp_worker_devices }}"
     service_volumes:
       - "{{ gpu_qp_data_path }}:/usr/src/quantum_pipeline/data:ro"
       - "{{ gpu_qp_gen_path }}:/usr/src/quantum_pipeline/gen"

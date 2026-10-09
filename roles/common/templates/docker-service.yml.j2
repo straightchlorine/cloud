@@ -33,9 +33,6 @@
 {% if service_userns_mode is defined %}
     userns_mode: "{{ service_userns_mode }}"
 {% endif %}
-{% if service_runtime is defined %}
-    runtime: {{ service_runtime }}
-{% endif %}
 {% if service_env_file is defined %}
     env_file: {{ service_env_file }}
 {% endif %}
