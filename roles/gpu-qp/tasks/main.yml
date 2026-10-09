@@ -41,18 +41,13 @@
 
 - name: Install the NVIDIA container toolkit
   # Must follow docker.yml: nvidia-ctk edits the daemon.json docker.yml wrote.
+  # The task file itself restarts Docker when the running daemon lacks the
+  # runtime, so no handler flush is needed before the stack bring-up.
   ansible.builtin.include_role:
     name: common
     tasks_from: nvidia_container_toolkit
   when: gpu_qp_container_toolkit_enabled
   tags: [docker, nvidia, toolkit]
-
-- name: Flush handlers so Docker reloads with the nvidia runtime
-  # nvidia-ctk only edits daemon.json and notifies "Restart docker"; handlers
-  # flush at end of play by default, which would be AFTER the stack bring-up.
-  # Without this the daemon does not know the nvidia runtime and compose fails
-  # with: could not select device driver "nvidia" with capabilities: [[gpu]].
-  ansible.builtin.meta: flush_handlers
 
 - name: Configure firewall
   ansible.builtin.include_role:

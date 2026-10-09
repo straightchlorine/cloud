@@ -10,8 +10,10 @@
 # gpu-qp role is the first consumer); the toolkit version is whatever NVIDIA's
 # stable channel currently ships.
 #
-# Notifies "Restart docker" (common/handlers) so a newly registered runtime is
-# active before any container that depends on it starts.
+# Ends by restarting Docker whenever the RUNNING daemon does not list the nvidia
+# runtime - nvidia-ctk only writes daemon.json and never reloads the daemon, so
+# without that restart compose fails with
+# "could not select device driver \"nvidia\" with capabilities: [[gpu]]".
 
 - name: Install the NVIDIA container toolkit prerequisites
   ansible.builtin.apt:
@@ -60,7 +62,8 @@
 
 - name: Register the nvidia runtime with Docker
   # nvidia-ctk reports success on every run (no idempotence signal), so guard on
-  # the daemon.json contents rather than letting it flap as changed each deploy.
+  # the daemon.json contents. It only writes the file - it never reloads the
+  # daemon, which the restart below handles.
   ansible.builtin.command:
     cmd: nvidia-ctk runtime configure --runtime=docker
   become: true
@@ -68,4 +71,24 @@
     common_nvidia_daemon_json.content is not defined
     or 'nvidia' not in (common_nvidia_daemon_json.content | b64decode)
   changed_when: true
-  notify: Restart docker
+
+- name: Read the running Docker daemon's registered runtimes
+  ansible.builtin.command:
+    cmd: docker info --format '{{ '{{' }}json .Runtimes{{ '}}' }}'
+  register: common_nvidia_docker_runtimes
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Restart Docker so a registered nvidia runtime becomes active
+  # Gated on the RUNNING daemon, not the file: daemon.json can already list
+  # nvidia while a daemon started before that write does not - exactly the state
+  # a deploy that failed at `compose up` leaves behind (handlers do not run for
+  # a failed host, so the restart was skipped). Gating on the file would then
+  # skip forever, and compose keeps failing with
+  # "could not select device driver \"nvidia\"".
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: "'nvidia' not in (common_nvidia_docker_runtimes.stdout | default(''))"
