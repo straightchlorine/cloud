@@ -11,7 +11,11 @@
     compose_owner: "{{ ansible_user }}"
     compose_critical_services: >-
       {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
-  when: common_start_stack | bool
+  # The flag is owned by common: under `--tags gpu-qp` the fleet play that loads
+  # common's defaults is skipped, so it can legitimately be undefined here. The
+  # default mirrors common's own (true) - acceptable cross-role flag default per
+  # CLAUDE.md.
+  when: common_start_stack | default(true) | bool
   tags: [post_validation]
 
 - name: Prove a GPU container can see the NVIDIA device
