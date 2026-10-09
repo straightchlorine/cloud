@@ -25,6 +25,8 @@
     #   - packages.yml / docker.yml (apt installs; no docker-in-docker)
     #   - nvidia_driver.yml (no GPU, no DKMS build)
     #   - image.yml / nvidia_container_toolkit.yml (need a live Docker daemon)
+    #   - dotfiles.yml (its src is playbook_dir-relative: ../dotfiles/tmux.conf
+    #     resolves from playbooks/, not from a molecule scenario directory)
     #   - firewall (ufw cannot apply rules inside a container)
     #   - post_deploy_validate.yml (needs a live stack and a real GPU)
     - name: Gather network facts

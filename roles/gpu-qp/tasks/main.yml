@@ -47,10 +47,25 @@
   when: gpu_qp_container_toolkit_enabled
   tags: [docker, nvidia, toolkit]
 
+- name: Flush handlers so Docker reloads with the nvidia runtime
+  # nvidia-ctk only edits daemon.json and notifies "Restart docker"; handlers
+  # flush at end of play by default, which would be AFTER the stack bring-up.
+  # Without this the daemon does not know the nvidia runtime and compose fails
+  # with: could not select device driver "nvidia" with capabilities: [[gpu]].
+  ansible.builtin.meta: flush_handlers
+
 - name: Configure firewall
   ansible.builtin.include_role:
     name: firewall
   tags: [firewall, security]
+
+- name: Re-apply the shared dotfiles (tmux)
+  # A tag-scoped run (--tags gpu-qp) skips the site.yml base play that applies
+  # the common role, so this host re-applies the fleet dotfiles itself.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: dotfiles
+  tags: [gpu-qp, common, base]
 
 - name: Prepare the data directories and the run wrapper
   ansible.builtin.include_tasks: data.yml
