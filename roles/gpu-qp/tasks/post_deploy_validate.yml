@@ -43,6 +43,34 @@
     quiet: true
   tags: [post_validation]
 
+- name: Prove the worker service container can see the NVIDIA device
+  # Same mechanism the smoke test below uses (compose run + the service's device
+  # reservation), so a compose-level GPU gap fails here with a clear message
+  # instead of surfacing as "No CUDA device available" deep inside Aer.
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker compose -f {{ gpu_qp_home }}/docker-compose.yml run --rm \
+      --entrypoint nvidia-smi quantum-pipeline-gpu -L
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: gpu_qp_worker_gpus
+  changed_when: false
+  tags: [post_validation]
+
+- name: Assert the worker service sees at least one GPU
+  ansible.builtin.assert:
+    that:
+      - "'GPU 0' in gpu_qp_worker_gpus.stdout"
+    fail_msg: >-
+      The worker service container cannot see an NVIDIA device, so the GPU smoke
+      test cannot pass. nvidia-smi said:
+      {{ gpu_qp_worker_gpus.stdout | default('') }}
+      {{ gpu_qp_worker_gpus.stderr | default('') }}
+    quiet: true
+  tags: [post_validation]
+
 - name: Run a short GPU-accelerated VQE to prove the full path
   ansible.builtin.shell: |
     set -o pipefail

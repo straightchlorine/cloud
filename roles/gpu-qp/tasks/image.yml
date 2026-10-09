@@ -12,17 +12,40 @@
   become_user: "{{ ansible_user }}"
   when: gpu_qp_image_mode == 'build'
 
+- name: Copy the upstream Dockerfile so the CUDA base can be pinned
+  # Copied rather than edited in place: a locally-modified tracked file makes the
+  # git module fail on the next run.
+  ansible.builtin.copy:
+    src: "{{ gpu_qp_source_path }}/docker/Dockerfile.gpu"
+    dest: "{{ gpu_qp_source_path }}/{{ gpu_qp_pinned_dockerfile }}"
+    remote_src: true
+    mode: "0644"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'build'
+
+- name: Pin the CUDA base version in the build Dockerfile
+  ansible.builtin.replace:
+    path: "{{ gpu_qp_source_path }}/{{ gpu_qp_pinned_dockerfile }}"
+    regexp: 'nvidia/cuda:[0-9][0-9.]*-cudnn-'
+    replace: 'nvidia/cuda:{{ gpu_qp_cuda_version }}-cudnn-'
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'build'
+
 - name: Build the GPU image for the target CUDA architecture
   # qiskit-aer is compiled from source with the CUDA thrust backend for
   # gpu_qp_cuda_arch - the only way to run a non-Ampere card, since the published
   # :gpu tag is compiled for sm_86. This is a slow C++/CUDA compile, so an
   # existing image is reused unless gpu_qp_image_force_rebuild is set.
+  # Tagged "-upstream" when the compat strip below is enabled, so the derived
+  # image (not this one) carries gpu_qp_image_name.
   community.docker.docker_image:
-    name: "{{ gpu_qp_image_name }}"
+    name: "{{ gpu_qp_upstream_image if gpu_qp_strip_cuda_compat else gpu_qp_image_name }}"
     source: build
     build:
       path: "{{ gpu_qp_source_path }}"
-      dockerfile: docker/Dockerfile.gpu
+      dockerfile: "{{ gpu_qp_pinned_dockerfile }}"
       args:
         CUDA_ARCH: "{{ gpu_qp_cuda_arch }}"
         AER_VERSION: "{{ gpu_qp_aer_version }}"
@@ -31,6 +54,46 @@
   become: true
   become_user: "{{ ansible_user }}"
   when: gpu_qp_image_mode == 'build'
+
+- name: Create the compat-strip build directory
+  ansible.builtin.file:
+    path: "{{ gpu_qp_compat_build_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+  when:
+    - gpu_qp_image_mode == 'build'
+    - gpu_qp_strip_cuda_compat
+
+- name: Render the compat-strip image Dockerfile
+  ansible.builtin.template:
+    src: Dockerfile.compatless.j2
+    dest: "{{ gpu_qp_compat_build_dir }}/Dockerfile"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  become: true
+  when:
+    - gpu_qp_image_mode == 'build'
+    - gpu_qp_strip_cuda_compat
+
+- name: Build the compat-stripped GPU image
+  # A trivial layer on top of the upstream build; cheap, so it is rebuilt
+  # whenever the upstream tag is absent rather than needing a manual force.
+  community.docker.docker_image:
+    name: "{{ gpu_qp_image_name }}"
+    source: build
+    build:
+      path: "{{ gpu_qp_compat_build_dir }}"
+    state: present
+    force_source: "{{ gpu_qp_image_force_rebuild | bool }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when:
+    - gpu_qp_image_mode == 'build'
+    - gpu_qp_strip_cuda_compat
 
 - name: Pull the prebuilt GPU image
   community.docker.docker_image:

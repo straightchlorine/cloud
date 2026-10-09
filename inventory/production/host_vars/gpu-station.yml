@@ -9,6 +9,15 @@ device_type: cloud_vm
 #   6.1 Pascal (GTX 10xx) | 7.5 Turing | 8.6 Ampere | 8.9 Ada.
 gpu_qp_cuda_arch: "6.1"
 
+# CUDA toolkit base the GPU image is compiled against. This is separate from the
+# arch above and must be compatible with the GUEST DRIVER, not the card:
+# `nvidia-smi` reports the driver's max ("CUDA Version: X.Y"), and this stack's
+# 550 branch caps at 12.4. 12.6.3 runs on it via minor-version compatibility
+# (the role also strips CUDA's forward-compat libs, which GeForce cannot use).
+# Lower it - e.g. "12.5.1" - only if a build matching the driver is needed; the
+# version must exist upstream with the ubuntu24.04 suffix.
+gpu_qp_cuda_version: "12.6.3"
+
 # Built on-host for gpu_qp_cuda_arch: the published :gpu tag is compiled for
 # Ampere (sm_86) and will not run on a Pascal/Turing card.
 gpu_qp_image_mode: "build"

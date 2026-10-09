@@ -33,6 +33,31 @@ gpu_qp_image_pull_name: "ghcr.io/straightchlorine/quantum-pipeline:gpu"
 gpu_qp_aer_version: "0.17.2"
 gpu_qp_image_force_rebuild: false
 
+# CUDA toolkit base the GPU image is compiled against - the FROM tag in
+# quantum-pipeline's docker/Dockerfile.gpu, pinned by the role at build time.
+# It must not exceed what the guest driver supports: `nvidia-smi` prints the
+# driver's max ("CUDA Version: 12.4" for the 550 branch). A newer CUDA than the
+# driver needs minor-version compatibility (which the compat strip below also
+# clears out of the way); a much newer one simply will not run.
+gpu_qp_cuda_version: "12.6.3"
+# The pinned copy of the upstream Dockerfile the build actually uses, relative to
+# the source checkout, so pinning the CUDA version never dirties the git checkout.
+gpu_qp_pinned_dockerfile: "docker/Dockerfile.gpu.pinned"
+
+# The stock CUDA image ships forward-compatibility libcuda libraries under
+# /usr/local/cuda-*/compat, and ldconfig resolves them first. Forward
+# compatibility is only supported on datacenter (Tesla) GPUs: on a GeForce card
+# the compat libcuda makes cuInit return
+# CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE (804), which qiskit-aer surfaces as
+# "No CUDA device available!" - even though nvidia-smi works (NVML does not use
+# libcuda). With this on, the role builds a thin derived image without those
+# libraries so the driver's own libcuda is used. Build mode only.
+gpu_qp_strip_cuda_compat: true
+# Tag of the upstream build the derived image is layered on.
+gpu_qp_upstream_image: "{{ gpu_qp_image_name }}-upstream"
+# Build context for the derived image (holds the generated Dockerfile).
+gpu_qp_compat_build_dir: "{{ gpu_qp_home }}/compatless"
+
 # The image compose actually runs: derived from the mode, so the worker service
 # does not have to branch on it.
 gpu_qp_active_image: >-

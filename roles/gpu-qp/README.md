@@ -32,6 +32,28 @@ when the prebuilt image already targets the card.
 
 - `gpu_qp_cuda_arch` - `6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada.
 
+## Image build knobs
+
+Two independent CUDA variables, and they are **not** the same thing:
+
+| Variable | Meaning | Set it to |
+|---|---|---|
+| `gpu_qp_cuda_arch` | the `CUDA_ARCH` build arg (compute capability) | the card: `6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada |
+| `gpu_qp_cuda_version` | the CUDA toolkit base the image compiles against | something compatible with the guest **driver** (`nvidia-smi` prints its max, e.g. `12.4` for the 550 branch) |
+
+The role pins `gpu_qp_cuda_version` into a copy of the upstream
+`docker/Dockerfile.gpu` at build time, so the version can be moved without
+dirtying the git checkout.
+
+**Compat strip (`gpu_qp_strip_cuda_compat`, on by default).** The stock CUDA
+image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, and
+`ldconfig` resolves it ahead of the driver's own library. Forward compatibility
+is datacenter-GPU only: on a GeForce card the shim makes `cuInit` fail with
+`CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE` (804), which qiskit-aer reports as
+`No CUDA device available!` — while `nvidia-smi` keeps working, because NVML
+never touches `libcuda`. The role therefore builds a thin derived image with
+those libraries removed, so the driver's `libcuda` is used.
+
 ## Running a simulation
 
 ```bash
