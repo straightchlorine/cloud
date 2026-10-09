@@ -56,7 +56,9 @@ ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml \
 
 The teardown removes the stack, the wrapper and the local image but **keeps the
 NVIDIA driver and toolkit** - they are host prerequisites, and reinstalling the
-driver is expensive.
+driver is expensive. Set `-e gpu_qp_teardown_keep_image=true` to also keep the
+built image across a teardown/redeploy cycle (rebuilding it compiles qiskit-aer
+from source, ~40 min).
 
 ## Testing
 

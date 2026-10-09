@@ -35,6 +35,7 @@
   become: true
   become_user: "{{ ansible_user }}"
   failed_when: false
+  when: not gpu_qp_teardown_keep_image
 
 - name: Verify the gpu-qp artifacts are gone
   ansible.builtin.include_role:

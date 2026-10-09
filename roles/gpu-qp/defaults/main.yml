@@ -102,6 +102,11 @@ gpu_qp_smoke_test_enabled: true
 gpu_qp_smoke_test_molecule_index: 0
 gpu_qp_smoke_test_max_iterations: 2
 
+# teardown removes the wrapper, the stack and the locally built image (role-owned
+# state). Set true to keep the image across a teardown/redeploy cycle - rebuilding
+# it compiles qiskit-aer from source (~40 min).
+gpu_qp_teardown_keep_image: false
+
 gpu_qp_supported_cuda_arches:
   - "6.0"
   - "6.1"
