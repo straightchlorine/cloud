@@ -23,10 +23,16 @@
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
 #                                     track (this is what `media-import` runs)
+#   media-sync --singles [<dir>]      just the judging pass - what you want in the
+#                                     morning after a nightly run, instead of
+#                                     waiting through a release pass that would
+#                                     find nothing new
 #   media-sync --release [<dir>]      the RELEASE pass asking per track - for the
 #                                     near misses automatic matching refuses
 #
-# The two interactive modes need a terminal; run them through `media-import`.
+# The interactive modes need a terminal; run them through `media-import`.
+# Ctrl-C stops any mode cleanly and says so: an unattended run (no terminal) also
+# sends one ntfy, a manual one just prints (see on_interrupt).
 set -euo pipefail
 
 LIB="{{ media_library_path }}"
@@ -64,6 +70,17 @@ release_pass() {  # [<dir>] [<overlay>]
         find "$1" -type f ! -name ".*" \
             -exec /lsiopy/bin/beet --config "$2" import {} \;' \
         release-pass "${1:-/downloads}" "${2:-/config/album.yaml}"
+}
+
+# Run beets interactively and keep this shell alive to catch Ctrl-C: `exec` would
+# replace the shell (and its traps) with beets, so the subshell takes the exec
+# instead. The subshell is still a proper child, so the terminal is handed over,
+# yt-dlp/beets/compose clean up their own containers and an interrupt surfaces
+# through on_interrupt as something a human can read.
+interactive_pass() {  # <beets args...>
+    local status=0
+    ( exec "${BEET_TTY[@]}" "$@" ) || status=$?
+    exit "$status"
 }
 
 # Compose an overlay with one extra setting, inside the container, so each
@@ -120,6 +137,22 @@ flock -n 9 || {
     exit 0
 }
 
+# Ctrl-C / SIGTERM: stop and say so. An unattended run interrupted at 02:00 must
+# not just vanish - hence the ntfy when there is no terminal - while a manual one
+# should say plainly that it stopped. Nothing needs unwinding: flock drops the
+# lock with the process, and yt-dlp's archive file means a re-run skips what was
+# already downloaded. A file interrupted mid-move is either already renamed
+# (downloads/ and music/ are the same filesystem) or still in downloads/, so the
+# worst case is a track sitting in music/ that beets has not registered yet -
+# `media-sync --adopt` picks it up.
+on_interrupt() {
+    echo "media-sync ${MODE#--} interrupted; stopping."
+    if [ ! -t 0 ]; then
+        notify "interrupted" "stopped before finishing - re-run when you can. See $LIB/logs/media-sync.log." default warning
+    fi
+    exit 130
+}
+trap on_interrupt INT TERM
 trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
 
 # Watchtower never sees this short-lived container, so pull here; a failed pull keeps the cached image.
@@ -185,21 +218,27 @@ case "$MODE" in
         "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
         notify "done" "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
         exit 0 ;;
+    --singles)
+        # The judging half on its own. After a nightly run the release pass has
+        # already had its say and left its leftovers, so `media-import --singles`
+        # goes straight to the per-track decisions instead of waiting through a
+        # release pass that would find nothing new.
+        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
     --interactive)
         # Both passes, the singleton one interactive (what `media-import` runs).
         echo "== media-import: album (release) pass =="
         release_pass "${2:-/downloads}" /config/album.yaml || true
         echo "== media-import: singleton pass =="
-        exec "${BEET_TTY[@]}" --config /config/interactive.yaml import "${2:-/downloads}" ;;
+        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
     --release)
         # The release pass WITH prompts, for the near misses automatic matching
         # refuses (verified: a correct release can score 0.05 against the 0.04
         # strong_rec_thresh and be skipped). Answering as-is marks the track.
         overlay release
-        exec "${BEET_TTY[@]}" -c /config/.run.yaml import "${2:-/downloads}" ;;
+        interactive_pass -c /config/.run.yaml import "${2:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--release [<dir>]]"
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--singles [<dir>]|--release [<dir>]]"
         exit 2 ;;
 esac
 

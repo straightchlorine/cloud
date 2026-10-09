@@ -22,6 +22,7 @@
         - "{{ media_home }}/scripts/media-sync.sh"
         - "{{ media_home }}/scripts/media-import.sh"
         - "{{ media_library_path }}/beets/plugins/reviewed.py"
+        - "{{ media_home }}/scripts/beet.sh"
       register: media_files
 
     - name: Parse the deployed files
@@ -38,6 +39,7 @@
         media_sync: "{{ media_files.results[9].content | b64decode }}"
         media_import: "{{ media_files.results[10].content | b64decode }}"
         reviewed_plugin: "{{ media_files.results[11].content | b64decode }}"
+        beet_helper: "{{ media_files.results[12].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -51,6 +53,7 @@
         - "{{ media_library_path }}/music"
         - /tmp/molecule-media-backup
         - /usr/local/bin/media-import
+        - /usr/local/bin/beet
       register: media_stats
 
     - name: Stat the retired command
@@ -192,6 +195,7 @@
           - "'--albums)' in media_sync"
           - "'--keep)' in media_sync"
           - "'--interactive)' in media_sync"
+          - "'--singles)' in media_sync"
           - "'--release)' in media_sync"
           # The reviewer's decisions survive the repair paths.
           - "'reviewed::^$' in media_sync"
@@ -222,6 +226,15 @@
         fail_msg: "media-import should be a wrapper, not a second implementation:\n{{ media_import }}"
         success_msg: "[OK] media-import: interactive wrapper over media-sync"
 
+    - name: Assert the interactive wrapper refuses a run without a terminal
+      # It is never scheduled (cron runs media-sync), and this is the guard that
+      # keeps it that way: without a TTY it fails immediately instead of running
+      # a quiet pass that can never ask, or hanging on a prompt nobody sees.
+      ansible.builtin.command: /usr/local/bin/media-import
+      register: media_import_nott
+      changed_when: false
+      failed_when: media_import_nott.rc != 2
+
     - name: Assert the yt-dlp config prefers YouTube Music tags
       ansible.builtin.assert:
         that:
@@ -237,9 +250,12 @@
           - media_stats.results[1].stat.islnk
           - media_stats.results[2].stat.islnk
           - media_stats.results[3].stat.mode == '0600'
+          - media_stats.results[8].stat.islnk
+          - "'--entrypoint /lsiopy/bin/beet' in beet_helper"
+          - "'docker compose' in beet_helper"
           - not media_import_album_retired.stat.exists
-        fail_msg: manage/media-sync symlinks, playlists.txt or a stale media-import-album
-        success_msg: "[OK] manage-media + media-sync in PATH, playlists.txt 0600, media-import-album retired"
+        fail_msg: manage/media-sync/beet symlinks, playlists.txt or a stale media-import-album
+        success_msg: "[OK] manage-media + media-sync + beet in PATH, playlists.txt 0600, media-import-album retired"
 
     - name: Run the deployed media-sync against the stub yt-dlp
       # The stub downloads nothing, so beets is skipped.

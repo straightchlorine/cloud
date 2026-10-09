@@ -34,6 +34,7 @@ check_absent /usr/local/bin/manage-media
 check_absent /usr/local/bin/media-sync
 check_absent /usr/local/bin/media-import
 check_absent /usr/local/bin/media-import-album
+check_absent /usr/local/bin/beet
 check_absent /usr/local/bin/media-syncthing-backup
 check_absent /usr/local/bin/yt-dlp-update
 check_absent /usr/local/bin/yt-dlp

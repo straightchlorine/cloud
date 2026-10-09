@@ -5,12 +5,15 @@
 #
 #   media-import [<dir>]            the nightly two passes, but the singleton one
 #                                   asks per track (Apply / as-is / Skip / ...)
+#   media-import --singles [<dir>]  the judging pass on its own - after a nightly
+#                                   run, go straight to the leftovers
 #   media-import --release [<dir>]  the RELEASE pass asking per track - for the
 #                                   near misses automatic matching refuses (a
 #                                   match just under the strong threshold)
 #
 # Answering "use as-is" marks the track reviewed (see reviewed.py), so no later
 # `--upgrade`/`--retag` re-matches something you chose to keep as it is.
+# Ctrl-C stops it cleanly and says so; nothing is half-applied.
 set -euo pipefail
 
 if [ ! -t 0 ] || [ ! -t 1 ]; then
@@ -19,9 +22,11 @@ if [ ! -t 0 ] || [ ! -t 1 ]; then
 fi
 
 mode=--interactive
-if [ "${1:-}" = "--release" ]; then
-    mode=--release
-    shift
-fi
+case "${1:-}" in
+    --singles | --release)
+        mode="$1"
+        shift
+        ;;
+esac
 
 exec /usr/local/bin/media-sync "$mode" "${1:-/downloads}"

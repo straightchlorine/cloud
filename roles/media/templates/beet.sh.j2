@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# beet - run beets from the host shell (ls, stats, duplicates, modify, ...).
+#
+# A convenience wrapper: beets lives in the stack's short-lived `beets`
+# container, so without this every look at the library means typing the whole
+# `docker compose run ... --entrypoint /lsiopy/bin/beet beets` incantation. The
+# container's config dir is /config, so the fields, queries and plugins here are
+# exactly what the pipeline uses.
+#
+#   beet ls -f '$title | $comments' 'reviewed::.'
+#   beet ls 'mb_albumid::^$' 'reviewed::^$' added:-4w..   # what --upgrade touches
+#   beet stats
+#
+# Reading is the common case; `beet modify` / `beet remove` change the library.
+# Interactive subcommands (beet edit, beet config -e) need a terminal, and when
+# this is called from a script give it `< /dev/null` - `docker compose run`
+# otherwise swallows the script's stdin.
+set -euo pipefail
+
+exec docker compose -f "{{ media_home }}/docker-compose.yml" run --rm -T \
+    --entrypoint /lsiopy/bin/beet beets "$@"

@@ -42,6 +42,7 @@
     # Retired (folded into `media-sync --albums`): still removed so a host
     # deployed before the refactor cannot keep a symlink to an unmanaged script.
     - /usr/local/bin/media-import-album
+    - /usr/local/bin/beet
     - /usr/local/bin/yt-dlp
     - /usr/local/bin/deno
     - "{{ media_home }}"
@@ -70,6 +71,7 @@
       - /usr/local/bin/media-sync
       - /usr/local/bin/media-import
       - /usr/local/bin/media-import-album
+      - /usr/local/bin/beet
       - /usr/local/bin/media-syncthing-backup
       - /usr/local/bin/yt-dlp
       - /usr/local/bin/deno

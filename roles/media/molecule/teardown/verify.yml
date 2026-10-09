@@ -12,6 +12,7 @@
         - /usr/local/bin/manage-media
         - /usr/local/bin/media-sync
         - /usr/local/bin/media-import
+        - /usr/local/bin/beet
         - /usr/local/bin/media-syncthing-backup
         - /usr/local/bin/yt-dlp
         - /usr/local/bin/deno

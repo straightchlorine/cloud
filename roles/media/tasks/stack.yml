@@ -115,9 +115,10 @@
     - reviewed.py
 
 - name: Install the pipeline scripts
-  # One engine plus an interactive wrapper, deployed unconditionally so the
-  # wrapper always has its target; only the schedule and the downloads are
-  # gated by media_youtube_enabled (see youtube.yml).
+  # One engine, an interactive wrapper, and a host-side `beet` for looking at the
+  # library; deployed unconditionally so the wrapper always has its target. Only
+  # the schedule and the downloads are gated by media_youtube_enabled
+  # (see youtube.yml).
   ansible.builtin.template:
     src: "{{ item }}.sh.j2"
     dest: "{{ media_home }}/scripts/{{ item }}.sh"
@@ -127,6 +128,7 @@
   loop:
     - media-sync
     - media-import
+    - beet
 
 - name: Symlink the pipeline scripts into PATH
   ansible.builtin.file:
@@ -138,6 +140,7 @@
   loop:
     - media-sync
     - media-import
+    - beet
 
 - name: Remove the retired command artifacts
   # media-import-album folded into `media-sync --albums`. A host deployed before

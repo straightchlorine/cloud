@@ -71,6 +71,10 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
     `downloads/`.
   - **`media-import [<dir>]`** — the same two passes, but the singleton one asks
     per track (needs a terminal).
+  - **`media-import --singles [<dir>]`** — only the judging pass. This is the one
+    for the morning after a nightly run: the release pass has already run and
+    left its leftovers, so there is nothing to gain by waiting through it again
+    just to reach the per-track questions.
   - **`media-import --release [<dir>]`** — the *release* pass asking per track,
     for the near misses automatic matching refuses (a correct release can score
     0.05 against the 0.04 `strong_rec_thresh` and get skipped).
@@ -83,7 +87,16 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   `beets/plugins`). A reviewed track is never handed to `--upgrade`/`--retag`
   again; the marker is a `reviewed` field plus a `reviewed` prefix on
   `comments`, so it rides along in the files and `--adopt` restores it after a
-  library rebuild.
+  library rebuild. Inspect any of it from the host shell with the deployed
+  `beet` helper: `beet ls -f '$title | $comments' 'reviewed::.'`.
+- **Interrupts.** Ctrl-C stops any mode cleanly and says so; nothing is left
+  half-applied. A run without a terminal (the cron ones) also sends one
+  `interrupted` ntfy; a manual one only prints. Nothing needs unwinding: the lock
+  goes with the process and yt-dlp's archive file means a re-run skips what was
+  already downloaded. A file caught mid-move is either renamed (`downloads/` and
+  `music/` share a filesystem) or still in `downloads/`, so the worst case is a
+  track in `music/` that beets has not registered yet — `media-sync --adopt`
+  picks it up.
 - **Retagging.** `media-sync --retag` (weekly) retries MusicBrainz for the last
   4 weeks' unmatched imports *and* gives the recent bare tracks their release;
   `media-sync --upgrade [all|<query>]` runs that second part on demand — the
@@ -122,7 +135,7 @@ Any failed step sends `... failed` with the line number, at high priority.
 ~/stack/ (SD, media_home)   docker-compose.yml  .env (0600)  .navidrome_jwt_secret
                             config/yt-dlp.conf  config/playlists.txt (0600)
                             scripts/manage-media.sh  scripts/media-sync.sh
-                            scripts/media-import.sh
+                            scripts/media-import.sh  scripts/beet.sh
 /mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/
                             cache/  logs/  state/youtube-archive.txt
                             syncthing/backup/  docker/  journal/  backup-tmp/
@@ -210,7 +223,8 @@ tmux new 'media-sync --backfill'   # lyrics + ReplayGain, writes tags (many hour
 
 Only lyrics and gain tags change. Title, artist and album stay as they are, so
 Navidrome keeps plays, stars and playlists. Once adopted, `beet duplicates`
-lists the ~190 duplicate groups the probe found, for manual review. The
+lists the ~190 duplicate groups the probe found, for manual review (`beet` is
+the deployed helper - it runs beets in the container for you). The
 existing tags (reposts filed under the uploader, `- Topic` artists) are left
 alone. Fixing them means re-fetching each video's metadata from YouTube (the
 URL is embedded in the file), which would be a separate one-off job.
@@ -228,4 +242,16 @@ cd roles/media
 molecule test -s default               # real stack/backup/pipeline task files; runs media-sync on a stub yt-dlp
 molecule test -s fail-fast-validation
 molecule test -s teardown
+```
+
+`scripts/media/marker-self-test.sh` proves the reviewed-marker layer on a
+deployed host: it imports a synthesised track both with and without the opt-in,
+checks the queries, the file tag, and the un-mark/`--adopt` recipes. It runs
+inside a throwaway container and writes only to that container's `/tmp`, so the
+real library, `library.db` and `/config` are untouched:
+
+```bash
+ssh <host> 'cd ~/stack && docker compose -f docker-compose.yml run --rm -T -i \
+  --entrypoint /bin/sh beets -c "cat > /tmp/marker-self-test.sh; sh /tmp/marker-self-test.sh"' \
+  < scripts/media/marker-self-test.sh
 ```
