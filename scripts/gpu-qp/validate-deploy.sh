@@ -84,11 +84,14 @@ check_present "$STACK_HOME/data/molecules.json"
 check_script /usr/local/bin/gpu-qp-run 755
 
 echo "-- GPU container can see a device --"
-if docker run --rm --runtime=nvidia --entrypoint nvidia-smi \
-     -e NVIDIA_VISIBLE_DEVICES=all quantum-pipeline:gpu -L 2>/dev/null | grep -q 'GPU 0'; then
-  note_ok "a GPU container sees at least one NVIDIA device"
+# -T is required: this script arrives on the remote shell's stdin, and compose run
+# would otherwise consume the rest of it. Compose service + device reservation is
+# the same path a real run takes.
+if docker compose -f "$STACK_HOME/docker-compose.yml" run --rm -T \
+     --entrypoint nvidia-smi quantum-pipeline-gpu -L 2>/dev/null | grep -q 'GPU 0'; then
+  note_ok "the worker container sees at least one NVIDIA device"
 else
-  note_left "a GPU container could NOT see an NVIDIA device"
+  note_left "the worker container could NOT see an NVIDIA device"
 fi
 
 echo "-- Containers --"

@@ -70,7 +70,9 @@ gpu-qp-run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 
 `gpu-qp-run` wraps `docker compose run` for the GPU worker with `--gpu --report`;
 reports and plots land in `gpu_qp_gen_path`. All flags after the wrapper are
-appended to the CLI, so any default can be overridden.
+appended to the CLI, so any default can be overridden. `gpu-qp-run --help` prints
+the defaults it applies, the files it touches, and how to list the solver's own
+options.
 
 ## Deploy / teardown
 

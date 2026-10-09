@@ -1,10 +1,52 @@
-#!/bin/sh
-# GPU VQE run through the gpu-qp stack. Arguments are appended to the CLI, so the
-# defaults below can be overridden: gpu-qp-run --basis cc-pvdz
-# Reports and plots land in {{ gpu_qp_gen_path }}.
-set -eu
-exec docker compose -f "{{ gpu_qp_home }}/docker-compose.yml" run --rm \
-  quantum-pipeline-gpu \
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# One quantum-pipeline simulation on the GPU: a `docker compose run` of the
+# gpu-qp stack's batch worker. Arguments are appended after the defaults below,
+# so they override them by name.
+
+set -euo pipefail
+
+STACK_HOME="{{ gpu_qp_home }}"
+COMPOSE_FILE="$STACK_HOME/docker-compose.yml"
+SERVICE="quantum-pipeline-gpu"
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<EOF
+Usage: gpu-qp-run [solver-option]...
+
+Runs one quantum-pipeline VQE simulation on the GPU. The worker is a batch
+service, so \`docker compose up\` does not start it - this is how it runs.
+
+Every run is prefixed with:
+  --file {{ gpu_qp_container_molecules_path }}
+  --basis {{ gpu_qp_basis }}
+  --max-iterations {{ gpu_qp_max_iterations }}
+  --optimizer {{ gpu_qp_optimizer }}
+  --gpu --report
+
+Arguments given here are appended after those, so the solver's argparse lets
+them override the default with the same name.
+
+Reports and plots land in {{ gpu_qp_gen_path }}.
+
+Examples:
+  gpu-qp-run
+  gpu-qp-run --molecule-index 1
+  gpu-qp-run --basis cc-pvdz --max-iterations 250
+
+Files:
+  $COMPOSE_FILE
+  {{ gpu_qp_data_path }}/molecules.json
+
+The solver's own option list:
+  docker compose -f "$COMPOSE_FILE" run --rm $SERVICE --help
+EOF
+  exit 0
+fi
+
+exec docker compose -f "$COMPOSE_FILE" run --rm \
+  "$SERVICE" \
   --file {{ gpu_qp_container_molecules_path }} \
   --basis {{ gpu_qp_basis }} \
   --max-iterations {{ gpu_qp_max_iterations }} \

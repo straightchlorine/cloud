@@ -69,14 +69,17 @@
       ansible.builtin.assert:
         that:
           - gpu_qp_run_stat.stat.mode == '0755'
-          - "'docker compose' in run_wrapper"
-          - "'/home/gpu/gpu-qp/docker-compose.yml' in run_wrapper"
-          - "'run --rm' in run_wrapper"
+          - "'Managed by Ansible' in run_wrapper"
+          - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in run_wrapper"
+          - "'COMPOSE_FILE=\"$STACK_HOME/docker-compose.yml\"' in run_wrapper"
+          - "'Usage: gpu-qp-run' in run_wrapper"
+          - "'quantum-pipeline-gpu' in run_wrapper"
           - "'--file data/molecules.json' in run_wrapper"
           - "'--gpu' in run_wrapper"
           - "'--report' in run_wrapper"
+          - "'/home/gpu/gpu-qp/gen' in run_wrapper"
         fail_msg: "gpu-qp-run wrapper wrong:\n{{ run_wrapper }}"
-        success_msg: "[OK] gpu-qp-run runs the worker with --gpu"
+        success_msg: "[OK] gpu-qp-run passes --gpu and carries its own --help"
 
     - name: Assert the rendered systemd unit
       ansible.builtin.assert:
