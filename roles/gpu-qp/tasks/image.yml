@@ -11,6 +11,18 @@
   become_user: "{{ ansible_user }}"
   when: gpu_qp_image_mode == 'build'
 
+- name: Read the checked-out source revision
+  # Part of the build fingerprint below: a pulled source change leaves the
+  # Dockerfile and the build args untouched, so without this the image would
+  # never be rebuilt from the new code.
+  ansible.builtin.command:
+    cmd: git -C {{ gpu_qp_source_path }} rev-parse HEAD
+  register: gpu_qp_source_revision
+  changed_when: false
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: gpu_qp_image_mode == 'build'
+
 - name: Read the upstream GPU Dockerfile
   ansible.builtin.slurp:
     src: "{{ gpu_qp_source_path }}/docker/Dockerfile.gpu"
@@ -32,7 +44,8 @@
           | regex_replace('nvidia/cuda:[0-9][0-9.]*-cudnn-',
                           'nvidia/cuda:' ~ gpu_qp_cuda_version ~ '-cudnn-')
           ~ (gpu_qp_compat_strip_block if gpu_qp_strip_cuda_compat else '')
-          ~ gpu_qp_cuda_arch ~ gpu_qp_aer_version) | hash('sha1') }}
+          ~ gpu_qp_cuda_arch ~ gpu_qp_aer_version
+          ~ gpu_qp_source_revision.stdout) | hash('sha1') }}
   when: gpu_qp_image_mode == 'build'
 
 - name: Write the pinned build Dockerfile

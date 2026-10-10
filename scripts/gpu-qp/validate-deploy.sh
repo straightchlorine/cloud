@@ -81,18 +81,19 @@ fi
 echo "-- Stack files --"
 check_present "$STACK_HOME/docker-compose.yml"
 check_present "$STACK_HOME/data/molecules.json"
-check_script /usr/local/bin/gpu-qp-run 755
+for tool in gpu-qp-run gpu-qp-check gpu-qp-pull; do
+  check_script "/usr/local/bin/$tool" 755
+done
 
-echo "-- GPU container can see a device --"
-# -T is required: this script arrives on the remote shell's stdin, and compose run
-# would otherwise consume the rest of it. Compose service + device reservation is
-# the same path a real run takes.
-if docker compose -f "$STACK_HOME/docker-compose.yml" run --rm -T \
-     --entrypoint nvidia-smi quantum-pipeline-gpu -L 2>/dev/null | grep -q 'GPU 0'; then
-  note_ok "the worker container sees at least one NVIDIA device"
+echo "-- GPU check --"
+# gpu-qp-check is the single place that proves the GPU path, so this reports its
+# own verdict rather than repeating it.
+if check_output="$(gpu-qp-check 2>&1)"; then
+  note_ok "gpu-qp-check passed"
 else
-  note_left "the worker container could NOT see an NVIDIA device"
+  note_left "gpu-qp-check failed"
 fi
+printf '%s\n' "$check_output" | sed 's/^/      /'
 
 echo "-- Containers --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then

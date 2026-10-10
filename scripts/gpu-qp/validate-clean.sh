@@ -30,7 +30,9 @@ check_absent() {
 }
 
 echo "-- gpu-qp role state --"
-check_absent /usr/local/bin/gpu-qp-run
+for tool in gpu-qp-run gpu-qp-check gpu-qp-pull; do
+  check_absent "/usr/local/bin/$tool"
+done
 check_absent /etc/systemd/system/stack.service
 # Stack home lives under the SSH user's home.
 check_absent "$HOME/gpu-qp"

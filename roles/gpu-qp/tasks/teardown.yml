@@ -25,6 +25,8 @@
   become: true
   loop:
     - /usr/local/bin/gpu-qp-run
+    - /usr/local/bin/gpu-qp-check
+    - /usr/local/bin/gpu-qp-pull
     - "{{ gpu_qp_home }}"
 
 - name: Remove the locally built GPU image
@@ -44,5 +46,7 @@
     common_teardown_name: gpu-qp
     common_teardown_paths:
       - /usr/local/bin/gpu-qp-run
+      - /usr/local/bin/gpu-qp-check
+      - /usr/local/bin/gpu-qp-pull
       - /etc/systemd/system/stack.service
       - "{{ gpu_qp_home }}"

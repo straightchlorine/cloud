@@ -12,6 +12,8 @@
         - "{{ gpu_qp_home }}/docker-compose.yml"
         - "{{ gpu_qp_home }}/data/molecules.json"
         - /usr/local/bin/gpu-qp-run
+        - /usr/local/bin/gpu-qp-check
+        - /usr/local/bin/gpu-qp-pull
         - /tmp/gpu-qp.service.rendered
       register: gpu_qp_files
 
@@ -19,13 +21,19 @@
       ansible.builtin.set_fact:
         compose: "{{ gpu_qp_files.results[0].content | b64decode | from_yaml }}"
         molecules: "{{ gpu_qp_files.results[1].content | b64decode | from_json }}"
-        run_wrapper: "{{ gpu_qp_files.results[2].content | b64decode }}"
-        unit: "{{ gpu_qp_files.results[3].content | b64decode }}"
+        run_tool: "{{ gpu_qp_files.results[2].content | b64decode }}"
+        check_tool: "{{ gpu_qp_files.results[3].content | b64decode }}"
+        pull_tool: "{{ gpu_qp_files.results[4].content | b64decode }}"
+        unit: "{{ gpu_qp_files.results[5].content | b64decode }}"
 
-    - name: Stat the run wrapper
+    - name: Stat the host tools
       ansible.builtin.stat:
-        path: /usr/local/bin/gpu-qp-run
-      register: gpu_qp_run_stat
+        path: "/usr/local/bin/{{ item }}"
+      loop:
+        - gpu-qp-run
+        - gpu-qp-check
+        - gpu-qp-pull
+      register: gpu_qp_tool_stats
 
     - name: Assert the compose services and the GPU worker definition
       vars:
@@ -65,21 +73,50 @@
         fail_msg: "molecules.json wrong: {{ molecules }}"
         success_msg: "[OK] molecules.json rendered from gpu_qp_molecules"
 
-    - name: Assert the run wrapper content and mode
+    - name: Assert the host tools are installed and executable
       ansible.builtin.assert:
         that:
-          - gpu_qp_run_stat.stat.mode == '0755'
-          - "'Managed by Ansible' in run_wrapper"
-          - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in run_wrapper"
-          - "'COMPOSE_FILE=\"$STACK_HOME/docker-compose.yml\"' in run_wrapper"
-          - "'Usage: gpu-qp-run' in run_wrapper"
-          - "'quantum-pipeline-gpu' in run_wrapper"
-          - "'--file data/molecules.json' in run_wrapper"
-          - "'--gpu' in run_wrapper"
-          - "'--report' in run_wrapper"
-          - "'/home/gpu/gpu-qp/gen' in run_wrapper"
-        fail_msg: "gpu-qp-run wrapper wrong:\n{{ run_wrapper }}"
-        success_msg: "[OK] gpu-qp-run passes --gpu and carries its own --help"
+          - item.stat.exists
+          - item.stat.mode == '0755'
+        fail_msg: "{{ item.item }} is missing or not mode 0755"
+        success_msg: "[OK] {{ item.item }} installed (0755)"
+      loop: "{{ gpu_qp_tool_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert the run tool wiring and defaults
+      ansible.builtin.assert:
+        that:
+          - "'Managed by Ansible' in run_tool"
+          - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in run_tool"
+          - "'COMPOSE_FILE=\"$STACK_HOME/docker-compose.yml\"' in run_tool"
+          - "'Usage: gpu-qp-run' in run_tool"
+          - "'--file data/molecules.json' in run_tool"
+          - "'--gpu' in run_tool"
+          - "'--report' in run_tool"
+          - "'MPLCONFIGDIR' in run_tool"
+          - "'/usr/src/quantum_pipeline/gen' in run_tool"
+        fail_msg: "gpu-qp-run wrong:\n{{ run_tool }}"
+        success_msg: "[OK] gpu-qp-run writes a per-run directory and passes --gpu"
+
+    - name: Assert the GPU check tool
+      ansible.builtin.assert:
+        that:
+          - "'Usage: gpu-qp-check' in check_tool"
+          - "'available_devices' in check_tool"
+          - "'device=\"GPU\"' in check_tool"
+          - "'ldd' in check_tool"
+        fail_msg: "gpu-qp-check wrong:\n{{ check_tool }}"
+        success_msg: "[OK] gpu-qp-check exercises the GPU path"
+
+    - name: Assert the pull tool
+      ansible.builtin.assert:
+        that:
+          - "'Usage: gpu-qp-pull' in pull_tool"
+          - "'/home/gpu/gpu-qp/src/quantum-pipeline' in pull_tool"
+          - "'pull --ff-only' in pull_tool"
+        fail_msg: "gpu-qp-pull wrong:\n{{ pull_tool }}"
+        success_msg: "[OK] gpu-qp-pull updates the source checkout"
 
     - name: Assert the rendered systemd unit
       ansible.builtin.assert:

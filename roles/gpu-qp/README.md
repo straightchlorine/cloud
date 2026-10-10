@@ -60,19 +60,34 @@ records a fingerprint of the effective build definition (pinned Dockerfile plus
 rebuild is still fast, since Docker's layer cache is untouched. Bump
 `gpu_qp_image_force_rebuild` to force one regardless.
 
-## Running a simulation
+## Host tools
+
+The role installs three tools to `/usr/local/bin`; each takes `-h`/`--help`.
+
+| Tool | Does |
+|---|---|
+| `gpu-qp-run` | one simulation. Arguments are appended to the CLI, so the defaults it prefixes can be overridden. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, image id, source revision, driver version) and the report and plots. |
+| `gpu-qp-check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. Post-deploy validation runs it. |
+| `gpu-qp-pull` | fetches and fast-forwards the source checkout the image is built from, switching branch first when the checkout is elsewhere. |
 
 ```bash
 # on the host, after a deploy
-gpu-qp-run                                         # defaults below
+gpu-qp-run                                         # defaults
 gpu-qp-run --molecule-index 1 --basis cc-pvdz --max-iterations 250
+gpu-qp-check
+gpu-qp-pull fix/gpu-build                          # then re-deploy to rebuild
 ```
 
-`gpu-qp-run` wraps `docker compose run` for the GPU worker with `--gpu --report`;
-reports and plots land in `gpu_qp_gen_path`. All flags after the wrapper are
-appended to the CLI, so any default can be overridden. `gpu-qp-run --help` prints
-the defaults it applies, the files it touches, and how to list the solver's own
-options.
+A deploy rebuilds the image whenever the source revision, the pinned Dockerfile
+or the build args change — `gpu-qp-pull` followed by a deploy is a full update.
+
+Runs are collected from your workstation, which is where they are wanted - the
+host cannot reach it:
+
+```bash
+./scripts/gpu-qp/collect.sh gpu-station            # -> ~/gpu-qp-results/gpu-station
+./scripts/gpu-qp/collect.sh gpu-station /tmp/qp    # or a destination of your own
+```
 
 ## Deploy / teardown
 

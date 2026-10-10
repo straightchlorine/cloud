@@ -22,11 +22,15 @@
     group: "{{ ansible_user }}"
     mode: "0644"
 
-- name: Install the simulation run wrapper
+- name: Install the host tools
   ansible.builtin.template:
-    src: run-simulation.sh.j2
-    dest: /usr/local/bin/gpu-qp-run
+    src: "{{ item }}.sh.j2"
+    dest: "/usr/local/bin/{{ item }}"
     owner: root
     group: root
     mode: "0755"
   become: true
+  loop:
+    - gpu-qp-run
+    - gpu-qp-check
+    - gpu-qp-pull

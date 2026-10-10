@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# Update the source checkout the GPU image is built from. It uses whatever
+# remote the checkout is configured with, so an SSH remote picks up this host's
+# key and no credentials live here.
+
+set -euo pipefail
+
+SOURCE="{{ gpu_qp_source_path }}"
+BRANCH="${1:-}"
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<EOF
+Usage: gpu-qp-pull [branch]
+
+Fetches and fast-forwards the gpu-qp source checkout, switching to BRANCH first
+when the checkout is on another one. Without an argument it updates whichever
+branch is checked out.
+
+Checkout: $SOURCE
+
+Pulling only updates the source. Re-run the deploy afterwards to rebuild the
+image: the build fingerprint includes the source revision, so new code is
+picked up even when the Dockerfile itself has not changed.
+EOF
+  exit 0
+fi
+
+if [ ! -d "$SOURCE/.git" ]; then
+  echo "no git checkout at $SOURCE - deploy the role first" >&2
+  exit 1
+fi
+
+# safe.directory: the deploy clones as the stack user, and this is often run as
+# root - without it git refuses the repository as "dubious ownership".
+git_src() { git -c "safe.directory=$SOURCE" -C "$SOURCE" "$@"; }
+
+# A shallow or single-branch clone cannot check out another branch, so complete
+# it and widen the refspec first. Both are no-ops on a complete clone.
+if [ -f "$SOURCE/.git/shallow" ]; then
+  git_src fetch --unshallow
+fi
+git_src config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+
+git_src fetch --prune --tags origin
+
+if [ -z "$BRANCH" ]; then
+  BRANCH="$(git_src rev-parse --abbrev-ref HEAD)"
+fi
+
+if [ "$(git_src rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
+  git_src checkout "$BRANCH"
+fi
+
+git_src pull --ff-only
+git_src --no-pager log --oneline -1
