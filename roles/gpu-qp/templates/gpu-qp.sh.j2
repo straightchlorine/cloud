@@ -257,15 +257,18 @@ cmd_run() {
   local run_id run_dir status
   run_id="$(date -u +%Y%m%dT%H%M%SZ)"
   run_dir="$GEN_DIR/$run_id"
-  mkdir -p "$run_dir"
+  mkdir -p "$run_dir/run_configs"
 
   # As the calling user, so the run directory stays theirs; HOME and the
   # matplotlib cache point at /tmp because that user has no home in the image.
+  # The solver writes gen/ and run_configs/ relative to its root-owned working
+  # directory, so both are mounted from the run directory.
   set +e
   docker compose -f "$COMPOSE_FILE" run --rm -T \
     --user "$(id -u):$(id -g)" \
     -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
     -v "$run_dir:/usr/src/quantum_pipeline/gen" \
+    -v "$run_dir/run_configs:/usr/src/quantum_pipeline/run_configs" \
     "$SERVICE" "${RUN_DEFAULTS[@]}" "$@" 2>&1 | tee "$run_dir/run.log"
   status=${PIPESTATUS[0]}
   set -e
