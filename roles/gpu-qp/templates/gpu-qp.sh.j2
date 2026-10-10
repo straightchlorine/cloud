@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# Host tool for the gpu-qp stack: keep the source checkout current, build the GPU
+# image from it, prove the image runs on the GPU, and run simulations with it.
+# The deploy uses the same commands, so a by-hand build or check is the deployed one.
+
+set -euo pipefail
+
+STACK_HOME="{{ gpu_qp_home }}"
+COMPOSE_FILE="$STACK_HOME/docker-compose.yml"
+SERVICE="quantum-pipeline-gpu"
+SOURCE="{{ gpu_qp_source_path }}"
+IMAGE="{{ gpu_qp_image_name }}"
+GEN_DIR="{{ gpu_qp_gen_path }}"
+LOG_DIR="{{ gpu_qp_log_path }}"
+FINGERPRINT_FILE="{{ gpu_qp_build_fingerprint_file }}"
+
+# Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
+BUILD_ARGS=(
+  CUDA_VERSION="{{ gpu_qp_cuda_version }}"
+  CUDA_ARCH="{{ gpu_qp_cuda_arch }}"
+  AER_VERSION="{{ gpu_qp_aer_version }}"
+  STRIP_CUDA_COMPAT="{{ gpu_qp_strip_cuda_compat | bool | lower }}"
+)
+
+# Every run starts with these; arguments given to `run` are appended, so the
+# solver's argparse lets them override a default with the same name.
+RUN_DEFAULTS=(
+  --file "{{ gpu_qp_container_molecules_path }}"
+  --basis "{{ gpu_qp_basis }}"
+  --max-iterations "{{ gpu_qp_max_iterations }}"
+  --optimizer "{{ gpu_qp_optimizer }}"
+  --gpu
+  --report
+)
+
+usage() {
+  cat <<EOF
+Usage: gpu-qp <command> [options]
+
+Commands:
+  pull [--reset] [BRANCH]
+      Fetch the source checkout's origin and fast-forward it, switching to
+      BRANCH first. Without BRANCH, updates the branch that is checked out.
+      --reset  hard-reset to origin instead of fast-forwarding - for a branch
+               that was rebased or amended upstream
+      Checkout: $SOURCE
+
+  build [--force]
+      Build $IMAGE from docker/Dockerfile.gpu with:
+$(printf '        %s\n' "${BUILD_ARGS[@]}")
+      Skipped while neither these nor the source revision changed since the
+      last successful build. App-code changes rebuild fast: Docker reuses every
+      cached layer before the source copy.
+      --force  build even when nothing changed
+      Logs: $LOG_DIR/build-<UTC timestamp>.log (build-latest.log is the newest)
+
+  check
+      Prove the image runs on the GPU, inside the worker container:
+        - Aer's available_devices() lists GPU
+        - a Bell circuit executed with device="GPU", which cannot quietly fall
+          back to the CPU - the CUDA controller raises instead
+        - ldd resolves every one of Aer's shared objects
+      Also prints the image size, the driver and the cards' compute capability.
+
+  run [SOLVER-OPTION]...
+      One VQE simulation on the GPU. Every run starts with
+        ${RUN_DEFAULTS[*]}
+      and appends the options given here, which override those by name.
+      Writes $GEN_DIR/<UTC timestamp>/:
+        run.log   the combined output, teed live
+        run.json  arguments, exit status, image id, source revision, driver
+        the report and the convergence plots
+      e.g.  gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
+
+  help
+      Show this message. Every command also takes -h/--help.
+
+Copy runs back from your workstation: scripts/gpu-qp/collect.sh (cloud repo)
+EOF
+}
+
+die() {
+  echo "[FAIL] $*" >&2
+  exit 1
+}
+
+bad_usage() {
+  echo "gpu-qp: $*" >&2
+  echo "Run 'gpu-qp help' for usage." >&2
+  exit 2
+}
+
+# safe.directory: the deploy clones as the stack user, and this may run as root
+# - without it git refuses the checkout as "dubious ownership".
+git_src() {
+  git -c "safe.directory=$SOURCE" -C "$SOURCE" "$@"
+}
+
+require_checkout() {
+  [ -d "$SOURCE/.git" ] || die "no git checkout at $SOURCE - deploy the role first"
+}
+
+require_image() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 \
+    || die "image $IMAGE is not present - run: gpu-qp build"
+}
+
+cmd_pull() {
+  local reset=false branch=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --reset) reset=true ;;
+      -*) bad_usage "pull: unknown option $1" ;;
+      *) [ -z "$branch" ] || bad_usage "pull: one branch at most"; branch="$1" ;;
+    esac
+    shift
+  done
+  require_checkout
+
+  # A shallow or single-branch clone cannot check out another branch, so complete
+  # it and widen the refspec first. Both are no-ops on a complete clone.
+  if [ -f "$SOURCE/.git/shallow" ]; then
+    git_src fetch --unshallow
+  fi
+  git_src config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  git_src fetch --prune --tags origin
+
+  local current
+  current="$(git_src rev-parse --abbrev-ref HEAD)"
+  branch="${branch:-$current}"
+  if [ "$current" != "$branch" ]; then
+    git_src checkout "$branch"
+  fi
+
+  if [ "$reset" = true ]; then
+    git_src reset --hard "origin/$branch"
+  else
+    git_src pull --ff-only
+  fi
+  git_src --no-pager log --oneline -1
+}
+
+cmd_build() {
+  local force=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --force) force=true ;;
+      *) bad_usage "build: unknown argument $1" ;;
+    esac
+    shift
+  done
+  require_checkout
+
+  local dockerfile="$SOURCE/docker/Dockerfile.gpu" arg
+  [ -f "$dockerfile" ] || die "no docker/Dockerfile.gpu in $SOURCE"
+  # An older Dockerfile.gpu ignores these build args: it would build on its own
+  # CUDA tag and keep the compat libcuda, which fails on GeForce (error 804).
+  for arg in CUDA_VERSION STRIP_CUDA_COMPAT; do
+    grep -q "^ARG $arg=" "$dockerfile" \
+      || die "docker/Dockerfile.gpu at this revision has no ARG $arg - gpu-qp pull a branch that has it"
+  done
+
+  local revision fingerprint
+  revision="$(git_src rev-parse HEAD)"
+  fingerprint="${BUILD_ARGS[*]} $revision"
+  if [ "$force" = false ] \
+     && docker image inspect "$IMAGE" >/dev/null 2>&1 \
+     && [ "$(cat "$FINGERPRINT_FILE" 2>/dev/null)" = "$fingerprint" ]; then
+    echo "[OK] $IMAGE is up to date (${revision:0:12})"
+    return
+  fi
+
+  mkdir -p "$LOG_DIR"
+  local log
+  log="$LOG_DIR/build-$(date -u +%Y%m%dT%H%M%SZ).log"
+  ln -sfn "$(basename "$log")" "$LOG_DIR/build-latest.log"
+  echo "building $IMAGE at ${revision:0:12} - log: $log"
+
+  if ! docker build --progress=plain \
+       -f "$dockerfile" \
+       "${BUILD_ARGS[@]/#/--build-arg=}" \
+       -t "$IMAGE" \
+       "$SOURCE" >"$log" 2>&1; then
+    tail -n 30 "$log" >&2
+    die "build failed - full log: $log"
+  fi
+
+  # Written only after a successful build, so a failed one is retried next time.
+  echo "$fingerprint" >"$FINGERPRINT_FILE"
+  echo "[OK] built $IMAGE at ${revision:0:12}"
+}
+
+cmd_check() {
+  case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+    "") ;;
+    *) bad_usage "check takes no arguments" ;;
+  esac
+  require_image
+
+  echo "== gpu-qp check =="
+  echo "-- image --"
+  echo "  $IMAGE $(docker image inspect "$IMAGE" --format '{% raw %}{{ .Size }}{% endraw %}' | numfmt --to=iec-i --suffix=B)"
+  echo "-- host GPU --"
+  nvidia-smi --query-gpu=index,name,driver_version,compute_cap --format=csv,noheader | sed 's/^/  /'
+  echo "-- container --"
+  docker compose -f "$COMPOSE_FILE" run --rm -T --entrypoint bash "$SERVICE" -s <<'INNER'
+set -euo pipefail
+
+python - <<'PY'
+import sys
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
+
+devices = AerSimulator().available_devices()
+print(f"  available_devices(): {devices}")
+if "GPU" not in devices:
+    sys.exit("  [FAIL] Aer advertises no GPU - this build is CPU-only, or cuInit failed")
+print("  [OK]   Aer advertises GPU")
+
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()
+
+simulator = AerSimulator(device="GPU", method="statevector", seed_simulator=1234)
+try:
+    counts = simulator.run(transpile(circuit, simulator), shots=256).result().get_counts()
+except Exception as exc:
+    sys.exit(f"  [FAIL] GPU execution raised: {exc}")
+if set(counts) - {"00", "11"}:
+    sys.exit(f"  [FAIL] Bell state produced unexpected counts: {counts}")
+print(f"  [OK]   GPU execution produced a Bell distribution: {counts}")
+PY
+
+aer_dir="$(python -c 'import os, qiskit_aer; print(os.path.dirname(qiskit_aer.__file__))')"
+unresolved="$(find "$aer_dir" -name '*.so' -exec ldd {} + 2>/dev/null | grep 'not found' | sort -u || true)"
+if [ -n "$unresolved" ]; then
+  echo "  [FAIL] unresolved shared objects:"
+  printf '%s\n' "$unresolved" | sed 's/^/    /'
+  exit 1
+fi
+echo "  [OK]   every Aer shared object resolves"
+INNER
+}
+
+cmd_run() {
+  case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+  esac
+  require_image
+
+  local run_id run_dir status
+  run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+  run_dir="$GEN_DIR/$run_id"
+  mkdir -p "$run_dir"
+
+  # As the calling user, so the run directory stays theirs; HOME and the
+  # matplotlib cache point at /tmp because that user has no home in the image.
+  set +e
+  docker compose -f "$COMPOSE_FILE" run --rm -T \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
+    -v "$run_dir:/usr/src/quantum_pipeline/gen" \
+    "$SERVICE" "${RUN_DEFAULTS[@]}" "$@" 2>&1 | tee "$run_dir/run.log"
+  status=${PIPESTATUS[0]}
+  set -e
+
+  GPU_QP_RUN_ID="$run_id" GPU_QP_STATUS="$status" GPU_QP_ARGS="${RUN_DEFAULTS[*]} $*" \
+  GPU_QP_IMAGE="$IMAGE" \
+  GPU_QP_IMAGE_ID="$(docker image inspect "$IMAGE" --format '{% raw %}{{ .Id }}{% endraw %}')" \
+  GPU_QP_GIT_SHA="$(git_src rev-parse HEAD 2>/dev/null || echo unknown)" \
+  GPU_QP_DRIVER="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || true)" \
+  python3 - "$run_dir/run.json" <<'PY'
+import json
+import os
+import sys
+
+json.dump(
+    {
+        "run": os.environ["GPU_QP_RUN_ID"],
+        "exit_status": int(os.environ["GPU_QP_STATUS"]),
+        "host": os.uname().nodename,
+        "arguments": os.environ["GPU_QP_ARGS"],
+        "image": {"name": os.environ["GPU_QP_IMAGE"], "id": os.environ["GPU_QP_IMAGE_ID"]},
+        "git_sha": os.environ["GPU_QP_GIT_SHA"],
+        "driver_version": os.environ["GPU_QP_DRIVER"],
+    },
+    open(sys.argv[1], "w"),
+    indent=2,
+    sort_keys=True,
+)
+PY
+
+  echo
+  echo "run directory: $run_dir"
+  return "$status"
+}
+
+command="${1:-}"
+[ $# -eq 0 ] || shift
+case "$command" in
+  pull|build|check|run) "cmd_$command" "$@" ;;
+  help|-h|--help) usage ;;
+  "") usage >&2; exit 2 ;;
+  *) bad_usage "unknown command: $command" ;;
+esac

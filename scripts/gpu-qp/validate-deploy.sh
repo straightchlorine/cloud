@@ -81,17 +81,17 @@ fi
 echo "-- Stack files --"
 check_present "$STACK_HOME/docker-compose.yml"
 check_present "$STACK_HOME/data/molecules.json"
-for tool in gpu-qp-run gpu-qp-check gpu-qp-pull gpu-qp-build; do
+for tool in gpu-qp; do
   check_script "/usr/local/bin/$tool" 755
 done
 
 echo "-- GPU check --"
-# gpu-qp-check is the single place that proves the GPU path, so this reports its
-# own verdict rather than repeating it.
-if check_output="$(gpu-qp-check 2>&1)"; then
-  note_ok "gpu-qp-check passed"
+# `gpu-qp check` is the single place that proves the GPU path, so this reports
+# its verdict rather than repeating it.
+if check_output="$(gpu-qp check 2>&1)"; then
+  note_ok "gpu-qp check passed"
 else
-  note_left "gpu-qp-check failed"
+  note_left "gpu-qp check failed"
 fi
 printf '%s\n' "$check_output" | sed 's/^/      /'
 

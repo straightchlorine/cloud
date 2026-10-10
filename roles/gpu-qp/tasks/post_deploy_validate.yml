@@ -15,10 +15,10 @@
   tags: [post_validation]
 
 - name: Run the GPU check
-  # gpu-qp-check executes a circuit with device="GPU" inside the worker, so a
+  # `gpu-qp check` executes a circuit with device="GPU" inside the worker, so a
   # silent CPU fallback cannot pass it - an exit code alone could.
   ansible.builtin.command:
-    cmd: /usr/local/bin/gpu-qp-check
+    argv: [/usr/local/bin/gpu-qp, check]
   become: true
   become_user: "{{ ansible_user }}"
   register: gpu_qp_gpu_check
@@ -31,17 +31,16 @@
   tags: [post_validation]
 
 - name: Run a short GPU-accelerated VQE to prove the full path
-  ansible.builtin.shell: |
-    set -o pipefail
-    docker compose -f {{ gpu_qp_home }}/docker-compose.yml run --rm \
-      quantum-pipeline-gpu \
-      --file {{ gpu_qp_container_molecules_path }} \
-      --molecule-index {{ gpu_qp_smoke_test_molecule_index }} \
-      --basis {{ gpu_qp_basis }} \
-      --max-iterations {{ gpu_qp_smoke_test_max_iterations }} \
-      --gpu
-  args:
-    executable: /bin/bash
+  # Through `gpu-qp run`, so the smoke test covers the path real runs take: the
+  # non-root user, the per-run directory, the report and run.json.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/gpu-qp
+      - run
+      - --molecule-index
+      - "{{ gpu_qp_smoke_test_molecule_index }}"
+      - --max-iterations
+      - "{{ gpu_qp_smoke_test_max_iterations }}"
   become: true
   become_user: "{{ ansible_user }}"
   register: gpu_qp_smoke_test
@@ -51,8 +50,6 @@
 
 - name: Report the smoke test outcome
   ansible.builtin.debug:
-    msg: >-
-      GPU VQE smoke test completed ({{ gpu_qp_smoke_test_max_iterations }}
-      iterations on molecule index {{ gpu_qp_smoke_test_molecule_index }}).
+    msg: "{{ gpu_qp_smoke_test.stdout_lines[-1] }}"
   when: gpu_qp_smoke_test_enabled
   tags: [post_validation]

@@ -39,10 +39,10 @@ Two independent CUDA variables, and they are **not** the same thing:
 | Variable | Meaning | Set it to |
 |---|---|---|
 | `gpu_qp_cuda_arch` | the `CUDA_ARCH` build arg (compute capability) | the card: `6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada |
-| `gpu_qp_cuda_version` | the CUDA toolkit base the image compiles against | something compatible with the guest **driver** (`nvidia-smi` prints its max, e.g. `12.4` for the 550 branch) |
+| `gpu_qp_cuda_version` | the `CUDA_VERSION` build arg: the CUDA toolkit base the image compiles against | something compatible with the guest **driver** (`nvidia-smi` prints its max, e.g. `12.4` for the 550 branch) |
 
-The role pins `gpu_qp_cuda_version` into the Dockerfile it builds from, so the
-version can be moved without dirtying the git checkout.
+Both reach `Dockerfile.gpu` as build args (`CUDA_ARCH`, `CUDA_VERSION`); the
+role never rewrites the Dockerfile.
 
 **Compat strip (`gpu_qp_strip_cuda_compat`, on by default).** The stock CUDA
 image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, and
@@ -50,37 +50,39 @@ image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, an
 is datacenter-GPU only: on a GeForce card the shim makes `cuInit` fail with
 `CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE` (804), which qiskit-aer reports as
 `No CUDA device available!` — while `nvidia-smi` keeps working, because NVML
-never touches `libcuda`. The role therefore appends a strip step to the build
-Dockerfile so those libraries are gone and the driver's `libcuda` is used.
+never touches `libcuda`. `Dockerfile.gpu` therefore deletes those libraries
+(`STRIP_CUDA_COMPAT`, on by default), so the driver's `libcuda` is used.
 
-**Build fingerprint.** `gpu-qp-build` records a fingerprint of the effective
-build definition (composed Dockerfile, `CUDA_ARCH`/`AER_VERSION` and the source
-revision) and skips the build while it matches — a rebuild is still fast, since
-Docker's layer cache is untouched. The deploy runs the same tool; bump
-`gpu_qp_image_force_rebuild` (or pass `--force`) to build regardless.
+**Build fingerprint.** `gpu-qp build` records a fingerprint of the effective
+build definition (the build args and the source revision) and skips the build
+while it matches — a rebuild is still fast, since Docker's layer cache is
+untouched. The deploy runs the same command; bump `gpu_qp_image_force_rebuild`
+(or pass `--force`) to build regardless.
 
-## Host tools
+## Host tool
 
-The role installs four tools to `/usr/local/bin`; each takes `-h`/`--help`.
+The role installs one command, `/usr/local/bin/gpu-qp`. `gpu-qp help` (or `-h`
+on any command) shows the options.
 
-| Tool | Does |
+| Command | Does |
 |---|---|
-| `gpu-qp-run` | one simulation. Arguments are appended to the CLI, so the defaults it prefixes can be overridden. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, image id, source revision, driver version) and the report and plots. |
-| `gpu-qp-check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. Post-deploy validation runs it. |
-| `gpu-qp-pull` | fetches and fast-forwards the source checkout the image is built from, switching branch first when the checkout is elsewhere. |
-| `gpu-qp-build` | builds the image from the checkout: pins the CUDA base, appends the compat strip, skips the build while the fingerprint matches. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` links the newest); `--dry-run` only writes the composed Dockerfile. The deploy runs it too. |
+| `gpu-qp pull [--reset] [BRANCH]` | fetches the source checkout's origin and fast-forwards it, switching to `BRANCH` first. `--reset` hard-resets to origin instead, for a branch that was rebased or amended. |
+| `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH`, `AER_VERSION` and `STRIP_CUDA_COMPAT` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks those args. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
+| `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
+| `gpu-qp run [OPTION]...` | one simulation. Options are appended to the role's defaults, so they override them by name. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
+
+The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
+`gpu-qp run` as its post-deploy validation.
 
 ```bash
-# on the host, after a deploy
-gpu-qp-run                                         # defaults
-gpu-qp-run --molecule-index 1 --basis cc-pvdz --max-iterations 250
-gpu-qp-check
-gpu-qp-pull fix/gpu-build && gpu-qp-build         # test a branch
+# on the host
+gpu-qp run                                          # defaults
+gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
+gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
 ```
 
-The deploy clones the source once; after that `gpu-qp-pull` owns the checkout,
-so a re-deploy never resets a pulled branch. `gpu-qp-pull` + `gpu-qp-build` is a
-full update without Ansible.
+The deploy clones the source once; after that `gpu-qp pull` owns the checkout,
+so a re-deploy never resets a pulled branch.
 
 Runs are collected from your workstation, which is where they are wanted - the
 host cannot reach it:

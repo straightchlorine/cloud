@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pull a gpu-qp host's per-run output back to this machine. The host side is
-# gpu-qp-run, which writes one directory per run under ~/gpu-qp/gen.
+# `gpu-qp run`, which writes one directory per run under ~/gpu-qp/gen.
 #
 # Usage: ./scripts/gpu-qp/collect.sh [ansible-host-alias] [destination]
 set -euo pipefail
@@ -23,7 +23,7 @@ for run_dir in "$DEST"/*/; do
 done
 
 if [ "$count" -eq 0 ]; then
-  echo "no run directories under $DEST - has gpu-qp-run been used on $HOST?" >&2
+  echo "no run directories under $DEST - has 'gpu-qp run' been used on $HOST?" >&2
   exit 1
 fi
 

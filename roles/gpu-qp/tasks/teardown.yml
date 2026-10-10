@@ -24,10 +24,7 @@
     state: absent
   become: true
   loop:
-    - /usr/local/bin/gpu-qp-run
-    - /usr/local/bin/gpu-qp-check
-    - /usr/local/bin/gpu-qp-pull
-    - /usr/local/bin/gpu-qp-build
+    - /usr/local/bin/gpu-qp
     - "{{ gpu_qp_home }}"
 
 - name: Remove the locally built GPU image
@@ -46,9 +43,6 @@
   vars:
     common_teardown_name: gpu-qp
     common_teardown_paths:
-      - /usr/local/bin/gpu-qp-run
-      - /usr/local/bin/gpu-qp-check
-      - /usr/local/bin/gpu-qp-pull
-      - /usr/local/bin/gpu-qp-build
+      - /usr/local/bin/gpu-qp
       - /etc/systemd/system/stack.service
       - "{{ gpu_qp_home }}"

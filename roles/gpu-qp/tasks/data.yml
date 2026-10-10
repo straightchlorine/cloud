@@ -23,16 +23,19 @@
     group: "{{ ansible_user }}"
     mode: "0644"
 
-- name: Install the host tools
+- name: Install the gpu-qp host tool
   ansible.builtin.template:
-    src: "{{ item }}.sh.j2"
-    dest: "/usr/local/bin/{{ item }}"
+    src: gpu-qp.sh.j2
+    dest: /usr/local/bin/gpu-qp
     owner: root
     group: root
     mode: "0755"
   become: true
-  loop:
-    - gpu-qp-run
-    - gpu-qp-check
-    - gpu-qp-pull
-    - gpu-qp-build
+
+- name: Remove the per-command tools earlier role versions installed
+  # ponytail: migration only - drop once every host has run this once
+  ansible.builtin.file:
+    path: "/usr/local/bin/{{ item }}"
+    state: absent
+  become: true
+  loop: [gpu-qp-run, gpu-qp-check, gpu-qp-pull, gpu-qp-build]

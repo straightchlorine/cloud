@@ -9,10 +9,7 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /usr/local/bin/gpu-qp-run
-        - /usr/local/bin/gpu-qp-check
-        - /usr/local/bin/gpu-qp-pull
-        - /usr/local/bin/gpu-qp-build
+        - /usr/local/bin/gpu-qp
         - /etc/systemd/system/stack.service
         - "{{ gpu_qp_home }}"
       register: gpu_qp_teardown_stats

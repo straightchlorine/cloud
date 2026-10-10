@@ -11,32 +11,21 @@
       loop:
         - "{{ gpu_qp_home }}/docker-compose.yml"
         - "{{ gpu_qp_home }}/data/molecules.json"
-        - /usr/local/bin/gpu-qp-run
-        - /usr/local/bin/gpu-qp-check
-        - /usr/local/bin/gpu-qp-pull
+        - /usr/local/bin/gpu-qp
         - /tmp/gpu-qp.service.rendered
-        - /usr/local/bin/gpu-qp-build
       register: gpu_qp_files
 
     - name: Parse the deployed files
       ansible.builtin.set_fact:
         compose: "{{ gpu_qp_files.results[0].content | b64decode | from_yaml }}"
         molecules: "{{ gpu_qp_files.results[1].content | b64decode | from_json }}"
-        run_tool: "{{ gpu_qp_files.results[2].content | b64decode }}"
-        check_tool: "{{ gpu_qp_files.results[3].content | b64decode }}"
-        pull_tool: "{{ gpu_qp_files.results[4].content | b64decode }}"
-        unit: "{{ gpu_qp_files.results[5].content | b64decode }}"
-        build_tool: "{{ gpu_qp_files.results[6].content | b64decode }}"
+        tool: "{{ gpu_qp_files.results[2].content | b64decode }}"
+        unit: "{{ gpu_qp_files.results[3].content | b64decode }}"
 
-    - name: Stat the host tools
+    - name: Stat the host tool
       ansible.builtin.stat:
-        path: "/usr/local/bin/{{ item }}"
-      loop:
-        - gpu-qp-run
-        - gpu-qp-check
-        - gpu-qp-pull
-        - gpu-qp-build
-      register: gpu_qp_tool_stats
+        path: /usr/local/bin/gpu-qp
+      register: gpu_qp_tool_stat
 
     - name: Assert the compose services and the GPU worker definition
       vars:
@@ -76,50 +65,58 @@
         fail_msg: "molecules.json wrong: {{ molecules }}"
         success_msg: "[OK] molecules.json rendered from gpu_qp_molecules"
 
-    - name: Assert the host tools are installed and executable
+    - name: Assert the host tool is installed and executable
       ansible.builtin.assert:
         that:
-          - item.stat.exists
-          - item.stat.mode == '0755'
-        fail_msg: "{{ item.item }} is missing or not mode 0755"
-        success_msg: "[OK] {{ item.item }} installed (0755)"
-      loop: "{{ gpu_qp_tool_stats.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+          - gpu_qp_tool_stat.stat.exists
+          - gpu_qp_tool_stat.stat.mode == '0755'
+        fail_msg: "/usr/local/bin/gpu-qp is missing or not mode 0755"
+        success_msg: "[OK] /usr/local/bin/gpu-qp installed (0755)"
 
-    - name: Assert the run tool wiring and defaults
+    - name: Assert the host tool carries the role's settings
       ansible.builtin.assert:
         that:
-          - "'Managed by Ansible' in run_tool"
-          - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in run_tool"
-          - "'COMPOSE_FILE=\"$STACK_HOME/docker-compose.yml\"' in run_tool"
-          - "'Usage: gpu-qp-run' in run_tool"
-          - "'--file data/molecules.json' in run_tool"
-          - "'--gpu' in run_tool"
-          - "'--report' in run_tool"
-          - "'MPLCONFIGDIR' in run_tool"
-          - "'/usr/src/quantum_pipeline/gen' in run_tool"
-        fail_msg: "gpu-qp-run wrong:\n{{ run_tool }}"
-        success_msg: "[OK] gpu-qp-run writes a per-run directory and passes --gpu"
+          - "'Managed by Ansible' in tool"
+          - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in tool"
+          - "'SOURCE=\"/home/gpu/gpu-qp/src/quantum-pipeline\"' in tool"
+          # build: the host settings reach Dockerfile.gpu as build args
+          - "'CUDA_VERSION=\"12.6.3\"' in tool"
+          - "'CUDA_ARCH=\"6.1\"' in tool"
+          - "'STRIP_CUDA_COMPAT=\"true\"' in tool"
+          - "'--build-arg=' in tool"
+          # run: defaults, the per-run directory, a non-root user
+          - "'--file \"data/molecules.json\"' in tool"
+          - "'--gpu' in tool"
+          - "'--report' in tool"
+          - "'MPLCONFIGDIR' in tool"
+          - "'/usr/src/quantum_pipeline/gen' in tool"
+          # check: a GPU circuit that cannot fall back to the CPU, plus ldd
+          - "'device=\"GPU\"' in tool"
+          - "'ldd' in tool"
+        fail_msg: "gpu-qp wrong:\n{{ tool }}"
+        success_msg: "[OK] gpu-qp is rendered with the role's settings"
 
-    - name: Assert the GPU check tool
-      ansible.builtin.assert:
-        that:
-          - "'Usage: gpu-qp-check' in check_tool"
-          - "'available_devices' in check_tool"
-          - "'device=\"GPU\"' in check_tool"
-          - "'ldd' in check_tool"
-        fail_msg: "gpu-qp-check wrong:\n{{ check_tool }}"
-        success_msg: "[OK] gpu-qp-check exercises the GPU path"
+    - name: Run the host tool's help
+      ansible.builtin.command: /usr/local/bin/gpu-qp help
+      register: gpu_qp_help
+      changed_when: false
 
-    - name: Assert the pull tool
+    - name: Run the host tool with an unknown command
+      ansible.builtin.command: /usr/local/bin/gpu-qp no-such-command
+      register: gpu_qp_unknown
+      changed_when: false
+      failed_when: gpu_qp_unknown.rc != 2
+
+    - name: Assert the help lists every command
       ansible.builtin.assert:
         that:
-          - "'Usage: gpu-qp-pull' in pull_tool"
-          - "'/home/gpu/gpu-qp/src/quantum-pipeline' in pull_tool"
-          - "'pull --ff-only' in pull_tool"
-        fail_msg: "gpu-qp-pull wrong:\n{{ pull_tool }}"
-        success_msg: "[OK] gpu-qp-pull updates the source checkout"
+          - "'Usage: gpu-qp <command>' in gpu_qp_help.stdout"
+          - gpu_qp_help.stdout is search('(?m)^  pull ')
+          - gpu_qp_help.stdout is search('(?m)^  build ')
+          - gpu_qp_help.stdout is search('(?m)^  check$')
+          - gpu_qp_help.stdout is search('(?m)^  run ')
+        fail_msg: "gpu-qp help wrong:\n{{ gpu_qp_help.stdout }}"
+        success_msg: "[OK] gpu-qp help lists pull, build, check and run; unknown commands exit 2"
 
     - name: Assert the rendered systemd unit
       ansible.builtin.assert:
@@ -128,48 +125,3 @@
           - "'ExecStart=/usr/bin/docker compose -f /home/gpu/gpu-qp/docker-compose.yml up -d' in unit"
         fail_msg: "unit render wrong:\n{{ unit }}"
         success_msg: "[OK] stack systemd unit renders with the explicit compose file"
-
-    - name: Assert the build tool wiring
-      ansible.builtin.assert:
-        that:
-          - "'Usage: gpu-qp-build' in build_tool"
-          - "'DOCKERFILE=\"/home/gpu/gpu-qp/Dockerfile.gpu.pinned\"' in build_tool"
-          - "'CUDA_ARCH=\"6.1\"' in build_tool"
-          - "'docker build' in build_tool"
-        fail_msg: "gpu-qp-build wrong:\n{{ build_tool }}"
-        success_msg: "[OK] gpu-qp-build is wired to the role's build settings"
-
-    # The composition is where silent bugs hid (a pin regex that stops matching,
-    # a strip landing in the wrong stage), so run it for real on a fixture: a
-    # two-stage Dockerfile on an older CUDA tag than the role pins.
-    - name: Create a fixture source checkout
-      ansible.builtin.copy:
-        dest: /home/gpu/gpu-qp/src/quantum-pipeline/docker/Dockerfile.gpu
-        content: |
-          FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu24.04 AS builder
-          RUN echo build
-          FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu24.04
-          ENTRYPOINT ["python", "-m", "quantum_pipeline"]
-        mode: "0644"
-
-    - name: Compose the pinned Dockerfile without building
-      ansible.builtin.command: /usr/local/bin/gpu-qp-build --dry-run
-      changed_when: false
-
-    - name: Read the composed Dockerfile
-      ansible.builtin.slurp:
-        src: /home/gpu/gpu-qp/Dockerfile.gpu.pinned
-      register: gpu_qp_composed
-
-    - name: Assert both stages are pinned and the strip lands in the runtime stage
-      vars:
-        composed: "{{ gpu_qp_composed.content | b64decode }}"
-        froms: "{{ composed | regex_findall('(?m)^FROM .*$') }}"
-      ansible.builtin.assert:
-        that:
-          - froms | length == 2
-          - froms | select('search', 'nvidia/cuda:12\\.6\\.3-cudnn-') | list | length == 2
-          - "'12.4.1' not in composed"
-          - composed.rfind('cuda-*/compat') > composed.rfind('FROM ')
-        fail_msg: "composed Dockerfile wrong:\n{{ composed }}"
-        success_msg: "[OK] gpu-qp-build pins every stage and strips compat in the runtime stage"
