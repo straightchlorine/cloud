@@ -27,6 +27,7 @@
     - /usr/local/bin/gpu-qp-run
     - /usr/local/bin/gpu-qp-check
     - /usr/local/bin/gpu-qp-pull
+    - /usr/local/bin/gpu-qp-build
     - "{{ gpu_qp_home }}"
 
 - name: Remove the locally built GPU image
@@ -48,5 +49,6 @@
       - /usr/local/bin/gpu-qp-run
       - /usr/local/bin/gpu-qp-check
       - /usr/local/bin/gpu-qp-pull
+      - /usr/local/bin/gpu-qp-build
       - /etc/systemd/system/stack.service
       - "{{ gpu_qp_home }}"

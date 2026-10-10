@@ -81,7 +81,7 @@ fi
 echo "-- Stack files --"
 check_present "$STACK_HOME/docker-compose.yml"
 check_present "$STACK_HOME/data/molecules.json"
-for tool in gpu-qp-run gpu-qp-check gpu-qp-pull; do
+for tool in gpu-qp-run gpu-qp-check gpu-qp-pull gpu-qp-build; do
   check_script "/usr/local/bin/$tool" 755
 done
 

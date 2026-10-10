@@ -53,33 +53,34 @@ is datacenter-GPU only: on a GeForce card the shim makes `cuInit` fail with
 never touches `libcuda`. The role therefore appends a strip step to the build
 Dockerfile so those libraries are gone and the driver's `libcuda` is used.
 
-**Build fingerprint.** `community.docker.docker_image` skips a build whenever the
-tag already exists, so it cannot see a Dockerfile change on its own. The role
-records a fingerprint of the effective build definition (pinned Dockerfile plus
-`CUDA_ARCH`/`AER_VERSION`) and forces the rebuild when it changes — a forced
-rebuild is still fast, since Docker's layer cache is untouched. Bump
-`gpu_qp_image_force_rebuild` to force one regardless.
+**Build fingerprint.** `gpu-qp-build` records a fingerprint of the effective
+build definition (composed Dockerfile, `CUDA_ARCH`/`AER_VERSION` and the source
+revision) and skips the build while it matches — a rebuild is still fast, since
+Docker's layer cache is untouched. The deploy runs the same tool; bump
+`gpu_qp_image_force_rebuild` (or pass `--force`) to build regardless.
 
 ## Host tools
 
-The role installs three tools to `/usr/local/bin`; each takes `-h`/`--help`.
+The role installs four tools to `/usr/local/bin`; each takes `-h`/`--help`.
 
 | Tool | Does |
 |---|---|
 | `gpu-qp-run` | one simulation. Arguments are appended to the CLI, so the defaults it prefixes can be overridden. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, image id, source revision, driver version) and the report and plots. |
 | `gpu-qp-check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. Post-deploy validation runs it. |
 | `gpu-qp-pull` | fetches and fast-forwards the source checkout the image is built from, switching branch first when the checkout is elsewhere. |
+| `gpu-qp-build` | builds the image from the checkout: pins the CUDA base, appends the compat strip, skips the build while the fingerprint matches. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` links the newest); `--dry-run` only writes the composed Dockerfile. The deploy runs it too. |
 
 ```bash
 # on the host, after a deploy
 gpu-qp-run                                         # defaults
 gpu-qp-run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp-check
-gpu-qp-pull fix/gpu-build                          # then re-deploy to rebuild
+gpu-qp-pull fix/gpu-build && gpu-qp-build         # test a branch
 ```
 
-A deploy rebuilds the image whenever the source revision, the pinned Dockerfile
-or the build args change — `gpu-qp-pull` followed by a deploy is a full update.
+The deploy clones the source once; after that `gpu-qp-pull` owns the checkout,
+so a re-deploy never resets a pulled branch. `gpu-qp-pull` + `gpu-qp-build` is a
+full update without Ansible.
 
 Runs are collected from your workstation, which is where they are wanted - the
 host cannot reach it:

@@ -30,7 +30,7 @@ check_absent() {
 }
 
 echo "-- gpu-qp role state --"
-for tool in gpu-qp-run gpu-qp-check gpu-qp-pull; do
+for tool in gpu-qp-run gpu-qp-check gpu-qp-pull gpu-qp-build; do
   check_absent "/usr/local/bin/$tool"
 done
 check_absent /etc/systemd/system/stack.service

@@ -2,98 +2,28 @@
 # Needs a Docker daemon, so molecule never runs this file.
 
 - name: Clone the quantum-pipeline source for a local build
+  # Cloned once. After that gpu-qp-pull owns the checkout, so a deploy never
+  # resets a pulled branch back to gpu_qp_image_ref.
   ansible.builtin.git:
     repo: "{{ gpu_qp_image_repo }}"
     dest: "{{ gpu_qp_source_path }}"
     version: "{{ gpu_qp_image_ref }}"
     depth: 1
+    update: false
   become: true
   become_user: "{{ ansible_user }}"
-  when: gpu_qp_image_mode == 'build'
-
-- name: Read the checked-out source revision
-  # Part of the build fingerprint below: a pulled source change leaves the
-  # Dockerfile and the build args untouched, so without this the image would
-  # never be rebuilt from the new code.
-  ansible.builtin.command:
-    cmd: git -C {{ gpu_qp_source_path }} rev-parse HEAD
-  register: gpu_qp_source_revision
-  changed_when: false
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: gpu_qp_image_mode == 'build'
-
-- name: Read the upstream GPU Dockerfile
-  ansible.builtin.slurp:
-    src: "{{ gpu_qp_source_path }}/docker/Dockerfile.gpu"
-  register: gpu_qp_upstream_dockerfile
-  when: gpu_qp_image_mode == 'build'
-
-- name: Compose the pinned build Dockerfile and its fingerprint
-  # Pins the CUDA base from gpu_qp_cuda_version and appends the compat strip.
-  # Composed as a string rather than edited in place, so the write below stays
-  # idempotent and the git checkout is never dirtied.
-  ansible.builtin.set_fact:
-    gpu_qp_build_dockerfile: >-
-      {{ (gpu_qp_upstream_dockerfile.content | b64decode)
-         | regex_replace('nvidia/cuda:[0-9][0-9.]*-cudnn-',
-                         'nvidia/cuda:' ~ gpu_qp_cuda_version ~ '-cudnn-')
-      }}{{ gpu_qp_compat_strip_block if gpu_qp_strip_cuda_compat else '' }}
-    gpu_qp_build_fingerprint: >-
-      {{ ((gpu_qp_upstream_dockerfile.content | b64decode)
-          | regex_replace('nvidia/cuda:[0-9][0-9.]*-cudnn-',
-                          'nvidia/cuda:' ~ gpu_qp_cuda_version ~ '-cudnn-')
-          ~ (gpu_qp_compat_strip_block if gpu_qp_strip_cuda_compat else '')
-          ~ gpu_qp_cuda_arch ~ gpu_qp_aer_version
-          ~ gpu_qp_source_revision.stdout) | hash('sha1') }}
-  when: gpu_qp_image_mode == 'build'
-
-- name: Write the pinned build Dockerfile
-  ansible.builtin.copy:
-    content: "{{ gpu_qp_build_dockerfile }}"
-    dest: "{{ gpu_qp_source_path }}/{{ gpu_qp_pinned_dockerfile }}"
-    mode: "0644"
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: gpu_qp_image_mode == 'build'
-
-- name: Read the previous build fingerprint
-  ansible.builtin.slurp:
-    src: "{{ gpu_qp_build_fingerprint_file }}"
-  register: gpu_qp_previous_fingerprint
-  failed_when: false
   when: gpu_qp_image_mode == 'build'
 
 - name: Build the GPU image for the target CUDA architecture
   # qiskit-aer is compiled with the CUDA thrust backend for gpu_qp_cuda_arch -
   # the only way to run a non-Ampere card, since the published :gpu tag is built
-  # for sm_86. docker_image skips a build whenever the tag exists, so force_source
-  # comes from the fingerprint instead.
-  community.docker.docker_image:
-    name: "{{ gpu_qp_image_name }}"
-    source: build
-    build:
-      path: "{{ gpu_qp_source_path }}"
-      dockerfile: "{{ gpu_qp_pinned_dockerfile }}"
-      args:
-        CUDA_ARCH: "{{ gpu_qp_cuda_arch }}"
-        AER_VERSION: "{{ gpu_qp_aer_version }}"
-    state: present
-    force_source: >-
-      {{ gpu_qp_image_force_rebuild | bool
-         or (gpu_qp_previous_fingerprint.content | default('') | b64decode | trim)
-            != gpu_qp_build_fingerprint }}
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: gpu_qp_image_mode == 'build'
-
-- name: Record the build fingerprint of the image just built
-  # Written only after a successful build, so a stale or absent fingerprint makes
-  # the next run rebuild while a matching one leaves the image alone.
-  ansible.builtin.copy:
-    content: "{{ gpu_qp_build_fingerprint }}\n"
-    dest: "{{ gpu_qp_build_fingerprint_file }}"
-    mode: "0644"
+  # for sm_86. gpu-qp-build pins the Dockerfile, skips the build when its
+  # fingerprint is unchanged and logs to gpu_qp_log_path.
+  ansible.builtin.command:
+    argv: "{{ ['/usr/local/bin/gpu-qp-build']
+              + (['--force'] if gpu_qp_image_force_rebuild | bool else []) }}"
+  register: gpu_qp_build
+  changed_when: "'up to date' not in gpu_qp_build.stdout"
   become: true
   become_user: "{{ ansible_user }}"
   when: gpu_qp_image_mode == 'build'

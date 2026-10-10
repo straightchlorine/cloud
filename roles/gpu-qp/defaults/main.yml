@@ -9,6 +9,8 @@
 gpu_qp_home: "/home/{{ ansible_user }}/gpu-qp"
 gpu_qp_data_path: "{{ gpu_qp_home }}/data"
 gpu_qp_gen_path: "{{ gpu_qp_home }}/gen"
+# gpu-qp-build writes one log per build here.
+gpu_qp_log_path: "{{ gpu_qp_home }}/logs"
 
 # pciutils: lspci, for inspecting the GPU and passthrough by hand.
 gpu_qp_specific_packages:
@@ -21,6 +23,7 @@ gpu_qp_specific_packages:
 # pull:  use gpu_qp_image_pull_name (only valid if it matches gpu_qp_cuda_arch).
 gpu_qp_image_mode: "build"
 gpu_qp_image_repo: "https://github.com/straightchlorine/quantum-pipeline.git"
+# Branch of the first clone only; afterwards gpu-qp-pull switches branches.
 gpu_qp_image_ref: "master"
 gpu_qp_source_path: "{{ gpu_qp_home }}/src/quantum-pipeline"
 gpu_qp_image_name: "quantum-pipeline:gpu"
@@ -35,9 +38,9 @@ gpu_qp_image_force_rebuild: false
 # driver needs minor-version compatibility (which the compat strip below also
 # clears out of the way); a much newer one simply will not run.
 gpu_qp_cuda_version: "12.6.3"
-# The pinned copy of the upstream Dockerfile the build actually uses, relative to
-# the source checkout, so pinning the CUDA version never dirties the git checkout.
-gpu_qp_pinned_dockerfile: "docker/Dockerfile.gpu.pinned"
+# The pinned copy of the upstream Dockerfile the build actually uses. Kept outside
+# the source checkout, so gpu-qp-pull always finds a clean tree.
+gpu_qp_pinned_dockerfile: "{{ gpu_qp_home }}/Dockerfile.gpu.pinned"
 
 # The stock CUDA image ships forward-compatibility libcuda under
 # /usr/local/cuda-*/compat and ldconfig resolves it before the driver's own
@@ -57,10 +60,9 @@ gpu_qp_compat_strip_block: |+
   RUN rm -rf /usr/local/cuda/compat /usr/local/cuda-*/compat \
    && rm -f /etc/ld.so.conf.d/*compat* \
    && ldconfig
-# Fingerprint of the last successful build. docker_image skips a build whenever
-# the tag exists, so a changed Dockerfile alone would never rebuild; a mismatched
-# fingerprint forces it, and that rebuild stays fast - Docker's layer cache is
-# intact.
+# Fingerprint of the last successful build (composed Dockerfile, build args and
+# source revision). gpu-qp-build skips the build while it matches; a rebuild
+# stays fast, since Docker's layer cache is intact.
 gpu_qp_build_fingerprint_file: "{{ gpu_qp_home }}/.image-build.fingerprint"
 
 # The image compose runs, derived from the mode so the services don't branch.

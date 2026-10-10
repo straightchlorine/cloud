@@ -13,6 +13,7 @@
     - "{{ gpu_qp_home }}"
     - "{{ gpu_qp_data_path }}"
     - "{{ gpu_qp_gen_path }}"
+    - "{{ gpu_qp_log_path }}"
 
 - name: Render the molecules input file
   ansible.builtin.template:
@@ -34,3 +35,4 @@
     - gpu-qp-run
     - gpu-qp-check
     - gpu-qp-pull
+    - gpu-qp-build

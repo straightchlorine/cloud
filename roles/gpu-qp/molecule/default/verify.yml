@@ -15,6 +15,7 @@
         - /usr/local/bin/gpu-qp-check
         - /usr/local/bin/gpu-qp-pull
         - /tmp/gpu-qp.service.rendered
+        - /usr/local/bin/gpu-qp-build
       register: gpu_qp_files
 
     - name: Parse the deployed files
@@ -25,6 +26,7 @@
         check_tool: "{{ gpu_qp_files.results[3].content | b64decode }}"
         pull_tool: "{{ gpu_qp_files.results[4].content | b64decode }}"
         unit: "{{ gpu_qp_files.results[5].content | b64decode }}"
+        build_tool: "{{ gpu_qp_files.results[6].content | b64decode }}"
 
     - name: Stat the host tools
       ansible.builtin.stat:
@@ -33,6 +35,7 @@
         - gpu-qp-run
         - gpu-qp-check
         - gpu-qp-pull
+        - gpu-qp-build
       register: gpu_qp_tool_stats
 
     - name: Assert the compose services and the GPU worker definition
@@ -125,3 +128,48 @@
           - "'ExecStart=/usr/bin/docker compose -f /home/gpu/gpu-qp/docker-compose.yml up -d' in unit"
         fail_msg: "unit render wrong:\n{{ unit }}"
         success_msg: "[OK] stack systemd unit renders with the explicit compose file"
+
+    - name: Assert the build tool wiring
+      ansible.builtin.assert:
+        that:
+          - "'Usage: gpu-qp-build' in build_tool"
+          - "'DOCKERFILE=\"/home/gpu/gpu-qp/Dockerfile.gpu.pinned\"' in build_tool"
+          - "'CUDA_ARCH=\"6.1\"' in build_tool"
+          - "'docker build' in build_tool"
+        fail_msg: "gpu-qp-build wrong:\n{{ build_tool }}"
+        success_msg: "[OK] gpu-qp-build is wired to the role's build settings"
+
+    # The composition is where silent bugs hid (a pin regex that stops matching,
+    # a strip landing in the wrong stage), so run it for real on a fixture: a
+    # two-stage Dockerfile on an older CUDA tag than the role pins.
+    - name: Create a fixture source checkout
+      ansible.builtin.copy:
+        dest: /home/gpu/gpu-qp/src/quantum-pipeline/docker/Dockerfile.gpu
+        content: |
+          FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu24.04 AS builder
+          RUN echo build
+          FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu24.04
+          ENTRYPOINT ["python", "-m", "quantum_pipeline"]
+        mode: "0644"
+
+    - name: Compose the pinned Dockerfile without building
+      ansible.builtin.command: /usr/local/bin/gpu-qp-build --dry-run
+      changed_when: false
+
+    - name: Read the composed Dockerfile
+      ansible.builtin.slurp:
+        src: /home/gpu/gpu-qp/Dockerfile.gpu.pinned
+      register: gpu_qp_composed
+
+    - name: Assert both stages are pinned and the strip lands in the runtime stage
+      vars:
+        composed: "{{ gpu_qp_composed.content | b64decode }}"
+        froms: "{{ composed | regex_findall('(?m)^FROM .*$') }}"
+      ansible.builtin.assert:
+        that:
+          - froms | length == 2
+          - froms | select('search', 'nvidia/cuda:12\\.6\\.3-cudnn-') | list | length == 2
+          - "'12.4.1' not in composed"
+          - composed.rfind('cuda-*/compat') > composed.rfind('FROM ')
+        fail_msg: "composed Dockerfile wrong:\n{{ composed }}"
+        success_msg: "[OK] gpu-qp-build pins every stage and strips compat in the runtime stage"
