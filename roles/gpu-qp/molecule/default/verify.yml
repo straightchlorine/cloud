@@ -93,6 +93,9 @@
           # check: a GPU circuit that cannot fall back to the CPU, plus ldd
           - "'device=\"GPU\"' in tool"
           - "'ldd' in tool"
+          # scan: the pinned scanner, CI's filters
+          - "'TRIVY_IMAGE=\"aquasec/trivy:' in tool"
+          - "'--ignore-unfixed' in tool"
         fail_msg: "gpu-qp wrong:\n{{ tool }}"
         success_msg: "[OK] gpu-qp is rendered with the role's settings"
 
@@ -115,8 +118,9 @@
           - gpu_qp_help.stdout is search('(?m)^  build ')
           - gpu_qp_help.stdout is search('(?m)^  check$')
           - gpu_qp_help.stdout is search('(?m)^  run ')
+          - gpu_qp_help.stdout is search('(?m)^  scan ')
         fail_msg: "gpu-qp help wrong:\n{{ gpu_qp_help.stdout }}"
-        success_msg: "[OK] gpu-qp help lists pull, build, check and run; unknown commands exit 2"
+        success_msg: "[OK] gpu-qp help lists pull, build, check, run and scan; unknown commands exit 2"
 
     - name: Assert the rendered systemd unit
       ansible.builtin.assert:

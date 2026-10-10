@@ -36,6 +36,14 @@
   failed_when: false
   when: not gpu_qp_teardown_keep_image
 
+- name: Remove the scanner image gpu-qp scan pulled
+  community.docker.docker_image:
+    name: "{{ gpu_qp_trivy_image }}"
+    state: absent
+  become: true
+  become_user: "{{ ansible_user }}"
+  failed_when: false
+
 - name: Verify the gpu-qp artifacts are gone
   ansible.builtin.include_role:
     name: common

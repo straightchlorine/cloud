@@ -51,6 +51,10 @@ gpu_qp_strip_cuda_compat: true
 # cache is intact.
 gpu_qp_build_fingerprint_file: "{{ gpu_qp_home }}/.image-build.fingerprint"
 
+# Scanner `gpu-qp scan` runs - the Trivy version the CI's trivy-action pins, so a
+# host scan and the GitHub code-scanning alerts agree.
+gpu_qp_trivy_image: "aquasec/trivy:0.70.0"
+
 # The image compose runs, derived from the mode so the services don't branch.
 gpu_qp_active_image: >-
   {{ gpu_qp_image_pull_name if gpu_qp_image_mode == 'pull' else gpu_qp_image_name }}

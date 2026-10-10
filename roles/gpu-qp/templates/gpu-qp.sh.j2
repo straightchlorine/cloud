@@ -15,6 +15,8 @@ IMAGE="{{ gpu_qp_image_name }}"
 GEN_DIR="{{ gpu_qp_gen_path }}"
 LOG_DIR="{{ gpu_qp_log_path }}"
 FINGERPRINT_FILE="{{ gpu_qp_build_fingerprint_file }}"
+TRIVY_IMAGE="{{ gpu_qp_trivy_image }}"
+TRIVY_CACHE="{{ gpu_qp_home }}/.cache/trivy"
 
 # Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
 BUILD_ARGS=(
@@ -73,6 +75,13 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
         run.json  arguments, exit status, image id, source revision, driver
         the report and the convergence plots
       e.g.  gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
+
+  scan [--all] [IMAGE]
+      Scan IMAGE (default $IMAGE) for vulnerabilities with Trivy, filtered the
+      way CI uploads them: HIGH and CRITICAL with a fix available, minus the
+      checkout's .trivyignore. Prints a summary by severity, source and package.
+      --all  every severity, fixed or not, no ignore file
+      Report: $LOG_DIR/scan-<UTC timestamp>.json   Scanner: $TRIVY_IMAGE
 
   help
       Show this message. Every command also takes -h/--help.
@@ -304,10 +313,85 @@ PY
   return "$status"
 }
 
+cmd_scan() {
+  local all=false image=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --all) all=true ;;
+      -*) bad_usage "scan: unknown option $1" ;;
+      *) [ -z "$image" ] || bad_usage "scan: one image at most"; image="$1" ;;
+    esac
+    shift
+  done
+  image="${image:-$IMAGE}"
+  docker image inspect "$image" >/dev/null 2>&1 || die "image $image is not present"
+
+  local filters=() mounts=()
+  if [ "$all" = false ]; then
+    filters=(--severity "HIGH,CRITICAL" --ignore-unfixed)
+    if [ -f "$SOURCE/.trivyignore" ]; then
+      mounts=(-v "$SOURCE/.trivyignore:/trivyignore:ro")
+      filters+=(--ignorefile /trivyignore)
+    fi
+  fi
+
+  mkdir -p "$LOG_DIR" "$TRIVY_CACHE"
+  local name
+  name="scan-$(date -u +%Y%m%dT%H%M%SZ).json"
+  echo "scanning $image ($([ "$all" = true ] && echo "all findings" || echo "HIGH,CRITICAL fixable"))..."
+
+  # Reads the image through the Docker socket; the vulnerability DB is cached
+  # under the stack home, so only the first scan of a day downloads it.
+  # --userns=host: the daemon remaps user namespaces, which would make the
+  # cache and report directories unwritable for the calling user.
+  docker run --rm --userns=host \
+    --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)" \
+    -e HOME=/tmp \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$TRIVY_CACHE:/cache" \
+    -v "$LOG_DIR:/out" \
+    "${mounts[@]}" \
+    "$TRIVY_IMAGE" image --quiet --cache-dir /cache --scanners vuln --timeout 40m \
+    "${filters[@]}" --format json --output "/out/$name" "$image" \
+    || die "trivy failed"
+
+  python3 - "$LOG_DIR/$name" <<'PY'
+import collections
+import json
+import sys
+
+report = json.load(open(sys.argv[1]))
+found = [
+    (result.get("Type", "?"), vuln)
+    for result in report.get("Results") or []
+    for vuln in result.get("Vulnerabilities") or []
+]
+severities = collections.Counter(vuln["Severity"] for _, vuln in found)
+order = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
+print(f"  {len(found)} findings" + "".join(f", {severities[s]} {s}" for s in order if severities[s]))
+if not found:
+    sys.exit()
+
+print("  -- by source --")
+for source, count in collections.Counter(kind for kind, _ in found).most_common():
+    print(f"  {count:6}  {source}")
+
+print("  -- top packages --")
+packages = collections.Counter(
+    (vuln["PkgName"], vuln.get("InstalledVersion", "?"), vuln.get("FixedVersion") or "no fix")
+    for _, vuln in found
+)
+for (name, installed, fixed), count in packages.most_common(10):
+    print(f"  {count:6}  {name} {installed} -> {fixed}")
+PY
+  echo "report: $LOG_DIR/$name"
+}
+
 command="${1:-}"
 [ $# -eq 0 ] || shift
 case "$command" in
-  pull|build|check|run) "cmd_$command" "$@" ;;
+  pull|build|check|run|scan) "cmd_$command" "$@" ;;
   help|-h|--help) usage ;;
   "") usage >&2; exit 2 ;;
   *) bad_usage "unknown command: $command" ;;

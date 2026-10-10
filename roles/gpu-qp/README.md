@@ -70,6 +70,7 @@ on any command) shows the options.
 | `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH`, `AER_VERSION` and `STRIP_CUDA_COMPAT` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks those args. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
 | `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
 | `gpu-qp run [OPTION]...` | one simulation. Options are appended to the role's defaults, so they override them by name. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
+| `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
 
 The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
 `gpu-qp run` as its post-deploy validation.
@@ -79,6 +80,7 @@ The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
 gpu-qp run                                          # defaults
 gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
+gpu-qp scan                                         # vulnerabilities, as CI counts them
 ```
 
 The deploy clones the source once; after that `gpu-qp pull` owns the checkout,
