@@ -9,6 +9,12 @@
 # YouTube Music ("- Topic" channels) supplies track/artist/album; prefer them.
 --parse-metadata "%(track,title)s:%(title)s"
 --parse-metadata "%(artist,uploader)s:%(artist)s"
+# Typographic dashes: uploaders write a separator as a hyphen, an en dash or an em
+# dash, while every rule below only knows about '-'. Normalise the dash class once,
+# here, rather than teaching each rule about it: the "- Topic" channel cleanup and
+# the "Artist - Title" repost split then both work (order matters - the rules below
+# see what this one wrote).
+--replace-in-metadata "artist,title" "[–—]" "-"
 # Reposts: a non-YouTube-Music title "Artist - Title" names the real artist.
 --parse-metadata "%(track&YTM|)s%(title)s:^(?!YTM)(?P<artist>[^-]+?) - (?P<title>.+)$"
 --replace-in-metadata "title" "\s*[\(\[\{【「『][^\)\]\}】」』]*?\b(?i:official|lyrics?|video|audio|visuali[sz]er|mv|hd|4k)\b[^\)\]\}】」』]*[\)\]\}】」』]" ""

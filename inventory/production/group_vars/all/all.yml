@@ -37,6 +37,7 @@ common_packages:
   - vim
   - tmux
   - fzf
+  - mosh
   - ufw
   - fail2ban
   - logrotate

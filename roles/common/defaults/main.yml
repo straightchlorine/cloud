@@ -31,6 +31,8 @@ common_packages:
   - tmux
   # fzf: scripts/media/pick.sh (album assignment, quarantine removal)
   - fzf
+  # mosh: interactive sessions that survive a flaky wifi hop
+  - mosh
   - ufw
   - fail2ban
   - logrotate
