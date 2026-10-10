@@ -149,7 +149,7 @@ cmd_pull() {
   else
     git_src pull --ff-only
   fi
-  git_src --no-pager log --oneline -1
+  echo "[OK] $branch at $(git_src --no-pager log --oneline -1)"
 }
 
 cmd_build() {
@@ -326,6 +326,19 @@ cmd_scan() {
   done
   image="${image:-$IMAGE}"
   docker image inspect "$image" >/dev/null 2>&1 || die "image $image is not present"
+
+  # Trivy exports the image into its container, i.e. into Docker's data root:
+  # short of the image's size there, it fills the disk mid-scan and breaks
+  # whatever else is running.
+  # The remapped data root (userns-remap) is not stat-able by the caller; its
+  # parent sits on the same filesystem.
+  local need have root
+  need="$(docker image inspect "$image" --format '{% raw %}{{ .Size }}{% endraw %}')"
+  root="$(docker info --format '{% raw %}{{ .DockerRootDir }}{% endraw %}')"
+  have="$(df --output=avail -B1 "$root" 2>/dev/null || df --output=avail -B1 "$(dirname "$root")")"
+  have="$(tail -n 1 <<<"$have")"
+  [ "$have" -gt "$need" ] \
+    || die "scanning $image needs $(numfmt --to=iec-i --suffix=B "$need") free for Docker, $(numfmt --to=iec-i --suffix=B "$have") available"
 
   local filters=() mounts=()
   if [ "$all" = false ]; then
