@@ -82,7 +82,6 @@
           # build: the host settings reach Dockerfile.gpu as build args
           - "'CUDA_VERSION=\"12.6.3\"' in tool"
           - "'CUDA_ARCH=\"6.1\"' in tool"
-          - "'STRIP_CUDA_COMPAT=\"true\"' in tool"
           - "'--build-arg=' in tool"
           # run: defaults, the per-run directory, a non-root user
           - "'--file \"data/molecules.json\"' in tool"

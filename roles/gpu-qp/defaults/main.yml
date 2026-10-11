@@ -18,9 +18,10 @@ gpu_qp_specific_packages:
 
 # --- GPU image -------------------------------------------------------------
 # build: clone the quantum-pipeline source and compile qiskit-aer for
-#        gpu_qp_cuda_arch - the only way to run a non-Ampere card, since the
-#        published :gpu tag is compiled for sm_86.
-# pull:  use gpu_qp_image_pull_name (only valid if it matches gpu_qp_cuda_arch).
+#        gpu_qp_cuda_arch only - a faster build than the published image's
+#        multi-generation one, and the way to test a branch.
+# pull:  use gpu_qp_image_pull_name. From 2.3.0 the published :gpu tag runs on
+#        every GPU from Pascal (6.1) on; older tags are Ampere (sm_86) only.
 gpu_qp_image_mode: "build"
 gpu_qp_image_repo: "https://github.com/straightchlorine/quantum-pipeline.git"
 # Branch of the first clone only; afterwards `gpu-qp pull` switches branches.
@@ -37,14 +38,6 @@ gpu_qp_image_force_rebuild: false
 # the 550 branch). A newer CUDA than the driver needs minor-version compatibility;
 # a much newer one simply will not run, and CUDA 13 drops Pascal altogether.
 gpu_qp_cuda_version: "12.6.3"
-
-# The STRIP_CUDA_COMPAT build arg. The stock CUDA image ships forward-compat
-# libcuda under /usr/local/cuda-*/compat and ldconfig resolves it before the
-# driver's own library. Forward compatibility is datacenter-GPU only: on GeForce
-# the compat libcuda fails cuInit with CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE
-# (804), which qiskit-aer reports as "No CUDA device available!" - nvidia-smi
-# still works, because NVML does not use libcuda. Build mode only.
-gpu_qp_strip_cuda_compat: true
 
 # Build args plus source revision of the last successful build. `gpu-qp build`
 # skips the build while it matches; a rebuild stays fast, since Docker's layer

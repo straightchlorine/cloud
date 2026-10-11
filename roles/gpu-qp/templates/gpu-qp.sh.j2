@@ -23,7 +23,6 @@ BUILD_ARGS=(
   CUDA_VERSION="{{ gpu_qp_cuda_version }}"
   CUDA_ARCH="{{ gpu_qp_cuda_arch }}"
   AER_VERSION="{{ gpu_qp_aer_version }}"
-  STRIP_CUDA_COMPAT="{{ gpu_qp_strip_cuda_compat | bool | lower }}"
 )
 
 # Every run starts with these; arguments given to `run` are appended, so the
@@ -164,14 +163,12 @@ cmd_build() {
   done
   require_checkout
 
-  local dockerfile="$SOURCE/docker/Dockerfile.gpu" arg
+  local dockerfile="$SOURCE/docker/Dockerfile.gpu"
   [ -f "$dockerfile" ] || die "no docker/Dockerfile.gpu in $SOURCE"
-  # An older Dockerfile.gpu ignores these build args: it would build on its own
-  # CUDA tag and keep the compat libcuda, which fails on GeForce (error 804).
-  for arg in CUDA_VERSION STRIP_CUDA_COMPAT; do
-    grep -q "^ARG $arg=" "$dockerfile" \
-      || die "docker/Dockerfile.gpu at this revision has no ARG $arg - gpu-qp pull a branch that has it"
-  done
+  # An older Dockerfile.gpu ignores the build args and ships CUDA's forward-compat
+  # libcuda, which fails on GeForce cards (error 804).
+  grep -q "^ARG CUDA_VERSION=" "$dockerfile" \
+    || die "docker/Dockerfile.gpu at this revision has no ARG CUDA_VERSION - gpu-qp pull a newer branch"
 
   local revision fingerprint
   revision="$(git_src rev-parse HEAD)"

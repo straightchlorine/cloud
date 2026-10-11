@@ -20,13 +20,14 @@ role, run simulations.
    `nvidia_gpu_exporter` (`:9835`) for Prometheus.
 6. Proves a GPU container can see the device and runs a short real GPU VQE.
 
-## Why the image is built, not pulled
+## Build or pull
 
-The published `:gpu` tag is compiled for **Ampere (sm_86)**. On a Pascal
-(GTX 10xx) or Turing card it fails at runtime with
-`CUDA error: no kernel image is available`. `gpu_qp_image_mode: build` compiles
-qiskit-aer for `gpu_qp_cuda_arch` from `docker/Dockerfile.gpu`. Use `pull` only
-when the prebuilt image already targets the card.
+`gpu_qp_image_mode: build` (the default) compiles qiskit-aer for
+`gpu_qp_cuda_arch` only, from the checkout's `docker/Dockerfile.gpu` - about 4x
+faster than the published image's build, and the way to test a branch.
+`pull` uses the published `:gpu` tag, which from 2.3.0 runs on every GPU from
+Pascal (6.1) on. Tags before 2.3.0 are Ampere (sm_86) only and fail elsewhere
+with `CUDA error: no kernel image is available`.
 
 ## Required host_vars
 
@@ -44,14 +45,13 @@ Two independent CUDA variables, and they are **not** the same thing:
 Both reach `Dockerfile.gpu` as build args (`CUDA_ARCH`, `CUDA_VERSION`); the
 role never rewrites the Dockerfile.
 
-**Compat strip (`gpu_qp_strip_cuda_compat`, on by default).** The stock CUDA
-image ships forward-compatibility `libcuda` under `/usr/local/cuda-*/compat`, and
-`ldconfig` resolves it ahead of the driver's own library. Forward compatibility
-is datacenter-GPU only: on a GeForce card the shim makes `cuInit` fail with
+**No forward-compat `libcuda`.** NVIDIA's CUDA base images ship a
+forward-compatibility `libcuda` that `ldconfig` resolves ahead of the driver's
+own. It only works on datacenter GPUs: on GeForce, `cuInit` fails with
 `CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE` (804), which qiskit-aer reports as
-`No CUDA device available!` — while `nvidia-smi` keeps working, because NVML
-never touches `libcuda`. `Dockerfile.gpu` therefore deletes those libraries
-(`STRIP_CUDA_COMPAT`, on by default), so the driver's `libcuda` is used.
+`No CUDA device available!` while `nvidia-smi` keeps working. `Dockerfile.gpu`
+therefore runs on plain Ubuntu, and `gpu-qp build` refuses a revision whose
+`Dockerfile.gpu` predates the `CUDA_VERSION` build arg.
 
 **Build fingerprint.** `gpu-qp build` records a fingerprint of the effective
 build definition (the build args and the source revision) and skips the build
@@ -67,7 +67,7 @@ on any command) shows the options.
 | Command | Does |
 |---|---|
 | `gpu-qp pull [--reset] [BRANCH]` | fetches the source checkout's origin and fast-forwards it, switching to `BRANCH` first. `--reset` hard-resets to origin instead, for a branch that was rebased or amended. |
-| `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH`, `AER_VERSION` and `STRIP_CUDA_COMPAT` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks those args. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
+| `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH` and `AER_VERSION` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks `CUDA_VERSION`. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
 | `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
 | `gpu-qp run [OPTION]...` | one simulation. Options are appended to the role's defaults, so they override them by name. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
 | `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
