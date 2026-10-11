@@ -32,3 +32,16 @@ gpu_qp_worker_device: "all"
 
 # A cloud instance is disposable - never block a teardown on it.
 teardown_protected: false
+
+# --- Monitoring --------------------------------------------------------------
+# Node Exporter is installed by the base play's prometheus-exporters role
+# (playbooks/site.yml, `hosts: all:!honeypot`), which this host reaches via the
+# `prometheus` group in hosts.yml. The role's validate.yml requires prometheus_role,
+# and Prometheus uses it as the scrape label (see monitoring/templates/prometheus.yml.j2).
+prometheus_role: "gpu-qp"
+
+# The exporter's own firewall.yml only opens :9100 to primary_network_cidr (this
+# host's own subnet), which the monitoring host is not on, so allow the one
+# scrape source explicitly. Matches the media/automation host_vars convention.
+firewall_rules:
+  - {port: 9100, proto: "tcp", src: "192.168.20.5", comment: "Node Exporter metrics (Prometheus scrape)"}

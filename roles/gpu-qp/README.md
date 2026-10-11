@@ -67,9 +67,11 @@ on any command) shows the options.
 | Command | Does |
 |---|---|
 | `gpu-qp pull [--reset] [BRANCH]` | fetches the source checkout's origin and fast-forwards it, switching to `BRANCH` first. `--reset` hard-resets to origin instead, for a branch that was rebased or amended. |
+| `gpu-qp patch [--reset]` | applies a unified diff from stdin to the checkout (`git apply --index`, new files included) to test uncommitted workstation changes. Records a patch hash, so the build revision reads `<sha>+patched-<hash>` and `gpu-qp build` rebuilds. Refuses empty input. `--reset` first drops everything uncommitted (`git reset --hard` + `git clean -fd`). While a patch is applied, `gpu-qp pull` requires `--reset`. |
 | `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH` and `AER_VERSION` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks `CUDA_VERSION`. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
 | `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
 | `gpu-qp run [OPTION]...` | one simulation. Options are appended to the role's defaults, so they override them by name. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
+| `gpu-qp bench [ARG]...` | runs `scripts/benchmark_fast_path.py` from the checkout inside the image, as the calling user, ARGs passed through; defaults `--output` to `gen/<UTC timestamp>/bench.json`, log in `bench.log`. Reports the missing script if the checkout lacks it. |
 | `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
 
 The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
@@ -81,6 +83,15 @@ gpu-qp run                                          # defaults
 gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
 gpu-qp scan                                         # vulnerabilities, as CI counts them
+gpu-qp bench [ARG]...                               # fast-path benchmark, args pass through
+```
+
+Test uncommitted workstation work (the host cannot reach the workstation, so
+the diff is piped over SSH; untracked files are added as new-file diffs):
+
+```bash
+(git diff HEAD; git ls-files -o --exclude-standard -z | xargs -0 -n1 git diff --no-index /dev/null) | ssh gpu 'gpu-qp patch --reset'
+ssh gpu 'gpu-qp build && gpu-qp check && gpu-qp run'
 ```
 
 The deploy clones the source once; after that `gpu-qp pull` owns the checkout,
@@ -102,6 +113,17 @@ ansible-playbook -i inventory/production playbooks/site.yml \
 
 ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml \
   --limit gpu-station -e gpu_qp_teardown_confirm=true
+```
+
+**Node Exporter comes from the base play.** `--tags gpu-qp` runs only the gpu-qp
+play, which skips `playbooks/site.yml`'s base play (`hosts: all:!honeypot`) - the
+place the `prometheus-exporters` role installs Node Exporter. The gpu-qp play does
+run the firewall role itself, so the ufw rule from host_vars applies either way,
+but a deploy that must (re)install Node Exporter has to include the base play:
+
+```bash
+ansible-playbook -i inventory/production playbooks/site.yml \
+  --limit gpu-station --ask-vault-pass
 ```
 
 The teardown removes the stack, the wrapper and the local image but **keeps the

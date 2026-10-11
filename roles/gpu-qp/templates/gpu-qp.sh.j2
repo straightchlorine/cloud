@@ -17,6 +17,9 @@ LOG_DIR="{{ gpu_qp_log_path }}"
 FINGERPRINT_FILE="{{ gpu_qp_build_fingerprint_file }}"
 TRIVY_IMAGE="{{ gpu_qp_trivy_image }}"
 TRIVY_CACHE="{{ gpu_qp_home }}/.cache/trivy"
+# Present while the checkout carries a `gpu-qp patch`; holds a hash of the patches.
+PATCH_MARKER="$SOURCE/.git/gpu-qp-patch"
+BENCH_SCRIPT="scripts/benchmark_fast_path.py"
 
 # Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
 BUILD_ARGS=(
@@ -48,6 +51,17 @@ Commands:
                that was rebased or amended upstream
       Checkout: $SOURCE
 
+  patch [--reset]
+      Apply a unified diff read from stdin to the checkout (git apply --index,
+      so new files are included) to test uncommitted workstation changes. The
+      build revision becomes <sha>+patched-<hash>, so 'gpu-qp build' rebuilds.
+      Refuses empty input. Patches stack until reset; 'pull' needs --reset
+      while one is applied.
+      --reset  first drop everything uncommitted in the checkout (git reset
+               --hard + git clean -fd), i.e. the previous patch
+      e.g.  (git diff HEAD; git ls-files -o --exclude-standard -z |
+             xargs -0 -n1 git diff --no-index /dev/null) | ssh gpu 'gpu-qp patch --reset'
+
   build [--force]
       Build $IMAGE from docker/Dockerfile.gpu with:
 $(printf '        %s\n' "${BUILD_ARGS[@]}")
@@ -74,6 +88,12 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
         run.json  arguments, exit status, image id, source revision, driver
         the report and the convergence plots
       e.g.  gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
+
+  bench [ARG]...
+      Run $BENCH_SCRIPT from the checkout inside the image, as the calling
+      user, passing ARG through. Defaults to --output <run dir>/bench.json (an
+      ARG --output overrides it). Writes $GEN_DIR/<UTC timestamp>/bench.log
+      and bench.json. Prints what is missing if the script is not in the checkout.
 
   scan [--all] [IMAGE]
       Scan IMAGE (default $IMAGE) for vulnerabilities with Trivy, filtered the
@@ -115,6 +135,53 @@ require_image() {
     || die "image $IMAGE is not present - run: gpu-qp build"
 }
 
+# HEAD, plus +patched-<hash> while a patch is applied - what build fingerprints.
+source_revision() {
+  local sha
+  sha="$(git_src rev-parse HEAD)"
+  if [ -e "$PATCH_MARKER" ]; then
+    echo "$sha+patched-$(cat "$PATCH_MARKER")"
+  else
+    echo "$sha"
+  fi
+}
+
+cmd_patch() {
+  local reset=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --reset) reset=true ;;
+      *) bad_usage "patch: unknown argument $1" ;;
+    esac
+    shift
+  done
+  require_checkout
+  [ ! -t 0 ] || die "patch reads a unified diff from stdin - pipe one in (see: gpu-qp help)"
+
+  local diff
+  diff="$(mktemp)"
+  trap 'rm -f "$diff"' EXIT
+  cat >"$diff"
+  [ -s "$diff" ] || die "empty diff on stdin - nothing to apply (is the workstation tree clean?)"
+
+  if [ "$reset" = true ]; then
+    git_src reset --hard -q
+    git_src clean -fdq
+    rm -f "$PATCH_MARKER"
+  fi
+  git_src apply --check "$diff" \
+    || die "the diff does not apply to $(git_src rev-parse --short HEAD) - same base commit as the workstation? previous patch still applied? try --reset"
+  git_src apply --index "$diff"
+
+  local previous=""
+  [ ! -e "$PATCH_MARKER" ] || previous="$(cat "$PATCH_MARKER")"
+  { echo "$previous"; cat "$diff"; } | sha256sum | cut -c1-12 >"$PATCH_MARKER"
+
+  git_src --no-pager diff --cached --stat
+  echo "[OK] patched $(git_src rev-parse --short HEAD) -> $(source_revision | cut -c1-40) - run: gpu-qp build"
+}
+
 cmd_pull() {
   local reset=false branch=""
   while [ $# -gt 0 ]; do
@@ -127,6 +194,9 @@ cmd_pull() {
     shift
   done
   require_checkout
+  if [ -e "$PATCH_MARKER" ] && [ "$reset" = false ]; then
+    die "the checkout carries a patch - use: gpu-qp pull --reset [BRANCH]"
+  fi
 
   # A shallow or single-branch clone cannot check out another branch, so complete
   # it and widen the refspec first. Both are no-ops on a complete clone.
@@ -145,6 +215,8 @@ cmd_pull() {
 
   if [ "$reset" = true ]; then
     git_src reset --hard "origin/$branch"
+    git_src clean -fdq
+    rm -f "$PATCH_MARKER"
   else
     git_src pull --ff-only
   fi
@@ -171,7 +243,7 @@ cmd_build() {
     || die "docker/Dockerfile.gpu at this revision has no ARG CUDA_VERSION - gpu-qp pull a newer branch"
 
   local revision fingerprint
-  revision="$(git_src rev-parse HEAD)"
+  revision="$(source_revision)"
   fingerprint="${BUILD_ARGS[*]} $revision"
   if [ "$force" = false ] \
      && docker image inspect "$IMAGE" >/dev/null 2>&1 \
@@ -282,7 +354,7 @@ cmd_run() {
   GPU_QP_RUN_ID="$run_id" GPU_QP_STATUS="$status" GPU_QP_ARGS="${RUN_DEFAULTS[*]} $*" \
   GPU_QP_IMAGE="$IMAGE" \
   GPU_QP_IMAGE_ID="$(docker image inspect "$IMAGE" --format '{% raw %}{{ .Id }}{% endraw %}')" \
-  GPU_QP_GIT_SHA="$(git_src rev-parse HEAD 2>/dev/null || echo unknown)" \
+  GPU_QP_GIT_SHA="$(source_revision 2>/dev/null || echo unknown)" \
   GPU_QP_DRIVER="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || true)" \
   python3 - "$run_dir/run.json" <<'PY'
 import json
@@ -304,6 +376,39 @@ json.dump(
     sort_keys=True,
 )
 PY
+
+  echo
+  echo "run directory: $run_dir"
+  return "$status"
+}
+
+cmd_bench() {
+  case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+  esac
+  require_checkout
+  [ -f "$SOURCE/$BENCH_SCRIPT" ] \
+    || die "no $BENCH_SCRIPT in $SOURCE - gpu-qp pull a branch that has it, or gpu-qp patch it in"
+  require_image
+
+  local run_id run_dir status
+  run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+  run_dir="$GEN_DIR/$run_id"
+  mkdir -p "$run_dir"
+
+  # Like `run`: calling user, HOME and matplotlib cache in /tmp, run directory as
+  # gen/. The script is mounted from the checkout so a patched script runs without
+  # a rebuild; the installed package is still the image's.
+  set +e
+  docker compose -f "$COMPOSE_FILE" run --rm -T --userns=host \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
+    -v "$run_dir:/usr/src/quantum_pipeline/gen" \
+    -v "$SOURCE/$BENCH_SCRIPT:/usr/src/quantum_pipeline/$BENCH_SCRIPT:ro" \
+    --entrypoint python "$SERVICE" \
+    "$BENCH_SCRIPT" --output /usr/src/quantum_pipeline/gen/bench.json "$@" 2>&1 | tee "$run_dir/bench.log"
+  status=${PIPESTATUS[0]}
+  set -e
 
   echo
   echo "run directory: $run_dir"
@@ -401,7 +506,7 @@ PY
 command="${1:-}"
 [ $# -eq 0 ] || shift
 case "$command" in
-  pull|build|check|run|scan) "cmd_$command" "$@" ;;
+  pull|patch|build|check|run|bench|scan) "cmd_$command" "$@" ;;
   help|-h|--help) usage ;;
   "") usage >&2; exit 2 ;;
   *) bad_usage "unknown command: $command" ;;
