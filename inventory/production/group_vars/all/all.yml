@@ -41,6 +41,9 @@ common_packages:
   - mosh
   - ufw
   - fail2ban
+  # cron: the common role schedules jobs with ansible.builtin.cron, which needs
+  # the crontab binary; slim cloud/VPS images ship no cron daemon.
+  - cron
   - logrotate
   - rsync
   - unzip

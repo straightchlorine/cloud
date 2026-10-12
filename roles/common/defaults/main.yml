@@ -37,6 +37,10 @@ common_packages:
   - mosh
   - ufw
   - fail2ban
+  # cron: the role schedules jobs with ansible.builtin.cron (auto_updates,
+  # app_update, snapshot), which needs the crontab binary. Raspberry Pi OS and
+  # full Debian ship it; slim cloud/VPS images do not.
+  - cron
   - logrotate
   - rsync
   - unzip
