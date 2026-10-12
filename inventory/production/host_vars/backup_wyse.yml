@@ -108,7 +108,7 @@ coordinator_targets:
       - /etc
       - /var/lib/docker/volumes
       - /var/log
-      - /home/media
+      - /home/ansible
       - /mnt/data
       - /root/.ssh
     backup_excludes:

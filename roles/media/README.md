@@ -201,6 +201,9 @@ The Pi is reflashed; the SSD keeps only `music/`, `downloads/` and the export.
 crontab -r                                  # no sync during the move
 ./migrate-legacy.sh export                  # -> /mnt/data/migration
 scp -r media@192.168.20.15:/mnt/data/migration ./media-migration   # off-Pi copy
+# Legacy data is often root-owned; beets runs as the stack user and must own it:
+sudo chown -R media:media /mnt/data/music /mnt/data/downloads
+sudo find /mnt/data/music /mnt/data/downloads ! -user media | wc -l   # expect 0
 # Tidy the drive: keep music/, downloads/, migration/ (dry run first, then -delete)
 sudo find /mnt/data -mindepth 1 -maxdepth 1 ! -name music ! -name downloads \
   ! -name migration ! -name lost+found -print
