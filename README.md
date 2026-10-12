@@ -36,14 +36,13 @@ just setup          # Create venv, install deps, collections, hooks
 just deploy         # Full infrastructure (with confirmation)
 just lint           # Ansible-lint + yamllint
 just test           # Molecule tests (all roles)
-just validate full  # End-to-end infrastructure validation
 ```
 
 ### Deploy Individual Services
 
 ```bash
-just deploy-service playbooks/media.yml
-just deploy-service playbooks/automation-stack.yml
+just deploy-service media                        # -> playbooks/media.yml
+just deploy-service backup/deploy-coordinator    # -> playbooks/backup/deploy-coordinator.yml
 ```
 
 Or directly:

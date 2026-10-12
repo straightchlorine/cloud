@@ -1,5 +1,0 @@
----
-# Backup System - Coordinator Only Deployment
-# Deploys only the backup coordinator for targeted deployment
-
-- import_playbook: playbooks/backup/deploy-coordinator.yml

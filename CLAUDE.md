@@ -13,7 +13,7 @@ roles/                  common dns os hardware firewall backup backup-system
                         monitoring prometheus-exporters automation media
 scripts/                per-role host check scripts (scripts/dns/validate-*.sh)
 docs/                   flat topic docs + docs/testing/ section
-.woodpecker/            lint.yaml, test.yaml, deploy-validation.yaml
+.woodpecker/            lint.yaml, test.yaml
 ```
 
 ### Reference implementation
@@ -104,7 +104,7 @@ prometheus_exporters_node_exporter_enabled: true
 
 # Subdomains: {role}_subdomain_{service}
 automation_subdomain_traefik: "traefik"
-automation_subdomain_vaultwarden: "vault"
+automation_subdomain_vaultwarden: "vaultwarden"
 
 # Vault secrets: vault_{descriptive_name}
 vault_domain_name: "example.com"
@@ -346,8 +346,7 @@ The canonical testing documentation is `docs/testing/`:
   recipe for rebuilding a role's tests (`roles/dns/molecule/` is the reference)
 - `beyond-molecule.md` -- the staging-Pi cycle, scoped production, verifier
   alternatives, secrets policy
-- `operations.md` -- pre-commit hooks, `validate-infrastructure.yml`, manual
-  procedures
+- `operations.md` -- pre-commit hooks, manual procedures
 
 ### Binding Molecule rules (details in docs/testing/molecule-standard.md)
 
@@ -377,7 +376,6 @@ fixture-based scenarios; rebuild before extending them.
 1. **lint.yaml** -- every push: ansible-lint, yamllint, shellcheck, syntax checks
 2. **test.yaml** -- Molecule under Podman; matrix currently runs only `dns`.
    Re-add each role to `.woodpecker/test.yaml` as its tests are rebuilt.
-3. **deploy-validation.yaml** -- pre-production validation on tag/deploy events
 
 - Failures must fail the pipeline -- no `|| true` on molecule steps
 - Line length limit: 120 characters (enforced by yamllint)
@@ -398,7 +396,8 @@ Every teardown playbook (`playbooks/dns-teardown.yml` is the reference):
 
 1. Gate on the role's own confirm flag (`dns_teardown_confirm | default(false)`
    is an acceptable cross-role flag default -- the playbook never loads role
-   defaults) and hard-refuse the production host by name and IP.
+   defaults) and refuse any host the inventory marks `teardown_protected: true`
+   (`common/tasks/teardown_guard.yml` does both).
 2. Set a shared `teardown_confirmed: true` fact -- the single gate every
    included teardown task file checks.
 3. Include the real teardown task files; nothing may remove state outside a

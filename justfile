@@ -107,10 +107,7 @@ syntax:
     set -euo pipefail
     echo "{{ _run }} Checking playbook syntax"
     failed=0
-    for pb in playbooks/*.yml playbooks/**/*.yml \
-              backup-coordinator.yml backup-deploy.yml \
-              deploy-rclone-to-hosts.yml prometheus-exporters.yml \
-              validate-infrastructure.yml; do
+    for pb in playbooks/*.yml playbooks/**/*.yml; do
         [ -f "$pb" ] || continue
         if ansible-playbook --syntax-check "$pb" > /dev/null 2>&1; then
             echo "{{ _ok }} $pb"
@@ -150,10 +147,3 @@ deploy:
 [confirm("Deploy this service. Continue?")]
 deploy-service playbook:
     ansible-playbook playbooks/{{ playbook }}.yml --ask-vault-pass
-
-# ---------- validate ----------
-
-# Validate infrastructure (type: full, backup, vault, pre_deployment, post_deployment, service_startup)
-[group: 'validate']
-validate type:
-    ansible-playbook validate-infrastructure.yml -e validation_type={{ type }} --ask-vault-pass

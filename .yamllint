@@ -1,6 +1,14 @@
 ---
 extends: default
 
+# Vendored collections (installed into ./collections) and the local venv are
+# not ours to lint; the CI lint step writes collections/ into the workspace.
+ignore: |
+  .git/
+  .venv/
+  venv/
+  collections/
+
 rules:
   document-start: enable
   line-length:
