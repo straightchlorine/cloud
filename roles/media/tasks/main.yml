@@ -89,6 +89,10 @@
     stack_exec_start: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml up -d"
     stack_exec_stop: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml down"
     stack_exec_reload: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml restart"
+  # common_start_stack=false renders the stack without starting it - the
+  # migration restore window (migrate-legacy.sh restore refuses while Navidrome
+  # runs). Skip the unit entirely then, so nothing auto-starts on a stray reboot.
+  when: common_start_stack | bool
   tags: [systemd, auto-start]
 
 - name: Include the YouTube -> beets pipeline
@@ -103,10 +107,13 @@
 
 - name: Activate the stack auto-start unit
   # Starting now proves the boot path: RemainAfterExit runs ExecStart immediately.
+  # Skipped when common_start_stack=false, so `-e common_start_stack=false`
+  # (migration restore) really leaves the stack down.
   ansible.builtin.systemd:
     name: "stack"
     state: started
   become: true
+  when: common_start_stack | bool
   tags: [systemd, auto-start, stack]
 
 - name: Flush pending handlers before validation
@@ -114,5 +121,10 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Run post-deployment validation
+  # Validate only what should be running: post_deploy_validate asserts the stack
+  # containers/endpoints, so with common_start_stack=false (stack intentionally
+  # down) it must be skipped - else a down-deploy fails on services it was told
+  # not to start.
   ansible.builtin.include_tasks: post_deploy_validate.yml
+  when: common_start_stack | bool
   tags: [post_validation]
