@@ -45,7 +45,10 @@
     owner: root
     group: root
     mode: "0755"
-    backup: true
+    # No `backup: true`: cmdline.txt lives on the vfat boot partition, and
+    # Ansible's backup name embeds a timestamp with ':' - illegal on vfat, so
+    # the copy fails with [Errno 22] Invalid argument. Content is rebuilt from
+    # the current cmdline, so the edit is safe without a backup.
   become: true
   when:
     - common_rpi_cmdline_path is defined
