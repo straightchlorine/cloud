@@ -70,8 +70,8 @@ on any command) shows the options.
 | `gpu-qp patch [--reset]` | applies a unified diff from stdin to the checkout (`git apply --index`, new files included) to test uncommitted workstation changes. Records a patch hash, so the build revision reads `<sha>+patched-<hash>` and `gpu-qp build` rebuilds. Refuses empty input. `--reset` first drops everything uncommitted (`git reset --hard` + `git clean -fd`). While a patch is applied, `gpu-qp pull` requires `--reset`. |
 | `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_VERSION`, `CUDA_ARCH` and `AER_VERSION` as build args. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` lacks `CUDA_VERSION`. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
 | `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
-| `gpu-qp run [OPTION]...` | one simulation. Options are appended to the role's defaults, so they override them by name. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
-| `gpu-qp bench [ARG]...` | runs `scripts/benchmark_fast_path.py` from the checkout inside the image, as the calling user, ARGs passed through; defaults `--output` to `gen/<UTC timestamp>/bench.json`, log in `bench.log`. Reports the missing script if the checkout lacks it. |
+| `gpu-qp run [--cpu] [OPTION]...` | one simulation, on the GPU by default (`--gpu` and the role's optimizer are injected). Options are appended to the role's defaults, so they override them by name. `--cpu` omits `--gpu` (CPU / fast-path cases); an `--optimizer` you pass replaces the default one. With no arguments the run is unchanged. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
+| `gpu-qp bench [ARG]...` | runs `scripts/benchmark_fast_path.py` from the checkout inside the image, as the calling user, ARGs passed through. Mounts the checkout's `scripts/` and `data/` read-only (so `data/molecules.thesis.json` is available) and a writable `benchmarks/` under the run directory; defaults `--output` to `gen/<UTC timestamp>/bench.json`, log in `bench.log`. Reports the missing script if the checkout lacks it. |
 | `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
 
 The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
@@ -80,6 +80,7 @@ The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
 ```bash
 # on the host
 gpu-qp run                                          # defaults
+gpu-qp run --cpu --optimizer COBYLA                 # CPU case, own optimizer
 gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
 gpu-qp scan                                         # vulnerabilities, as CI counts them

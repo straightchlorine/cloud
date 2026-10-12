@@ -27,6 +27,8 @@ common_packages:
   - wget
   - git
   - htop
+  # btop: nicer live system monitor (CPU/mem/net/disk) for the Pi hosts
+  - btop
   - vim
   - tmux
   # fzf: scripts/media/pick.sh (album assignment, quarantine removal)

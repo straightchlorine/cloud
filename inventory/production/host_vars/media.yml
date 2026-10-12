@@ -30,6 +30,9 @@ restic_enabled: true
 restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/music"
 restic_password: "{{ vault_restic_music_password }}"
 common_backup_tmp_dir: "{{ media_library_path }}/backup-tmp"
+# ~37 GB over a Pi 3 uplink: the common default (2h) kills the first full
+# snapshot (and any full re-read) mid-run. Nightly incrementals still finish fast.
+common_backup_timeout: "12h"
 
 common_syncthing_enabled: true
 media_backup_enabled: true

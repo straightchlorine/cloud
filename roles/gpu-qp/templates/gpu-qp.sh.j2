@@ -20,6 +20,7 @@ TRIVY_CACHE="{{ gpu_qp_home }}/.cache/trivy"
 # Present while the checkout carries a `gpu-qp patch`; holds a hash of the patches.
 PATCH_MARKER="$SOURCE/.git/gpu-qp-patch"
 BENCH_SCRIPT="scripts/benchmark_fast_path.py"
+CONTAINER_ROOT="/usr/src/quantum_pipeline"
 
 # Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
 BUILD_ARGS=(
@@ -29,15 +30,15 @@ BUILD_ARGS=(
 )
 
 # Every run starts with these; arguments given to `run` are appended, so the
-# solver's argparse lets them override a default with the same name.
+# solver's argparse lets them override a default with the same name. `run` adds
+# --gpu (unless --cpu) and --optimizer (unless the caller passes one) itself.
 RUN_DEFAULTS=(
   --file "{{ gpu_qp_container_molecules_path }}"
   --basis "{{ gpu_qp_basis }}"
   --max-iterations "{{ gpu_qp_max_iterations }}"
-  --optimizer "{{ gpu_qp_optimizer }}"
-  --gpu
   --report
 )
+DEFAULT_OPTIMIZER="{{ gpu_qp_optimizer }}"
 
 usage() {
   cat <<EOF
@@ -79,10 +80,12 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
         - ldd resolves every one of Aer's shared objects
       Also prints the image size, the driver and the cards' compute capability.
 
-  run [SOLVER-OPTION]...
-      One VQE simulation on the GPU. Every run starts with
-        ${RUN_DEFAULTS[*]}
+  run [--cpu] [SOLVER-OPTION]...
+      One VQE simulation, on the GPU unless --cpu. Every run starts with
+        ${RUN_DEFAULTS[*]} --optimizer $DEFAULT_OPTIMIZER --gpu
       and appends the options given here, which override those by name.
+      --cpu  omit --gpu (CPU / fast-path cases); consumed here, not passed on
+      --optimizer given here replaces the default one instead of being added to it
       Writes $GEN_DIR/<UTC timestamp>/:
         run.log   the combined output, teed live
         run.json  arguments, exit status, image id, source revision, driver
@@ -91,8 +94,10 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
 
   bench [ARG]...
       Run $BENCH_SCRIPT from the checkout inside the image, as the calling
-      user, passing ARG through. Defaults to --output <run dir>/bench.json (an
-      ARG --output overrides it). Writes $GEN_DIR/<UTC timestamp>/bench.log
+      user, passing ARG through. The checkout's scripts/ (read-only) and data/
+      (read-only, so data/molecules.thesis.json is there) are mounted; benchmarks/
+      is writable under the run directory. Defaults to --output <run dir>/bench.json
+      (an ARG --output overrides it). Writes $GEN_DIR/<UTC timestamp>/bench.log
       and bench.json. Prints what is missing if the script is not in the checkout.
 
   scan [--all] [IMAGE]
@@ -161,7 +166,9 @@ cmd_patch() {
 
   local diff
   diff="$(mktemp)"
-  trap 'rm -f "$diff"' EXIT
+  # Expanded now: a single-quoted trap would read the function-local $diff at
+  # script exit, after it is gone (set -u: "diff: unbound variable", exit 1).
+  trap "rm -f '$diff'" EXIT
   cat >"$diff"
   [ -s "$diff" ] || die "empty diff on stdin - nothing to apply (is the workstation tree clean?)"
 
@@ -332,6 +339,18 @@ cmd_run() {
   esac
   require_image
 
+  local cpu=false have_optimizer=false args=() arg
+  for arg in "$@"; do
+    case "$arg" in
+      --cpu) cpu=true; continue ;;
+      --optimizer|--optimizer=*) have_optimizer=true ;;
+    esac
+    args+=("$arg")
+  done
+  local defaults=("${RUN_DEFAULTS[@]}")
+  [ "$have_optimizer" = true ] || defaults+=(--optimizer "$DEFAULT_OPTIMIZER")
+  [ "$cpu" = true ] || defaults+=(--gpu)
+
   local run_id run_dir status
   run_id="$(date -u +%Y%m%dT%H%M%SZ)"
   run_dir="$GEN_DIR/$run_id"
@@ -347,11 +366,11 @@ cmd_run() {
     -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
     -v "$run_dir:/usr/src/quantum_pipeline/gen" \
     -v "$run_dir/run_configs:/usr/src/quantum_pipeline/run_configs" \
-    "$SERVICE" "${RUN_DEFAULTS[@]}" "$@" 2>&1 | tee "$run_dir/run.log"
+    "$SERVICE" "${defaults[@]}" ${args[@]+"${args[@]}"} 2>&1 | tee "$run_dir/run.log"
   status=${PIPESTATUS[0]}
   set -e
 
-  GPU_QP_RUN_ID="$run_id" GPU_QP_STATUS="$status" GPU_QP_ARGS="${RUN_DEFAULTS[*]} $*" \
+  GPU_QP_RUN_ID="$run_id" GPU_QP_STATUS="$status" GPU_QP_ARGS="${defaults[*]} ${args[*]-}" \
   GPU_QP_IMAGE="$IMAGE" \
   GPU_QP_IMAGE_ID="$(docker image inspect "$IMAGE" --format '{% raw %}{{ .Id }}{% endraw %}')" \
   GPU_QP_GIT_SHA="$(source_revision 2>/dev/null || echo unknown)" \
@@ -394,19 +413,28 @@ cmd_bench() {
   local run_id run_dir status
   run_id="$(date -u +%Y%m%dT%H%M%SZ)"
   run_dir="$GEN_DIR/$run_id"
-  mkdir -p "$run_dir"
+  mkdir -p "$run_dir/benchmarks"
 
   # Like `run`: calling user, HOME and matplotlib cache in /tmp, run directory as
-  # gen/. The script is mounted from the checkout so a patched script runs without
-  # a rebuild; the installed package is still the image's.
+  # gen/. scripts/ and data/ come from the checkout (read-only) so a patched script
+  # or data file runs without a rebuild; the installed package is still the image's.
+  # The stack's rendered molecules.json replaces the checkout's, as in `run`.
+  # (userns_mode: host is set in the compose file; `compose run` has no flag for it.)
+  local mounts=()
+  if [ -f "$STACK_HOME/data/molecules.json" ] && [ -f "$SOURCE/data/molecules.json" ]; then
+    mounts=(-v "$STACK_HOME/data/molecules.json:$CONTAINER_ROOT/data/molecules.json:ro")
+  fi
   set +e
-  docker compose -f "$COMPOSE_FILE" run --rm -T --userns=host \
+  docker compose -f "$COMPOSE_FILE" run --rm -T \
     --user "$(id -u):$(id -g)" \
     -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
-    -v "$run_dir:/usr/src/quantum_pipeline/gen" \
-    -v "$SOURCE/$BENCH_SCRIPT:/usr/src/quantum_pipeline/$BENCH_SCRIPT:ro" \
+    -v "$run_dir:$CONTAINER_ROOT/gen" \
+    -v "$run_dir/benchmarks:$CONTAINER_ROOT/benchmarks" \
+    -v "$SOURCE/scripts:$CONTAINER_ROOT/scripts:ro" \
+    -v "$SOURCE/data:$CONTAINER_ROOT/data:ro" \
+    ${mounts[@]+"${mounts[@]}"} \
     --entrypoint python "$SERVICE" \
-    "$BENCH_SCRIPT" --output /usr/src/quantum_pipeline/gen/bench.json "$@" 2>&1 | tee "$run_dir/bench.log"
+    "$BENCH_SCRIPT" --output "$CONTAINER_ROOT/gen/bench.json" "$@" 2>&1 | tee "$run_dir/bench.log"
   status=${PIPESTATUS[0]}
   set -e
 
