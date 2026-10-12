@@ -90,7 +90,10 @@ gpu_qp_worker_cpu_reservation: "0.5"
 
 gpu_qp_basis: "sto3g"
 gpu_qp_max_iterations: 100
-gpu_qp_optimizer: "L-BFGS-B"
+# Gradient-free: quantum-pipeline samples the objective (default_shots=1024), and
+# finite-difference gradients of a sampled energy are meaningless - it refuses a
+# gradient optimizer such as L-BFGS-B unless --exact is passed. COBYLA needs none.
+gpu_qp_optimizer: "COBYLA"
 # Path inside the container (gpu_qp_data_path is mounted at
 # /usr/src/quantum_pipeline/data, the image's working directory).
 gpu_qp_container_molecules_path: "data/molecules.json"
