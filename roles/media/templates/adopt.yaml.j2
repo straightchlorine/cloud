@@ -3,7 +3,20 @@ import:
     move: no
     copy: no
     write: no
+    # A file that is already in the library must be SKIPPED, not re-imported.
+    # adopt walks the whole of music/, so config.yaml's duplicate_action (keep)
+    # made it re-apply an import task for every already-known file - which fires
+    # the import-event plugins on each one and turns a minutes-long registration
+    # into an hours-long pass.
+    duplicate_action: skip
 lyrics:
     auto: no
 replaygain:
+    auto: no
+# Same reasoning as duplicate_action: adopt means "register what is there and
+# change nothing". lastgenre is an import-event plugin, so auto: yes would have
+# it re-derive genres from Last.fm for every file touched (and, with force: yes
+# in config.yaml, replace them) even though autotag is off - the adopt pass then
+# rewrites genres in library.db without saying so.
+lastgenre:
     auto: no

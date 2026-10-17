@@ -90,3 +90,28 @@
     or 'ReviewedPlugin' not in media_reviewed_check.stdout
     or 'mark False' not in media_reviewed_check.stdout
   tags: [post_validation]
+
+- name: Verify the beets container can resolve MusicBrainz
+  # The one failure that looks like success: with no reachable resolver every
+  # lookup dies, the pass logs "Skipping." for thousands of files and matches
+  # nothing - 3913 such failures hid inside a run that otherwise looked healthy.
+  # Docker hands the container the host's resolver list through its embedded DNS,
+  # so a Pi-hole hiccup or a tailnet reshuffle is enough to break it. The role now
+  # pins public resolvers on the beets service (media_beets_dns); this asserts both
+  # that they arrived in the container and that they actually answer.
+  ansible.builtin.command: >-
+    docker compose -f {{ media_home }}/docker-compose.yml
+    run --rm -T --entrypoint /lsiopy/bin/python3 beets -c
+    "import socket; ns=[l.split()[1] for l in open('/etc/resolv.conf') if l.startswith('nameserver')];
+    print('resolvers', ns); print('musicbrainz.org', socket.gethostbyname('musicbrainz.org'));
+    print('api.acoustid.org', socket.gethostbyname('api.acoustid.org'))"
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: media_beets_dns_check
+  changed_when: false
+  failed_when: >-
+    media_beets_dns_check.rc != 0
+    or 'musicbrainz.org' not in media_beets_dns_check.stdout
+    or 'api.acoustid.org' not in media_beets_dns_check.stdout
+    or media_beets_dns[0] not in media_beets_dns_check.stdout
+  tags: [post_validation]

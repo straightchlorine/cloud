@@ -92,6 +92,10 @@
     - adopt.yaml
     - interactive.yaml
     - album.yaml
+    # album.yaml + `lastgenre: auto: no`: the overlay the upgrade path re-imports
+    # through, so a re-match cannot re-derive genres. Separate from album.yaml,
+    # which the nightly release pass uses and where Last.fm genres are wanted.
+    - upgrade.yaml
 
 - name: Install the beets plugin directory and plugins
   # reviewed.py turns a reviewer's "use as-is" answer into a marker; config.yaml
@@ -129,6 +133,24 @@
     - media-sync
     - media-import
     - beet
+    # Read-only dashboard for a long pass; deliberately not a media-sync mode,
+    # because it must not take the writer lock. See its header.
+    - media-status
+
+- name: Install the shared script modules
+  # Sourced by media-sync and media-status, never run and never in PATH: the
+  # library operations (media-lib) and the existing-library routine
+  # (media-maintenance). They sit beside the scripts so `readlink -f` on the
+  # PATH symlink finds them.
+  ansible.builtin.template:
+    src: "{{ item }}.sh.j2"
+    dest: "{{ media_home }}/scripts/{{ item }}.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  loop:
+    - media-lib
+    - media-maintenance
 
 - name: Symlink the pipeline scripts into PATH
   ansible.builtin.file:
@@ -141,6 +163,7 @@
     - media-sync
     - media-import
     - beet
+    - media-status
 
 - name: Remove the retired command artifacts
   # media-import-album folded into `media-sync --albums`. A host deployed before

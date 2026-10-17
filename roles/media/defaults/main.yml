@@ -52,6 +52,11 @@ media_backup_retention: 14
 media_backup_schedule_hour: "02"
 media_backup_schedule_minute: "30"
 
+# Resolvers handed to the beets container (see the service's service_dns).
+media_beets_dns:
+  - 1.1.1.1
+  - 9.9.9.9
+
 media_compose_networks:
   - name: stack
     compose_name: stack
@@ -137,6 +142,21 @@ media_compose_services:
       - "{{ media_library_path }}/downloads:/downloads"
     service_networks:
       - stack
+    # Public resolvers on purpose: this container only ever looks up MusicBrainz
+    # and AcoustID, and inheriting the host's resolver list (a Pi-hole plus a
+    # fallback that is not always reachable, 1s timeout, one attempt) meant a
+    # single Pi-hole hiccup made EVERY lookup fail - while the pass kept logging
+    # "Skipping." and looked healthy. 3913 such failures in one run, zero matches.
+    service_dns: "{{ media_beets_dns }}"
+    # Docker's per-container SOFT nofile default is 1024 regardless of the
+    # daemon's LimitNOFILE, which only becomes the hard limit - and a
+    # whole-library `beet import` burns ~2 descriptors per task, so the album
+    # pass died with EMFILE (no file descriptors available) after 478 of
+    # ~7000 tasks. 65536 is ~4x what the whole library needs.
+    service_ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     service_resources:
       # ReplayGain decodes every imported track with ffmpeg.
       limits:

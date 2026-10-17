@@ -12,13 +12,25 @@
 #                                     and give them their release [cron Sun 4:15]
 #   media-sync --upgrade [all|<q>]    give bare tracks their release (last 4
 #                                     weeks by default)
-#   media-sync --albums [<dir>]       release pass only, grouped: a ripped CD or
-#                                     a complete album dropped in one directory
+#   media-sync --albums [<dir>] [--id <release>]
+#                                     release pass only, grouped: a ripped CD or
+#                                     a complete album dropped in one directory;
+#                                     --id pins the MusicBrainz release when the
+#                                     pressing differs from the files
 #   media-sync --keep [<dir>]         register a directory as-is (no matching)
 #                                     and mark it reviewed, so nothing re-matches
 #                                     it later
-#   media-sync --adopt                one-time: register an existing music/ with
-#                                     beets and restore the reviewed markers
+#   media-sync --adopt                register the files in music/ that have no
+#                                     row, restore the reviewed markers (rows that
+#                                     exist are never touched)
+#   media-sync --regroup              album rows for tracks that carry a release
+#                                     id but have none (changes no file)
+#   media-sync --plan                 what --maintenance would face; changes nothing
+#   media-sync --maintenance [--from <1-6>]
+#                                     the one-time routine for an existing library:
+#                                     adopt, prune, upgrade, adopt, regroup,
+#                                     backfill - with a checkpoint and a resume
+#                                     point (media-maintenance)
 #   media-sync --backfill             one-time: lyrics + ReplayGain for adopted
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
@@ -38,21 +50,36 @@
 # sends one ntfy, a manual one just prints (see on_interrupt).
 set -euo pipefail
 
-LIB="{{ media_library_path }}"
 MODE="${1:-sync}"
-COMPOSE=(docker compose -f "{{ media_home }}/docker-compose.yml")
-# --entrypoint skips /init (and the beets web UI) so each run is a one-off that
-# exits; service_user sets the uid so beets' moves and tag writes stay owned by
-# the remapped stack user. PYTHONUNBUFFERED: without a TTY stdout is
-# block-buffered, so a long release pass looks dead while it works.
-BEET=("${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
-    --entrypoint /lsiopy/bin/beet beets)
-# The same, but with a TTY: for the modes that prompt.
-BEET_TTY=("${COMPOSE[@]}" run --rm -it -e PYTHONUNBUFFERED=1 \
-    --entrypoint /lsiopy/bin/beet beets)
+# The shared module (constants, beets invocation, library operations) sits beside
+# this script; readlink -f because the command in PATH is a symlink to it.
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/media-lib.sh"
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/media-maintenance.sh"
 
-notify() { ntfy-notify "$(hostname): media-sync ${MODE#--} $1" "$2" "${3:-default}" "${4:-musical_note}"; }
-count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
+# After the mode: a directory (or, for --upgrade, a beets query), --id <release>
+# for the two release modes, --from <step> for --maintenance.
+[ "$#" -eq 0 ] || shift
+DIR="" ALBUM_ID="" FROM=1
+# FROM is read by media-maintenance.
+# shellcheck disable=SC2034
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --id | --from)
+            [ "$#" -ge 2 ] || { echo "media-sync $1 needs a value" >&2; exit 2; }
+            if [ "$1" = --id ]; then ALBUM_ID="$2"; else FROM="$2"; fi
+            shift 2 ;;
+        *) DIR="$1"; shift ;;
+    esac
+done
+# A release id is typed by a person and ends up in a beets command line: only a
+# UUID gets that far, and only for the modes that import a release.
+if [ -n "$ALBUM_ID" ]; then
+    case "$MODE" in --albums | --release) ;; *) echo "--id only applies to --albums and --release" >&2; exit 2 ;; esac
+    [[ "$ALBUM_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+        { echo "--id wants a MusicBrainz release id (a UUID), got: $ALBUM_ID" >&2; exit 2; }
+fi
 
 # ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
 # many files can share one (or the wrong) album tag; a group like that holds
@@ -103,31 +130,6 @@ interactive_pass() {  # <beets args...>
     exit "$status"
 }
 
-# Compose an overlay with one extra setting, inside the container, so each
-# overlay stays the single source of truth: beets --config takes a single file
-# and `beet import --quiet` can only ever turn quiet ON, never off. Writes
-# /config/.run.yaml, regenerated on every use.
-#
-#   release -> album.yaml + import.quiet: no   (prompt with release candidates)
-#   keep    -> adopt.yaml + import.move: yes   (register a directory as-is)
-#
-# Both are interactive, human-driven runs, so both let reviewed.py turn a
-# "use as-is" answer into a marker.
-overlay() {  # <release|keep>
-    "${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets -c "
-import sys, yaml
-base, imp, top = {
-    'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
-    'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
-}[sys.argv[1]]
-conf = yaml.safe_load(open(base))
-for key, value in top.items():
-    conf.setdefault(key, {}).update(value)
-conf.setdefault('import', {}).update(imp)
-yaml.safe_dump(conf, open('/config/.run.yaml', 'w'))
-" "$1"
-}
-
 # Give already-imported bare tracks their release. beets only applies RELEASE
 # metadata during an album import, and `beet import -L` re-imports the library
 # item as whatever it already is - a singleton stays a singleton, so the track
@@ -141,10 +143,34 @@ yaml.safe_dump(conf, open('/config/.run.yaml', 'w'))
 # Optional beets query as "$@".
 upgrade_releases() {
     local files
-    mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' 'reviewed::^$' "$@")
+    # sort -u: the library can hold SEVERAL rows for the SAME path (a legacy
+    # import artifact - this one has 1112 such paths, 1909 redundant rows). beets
+    # imports the first copy of a path by MOVING the file, so the next task for
+    # that path then cannot open it: chroma's fingerprint stage raises
+    # FileNotFoundError out of run_parallel and kills the whole session mid-pass
+    # (seen twice, ~900 tasks in). One task per path removes that entirely.
+    mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' 'reviewed::^$' "$@" | sort -u)
     [ -n "${files[*]:-}" ] || return 0
     "${BEET[@]}" remove -f 'mb_albumid::^$' 'reviewed::^$' "$@"
-    "${BEET[@]}" --config /config/album.yaml import "${files[@]}"
+    # upgrade.yaml = album.yaml + `lastgenre: auto: no`: re-matching the existing
+    # library must not re-derive (and replace) genres for every file it re-imports.
+    # See the overlay's own header.
+    "${BEET[@]}" --config /config/upgrade.yaml import "${files[@]}"
+}
+
+# upgrade_releases plus the numbers worth reporting. A track that finds no release
+# loses its row (see above), so "bare rows left" is not "tracks that failed" - the
+# ones that failed are gone from the count. Count what gained a release and what
+# vanished instead; sets UPG_BEFORE, UPG_GOT and UPG_DROPPED.
+upgrade_report() {  # [<beets query>...]
+    local rel_before rel_after bare_after
+    UPG_BEFORE="$(count 'mb_albumid::^$' 'reviewed::^$' "$@")"
+    rel_before="$(count 'mb_albumid::.' 'reviewed::^$' "$@")"
+    upgrade_releases "$@"
+    bare_after="$(count 'mb_albumid::^$' 'reviewed::^$' "$@")"
+    rel_after="$(count 'mb_albumid::.' 'reviewed::^$' "$@")"
+    UPG_GOT=$((rel_after - rel_before))
+    UPG_DROPPED=$((UPG_BEFORE - bare_after - UPG_GOT))
 }
 
 exec 9>"$LIB/logs/.media-sync.lock"
@@ -201,33 +227,40 @@ case "$MODE" in
         after="$(count 'mb_trackid::^$' 'reviewed::^$' added:-4w..)"
         # A track match can never carry the release (year, release ID, cover
         # art), so give the recent matches their release too. Same window.
-        albums_before="$(count 'mb_albumid::^$' 'reviewed::^$' added:-4w..)"
-        upgrade_releases added:-4w..
-        albums_after="$(count 'mb_albumid::^$' 'reviewed::^$' added:-4w..)"
-        notify "done" "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $((albums_before - albums_after)) of $albums_before got a release."
+        upgrade_report added:-4w..
+        notify "done" "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $UPG_GOT of $UPG_BEFORE got a release, $UPG_DROPPED found none and need 'media-sync --adopt'."
         exit 0 ;;
     --upgrade)
         # The release half of --retag, on demand: give tracks that were imported
         # as bare tracks their release (year, release ID, label, track numbers,
         # Cover Art Archive art). Narrow it with a beets query, or pass `all`.
-        case "${2:-}" in
+        case "$DIR" in
             all) scope=() ;;
             '') scope=(added:-4w..) ;;
-            *) scope=("$2") ;;
+            *) scope=("$DIR") ;;
         esac
-        before="$(count 'mb_albumid::^$' 'reviewed::^$' "${scope[@]}")"
-        upgrade_releases "${scope[@]}"
-        after="$(count 'mb_albumid::^$' 'reviewed::^$' "${scope[@]}")"
-        notify "done" "$((before - after)) of $before track(s) got a release; the rest found no MusicBrainz release and can be re-registered with 'media-sync --adopt'."
+        upgrade_report "${scope[@]}"
+        notify "done" "$UPG_GOT of $UPG_BEFORE track(s) got a release; $UPG_DROPPED found none and lost their row until 'media-sync --adopt' registers them again."
         exit 0 ;;
     --albums)
         # Release pass only, GROUPED: beets sees the directory as album tasks, so
         # a complete album (or a ripped CD) is matched as a whole. The nightly run
         # makes the opposite trade-off - every file judged on its own - because a
         # playlist dump cannot be trusted to group correctly; see release_pass.
+        #
+        # --id pins the release: a pressing that is on MusicBrainz but whose
+        # track list or credits differ from the files (a ripped compilation, a
+        # reissue) scores below the strong threshold and would be skipped, so the
+        # `pinned` overlay accepts the one candidate a person chose.
+        if [ -n "$ALBUM_ID" ]; then
+            overlay pinned
+            exec "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+                --entrypoint /lsiopy/bin/beet beets \
+                -c /config/.run.yaml import -S "$ALBUM_ID" "${DIR:-/downloads}"
+        fi
         exec "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
             --entrypoint /lsiopy/bin/beet beets \
-            --config /config/album.yaml import "${2:-/downloads}" ;;
+            --config /config/album.yaml import "${DIR:-/downloads}" ;;
     --keep)
         # "I know what this is and I want it as it is": register the files with
         # beets without matching them (adopt.yaml), move them into music/ so the
@@ -235,21 +268,33 @@ case "$MODE" in
         # marker is what keeps --upgrade and --retag away from them later.
         overlay keep
         before="$(count)"
-        "${BEET[@]}" -c /config/.run.yaml import "${2:-/downloads}"
+        register_new /config/.run.yaml "${DIR:-/downloads}"
         after="$(count)"
         notify "done" "$((after - before)) new track(s) registered as-is and marked reviewed."
         exit 0 ;;
     --adopt)
-        "${BEET[@]}" -c /config/adopt.yaml import /music
-        # A rebuilt library loses the reviewed markers: the flexible field lives
-        # only in library.db, but the comments prefix travelled with the files.
-        "${BEET[@]}" modify -y reviewed=1 'comments::^reviewed'
+        adopt_library
         notify "done" "beets now tracks $(count) track(s) in music/, $(count 'reviewed::.') of them marked reviewed."
         exit 0 ;;
     --backfill)
-        "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
-        "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+        backfill
         notify "done" "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
+        exit 0 ;;
+    --regroup)
+        # Album rows for tracks that carry a release id but no album row: what
+        # as-is registration and older library damage leave behind. Changes no file.
+        result="$(regroup_albums)"
+        echo "$result"
+        notify "done" "$result"
+        exit 0 ;;
+    --plan)
+        # What --maintenance would face, changing nothing.
+        maintenance_plan || exit 1
+        exit 0 ;;
+    --maintenance)
+        # The one-time routine for an existing library, with a checkpoint and a
+        # resume point; see media-maintenance.
+        maintenance
         exit 0 ;;
     --review)
         # A full review session: the release pass WITH prompts, so a near miss the
@@ -260,30 +305,33 @@ case "$MODE" in
         # that can no longer reach an album afterwards.
         overlay release
         echo "== media-import: album (release) pass, asking =="
-        release_pass "${2:-/downloads}" /config/.run.yaml tty || true
+        release_pass "${DIR:-/downloads}" /config/.run.yaml tty || true
         echo "== media-import: singleton pass =="
-        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
+        interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --singles)
         # The judging half on its own. After a nightly run the release pass has
         # already had its say and left its leftovers, so `media-import --singles`
         # goes straight to the per-track decisions instead of waiting through a
         # release pass that would find nothing new.
-        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
+        interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --interactive)
         # Both passes, the singleton one interactive (what `media-import` runs).
         echo "== media-import: album (release) pass =="
-        release_pass "${2:-/downloads}" /config/album.yaml || true
+        release_pass "${DIR:-/downloads}" /config/album.yaml || true
         echo "== media-import: singleton pass =="
-        interactive_pass --config /config/interactive.yaml import "${2:-/downloads}" ;;
+        interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --release)
         # The release pass WITH prompts, for the near misses automatic matching
         # refuses (verified: a correct release can score 0.05 against the 0.04
         # strong_rec_thresh and be skipped). Answering as-is marks the track.
         overlay release
-        interactive_pass -c /config/.run.yaml import "${2:-/downloads}" ;;
+        if [ -n "$ALBUM_ID" ]; then
+            interactive_pass -c /config/.run.yaml import -S "$ALBUM_ID" "${DIR:-/downloads}"
+        fi
+        interactive_pass -c /config/.run.yaml import "${DIR:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>]|--keep [<dir>]|--adopt|--backfill|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>]]"
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--backfill|--plan|--maintenance [--from <1-6>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
         exit 2 ;;
 esac
 

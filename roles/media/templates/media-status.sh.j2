@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# media-status - what the library pass is doing right now.
+#
+# Read-only and cheap by design: it reads the run log and queries sqlite
+# directly, and never invokes beets or docker - each of those costs tens of
+# seconds and would shell out to the very thing being watched. The step markers
+# (`=== <ts>  n/5 ...`) are the contract it parses: media-sync --maintenance
+# writes one per step, so the lines after the last marker are the current step's
+# work. That is also why this is a separate command and not a media-sync mode:
+# it must not take the writer lock.
+#
+#   media-status            the dashboard (watch -n 60 media-status)
+#   media-status --sample   append one fd sample to logs/fdwatch.log; the
+#                           dashboard reads that file. A timer or a loop calls
+#                           this, so the dashboard never runs docker itself.
+#
+# Exit status: 0 while a pass is active, 1 when idle - so a timer or a cron job
+# can branch on it without parsing anything.
+set -uo pipefail
+
+# The library paths, ansi() and audio_files() are media-lib's (nothing in it runs
+# docker at source time, so this stays a cheap read).
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/media-lib.sh"
+# --maintenance logs here; the pre-fold script wrote night.log, so fall back to
+# that while both may exist.
+LOG="$LIB/logs/maintenance.log"
+[ -f "$LOG" ] || LOG="$LIB/logs/night.log"
+# A run started by hand with its own redirect (`media-sync --upgrade all > x.log`)
+# writes no step markers and lives outside logs/: MEDIA_LOG points the dashboard
+# at it.
+LOG="${MEDIA_LOG:-$LOG}"
+FDLOG="$LIB/logs/fdwatch.log"
+LOCK="$LIB/logs/.media-sync.lock"
+
+
+sample_fds() {
+    # Docker's per-container SOFT nofile default is 1024 whatever the host
+    # allows, and a whole-library import burns ~2 descriptors per task - that
+    # ceiling is what killed the first passes after ~478 tasks. Recording the
+    # count is how a later reader sees the slope without starting a container.
+    pid=""
+    for p in $(pgrep -f 'lsiopy/bin/' 2>/dev/null); do
+        grep -q 'docker-' "/proc/$p/cgroup" 2>/dev/null || continue
+        pid="$p"
+        break
+    done
+    if [ -n "$pid" ]; then
+        printf '%s  fd=%s  %s\n' "$(date -Is)" \
+            "$(ls "/proc/$pid/fd" 2>/dev/null | wc -l)" \
+            "$(tr '\0' ' ' < "/proc/$pid/cmdline" | cut -c1-60)"
+    else
+        printf '%s  idle\n' "$(date -Is)"
+    fi
+}
+
+if [ "${1:-}" = "--sample" ]; then
+    mkdir -p "$(dirname "$FDLOG")"
+    sample_fds >> "$FDLOG"
+    exit 0
+fi
+
+if [ "${1:-}" = "--report" ]; then
+    # What the last run actually did. A multi-day pass otherwise leaves this
+    # nowhere: the log is the stream, and the numbers that matter (yield, rate,
+    # what is left for a second pass) are only ever derived by hand. Log + DB
+    # only, like the dashboard.
+    [ -f "$LOG" ] || { echo "no run log at $LOG"; exit 1; }
+    start_ln=$(grep -an 'run start' "$LOG" | tail -1 | cut -d: -f1)
+    start_ts=$(tail -n +"$start_ln" "$LOG" | grep -aoE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:+-]+' | head -1)
+    end_ts=$(date -r "$LOG" -Is)
+    body=$(tail -n +"$start_ln" "$LOG" | ansi)
+    walked=$(printf '%s\n' "$body" | grep -acE '^(/music/|/downloads/)')
+    skipped=$(printf '%s\n' "$body" | grep -c '^Skipping\.')
+    mb503=$(printf '%s\n' "$body" | grep -c 'too many 503')
+    matched=$(( walked - skipped ))
+    dur=$(( $(date -r "$LOG" +%s) - $(date -d "$start_ts" +%s) ))
+
+    printf 'last run   : %s  ->  %s  (%dh%02dm)\n' \
+        "$start_ts" "$end_ts" $(( dur / 3600 )) $(( (dur % 3600) / 60 ))
+    printf 'steps      : %s\n' \
+        "$(printf '%s\n' "$body" | grep -a '^===' | sed 's/^=== [0-9T:+-]*  *//' | tr '\n' '|')"
+    printf 'tasks      : %s walked   %s matched   %s skipped   %s MB 503s (%.1f%%)\n' \
+        "$walked" "$matched" "$skipped" "$mb503" \
+        "$(awk -v a="$mb503" -v b="$walked" 'BEGIN{print (b>0)? 100*a/b : 0}')"
+    awk -v w="$walked" -v m="$matched" -v d="$dur" 'BEGIN{
+        if (w > 0) printf "rate       : %.1f s/task   (%.1f%% of tasks matched)\n", d / w, 100 * m / w
+    }'
+    printf 'db         : %s items | %s with a release | %s bare AND not reviewed\n' \
+        "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from items;' 2>/dev/null || echo '?')" \
+        "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" "select count(*) from items where mb_albumid is not null and mb_albumid != '';" 2>/dev/null || echo '?')" \
+        "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" "select count(*) from items where (mb_albumid is null or mb_albumid='') and id not in (select entity_id from item_attributes where key='reviewed');" 2>/dev/null || echo '?')"
+    echo 'matched, by top-level directory:'
+    sqlite3 -readonly -cmd '.timeout 3000' "$DB" \
+        "select '  ' || substr(path,1,instr(path,'/')-1) || '  x' || count(*) from items where mb_albumid is not null and mb_albumid != '' group by substr(path,1,instr(path,'/')-1) order by count(*) desc limit 8;" 2>/dev/null
+    [ -f "$FDLOG" ] && printf 'fd peak    : %s\n' \
+        "$(grep -aoE 'fd=[0-9]+' "$FDLOG" | cut -d= -f2 | sort -n | tail -1)"
+    exit 0
+fi
+
+if [ "${1:-}" = "--preflight" ]; then
+    # What to check BEFORE starting a pass. Every item here is something whose
+    # absence cost real time: an unresolved MusicBrainz makes a pass silently
+    # match nothing, a collapsed library.db means a previous pass died mid-flight,
+    # duplicate paths are the crash that killed three passes, and the fd ceiling
+    # is Docker's per-container default of 1024.
+    #
+    # Deliberately no docker here (this stays a cheap, lock-free read): the
+    # container-side resolution check belongs in the role's post_deploy_validate,
+    # which is the only place with a daemon to ask.
+    rc=0
+    say() { printf '%-20s %s\n' "$1:" "$2"; }
+
+    say host "$(hostname)"
+    if getent hosts musicbrainz.org >/dev/null 2>&1; then
+        say musicbrainz "$(getent hosts musicbrainz.org | awk '{print $1}' | head -1)  (host side; the container's own DNS is checked at deploy)"
+    else
+        say musicbrainz "DOES NOT RESOLVE - a pass would silently match nothing"
+        rc=1
+    fi
+
+    if pgrep -f 'night\.sh|media-sync' >/dev/null 2>&1; then
+        say 'in progress' "YES - do not start a second run: the prune step takes no lock"
+    fi
+
+    files=$(audio_files | wc -l)
+    items=$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from items;' 2>/dev/null || echo 0)
+    say library "$files files on disk, $items rows in library.db"
+    # Only a warning when nothing is running: mid-pass the DB *is* collapsed on
+    # purpose (the upgrade step removes every bare row before importing), so the
+    # check would otherwise fire on every healthy pass.
+    if [ "$items" -lt $(( files / 2 )) ] && ! pgrep -f 'night\.sh|media-sync' >/dev/null 2>&1; then
+        say 'DB vs disk' "FAR FEWER ROWS THAN FILES - a previous pass died after removing its bare rows. Let --adopt re-register, or restore a checkpoint."
+        rc=1
+    fi
+
+    dups=$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select coalesce(sum(n-1),0) from (select count(*) n from items group by path having count(*) > 1);' 2>/dev/null || echo 0)
+    say 'duplicate paths' "$dups  (the upgrade path dedupes its list with sort -u; the prune clears the rest)"
+    say 'free space' "$(df -h "$LIB" | awk 'NR==2{print $4" free ("$5" used)"}')"
+    say 'checkpoint' "$(ls -1t "$LIB"/migration/*.db 2>/dev/null | head -1 || echo 'none')"
+    say 'fd ceiling' "65536 for the beets service in the role compose (Docker's per-container default is 1024)"
+    say 'last run' "$(grep -aE 'maintenance run complete|night run complete' "$LOG" 2>/dev/null | tail -1 || echo 'no completion line - the last run did not finish')"
+    exit "$rc"
+fi
+
+[ -f "$LOG" ] || { echo "no run log at $LOG (nothing has run yet)"; exit 1; }
+
+# The lock is the authoritative "a writer is working" signal; the prune phase
+# runs outside it, so the process check is the belt to that braces.
+lock="free"
+flock -n "$LOCK" -c true 2>/dev/null || lock="held"
+if [ "$lock" = "held" ] || pgrep -f 'night\.sh|media-sync (--|[^-])' >/dev/null 2>&1; then
+    running=1
+    state="RUNNING"
+else
+    running=0
+    state="not running"
+fi
+
+printf 'media library pass   %s   [%s, lock %s]\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "$state" "$lock"
+
+marker=$(grep -a '^===' "$LOG" | tail -1)
+ln=$(grep -an '^===' "$LOG" | tail -1 | cut -d: -f1)
+started=$(printf '%s' "$marker" | grep -oE '^=== [0-9T:+-]+' | cut -d' ' -f2)
+if [ -z "$marker" ]; then
+    # No step markers: a single mode run by hand. Its command line and start
+    # time stand in for the marker, and the whole log is the step.
+    pid=$(pgrep -of '^bash [^ ]*media-sync --' 2>/dev/null)
+    if [ -n "$pid" ]; then
+        marker="=== $(ps -o lstart= -p "$pid" | xargs -I{} date -d {} -Is)  $(tr '\0' ' ' < "/proc/$pid/cmdline" | sed 's|.*/||')"
+        started=$(printf '%s' "$marker" | grep -oE '^=== [0-9T:+-]+' | cut -d' ' -f2)
+    fi
+    ln=1
+fi
+body=$(tail -n +"$ln" "$LOG" | ansi)
+
+echo "current  : ${marker:-<none>}"
+el=0
+if [ -n "$started" ]; then
+    el=$(( $(date +%s) - $(date -d "$started" +%s) ))
+    printf 'elapsed  : %dh%02dm\n' $(( el / 3600 )) $(( (el % 3600) / 60 ))
+fi
+
+walked=$(printf '%s\n' "$body" | grep -acE '^(/music/|/downloads/)')
+skipped=$(printf '%s\n' "$body" | grep -c '^Skipping\.')
+mb503=$(printf '%s\n' "$body" | grep -c 'too many 503')
+matched=$(( walked - skipped ))
+# the prune records how many tracks this pass has to get through
+target=$(grep -a 'beets now tracks' "$LOG" | tail -1 | grep -oE '[0-9]+$')
+target=${target:-0}
+# --adopt registers files as-is: it prints no "Skipping." line (every path line
+# is a registered row, not a match) and the prune's track count belongs to the
+# upgrade step. Rows registered so far = walked, so the untracked files at the
+# start of the step were (files on disk - rows now + walked). The busy timeout
+# on sqlite3 matters here: adopt holds long write transactions.
+case "$marker" in
+*upgrade*)
+    # Without a prune record the pass has no stated size: what it must walk is
+    # every file that has no release yet (files on disk minus rows that have one).
+    if [ "$target" -eq 0 ]; then
+        files=$(audio_files | wc -l)
+        withrel=$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" "select count(*) from items where coalesce(mb_albumid,'')!='';" 2>/dev/null || echo 0)
+        target=$(( files - withrel ))
+    fi
+    ;;
+*adopt*)
+    # register_new prints "to register: N file(s)" before it starts; N is the
+    # size of this step. A path line is a file registered, never a match.
+    matched=$walked
+    skipped=0
+    target=$(printf '%s\n' "$body" | grep -a '^to register:' | tail -1 | grep -oE '[0-9]+' | head -1)
+    target=${target:-0}
+    ;;
+esac
+
+printf 'tasks    : %s walked (%s matched, %s skipped, %s MB 503s)\n' \
+    "$walked" "$matched" "$skipped" "$mb503"
+# Recent, not cumulative: a step's total only ever grows, so a historic outage
+# would keep the warning lit for days and train us to ignore it. The watcher
+# still compares successive totals (growth is the signal); this line answers
+# "is it failing NOW".
+dns=$(printf '%s\n' "$body" | tail -500 | grep -aciE 'NameResolutionError|Failed to resolve|gaierror')
+printf 'dns      : %s resolution failure(s) in the last 500 lines%s\n' "$dns" \
+    "$( [ "$dns" -gt 0 ] && echo '   <-- lookups are failing now, matches are being lost silently' )"
+if [ "$walked" -gt 0 ] && [ "$target" -gt 0 ]; then
+    awk -v w="$walked" -v t="$target" -v e="$el" -v st="$started" 'BEGIN{
+        s = e / w
+        pct = 100 * w / t
+        cells = int(pct / 100 * 30)
+        bar = sprintf("%*s", cells, "")
+        gsub(/ /, "#", bar)
+        printf "progress : [%-30s] %3.0f%%   %d of %d tasks\n", bar, pct, w, t
+        printf "rate     : %.1f s/task   eta %.1f h   (step started %s)\n", s, (t - w) * s / 3600, st
+    }'
+fi
+
+printf '\ndb items : %s   albums %s   (collapses mid-pass on purpose: the upgrade\n' \
+    "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from items;' 2>/dev/null || echo '?')" \
+    "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from albums;' 2>/dev/null || echo '?')"
+printf '                                      pass removes every bare row before importing)\n'
+printf 'bare rows: %s   (0 until step 4 re-registers the unmatched ones - that\n' \
+    "$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" "select count(*) from items where mb_albumid is null or mb_albumid='';" 2>/dev/null || echo '?')"
+printf '                                      count is the second-pass workload)\n'
+printf 'disk     : %s\n' "$(df -h "$LIB" | awk 'NR==2{print $4" free ("$5" used)"}')"
+printf 'host     : load %s   %s\n' "$(cut -d' ' -f1-3 /proc/loadavg)" \
+    "$(awk '/MemAvailable/{printf "%dM ram free", $2/1024}' /proc/meminfo)"
+
+if [ -f "$FDLOG" ]; then
+    printf 'fds      : %s\n' "$(tail -1 "$FDLOG")"
+    printf 'fd peak  : %s   (the compose ulimits raise the per-container ceiling)\n' \
+        "$(grep -aoE 'fd=[0-9]+' "$FDLOG" | cut -d= -f2 | sort -n | tail -1)"
+fi
+
+echo
+echo 'last lines:'
+printf '%s\n' "$body" | grep -vE '^(Skipping\.|$)' | tail -3 | cut -c1-150
+
+exit $(( running == 1 ? 0 : 1 ))

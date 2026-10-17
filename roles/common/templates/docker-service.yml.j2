@@ -54,6 +54,16 @@
       - {{ network }}
 {% endfor %}
 {% endif %}
+{# Explicit resolvers. Docker otherwise hands the container the host's list via
+   its embedded DNS, which for a host behind a Pi-hole means one flaky resolver
+   and a 1s single-attempt timeout - a hiccup then makes every outbound lookup
+   fail, and a long unattended pass keeps "succeeding" while doing nothing. #}
+{% if service_dns is defined %}
+    dns:
+{% for server in service_dns %}
+      - "{{ server }}"
+{% endfor %}
+{% endif %}
 {% if service_profiles is defined %}
     profiles:
 {% for profile in service_profiles %}
@@ -84,6 +94,18 @@
       timeout: {{ service_healthcheck.timeout | default('10s') }}
       retries: {{ service_healthcheck.retries | default('3') }}
       start_period: {{ service_healthcheck.start_period | default('40s') }}
+{% endif %}
+{# Per-container rlimits. Docker's default SOFT nofile is 1024 no matter what
+   the daemon's LimitNOFILE says (that only becomes the hard limit), and a
+   long-running importer can exhaust it: beets died with EMFILE after ~478
+   tasks of a whole-library pass. #}
+{% if service_ulimits is defined %}
+    ulimits:
+{% for ulimit_name, ulimit_value in service_ulimits.items() %}
+      {{ ulimit_name }}:
+        soft: {{ ulimit_value.soft }}
+        hard: {{ ulimit_value.hard }}
+{% endfor %}
 {% endif %}
 {% if service_resources is defined or service_devices is defined %}
     deploy:

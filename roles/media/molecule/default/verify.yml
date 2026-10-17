@@ -23,6 +23,9 @@
         - "{{ media_home }}/scripts/media-import.sh"
         - "{{ media_library_path }}/beets/plugins/reviewed.py"
         - "{{ media_home }}/scripts/beet.sh"
+        - "{{ media_home }}/scripts/media-lib.sh"
+        - "{{ media_home }}/scripts/media-maintenance.sh"
+        - "{{ media_home }}/scripts/media-status.sh"
       register: media_files
 
     - name: Parse the deployed files
@@ -40,6 +43,9 @@
         media_import: "{{ media_files.results[10].content | b64decode }}"
         reviewed_plugin: "{{ media_files.results[11].content | b64decode }}"
         beet_helper: "{{ media_files.results[12].content | b64decode }}"
+        media_lib: "{{ media_files.results[13].content | b64decode }}"
+        media_maintenance: "{{ media_files.results[14].content | b64decode }}"
+        media_status: "{{ media_files.results[15].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -231,6 +237,52 @@
           - "'mode=--review' in media_import"
         fail_msg: "media-import should be a wrapper, not a second implementation:\n{{ media_import }}"
         success_msg: "[OK] media-import: interactive wrapper over media-sync"
+
+    - name: Assert the shared modules own the library operations
+      # The behaviour is proven against a real beets by
+      # scripts/media/engine-test.sh; this pins the text that behaviour rests on,
+      # so a refactor cannot quietly drop it.
+      ansible.builtin.assert:
+        that:
+          # adopt registers only files with no row: importing the directory
+          # re-creates every known row (new id, no album row, no reviewed flag).
+          - "'register_new() {' in media_lib"
+          - "'comm -23' in media_lib"
+          - "'unregistered_files() {' in media_lib"
+          - "'register_new /config/adopt.yaml /music' in media_lib"
+          - "'-c /config/adopt.yaml import /music' not in media_lib"
+          - "'-c /config/adopt.yaml import /music' not in media_sync"
+          # regroup builds album rows from release ids and touches no file
+          - "'lib.add_album(items)' in media_lib"
+          # prune drops rows, never files (delete=False)
+          - "'item.remove(False)' in media_lib"
+          - "'prune_rows() {' in media_lib"
+          # checkpoint, preflight, the pinned-release overlay
+          - "'checkpoint() {' in media_lib"
+          - "'musicbrainz_reachable() {' in media_lib"
+          - "'strong_rec_thresh' in media_lib"
+          # one definition of the constants, in the library only
+          - "'LIB=\"' in media_lib"
+          - "'LIB=\"' not in media_sync"
+          - "'media-lib.sh' in media_sync"
+          - "'media-lib.sh' in media_status"
+          # the maintenance routine: six marked steps, a resume point, and the
+          # step-3 warning
+          - "'MAINT_STEPS=6' in media_maintenance"
+          - "'--from $CURRENT_STEP' in media_maintenance"
+          - "'musicbrainz_reachable' in media_maintenance"
+          - "'checkpoint' in media_maintenance"
+          # the engine exposes them, and validates what a person types
+          - "'--maintenance)' in media_sync"
+          - "'--regroup)' in media_sync"
+          - "'--plan)' in media_sync"
+          - "'UPG_DROPPED' in media_sync"
+          - "'a MusicBrainz release id (a UUID)' in media_sync"
+          # the dashboard stays read-only: no container, no lock
+          - "'compose run' not in media_status"
+          - "'flock -n' in media_status"
+        fail_msg: "shared modules wrong:\n{{ media_lib }}"
+        success_msg: "[OK] media-lib / media-maintenance own the library operations, shared with sync and status"
 
     - name: Assert the interactive wrapper refuses a run without a terminal
       # It is never scheduled (cron runs media-sync), and this is the guard that

@@ -9,7 +9,9 @@
 #                                   singleton pass asks per track
 #   media-import --singles [<dir>]  the judging pass on its own - after a nightly
 #                                   run, go straight to the leftovers
-#   media-import --release [<dir>]  the release pass asking, on its own
+#   media-import --release [<dir>] [--id <release>]
+#                                   the release pass asking, on its own; --id
+#                                   offers only that MusicBrainz release
 #   media-import --interactive [<dir>]  the nightly pairing (quiet release pass,
 #                                   then the singleton pass) but asking per track
 #
@@ -31,4 +33,6 @@ case "${1:-}" in
         ;;
 esac
 
-exec /usr/local/bin/media-sync "$mode" "${1:-/downloads}"
+# The directory and --id travel on to the engine, which owns their defaults and
+# validation.
+exec /usr/local/bin/media-sync "$mode" "$@"

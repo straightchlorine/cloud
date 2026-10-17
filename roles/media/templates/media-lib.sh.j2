@@ -1,0 +1,223 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2016  # beets format/query strings ('$id', '$path') are
+# literal beets syntax, never shell expansion - hence quoted.
+# media-lib - what media-sync and media-status share. Sourced, never run: the
+# constants, the beets invocation, and every operation on the LIBRARY itself
+# (registering files, pruning rows, regrouping albums, checkpoints), so each
+# exists exactly once. The passes that decide what to import live in media-sync.
+#
+# Nothing here starts a container at source time; media-status sources this too
+# and must stay a cheap, lock-free read.
+
+LIB="{{ media_library_path }}"
+MEDIA_HOME="{{ media_home }}"
+DB="$LIB/beets/library.db"
+COMPOSE=(docker compose -f "$MEDIA_HOME/docker-compose.yml")
+# --entrypoint skips /init (and the beets web UI) so each run is a one-off that
+# exits; service_user sets the uid so beets' moves and tag writes stay owned by
+# the remapped stack user. PYTHONUNBUFFERED: without a TTY stdout is
+# block-buffered, so a long release pass looks dead while it works.
+BEET=("${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
+    --entrypoint /lsiopy/bin/beet beets)
+# The same, but with a TTY: for the modes that prompt (used by media-sync).
+# shellcheck disable=SC2034
+BEET_TTY=("${COMPOSE[@]}" run --rm -it -e PYTHONUNBUFFERED=1 \
+    --entrypoint /lsiopy/bin/beet beets)
+# beets' own python, for the few things the CLI has no command for.
+BEET_PY=("${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets)
+
+ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
+
+notify() {
+    # ntfy-notify reads its API key from /etc/ntfy/notify-api-key, which the
+    # common role deploys root:root 0600 - so when the cron (or a reviewer) runs
+    # this as the unprivileged stack user, it finds no key and exits 0 without
+    # sending anything: every mode's notification was silently dropped. That
+    # user has NOPASSWD sudo, so go through sudo; keep the bare call as a
+    # fallback (correct if the key ever becomes group-readable) and never let a
+    # failed notification abort a mode mid-run.
+    local title
+    title="$(hostname): media-sync ${MODE#--} $1"
+    sudo -n /usr/local/bin/ntfy-notify "$title" "$2" "${3:-default}" "${4:-musical_note}" ||
+        ntfy-notify "$title" "$2" "${3:-default}" "${4:-musical_note}" ||
+        true
+}
+
+count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
+
+# --- files and rows -------------------------------------------------------------
+
+# Host paths of every audio file under a directory (default: the whole music/).
+# One definition of "audio file", used by registration and by the dashboard.
+audio_files() {  # [<host dir>]
+    find "${1:-$LIB/music}" -type f ! -name '.*' \
+        \( -iname '*.opus' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \
+        -o -iname '*.ogg' -o -iname '*.wav' \)
+}
+
+# Container paths of the files under <container dir> that have no row yet. The
+# host mirrors the container's /music and /downloads under $LIB, so the mapping
+# is a prefix. LC_ALL=C on both sides: comm needs both lists sorted by the same
+# rule, and the library holds names in every script.
+unregistered_files() {  # <container dir>
+    comm -23 \
+        <(audio_files "$LIB$1" | sed "s|^$LIB||" | LC_ALL=C sort -u) \
+        <("${BEET[@]}" ls -f '$path' < /dev/null | LC_ALL=C sort -u)
+}
+
+# Register files as they are, but ONLY the ones with no row. Pointing the importer
+# at a directory instead re-imports files the library already holds, and beets
+# replaces the old row with a new one: a fresh id, no album row (the items come
+# back as singletons) and the flexible fields (reviewed) gone - for the whole
+# library on every pass, taking minutes where this takes seconds.
+register_new() {  # <beets config> <container dir>
+    local cfg="$1" dir="$2" list
+    # Array length expansions are avoided in a .j2 (their brace-hash opens a Jinja comment).
+    list="$(unregistered_files "$dir")"
+    if [ -z "$list" ]; then
+        echo "to register: 0 file(s)"
+        return 0
+    fi
+    echo "to register: $(printf '%s\n' "$list" | wc -l) file(s)"
+    # Batches keep the argument list short and one broken file from costing the
+    # whole run; -d newline because paths hold spaces and quotes, not newlines.
+    printf '%s\n' "$list" |
+        xargs -d '\n' -n 200 -- "${BEET[@]}" -c "$cfg" import
+}
+
+# Drop rows whose file is gone (a track removed on purpose). The row only: a
+# file is never deleted. With <dry> the rows are counted and nothing changes.
+prune_rows() {  # [dry]
+    local apply=1
+    [ "${1:-}" != dry ] || apply=0
+    "${COMPOSE[@]}" run --rm -T -e "PRUNE=$apply" --entrypoint /lsiopy/bin/python3 beets -c "
+import os
+from beets.library import Library
+
+# directory= is explicit on purpose: only beets' CLI entry point reads
+# /config/config.yaml, so a bare Library() falls back to the default ~/Music
+# and then EVERY item looks like an orphan.
+lib = Library('/config/library.db', directory='/music')
+items = list(lib.items())
+gone = [i for i in items if not os.path.exists(i.path)]
+print('orphan rows:', len(gone), 'of', len(items))
+for item in gone[:5]:
+    print('  e.g.', item.path)
+if os.environ.get('PRUNE') == '1':
+    # delete=False: the ROW only, never the file. with_album defaults to True,
+    # so an album row goes with the last item that belonged to it.
+    with lib.transaction():
+        for item in gone:
+            item.remove(False)
+    print('pruned', len(gone), 'row(s); beets now tracks', len(list(lib.items())))
+else:
+    print('dry run: nothing removed.')
+"
+}
+
+# Give tracks that carry a release id but no album row their album row back.
+# Importing as a singleton (what the as-is registration does) stores a track
+# without one even when the file names its release, and that is also how rows
+# damaged before register_new existed look. Grouping by release id and letting
+# beets build the album from its items changes no file and no tag; a folder's
+# cover.jpg becomes the album's art.
+regroup_albums() {
+    "${BEET_PY[@]}" -c "
+import collections, os
+from beets import config
+from beets.library import Library
+
+config.read(user=False, defaults=True)
+config.set_file('/config/config.yaml')
+lib = Library('/config/library.db', directory='/music')
+groups = collections.defaultdict(list)
+for item in lib.items():
+    if item.album_id is None and (item.get('mb_albumid') or ''):
+        groups[item.mb_albumid].append(item)
+made = 0
+with lib.transaction():
+    for items in groups.values():
+        album = lib.add_album(items)
+        art = os.path.join(os.path.dirname(items[0].path), b'cover.jpg')
+        if os.path.exists(art):
+            album.artpath = art
+            album.store()
+        made += 1
+print('regrouped', made, 'album(s) from', sum(len(g) for g in groups.values()), 'track(s)')
+"
+}
+
+# A copy of library.db to fall back on. Plain cp is consistent here because the
+# caller holds the writer lock. Three are kept; never take one of a library that
+# is collapsed on purpose (mid-upgrade), or the good copy rotates away.
+checkpoint() {
+    local f
+    f="$LIB/beets/library.db-checkpoint-$(date +%Y%m%d-%H%M%S).bak"
+    cp -- "$DB" "$f"
+    # shellcheck disable=SC2012  # names are ours: date-stamped, no odd characters
+    ls -1t "$LIB"/beets/library.db-checkpoint-*.bak | tail -n +4 | xargs -r rm -f --
+    echo "$f"
+}
+
+# Can the beets container reach MusicBrainz? A pass that cannot silently matches
+# nothing and logs "Skipping." for days, so ask before starting one.
+musicbrainz_reachable() {
+    "${BEET_PY[@]}" -c "
+import socket, sys
+try:
+    socket.create_connection((socket.gethostbyname('musicbrainz.org'), 443), 10).close()
+except OSError as err:
+    print('musicbrainz.org unreachable from the beets container:', err)
+    sys.exit(1)
+"
+}
+
+# Compose an overlay with one extra setting, inside the container, so each
+# overlay stays the single source of truth: beets --config takes a single file
+# and `beet import --quiet` can only ever turn quiet ON, never off. Writes
+# /config/.run.yaml, regenerated on every use.
+#
+#   release -> album.yaml + import.quiet: no            (prompt with candidates)
+#   keep    -> adopt.yaml + import.move: yes            (register a directory as-is)
+#   pinned  -> album.yaml + match.strong_rec_thresh 0.3 (the release was chosen
+#              by a person with --id: a lone candidate is accepted even when
+#              the pressing's own track list or credits differ from the files)
+#
+# The prompting kinds are human-driven runs, so they let reviewed.py turn a
+# "use as-is" answer into a marker.
+overlay() {  # <release|keep|pinned>
+    "${BEET_PY[@]}" -c "
+import sys, yaml
+base, imp, top = {
+    'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
+    'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
+    'pinned': ('/config/album.yaml', {}, {'match': {'strong_rec_thresh': 0.3}}),
+}[sys.argv[1]]
+conf = yaml.safe_load(open(base))
+for key, value in top.items():
+    conf.setdefault(key, {}).update(value)
+conf.setdefault('import', {}).update(imp)
+yaml.safe_dump(conf, open('/config/.run.yaml', 'w'))
+" "$1"
+}
+
+# Register what is on disk and has no row, then restore the reviewed markers.
+adopt_library() {
+    register_new /config/adopt.yaml /music
+    # A rebuilt library loses the reviewed markers: the flexible field lives only
+    # in library.db, but the comments prefix travelled with the files. `beet
+    # modify` raises "No matching objects to modify." when its query matches
+    # nothing - and a library that has never had a "use as-is" decision has none -
+    # so restore only if there is something to restore.
+    if [ "$(count 'comments::^reviewed')" -gt 0 ]; then
+        "${BEET[@]}" modify -y reviewed=1 'comments::^reviewed'
+    fi
+}
+
+# Lyrics and ReplayGain for tracks that came in without them (slow; run under
+# tmux or --maintenance). media_backfill_exclude is a beets query - `^` negates -
+# that keeps a kind of file out of both, e.g. an audiobook.
+backfill() {
+    "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+    "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+}

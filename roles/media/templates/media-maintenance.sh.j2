@@ -1,0 +1,100 @@
+# shellcheck shell=bash
+# media-maintenance - the existing-library routine behind
+# `media-sync --maintenance`. Sourced by media-sync, which holds the writer lock
+# for the whole run; every operation it uses lives in media-lib or media-sync.
+#
+# It exists for a library that was never matched: a migrated one, or years of
+# as-is imports. Run about once a year, takes hours to days, and is the one thing
+# in this role that can lose data when it is wrong, hence the checkpoint, the
+# resume point and the preflight.
+#
+#   1 adopt     register files that have no row
+#   2 prune     drop rows whose file is gone (after a checkpoint of library.db)
+#   3 upgrade   re-match every bare track against MusicBrainz as part of its
+#               release. It removes the bare rows FIRST and re-imports the files,
+#               so the library is collapsed until step 4 - the point of no return
+#   4 adopt     re-register what step 3 found no release for
+#   5 regroup   album rows for tracks that carry a release id
+#   6 backfill  lyrics + ReplayGain
+#
+# A failed or interrupted run says where to resume: `--from N`. Resume from 4 or
+# later after step 3 started - never from 1-3 on a collapsed library.
+MAINT_LOG="$LIB/logs/maintenance.log"
+MAINT_STEPS=6
+
+maint_log() { printf '\n=== %s  %s\n' "$(date -Is)" "$*"; }
+
+maintenance_plan() {
+    echo "files on disk : $(audio_files | wc -l)"
+    echo "rows          : $(count)"
+    echo "unregistered  : $(unregistered_files /music | wc -l)   (step 1 and 4 register these)"
+    echo "bare rows     : $(count 'mb_albumid::^$' 'reviewed::^$')   (step 3 re-matches these)"
+    prune_rows dry
+    if musicbrainz_reachable; then
+        echo "musicbrainz   : reachable from the beets container"
+    else
+        echo "musicbrainz   : NOT reachable - step 3 would match nothing"
+        return 1
+    fi
+}
+
+# <n> <label> <command...>: run a step unless --from skips it. CURRENT_STEP is
+# what the failure notification tells you to resume from.
+maint_step() {
+    CURRENT_STEP="$1"
+    if [ "$FROM" -gt "$1" ]; then
+        maint_log "skipping step $1/$MAINT_STEPS ($2): --from $FROM"
+        return 0
+    fi
+    maint_log "$1/$MAINT_STEPS  $2"
+    shift 2
+    "$@"
+}
+
+maint_prune() {
+    echo "checkpoint: $(checkpoint)"
+    prune_rows
+}
+
+maint_upgrade() {
+    # Resuming at 3 means step 2 was skipped, so nothing took a checkpoint yet.
+    [ "$FROM" -eq 3 ] && echo "checkpoint: $(checkpoint)"
+    upgrade_releases
+}
+
+maintenance() {
+    case "$FROM" in
+        [1-6]) ;;
+        *) echo "media-sync --maintenance --from takes a step number, 1-$MAINT_STEPS" >&2; exit 2 ;;
+    esac
+    mkdir -p "$LIB/logs"
+    # -E: the ERR trap must also fire for a command that fails inside one of the
+    # step functions, or the failure would exit the run without a word.
+    set -E
+    # Everything below also lands in the log, however the run was started.
+    exec > >(tee -a "$MAINT_LOG") 2>&1
+    local began
+    began=$(date +%s)
+    CURRENT_STEP="$FROM"
+    trap 'notify failed "Step $CURRENT_STEP/$MAINT_STEPS (line $LINENO). See $MAINT_LOG. Resume with: media-sync --maintenance --from $CURRENT_STEP" high rotating_light,error' ERR
+
+    maint_log "maintenance run start from step $FROM/$MAINT_STEPS (log: $MAINT_LOG)"
+    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, backfill. Hours to days; one more ntfy when it is done."
+    # Only step 3 and the backfill need MusicBrainz or lrclib, but a collapsed
+    # library is the wrong place to find out it is unreachable.
+    if [ "$FROM" -le 3 ] && ! musicbrainz_reachable; then
+        notify failed "musicbrainz.org is unreachable from the beets container; nothing was changed." high rotating_light,error
+        exit 1
+    fi
+
+    maint_step 1 "adopt    (register files that have no row)" adopt_library
+    maint_step 2 "prune    (drop rows whose file is gone)" maint_prune
+    maint_step 3 "upgrade  (give every bare track its release; the library is collapsed until step 4)" maint_upgrade
+    maint_step 4 "adopt    (re-register what step 3 found no release for)" adopt_library
+    maint_step 5 "regroup  (album rows for tracks that carry a release id)" regroup_albums
+    maint_step 6 "backfill (lyrics and ReplayGain)" backfill
+
+    maint_log "maintenance run complete"
+    local took=$(( $(date +%s) - began ))
+    notify "done" "complete after $((took / 3600))h$(( (took % 3600) / 60 ))m: $(count) track(s), $(count 'mb_albumid::.') with a release, $(count 'lyrics::.') with lyrics."
+}
