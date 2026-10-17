@@ -52,7 +52,9 @@ media_backup_retention: 14
 media_backup_schedule_hour: "02"
 media_backup_schedule_minute: "30"
 
-# Resolvers handed to the beets container (see the service's service_dns).
+# Resolvers handed to the beets container (see the service's service_dns). Public
+# fallback for a host that sets none; a host on a LAN with its own resolvers
+# overrides this in host_vars (the media host does).
 media_beets_dns:
   - 1.1.1.1
   - 9.9.9.9
@@ -142,11 +144,12 @@ media_compose_services:
       - "{{ media_library_path }}/downloads:/downloads"
     service_networks:
       - stack
-    # Public resolvers on purpose: this container only ever looks up MusicBrainz
-    # and AcoustID, and inheriting the host's resolver list (a Pi-hole plus a
+    # Pinned on purpose: inheriting the host's resolver list (a Pi-hole plus a
     # fallback that is not always reachable, 1s timeout, one attempt) meant a
-    # single Pi-hole hiccup made EVERY lookup fail - while the pass kept logging
+    # single hiccup made EVERY lookup fail - while the pass kept logging
     # "Skipping." and looked healthy. 3913 such failures in one run, zero matches.
+    # media_beets_dns names the resolvers explicitly, so the container no longer
+    # depends on whatever the host's resolv.conf looks like at that moment.
     service_dns: "{{ media_beets_dns }}"
     # Docker's per-container SOFT nofile default is 1024 regardless of the
     # daemon's LimitNOFILE, which only becomes the hard limit - and a

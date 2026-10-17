@@ -97,8 +97,11 @@
   # nothing - 3913 such failures hid inside a run that otherwise looked healthy.
   # Docker hands the container the host's resolver list through its embedded DNS,
   # so a Pi-hole hiccup or a tailnet reshuffle is enough to break it. The role now
-  # pins public resolvers on the beets service (media_beets_dns); this asserts both
-  # that they arrived in the container and that they actually answer.
+  # pins public resolvers on the beets service (media_beets_dns); this asserts that
+  # lookups from inside the container actually answer. The pinned servers are not
+  # visible in the container's /etc/resolv.conf - on the stack's user-defined
+  # network that file only lists Docker's embedded resolver (127.0.0.11), which
+  # forwards to them - so the next task checks the compose file for them.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T --entrypoint /lsiopy/bin/python3 beets -c
@@ -113,5 +116,15 @@
     media_beets_dns_check.rc != 0
     or 'musicbrainz.org' not in media_beets_dns_check.stdout
     or 'api.acoustid.org' not in media_beets_dns_check.stdout
-    or media_beets_dns[0] not in media_beets_dns_check.stdout
+  tags: [post_validation]
+
+- name: Verify the beets service pins the configured resolvers
+  ansible.builtin.command: docker compose -f {{ media_home }}/docker-compose.yml config --format json
+  become: true
+  become_user: "{{ ansible_user }}"
+  register: media_compose_config
+  changed_when: false
+  failed_when: >-
+    media_compose_config.rc != 0
+    or (media_compose_config.stdout | from_json).services.beets.dns | default([]) != media_beets_dns
   tags: [post_validation]
