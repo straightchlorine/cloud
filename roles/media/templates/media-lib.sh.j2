@@ -297,10 +297,13 @@ print('dropped', len(gone), 'row(s) of', len(wanted), 'file(s)')
 # An album qualifies with one release id among its matched tracks, at least three
 # of them, and no more bare tracks than matched ones. A bare track is only
 # included if its title is a track of that release - fetched from MusicBrainz -
-# so a bonus track or a different song under the same album tag stays out.
+# so a bonus track or a different song under the same album tag stays out. A bare
+# track whose title a matched track of the album already has is a second copy of
+# it (another download, the other format): pinning it would put the same track
+# into the album twice, so it is left alone and counted on stderr.
 complete_plan() {
     "${BEET_PY[@]}" -c "
-import collections, difflib, json, re, time, unicodedata, urllib.request
+import collections, difflib, json, re, sys, time, unicodedata, urllib.request
 from beets.library import Library
 
 def key(text):
@@ -331,6 +334,7 @@ def release_titles(mbid):
     return None
 
 lib = Library('/config/library.db', directory='/music')
+copies = 0
 groups = collections.defaultdict(list)
 for item in lib.items():
     if (item.album or '').strip():
@@ -346,7 +350,11 @@ for items in groups.values():
     if titles is None:
         continue
     for item in bare:
-        if any(same_title(item.title, t) for t in titles):
+        if any(same_title(item.title, m.title) for m in matched):
+            copies += 1
+        elif any(same_title(item.title, t) for t in titles):
             print('%s\t%s\t%s' % (mbid, matched[0].album, item.path.decode('utf-8', 'surrogateescape')))
+if copies:
+    print('%d bare track(s) are copies of a track the album already has; left alone' % copies, file=sys.stderr)
 "
 }
