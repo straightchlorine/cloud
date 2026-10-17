@@ -55,25 +55,36 @@ audio_files() {  # [<host dir>]
         -o -iname '*.ogg' -o -iname '*.wav' \)
 }
 
+# The container paths beets already holds a row for. Sorted with LC_ALL=C: comm
+# needs both lists sorted by the same rule, and the library holds names in every
+# script.
+registered_paths() {
+    "${BEET[@]}" ls -f '$path' < /dev/null | LC_ALL=C sort -u
+}
+
 # Container paths of the files under <container dir> that have no row yet. The
 # host mirrors the container's /music and /downloads under $LIB, so the mapping
-# is a prefix. LC_ALL=C on both sides: comm needs both lists sorted by the same
-# rule, and the library holds names in every script.
+# is a prefix.
 unregistered_files() {  # <container dir>
     comm -23 \
         <(audio_files "$LIB$1" | sed "s|^$LIB||" | LC_ALL=C sort -u) \
-        <("${BEET[@]}" ls -f '$path' < /dev/null | LC_ALL=C sort -u)
+        <(registered_paths)
 }
 
 # Register files as they are, but ONLY the ones with no row. Pointing the importer
 # at a directory instead re-imports files the library already holds, and beets
 # replaces the old row with a new one: a fresh id, no album row (the items come
 # back as singletons) and the flexible fields (reviewed) gone - for the whole
-# library on every pass, taking minutes where this takes seconds.
-register_new() {  # <beets config> <container dir>
-    local cfg="$1" dir="$2" list
-    # Array length expansions are avoided in a .j2 (their brace-hash opens a Jinja comment).
-    list="$(unregistered_files "$dir")"
+# library on every pass, taking minutes where this takes seconds. The candidates
+# (container paths, one per line) come on stdin; whatever already has a row is
+# dropped from them here.
+register_paths() {  # <beets config>
+    local cfg="$1" list
+    # No array-length expansions in a .j2 (their brace-hash opens a Jinja comment).
+    # Only files still on disk: a pin hands over the paths its files had BEFORE the
+    # import moved them, and a path that no longer exists is not "unregistered".
+    list="$(comm -23 <(LC_ALL=C sort -u) <(registered_paths) |
+        while IFS= read -r path; do [ ! -e "$LIB$path" ] || printf '%s\n' "$path"; done)"
     if [ -z "$list" ]; then
         echo "to register: 0 file(s)"
         return 0
@@ -83,6 +94,10 @@ register_new() {  # <beets config> <container dir>
     # whole run; -d newline because paths hold spaces and quotes, not newlines.
     printf '%s\n' "$list" |
         xargs -d '\n' -n 200 -- "${BEET[@]}" -c "$cfg" import
+}
+
+register_new() {  # <beets config> <container dir>
+    audio_files "$LIB$2" | sed "s|^$LIB||" | register_paths "$1"
 }
 
 # Drop rows whose file is gone (a track removed on purpose). The row only: a
@@ -119,12 +134,14 @@ else:
 # Importing as a singleton (what the as-is registration does) stores a track
 # without one even when the file names its release, and that is also how rows
 # damaged before register_new existed look. Grouping by release id and letting
-# beets build the album from its items changes no file and no tag; a folder's
-# cover.jpg becomes the album's art.
+# beets build the album from its items changes no file and no tag. A release
+# that already has an album row takes the orphans into it (one row per release);
+# a folder's cover.jpg becomes the art of a row that has none.
 regroup_albums() {
     "${BEET_PY[@]}" -c "
 import collections, os
 from beets import config
+from beets.dbcore import MatchQuery
 from beets.library import Library
 
 config.read(user=False, defaults=True)
@@ -134,16 +151,25 @@ groups = collections.defaultdict(list)
 for item in lib.items():
     if item.album_id is None and (item.get('mb_albumid') or ''):
         groups[item.mb_albumid].append(item)
-made = 0
+made = joined = 0
 with lib.transaction():
-    for items in groups.values():
-        album = lib.add_album(items)
+    for mbid, items in groups.items():
+        existing = list(lib.albums(MatchQuery('mb_albumid', mbid)))
+        if existing:
+            album = existing[0]
+            for item in items:
+                item.album_id = album.id
+                item.store()
+            joined += 1
+        else:
+            album = lib.add_album(items)
+            made += 1
         art = os.path.join(os.path.dirname(items[0].path), b'cover.jpg')
-        if os.path.exists(art):
+        if not album.get('artpath') and os.path.exists(art):
             album.artpath = art
             album.store()
-        made += 1
-print('regrouped', made, 'album(s) from', sum(len(g) for g in groups.values()), 'track(s)')
+print('regrouped', made, 'album(s) from', sum(len(g) for g in groups.values()), 'track(s)', end='')
+print(' (%d joined an existing album)' % joined if joined else '')
 "
 }
 
@@ -179,9 +205,11 @@ except OSError as err:
 #
 #   release -> album.yaml + import.quiet: no            (prompt with candidates)
 #   keep    -> adopt.yaml + import.move: yes            (register a directory as-is)
-#   pinned  -> album.yaml + match.strong_rec_thresh 0.3 (the release was chosen
-#              by a person with --id: a lone candidate is accepted even when
-#              the pressing's own track list or credits differ from the files)
+#   pinned  -> album.yaml + match.strong_rec_thresh 0.3 + duplicate_action merge
+#              (the release was chosen with --id: a lone candidate is accepted
+#              even when the pressing's own track list or credits differ from the
+#              files, and a file imported on its own joins the album row of the
+#              same release instead of starting a one-track album of its own)
 #
 # The prompting kinds are human-driven runs, so they let reviewed.py turn a
 # "use as-is" answer into a marker.
@@ -191,7 +219,7 @@ import sys, yaml
 base, imp, top = {
     'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
     'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
-    'pinned': ('/config/album.yaml', {}, {'match': {'strong_rec_thresh': 0.3}}),
+    'pinned': ('/config/album.yaml', {'duplicate_action': 'merge'}, {'match': {'strong_rec_thresh': 0.3}}),
 }[sys.argv[1]]
 conf = yaml.safe_load(open(base))
 for key, value in top.items():
@@ -220,4 +248,105 @@ adopt_library() {
 backfill() {
     "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
     "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
+}
+
+# --- pinning a release onto files -------------------------------------------------
+
+# The files (container paths, one per line) a beets query selects, sorted.
+files_for_query() {  # <beets query...>
+    "${BEET[@]}" ls -f '$path' "$@" < /dev/null | LC_ALL=C sort -u
+}
+
+# Give the files on stdin (container paths) the MusicBrainz release <id>. Their
+# rows are dropped first - an import of a file the library already holds stops
+# at the duplicate check - and they are imported with the pinned overlay, which
+# merges every file of the release into one album row wherever the files lie.
+# Rows only: no file is deleted. Whatever the importer refuses is registered again
+# as it was, so a pin that does not fit costs no row.
+pin_files() {  # <release id>
+    local id="$1" paths
+    paths="$(cat)"
+    [ -n "$paths" ] || { echo "pin: no files given"; return 0; }
+    printf '%s\n' "$paths" | "${BEET_PY[@]}" -c "
+import sys
+from beets.library import Library
+
+wanted = set(l.rstrip('\n') for l in sys.stdin if l.strip())
+lib = Library('/config/library.db', directory='/music')
+gone = [i for i in lib.items() if i.path.decode('utf-8', 'surrogateescape') in wanted]
+with lib.transaction():
+    for item in gone:
+        item.remove(False)
+print('dropped', len(gone), 'row(s) of', len(wanted), 'file(s)')
+"
+    overlay pinned
+    # One beets process per file, in order. Handed several files at once, beets
+    # pipelines them (fingerprinting the next while the previous is still being
+    # moved) and a file that joins an album row re-imports that row's members too,
+    # so a path can be taken twice and the run dies on a file that has just moved:
+    # FileNotFoundError out of the fingerprint stage. A file that fails here only
+    # costs itself; the register below catches it.
+    printf '%s\n' "$paths" |
+        xargs -d '\n' -n 1 -- "${BEET[@]}" -c /config/.run.yaml import -S "$id" ||
+        echo "pin: some files could not be imported; they are registered as they were"
+    printf '%s\n' "$paths" | register_paths /config/adopt.yaml
+}
+
+# Albums where most tracks found their release and some did not, as the plan
+# `media-sync --complete` acts on: lines of <release id> TAB <album> TAB <path>.
+# An album qualifies with one release id among its matched tracks, at least three
+# of them, and no more bare tracks than matched ones. A bare track is only
+# included if its title is a track of that release - fetched from MusicBrainz -
+# so a bonus track or a different song under the same album tag stays out.
+complete_plan() {
+    "${BEET_PY[@]}" -c "
+import collections, difflib, json, re, time, unicodedata, urllib.request
+from beets.library import Library
+
+def key(text):
+    return re.sub(r'[\W_]+', '', unicodedata.normalize('NFKC', text or '').casefold())
+
+def who(item):
+    name = (item.albumartist or item.artist or '').casefold()
+    return key(re.sub(r'\s*-\s*topic\$', '', name))
+
+def same_title(mine, theirs):
+    a, b = key(mine), key(theirs)
+    if not a or not b:
+        return False
+    if a == b or (min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a))):
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.85
+
+def release_titles(mbid):
+    url = 'https://musicbrainz.org/ws/2/release/%s?inc=recordings&fmt=json' % mbid
+    for _ in range(3):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'media-library-complete/1.0'})
+            data = json.load(urllib.request.urlopen(req, timeout=40))
+            time.sleep(1.1)
+            return [t['title'] for m in data.get('media', []) for t in m.get('tracks', [])]
+        except Exception:
+            time.sleep(3)
+    return None
+
+lib = Library('/config/library.db', directory='/music')
+groups = collections.defaultdict(list)
+for item in lib.items():
+    if (item.album or '').strip():
+        groups[(who(item), key(item.album))].append(item)
+for items in groups.values():
+    matched = [i for i in items if (i.get('mb_albumid') or '')]
+    bare = [i for i in items if not (i.get('mb_albumid') or '') and not i.get('reviewed')]
+    ids = set(i.mb_albumid for i in matched)
+    if len(ids) != 1 or len(matched) < 3 or not bare or len(bare) > len(matched):
+        continue
+    mbid = next(iter(ids))
+    titles = release_titles(mbid)
+    if titles is None:
+        continue
+    for item in bare:
+        if any(same_title(item.title, t) for t in titles):
+            print('%s\t%s\t%s' % (mbid, matched[0].album, item.path.decode('utf-8', 'surrogateescape')))
+"
 }

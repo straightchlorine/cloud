@@ -15,12 +15,13 @@
 #               so the library is collapsed until step 4 - the point of no return
 #   4 adopt     re-register what step 3 found no release for
 #   5 regroup   album rows for tracks that carry a release id
-#   6 backfill  lyrics + ReplayGain
+#   6 complete  pin the bare tracks of partly matched albums to their release
+#   7 backfill  lyrics + ReplayGain
 #
 # A failed or interrupted run says where to resume: `--from N`. Resume from 4 or
 # later after step 3 started - never from 1-3 on a collapsed library.
 MAINT_LOG="$LIB/logs/maintenance.log"
-MAINT_STEPS=6
+MAINT_STEPS=7
 
 maint_log() { printf '\n=== %s  %s\n' "$(date -Is)" "$*"; }
 
@@ -62,9 +63,22 @@ maint_upgrade() {
     upgrade_releases
 }
 
+# --complete lives in media-sync's mode table; the same plan and pin, as a step.
+maint_complete() {
+    local plan id
+    plan="$(complete_plan)"
+    if [ -z "$plan" ]; then
+        echo "nothing to complete"
+        return 0
+    fi
+    for id in $(printf '%s\n' "$plan" | cut -f1 | sort -u); do
+        printf '%s\n' "$plan" | awk -F'\t' -v id="$id" '$1 == id {print $3}' | pin_files "$id"
+    done
+}
+
 maintenance() {
     case "$FROM" in
-        [1-6]) ;;
+        [1-7]) ;;
         *) echo "media-sync --maintenance --from takes a step number, 1-$MAINT_STEPS" >&2; exit 2 ;;
     esac
     mkdir -p "$LIB/logs"
@@ -79,7 +93,7 @@ maintenance() {
     trap 'notify failed "Step $CURRENT_STEP/$MAINT_STEPS (line $LINENO). See $MAINT_LOG. Resume with: media-sync --maintenance --from $CURRENT_STEP" high rotating_light,error' ERR
 
     maint_log "maintenance run start from step $FROM/$MAINT_STEPS (log: $MAINT_LOG)"
-    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, backfill. Hours to days; one more ntfy when it is done."
+    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, complete, backfill. Hours to days; one more ntfy when it is done."
     # Only step 3 and the backfill need MusicBrainz or lrclib, but a collapsed
     # library is the wrong place to find out it is unreachable.
     if [ "$FROM" -le 3 ] && ! musicbrainz_reachable; then
@@ -92,7 +106,8 @@ maintenance() {
     maint_step 3 "upgrade  (give every bare track its release; the library is collapsed until step 4)" maint_upgrade
     maint_step 4 "adopt    (re-register what step 3 found no release for)" adopt_library
     maint_step 5 "regroup  (album rows for tracks that carry a release id)" regroup_albums
-    maint_step 6 "backfill (lyrics and ReplayGain)" backfill
+    maint_step 6 "complete (pin the bare tracks of partly matched albums to their release)" maint_complete
+    maint_step 7 "backfill (lyrics and ReplayGain)" backfill
 
     maint_log "maintenance run complete"
     local took=$(( $(date +%s) - began ))

@@ -268,13 +268,19 @@
           - "'media-lib.sh' in media_status"
           # the maintenance routine: six marked steps, a resume point, and the
           # step-3 warning
-          - "'MAINT_STEPS=6' in media_maintenance"
+          - "'MAINT_STEPS=7' in media_maintenance"
+          - "'maint_complete' in media_maintenance"
           - "'--from $CURRENT_STEP' in media_maintenance"
           - "'musicbrainz_reachable' in media_maintenance"
           - "'checkpoint' in media_maintenance"
           # the engine exposes them, and validates what a person types
           - "'--maintenance)' in media_sync"
           - "'--regroup)' in media_sync"
+          - "'--pin)' in media_sync"
+          - "'--complete)' in media_sync"
+          - "'pin_files() {' in media_lib"
+          - "'complete_plan() {' in media_lib"
+          - "'duplicate_action' in media_lib"
           - "'--plan)' in media_sync"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"

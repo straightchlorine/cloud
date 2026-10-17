@@ -25,12 +25,17 @@
 #                                     exist are never touched)
 #   media-sync --regroup              album rows for tracks that carry a release
 #                                     id but have none (changes no file)
+#   media-sync --pin '<query>' --id <release> [--dry-run]
+#                                     give the files a beets query selects one
+#                                     MusicBrainz release, into one album row
+#   media-sync --complete [--dry-run] finish partly matched albums: pin their
+#                                     bare tracks to the release the rest found
 #   media-sync --plan                 what --maintenance would face; changes nothing
-#   media-sync --maintenance [--from <1-6>]
+#   media-sync --maintenance [--from <1-7>]
 #                                     the one-time routine for an existing library:
 #                                     adopt, prune, upgrade, adopt, regroup,
-#                                     backfill - with a checkpoint and a resume
-#                                     point (media-maintenance)
+#                                     complete, backfill - with a checkpoint and a
+#                                     resume point (media-maintenance)
 #   media-sync --backfill             one-time: lyrics + ReplayGain for adopted
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
@@ -61,25 +66,31 @@ MODE="${1:-sync}"
 # After the mode: a directory (or, for --upgrade, a beets query), --id <release>
 # for the two release modes, --from <step> for --maintenance.
 [ "$#" -eq 0 ] || shift
-DIR="" ALBUM_ID="" FROM=1
-# FROM is read by media-maintenance.
+DIR="" ALBUM_ID="" FROM=1 DRY=0 ARGS=()
+# FROM is read by media-maintenance, DRY by --complete and --pin.
 # shellcheck disable=SC2034
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --dry-run) DRY=1; shift ;;
         --id | --from)
             [ "$#" -ge 2 ] || { echo "media-sync $1 needs a value" >&2; exit 2; }
             if [ "$1" = --id ]; then ALBUM_ID="$2"; else FROM="$2"; fi
             shift 2 ;;
-        *) DIR="$1"; shift ;;
+        *) DIR="$1"; ARGS+=("$1"); shift ;;
     esac
 done
 # A release id is typed by a person and ends up in a beets command line: only a
 # UUID gets that far, and only for the modes that import a release.
 if [ -n "$ALBUM_ID" ]; then
-    case "$MODE" in --albums | --release) ;; *) echo "--id only applies to --albums and --release" >&2; exit 2 ;; esac
+    case "$MODE" in --albums | --release | --pin) ;; *) echo "--id only applies to --albums, --release and --pin" >&2; exit 2 ;; esac
     [[ "$ALBUM_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
         { echo "--id wants a MusicBrainz release id (a UUID), got: $ALBUM_ID" >&2; exit 2; }
 fi
+case "$MODE" in
+    --pin)
+        [ -n "$DIR" ] || { echo "usage: media-sync --pin '<beets query>' --id <release> [--dry-run]" >&2; exit 2; }
+        [ -n "$ALBUM_ID" ] || { echo "media-sync --pin needs --id <release>" >&2; exit 2; } ;;
+esac
 
 # ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
 # many files can share one (or the wrong) album tag; a group like that holds
@@ -287,6 +298,49 @@ case "$MODE" in
         echo "$result"
         notify "done" "$result"
         exit 0 ;;
+    --pin)
+        # Give the files a beets query selects a MusicBrainz release, chosen by a
+        # person (--id): for an album the per-file release pass could not place,
+        # a ripped CD whose release is on MusicBrainz, or tracks spread over
+        # several folders (a folder import cannot group those). They end up in one
+        # album row. Rows only are replaced, never files; a file the release does
+        # not fit stays registered as it was. --dry-run lists the files and stops.
+        # Several words make several query terms: --pin 'album:X' 'track:1..5'.
+        files="$(files_for_query "${ARGS[@]}")"
+        [ -n "$files" ] || { echo "no track matches: ${ARGS[*]}" >&2; exit 1; }
+        echo "$(printf '%s\n' "$files" | wc -l) file(s) match: ${ARGS[*]}"
+        printf '%s\n' "$files" | head -5
+        if [ "$DRY" -eq 1 ]; then
+            echo "dry run: nothing changed."
+            exit 0
+        fi
+        before="$(count "mb_albumid:$ALBUM_ID")"
+        echo "checkpoint: $(checkpoint)"
+        printf '%s\n' "$files" | pin_files "$ALBUM_ID"
+        after="$(count "mb_albumid:$ALBUM_ID")"
+        notify "done" "$((after - before)) of $(printf '%s\n' "$files" | wc -l) track(s) pinned to release ${ALBUM_ID%%-*}; the rest stayed registered as they were."
+        exit 0 ;;
+    --complete)
+        # Finish partly matched albums: where most tracks found their release and
+        # a few did not, pin the rest to the same release - but only the tracks
+        # whose title is on that release (complete_plan). --dry-run prints the
+        # plan and stops. Run --regroup first, so the matched tracks already
+        # share one album row for the others to join.
+        plan="$(complete_plan)"
+        [ -n "$plan" ] || { echo "nothing to complete"; notify "done" "no partly matched album found."; exit 0; }
+        printf '%s\n' "$plan" | awk -F'\t' '{k = $2 "  (" $1 ")"; n[k]++} END {for (k in n) print n[k] " track(s) -> " k}'
+        if [ "$DRY" -eq 1 ]; then
+            echo "dry run: nothing changed."
+            exit 0
+        fi
+        echo "checkpoint: $(checkpoint)"
+        total=0
+        for id in $(printf '%s\n' "$plan" | cut -f1 | sort -u); do
+            printf '%s\n' "$plan" | awk -F'\t' -v id="$id" '$1 == id {print $3}' | pin_files "$id"
+            total=$((total + $(printf '%s\n' "$plan" | awk -F'\t' -v id="$id" '$1 == id' | wc -l)))
+        done
+        notify "done" "$total track(s) of $(printf '%s\n' "$plan" | cut -f1 | sort -u | wc -l) album(s) given their release."
+        exit 0 ;;
     --plan)
         # What --maintenance would face, changing nothing.
         maintenance_plan || exit 1
@@ -331,7 +385,7 @@ case "$MODE" in
         interactive_pass -c /config/.run.yaml import "${DIR:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--backfill|--plan|--maintenance [--from <1-6>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--pin '<query>' --id <release> [--dry-run]|--complete [--dry-run]|--backfill|--plan|--maintenance [--from <1-7>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
         exit 2 ;;
 esac
 

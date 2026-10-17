@@ -238,7 +238,7 @@ tmux new -s maintenance 'media-sync --maintenance'   # hours to days on a Pi 3
 media-status                            # progress, ETA, DNS health (in another pane)
 ```
 
-The six steps, each marked `=== <time>  n/6  ...` in `$LIB/logs/maintenance.log`
+The seven steps, each marked `=== <time>  n/7  ...` in `$LIB/logs/maintenance.log`
 (which `media-status` reads), with an ntfy at the start, at the end and on failure:
 
 | # | step | what |
@@ -248,7 +248,8 @@ The six steps, each marked `=== <time>  n/6  ...` in `$LIB/logs/maintenance.log`
 | 3 | upgrade | re-match every bare track as part of its release |
 | 4 | adopt | re-register what step 3 found no release for |
 | 5 | regroup | album rows for tracks that carry a release id |
-| 6 | backfill | lyrics and ReplayGain |
+| 6 | complete | pin the bare tracks of partly matched albums to their release |
+| 7 | backfill | lyrics and ReplayGain |
 
 A failure notification names the step and the resume command,
 `media-sync --maintenance --from N`. **Step 3 is the point of no return:** it
@@ -286,14 +287,40 @@ twin) is skipped by `adopt.yaml`'s `duplicate_action: skip` and stays unregister
 - it still plays in Navidrome - and is retried quickly on each adopt.
 
 **`media-sync --regroup`** gives tracks that carry a release id but no album row
-their album back (grouping by release id, using beets' own `add_album`). It
-changes no file and no tag; a folder's `cover.jpg` becomes the album's art. It is
-step 5 of the maintenance run, and repairs libraries damaged before the adopt fix.
+their album back (grouping by release id, using beets' own `add_album`; a release
+that already has an album row takes the orphans into it). It changes no file and
+no tag; a folder's `cover.jpg` becomes the art of a row that has none. It is step 5
+of the maintenance run, and repairs libraries damaged before the adopt fix.
+
+**Albums the per-file pass could only half place.** The release pass judges each
+file alone, so a track that fails on its own stays bare even when the rest of its
+album matched (a live album with five of 21 tracks bare, say). Two modes finish
+them, both pinning a release with beets' `duplicate_action: merge`, which puts every
+file of the release into one album row wherever the files lie:
+
+- `media-sync --pin '<beets query>' --id <release> [--dry-run]` - the release is
+  your choice. For a ripped CD whose release you found on MusicBrainz, tracks that
+  sit in several folders (a folder import cannot group those), or one album the
+  automatic passes skipped. `--dry-run` lists the files and stops. Several words
+  are several query terms: `--pin 'album:Best' 'artist:Enigma' --id ...`.
+- `media-sync --complete [--dry-run]` - the library chooses. An album qualifies when
+  its matched tracks agree on one release id, there are at least three of them and
+  no more bare tracks than matched ones; a bare track is pinned only if its title is
+  a track of that release (read from MusicBrainz), so a bonus track or another song
+  under the same album tag stays out. It is step 6 of the maintenance run; run
+  `--regroup` before it, so the matched tracks already share one album row.
+
+Both take a checkpoint first, drop only the *rows* of the files concerned (never a
+file), import them one beets process at a time, and register again, as they were,
+any file the release did not fit - so a pin that does not fit costs no row. beets
+may re-import the album's existing tracks as part of a merge, so their ids can
+change; their tags and release stay.
 
 **Ripped CDs and pressings MusicBrainz does not match well.** `--albums <dir>`
 imports a directory as one album and applies only a *strong* match. If a release
 exists but its track list or credits differ from your files, name it:
-`media-sync --albums /music/<dir> --id <release-mbid>`, or
+`media-sync --albums /music/<dir> --id <release-mbid>` (for tracks scattered over
+several folders use `--pin`), or
 `media-import --release /music/<dir> --id <release-mbid>` to be asked first. That
 accepts the one candidate you chose even when it scores below the strong threshold. A recording id already in the
 files (from the ripper) is not a release id and is replaced by a release match.
@@ -331,10 +358,12 @@ right text, not that the modes behave. `scripts/media/engine-test.sh` does: it
 renders the real templates into a scratch host (its own beets-only compose file,
 stub `yt-dlp`/`ntfy-notify`/`sudo`) and runs every mode against the real beets
 image - arguments and refusals, adopt (ids, album rows and `reviewed` survive),
-regroup, prune, checkpoint rotation, `--plan`, `--keep`, the lock, the nightly sync,
-`--upgrade`/`--retag`, the backfill exclusion, the whole maintenance run with a
-failure at step 3 and the resume at 4, a pinned release (`--albums --id`, and
-`media-import --release --id` through a pty), and the dashboard. A few minutes;
+regroup (including joining an existing album), prune, checkpoint rotation, `--plan`,
+`--keep`, the lock, the nightly sync, `--upgrade`/`--retag`, the backfill exclusion,
+the whole maintenance run with a failure at step 3 and the resume at 4, a pinned
+release (`--albums --id`, `--pin` across two folders, a release that does not fit,
+`--complete` with a foreign track and with too few matches, and `media-import
+--release --id` through a pty), and the dashboard. A few minutes;
 needs docker, ffmpeg, sqlite3 and the repo `.venv`; `NETWORK=0` skips what needs
 MusicBrainz.
 
