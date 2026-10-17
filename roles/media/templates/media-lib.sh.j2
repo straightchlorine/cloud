@@ -331,6 +331,7 @@ mapping = {item: next(t for t in info.tracks if id(t) == tid) for tid, item in c
 for item, why in skipped:
     print("left alone: %s - %s" % (path_of(item), why))
 new_album = False
+own = {item.id: item.length for item in mapping}
 if mapping:
     AlbumMatch(Distance(), info, mapping).apply_metadata()
     if album is None:
@@ -342,6 +343,7 @@ if mapping:
         for item in mapping:
             item.album_id = album.id
     for item in mapping:
+        item.length = own[item.id]
         item.try_write()
         item.move()
         item.store()
