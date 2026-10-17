@@ -119,7 +119,10 @@
   tags: [post_validation]
 
 - name: Verify the beets service pins the configured resolvers
-  ansible.builtin.command: docker compose -f {{ media_home }}/docker-compose.yml config --format json
+  # --profile tools: beets is an on-demand service in that profile, and `config`
+  # leaves services of inactive profiles out of its output entirely.
+  ansible.builtin.command: >-
+    docker compose -f {{ media_home }}/docker-compose.yml --profile tools config --format json
   become: true
   become_user: "{{ ansible_user }}"
   register: media_compose_config
