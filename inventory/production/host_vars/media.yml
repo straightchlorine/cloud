@@ -11,6 +11,13 @@ media_backfill_exclude: '^artist:New International Version'
 
 media_youtube_enabled: true
 
+# The LAN resolvers this box already uses (Pi-hole, then the router). The beets
+# container gets exactly these, so a lookup that works from the host works from
+# the container, and a Pi-hole hiccup falls through to the router.
+media_beets_dns:
+  - 192.168.20.10
+  - 192.168.20.1
+
 common_firewall_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
