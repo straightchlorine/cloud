@@ -1,0 +1,144 @@
+id	group	molecule	args	expect_exit	expect_substr	est_s	note
+opt-fast-lbfgsb	opt-fast	H2	--max-iterations 10	0	Analytic-gradient statevector path	15	exit 0; log 'Analytic-gradient statevector path: 4 qubits, <m> parameters, optimizer L-BFGS-B.' (default optimizer); backend statevector_analytic; bare = no --shots, no --gpu, no --noise
+opt-fast-bfgs	opt-fast	H2	--optimizer BFGS --max-iterations 10	0	optimizer BFGS.	15	exit 0; analytic line names BFGS
+opt-fast-cg	opt-fast	H2	--optimizer CG --max-iterations 10	0	optimizer CG.	15	exit 0; analytic line names CG
+opt-fast-tnc	opt-fast	H2	--optimizer TNC --max-iterations 10	0	optimizer TNC.	15	exit 0; analytic line names TNC
+opt-fast-slsqp	opt-fast	H2	--optimizer SLSQP --max-iterations 10	0	optimizer SLSQP.	15	exit 0; analytic line names SLSQP
+opt-fast-newtoncg	opt-fast	H2	--optimizer Newton-CG --max-iterations 10	0	optimizer Newton-CG.	15	exit 0; analytic line names Newton-CG (only runs on fast path); Newton-CG may use a hessian-free path; check no 'Jacobian is required' error
+opt-fast-trustconstr	opt-fast	H2	--optimizer trust-constr --max-iterations 10	0	optimizer trust-constr.	20	exit 0; analytic line names trust-constr; exact spelling is trust-constr (lowercase)
+opt-fast-cobyla	opt-fast	H2	--optimizer COBYLA --max-iterations 10	0	!Analytic-gradient	15	exit 0; NO analytic line; exact Aer CPU (default_shots None); COBYLA not in GRADIENT_OPTIMIZERS
+opt-fast-nelder	opt-fast	H2	--optimizer Nelder-Mead --max-iterations 10	0	!Analytic-gradient	15	exit 0; no analytic line; exact Aer CPU
+opt-fast-powell	opt-fast	H2	--optimizer Powell --max-iterations 10	0	!Analytic-gradient	15	exit 0; no analytic line; exact Aer CPU
+opt-gpu-lbfgsb	opt-gpu	H2	--gpu --max-iterations 10	0	!Analytic-gradient	40	exit 0; no analytic line; Aer GPU backend in log (finite differences); GPU host only
+opt-gpu-bfgs	opt-gpu	H2	--gpu --optimizer BFGS --max-iterations 10	0	!Analytic-gradient	40	exit 0; Aer GPU, no analytic line
+opt-gpu-cg	opt-gpu	H2	--gpu --optimizer CG --max-iterations 10	0	!Analytic-gradient	40	exit 0; Aer GPU, no analytic line
+opt-gpu-tnc	opt-gpu	H2	--gpu --optimizer TNC --max-iterations 10	0	!Analytic-gradient	40	exit 0; Aer GPU, no analytic line
+opt-gpu-slsqp	opt-gpu	H2	--gpu --optimizer SLSQP --max-iterations 10	0	!Analytic-gradient	40	exit 0; Aer GPU, no analytic line
+opt-gpu-newtoncg	opt-gpu	H2	--gpu --optimizer Newton-CG --max-iterations 10	2	needs an analytic gradient	10	exit 2; stderr 'quantum-pipeline: error: Optimizer Newton-CG needs an analytic gradient...' with usage, no traceback; raised before any compute
+opt-gpu-trustconstr	opt-gpu	H2	--gpu --optimizer trust-constr --max-iterations 10	0	!Analytic-gradient	60	exit 0; Aer GPU, no analytic line (trust-constr w/ finite-difference gradient; may be slow)
+opt-gpu-cobyla	opt-gpu	H2	--gpu --optimizer COBYLA --max-iterations 10	0	!Analytic-gradient	30	exit 0; Aer GPU exact
+opt-gpu-nelder	opt-gpu	H2	--gpu --optimizer Nelder-Mead --max-iterations 10	0	!Analytic-gradient	30	exit 0; Aer GPU exact
+opt-gpu-powell	opt-gpu	H2	--gpu --optimizer Powell --max-iterations 10	0	!Analytic-gradient	30	exit 0; Aer GPU exact
+opt-shots-lbfgsb	opt-shots	H2	--shots 1024 --max-iterations 10	2	needs a gradient	8	exit 2; 'quantum-pipeline: error: Optimizer L-BFGS-B needs a gradient, but default_shots=1024 samples the objective...' + usage, no traceback; repeat for each gradient optimizer below
+opt-shots-bfgs	opt-shots	H2	--shots 1024 --optimizer BFGS --max-iterations 10	2	needs a gradient	8	exit 2 with gradient message naming BFGS
+opt-shots-cg	opt-shots	H2	--shots 1024 --optimizer CG --max-iterations 10	2	needs a gradient	8	exit 2 gradient message naming CG
+opt-shots-tnc	opt-shots	H2	--shots 1024 --optimizer TNC --max-iterations 10	2	needs a gradient	8	exit 2 gradient message naming TNC
+opt-shots-slsqp	opt-shots	H2	--shots 1024 --optimizer SLSQP --max-iterations 10	2	needs a gradient	8	exit 2 gradient message naming SLSQP
+opt-shots-newtoncg	opt-shots	H2	--shots 1024 --optimizer Newton-CG --max-iterations 10	2	needs an analytic gradient	8	exit 2 with the Newton-CG 'needs an analytic gradient' message (Newton-CG guard is checked FIRST, before the shots guard)
+opt-shots-trustconstr	opt-shots	H2	--shots 1024 --optimizer trust-constr --max-iterations 10	2	needs a gradient	8	exit 2 gradient message naming trust-constr
+opt-shots-cobyla	opt-shots	H2	--shots 1024 --optimizer COBYLA --max-iterations 10	0	!Analytic-gradient	20	exit 0; sampled Aer CPU, energy within shot noise (~1e-2) of exact
+opt-shots-nelder	opt-shots	H2	--shots 1024 --optimizer Nelder-Mead --max-iterations 10	0	!Analytic-gradient	20	exit 0; sampled
+opt-shots-powell	opt-shots	H2	--shots 1024 --optimizer Powell --max-iterations 10	0	!Analytic-gradient	20	exit 0; sampled
+opt-shots-gpu-cobyla	opt-shots	H2	--shots 1024 --gpu --optimizer COBYLA --max-iterations 10	0	!Analytic-gradient	40	exit 0; sampled on Aer GPU
+opt-shots-exact-override	opt-shots	H2	--shots 1024 --exact --max-iterations 10	0	Analytic-gradient statevector path	15	exit 0; --exact overrides shots (default_shots None) -> analytic fast path with L-BFGS-B; doc claim check: 'With --shots, --exact overrides it'
+sim-statevector-cpu	sim	H2	--simulation-method statevector --optimizer COBYLA --max-iterations 5	0		10	exit 0; COBYLA to stay on Aer
+sim-statevector-gpu	sim	H2	--simulation-method statevector --gpu --optimizer COBYLA --max-iterations 5	0		20	exit 0, GPU
+sim-automatic-cpu	sim	H2	--simulation-method automatic --optimizer COBYLA --max-iterations 5	0		10	exit 0
+sim-automatic-gpu	sim	H2	--simulation-method automatic --gpu --optimizer COBYLA --max-iterations 5	0		20	exit 0, GPU
+sim-density-cpu	sim	H2	--simulation-method density_matrix --optimizer COBYLA --max-iterations 5	0		10	exit 0
+sim-density-gpu	sim	H2	--simulation-method density_matrix --gpu --optimizer COBYLA --max-iterations 5	0		20	exit 0 (GPU density matrix supported on sm_61) - record
+sim-mps-cpu	sim	H2	--simulation-method matrix_product_state --optimizer COBYLA --max-iterations 5	0		10	exit 0
+sim-mps-gpu	sim	H2	--simulation-method matrix_product_state --gpu --optimizer COBYLA --max-iterations 5	0		20	exit 0 or Aer GPU-unsupported error for MPS - record
+sim-tn-cpu	sim	H2	--simulation-method tensor_network --optimizer COBYLA --max-iterations 5	2	requires --gpu	3	exit 2: '--simulation-method tensor_network requires --gpu...'; parser error, no compute
+sim-tn-gpu	sim	H2	--simulation-method tensor_network --gpu --optimizer COBYLA --max-iterations 5			20	parser passes; runtime fails on sm_61 (no cuTensorNet/cuStateVec) - expected env failure, record message; expected-failure
+sim-nonchoice	sim	H2	--simulation-method bogus --optimizer COBYLA --max-iterations 5			10	--simulation-method has no argparse choices (help shows free text): record whether it exits 2 or fails at runtime; also --optimizer has no choices in usage; unknown optimizer is handled elsewhere
+sim-statevector-fast	sim	H2	--simulation-method statevector --max-iterations 10	0		15	exit 0; fast path still taken (simulation method not part of eligibility) - record whether the method is silently ignored; doc-claim check: method ignored on fast path?
+noise-bare	noise	H2	--noise ibm_brisbane	2	density_matrix	3	exit 2: 'An exact run (--exact, or no --shots) with --noise requires --simulation-method density_matrix...'; noise name may need a valid choice; read data/ or noise module for valid names (e.g. grep the noise model list) - try the name the repo documents, record if rejected
+noise-shots-cobyla	noise	H2	--noise ibm_brisbane --shots 1024 --optimizer COBYLA --max-iterations 5			20	parser passes; runtime may need IBM access to fetch backend noise model - record outcome
+noise-density	noise	H2	--noise ibm_brisbane --simulation-method density_matrix --optimizer COBYLA --max-iterations 5			20	parser passes (exact + density_matrix); runtime may need IBM access - record; with default L-BFGS-B this should go Aer (noise excludes fast path) - also try without --optimizer COBYLA
+noise-shots-lbfgsb	noise	H2	--noise ibm_brisbane --shots 1024 --max-iterations 5	2	needs a gradient	8	exit 2 gradient-needs message (L-BFGS-B + shots); may fail earlier if noise model fetch occurs before solve
+noise-newtoncg-density	noise	H2	--noise ibm_brisbane --simulation-method density_matrix --optimizer Newton-CG --max-iterations 5	2	needs an analytic gradient	8	exit 2 Newton-CG needs analytic gradient (noise)
+init-su2-r2-hf-s2	init	H2	--ansatz EfficientSU2 --ansatz-reps 2 --init-strategy hf --seed 2 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; fast path; final energy ~ FCI -1.13727 (reps2 hf seed 2 reaches FCI); seed 3 stalls at HF -1.11668
+init-su2-r2-hf-s3	init	H2	--ansatz EfficientSU2 --ansatz-reps 2 --init-strategy hf --seed 3 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; expected to stall at HF energy -1.11668 (documented trap); verify docs say this
+init-su2-r3-hf-s2	init	H2	--ansatz EfficientSU2 --ansatz-reps 3 --init-strategy hf --seed 2 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; likely FCI
+init-su2-r3-hf-s3	init	H2	--ansatz EfficientSU2 --ansatz-reps 3 --init-strategy hf --seed 3 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; likely FCI
+init-su2-r2-rand-s2	init	H2	--ansatz EfficientSU2 --ansatz-reps 2 --init-strategy random --seed 2 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; FCI or local minimum (6/10 trap) - record
+init-su2-r2-rand-s3	init	H2	--ansatz EfficientSU2 --ansatz-reps 2 --init-strategy random --seed 3 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; record energy
+init-su2-r3-rand-s2	init	H2	--ansatz EfficientSU2 --ansatz-reps 3 --init-strategy random --seed 2 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; record energy
+init-su2-r3-rand-s3	init	H2	--ansatz EfficientSU2 --ansatz-reps 3 --init-strategy random --seed 3 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; record energy
+init-ep-hf-s2	init	H2	--ansatz ExcitationPreserving --ansatz-reps 2 --init-strategy hf --seed 2 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; fast path; FCI likely (EP hf traps 1/10)
+init-ep-hf-s3	init	H2	--ansatz ExcitationPreserving --ansatz-reps 2 --init-strategy hf --seed 3 --max-iterations 100	0	Analytic-gradient statevector path	20	exit 0; FCI likely
+init-gpu-hf-s2	init	H2	--ansatz EfficientSU2 --ansatz-reps 2 --init-strategy hf --seed 2 --max-iterations 300 --gpu	0	!Analytic-gradient	90	exit 0; Aer GPU FD; compare final energy with init-su2-r2-hf-s2 (should be FCI, agreement ~1e-6 or better); max-iterations bounds objective calls (vqe_solver line 320), so 300 evals; FD costs m+1 per gradient
+init-realamp	init	H2	--ansatz RealAmplitudes --ansatz-reps 2 --init-strategy hf --seed 2 --max-iterations 100	0		20	exit 0 (help lists RealAmplitudes); record whether hf init supports it; --ansatz is free text, no choices
+init-ansatz-bogus	init	H2	--ansatz Bogus --max-iterations 5			5	non-zero exit with readable error (record exit code and whether traceback)
+budget-max-only	budget	H2	--max-iterations 5	0	Starting VQE optimization with max iterations 5	10	exit 0; log 'Starting VQE optimization with max iterations 5'; at most 5 objective calls/steps recorded (max_iterations bounds objective calls); count iterations in output
+budget-one	budget	H2	--max-iterations 1	0		8	exit 0; one objective call; best energy = initial energy; no crash; edge case; also try --optimizer COBYLA
+budget-one-cobyla	budget	H2	--max-iterations 1 --optimizer COBYLA	0		8	exit 0 no crash
+budget-conv	budget	H2	--convergence --threshold 1e-6	0	Applying convergence threshold 1e-06	20	exit 0; log 'Applying convergence threshold 1e-06 ...'; stops by ftol/gtol under high maxiter cap; log reports convergence achieved; --convergence is a flag, --threshold default 1e-6 per defaults.py
+budget-conv-and-max	budget	H2	--convergence --threshold 1e-6 --max-iterations 5	0	--max-iterations 5 ignored	20	exit 0; log '--max-iterations 5 ignored: --convergence takes precedence.'; runs past 5 evaluations; max-iterations default is 100 so message only if explicit? record
+budget-conv-loose	budget	H2	--convergence --threshold 1e-2	0		10	exit 0; stops early with few iterations
+budget-conv-cobyla	budget	H2	--convergence --threshold 1e-6 --optimizer COBYLA	0		30	exit 0 (tol path for gradient-free); record iteration count
+budget-neg-iter	budget	H2	--max-iterations 0			3	record: argparse type is positive_int? expect exit 2 or defined behaviour; no --max-evaluations flag exists; max-iterations bounds objective calls
+io-dump	io	H2	--dump --max-iterations 5	0		10	exit 0; JSON config written (find where: grep dump in repo / check cwd and --output-dir); contains shots null / exact preserved; --dump is a bare flag, takes no filename; locate output file; discover the filename pattern from the run
+io-dump-load-conflict	io	H2	--dump --load /tmp/x.json	2	cannot be used together	3	exit 2: '--dump and --load cannot be used together.'; duplicated under errors group
+io-report	io	H2	--report --max-iterations 5	0		30	exit 0; PDF report generated (check output dir); also with --gpu; may need reportlab/matplotlib; record
+io-output-dir	io	H2	--output-dir /tmp/qpout --max-iterations 5	0		10	exit 0; output files in dir
+io-debug-log	io	H2	--log-level DEBUG --max-iterations 5	0	Analytic-gradient statevector path	10	exit 0; analytic line present; DEBUG detail printed; analytic line is INFO so also visible at INFO; check WARNING hides it
+io-warning-log	io	H2	--log-level WARNING --max-iterations 5	0	!Analytic-gradient	10	exit 0; analytic line absent
+repro-fast-a	repro	H2	--seed 7 --max-iterations 30		Analytic-gradient statevector path	15	final energy digits identical to repro-fast-b; compare all printed digits and per-step history
+repro-fast-b	repro	H2	--seed 7 --max-iterations 30		Analytic-gradient statevector path	15	identical to repro-fast-a; run twice
+repro-gpu-a	repro	H2	--seed 7 --gpu --max-iterations 30		!Analytic-gradient	50	identical to repro-gpu-b (exact, deterministic)
+repro-gpu-b	repro	H2	--seed 7 --gpu --max-iterations 30		!Analytic-gradient	50	identical to repro-gpu-a
+repro-cpu-aer-a	repro	H2	--seed 7 --optimizer COBYLA --max-iterations 30		!Analytic-gradient	15	identical to -b (exact Aer CPU)
+repro-cpu-aer-b	repro	H2	--seed 7 --optimizer COBYLA --max-iterations 30		!Analytic-gradient	15	identical to -a
+repro-cross	repro	H2	--seed 7 --max-iterations 30 --optimizer COBYLA --gpu		!Analytic-gradient	40	compare with CPU Aer COBYLA seed 7: agree to ~1e-10 or record the gap; fast path vs Aer agreement claim ~1e-13 Ha at same params
+repro-norand-a	repro	H2	--init-strategy random --max-iterations 10			15	differs from -b (no seed)
+repro-norand-b	repro	H2	--init-strategy random --max-iterations 10			15	differs from -a
+scale-lih-fast	scale	LiH	--max-iterations 20	0	Analytic-gradient statevector path	60	exit 0; 12 qubits analytic line; record wall time; thesis file index 2; host molecules.json index 1; EfficientSU2 default
+scale-lih-gpu	scale	LiH	--gpu --max-iterations 5	0	!Analytic-gradient	80	exit 0; Aer GPU; record time per eval; max-iterations bounds objective calls so 5 evals only; FD gradient would be truncated
+scale-lih-aer-cpu	scale	LiH	--optimizer COBYLA --max-iterations 5	0	!Analytic-gradient	60	exit 0; time per eval on Aer CPU for comparison
+scale-beh2-su2	scale	BeH2	--max-iterations 3	0	Analytic-gradient statevector path	60	exit 0; fast path; time per step ~0.115 s (benchmark SU2); requires molecules.thesis.json inside the image/host (index 3); verify exists; otherwise skip
+scale-beh2-ep	scale	BeH2	--ansatz ExcitationPreserving --max-iterations 3	0	Analytic-gradient statevector path	80	exit 0; ~1.0 s per step; thesis file index 3
+scale-nh3-su2	scale	NH3	--max-iterations 3	0	Analytic-gradient statevector path	90	exit 0; ~0.305 s per step; thesis file index 5; memory heavy, watch OOM
+scale-nh3-ep	scale	NH3	--ansatz ExcitationPreserving --max-iterations 3	0	Analytic-gradient statevector path	90	exit 0; ~2.4 s per step; thesis file index 5; skip if >90 s
+err-unknown-optimizer	errors	H2	--optimizer Bogus --max-iterations 5	2		5	exit 2 (note: --optimizer has no argparse choices; check how it fails: clean exit 2 vs traceback) - record; usage shows --optimizer OPTIMIZER with no braces
+err-shots-zero	errors	H2	--shots 0	2		3	exit 2 argparse: 'shots:0 is not a valid number'
+err-shots-neg	errors	H2	--shots -5	2		3	exit 2 argparse invalid value
+err-shots-float	errors	H2	--shots 10.5	2		3	exit 2 (int() ValueError -> argparse invalid) - record
+err-reps-zero	errors	H2	--ansatz-reps 0 --max-iterations 5			8	record: argparse may accept 0 (type shown only as default); expect exit 2 or a sane run / qiskit error without traceback
+err-reps-neg	errors	H2	--ansatz-reps -1 --max-iterations 5			8	record exit code and message
+err-dump-load	errors	H2	--dump --load /nonexistent.json	2	cannot be used together	3	exit 2 '--dump and --load cannot be used together.'
+err-load-missing	errors	H2	--load /nonexistent.json			3	record exit code / traceback behaviour
+err-conv-threshold	errors	H2	--convergence --threshold 0			10	record (threshold 0 accepted?)
+err-min-qubits	errors	H2	--min-qubits 5	2	can only be used if --ibm	3	exit 2 '--min-qubits can only be used if --ibm is selected.'
+err-tn-cpu	errors	H2	--simulation-method tensor_network	2	requires --gpu	3	exit 2 requires --gpu; dup of sim-tn-cpu
+err-kafka-opts	errors	H2	--topic foo	2	--kafka must be set	3	exit 2 '--kafka must be set for the options to take effect.'
+err-basis-bogus	errors	H2	-b bogus	2	invalid choice	3	exit 2 argparse choices sto3g/6-31g/cc-pvdz
+err-newtoncg-fast-shots-exact	errors	H2	--optimizer Newton-CG --shots 1024 --exact --max-iterations 10	0	Analytic-gradient statevector path	15	exit 0 on fast path (--exact overrides shots) - verifies Newton-CG order vs exact override
+ex-readme-pip	doc-example	ALL	--exact -b sto3g --max-iterations 100 --optimizer L-BFGS-B --report	0	Analytic-gradient statevector path	60	README.md:59; Exit 0. Fast path log line 'Analytic-gradient statevector path: 4 qubits, ...' for H2, then LiH (10 qubits); PDF report in gen/. H2 energy near -1.137 Ha if not trapped.
+ex-docker-cpu	doc-example	ALL	--exact --simulation-method statevector --max-iterations 150 --convergence	0	Analytic-gradient statevector path	90	docs/deployment/docker-basics.md:138; Exit 0, fast path (no --gpu, no noise), backend statevector_analytic; stops by convergence before or at 150 iterations.
+ex-gpu-51	doc-example	ALL	--exact --gpu --simulation-method statevector --max-iterations 150	0	!Analytic-gradient	400	docs/deployment/gpu-acceleration.md:51; Exit 0, Aer GPU exact path, no analytic log line; log shows GPU backend.
+ex-basic-20	doc-example	ALL	--exact	0	Analytic-gradient statevector path	60	docs/getting-started/basic-usage.md:20; Exit 0, all molecules in file (repo file has 9 incl. N2/CH4; host file H2,LiH), fast path, default 100 iterations.
+ex-basic-26	doc-example	H2	--exact	0	Analytic-gradient statevector path	15	docs/getting-started/basic-usage.md:26; Exit 0, only H2 processed, fast path log '4 qubits'.
+ex-basic-33	doc-example	ALL	--exact --max-iterations 10	0	Analytic-gradient statevector path	20	docs/getting-started/basic-usage.md:33; Exit 0, 10 iterations max, fast path.
+ex-basic-76	doc-example	ALL	--exact --basis cc-pvdz --max-iterations 200 --optimizer L-BFGS-B --dump	0		10	docs/getting-started/basic-usage.md:76; --dump writes run_configs/*.json and exits without running the VQE (verify). Stored config must have shots null/absent (exact) so it can be reloaded.
+ex-basic-105	doc-example	ALL	--exact --ansatz RealAmplitudes	0	Analytic-gradient statevector path	60	docs/getting-started/basic-usage.md:105; Exit 0, fast path with RealAmplitudes.
+ex-basic-180a	doc-example	ALL	--exact --log-level ERROR	0	!Analytic-gradient	40	docs/getting-started/basic-usage.md:180; Minimal output; the INFO 'Analytic-gradient' line is NOT printed.
+ex-basic-180b	doc-example	ALL	--exact --log-level INFO	0	Analytic-gradient statevector path	40	docs/getting-started/basic-usage.md:183; Default output incl. 'Analytic-gradient statevector path' line.
+ex-basic-180c	doc-example	ALL	--exact --log-level DEBUG	0		40	docs/getting-started/basic-usage.md:186; Verbose; exit 0.
+ex-basic-221	doc-example	ALL	--basis sto3g --max-iterations 50 --optimizer COBYLA	0	!Analytic-gradient	60	docs/getting-started/basic-usage.md:221; No --exact, no --shots: exact run (contract), COBYLA runs exact, NOT the analytic path (gradient-free): no 'Analytic-gradient' line. Exit 0.
+ex-basic-231	doc-example	ALL	--exact --basis sto3g --max-iterations 150 --optimizer L-BFGS-B --ansatz-reps 2	0	Analytic-gradient statevector path	60	docs/getting-started/basic-usage.md:231; Exit 0 fast path, reps 2 (H2: 32 parameters in log).
+ex-inst-56	doc-example	ALL	--exact --basis sto3g --gpu --max-iterations 100	0		300	docs/getting-started/installation.md:56; Exit 0 Aer GPU path.
+ex-inst-73	doc-example	H2	--exact --basis sto3g --max-iterations 100 --report	0	Analytic-gradient statevector path	20	docs/getting-started/installation.md:73; Exit 0; PDF report and plots appear in mounted gen/.
+ex-inst-140	doc-example	H2	--exact --basis sto3g --max-iterations 10	0	Analytic-gradient statevector path	10	docs/getting-started/installation.md:140; Smoke test: exit 0, 10 iterations.
+ex-qs-45	doc-example	H2	--exact --basis sto3g --max-iterations 100 --optimizer L-BFGS-B --ansatz-reps 3 --init-strategy hf --seed 42 --report	0	Analytic-gradient statevector path	20	docs/getting-started/quick-start.md:45; Doc says 'reliable and reproducible' (seed 42, reps 3, hf): must reach about -1.137 Ha (FCI -1.13727), NOT stall at HF -1.11668. Run twice: identical energies. Doc 'Expected output' block (-1.126758 Ha, 100 iterations, Aer wording, 2026-06 dates) is stale: fla
+ex-qs-152	doc-example	H2	--exact --basis sto3g --convergence --threshold 1e-6 --optimizer L-BFGS-B	0	Analytic-gradient statevector path	20	docs/getting-started/quick-start.md:152; Exit 0, stops on convergence.
+ex-qs-178	doc-example	ALL	--exact --gpu --max-iterations 100	0	!Analytic-gradient	300	docs/getting-started/quick-start.md:178; Aer GPU exact path.
+ex-ts-38a	doc-example	ALL	--exact --max-iterations 500	0	Analytic-gradient statevector path	120	docs/reference/troubleshooting.md:38; Exit 0, fast path.
+ex-ts-38b	doc-example	ALL	--exact --init-strategy hf --ansatz-reps 3	0	Analytic-gradient statevector path	60	docs/reference/troubleshooting.md:41; Exit 0, hf start with reps 3.
+ex-ts-38c	doc-example	ALL	--optimizer COBYLA	0	!Analytic-gradient	90	docs/reference/troubleshooting.md:44; Exact (no shots), COBYLA, exit 0, no analytic line.
+ex-ts-38d	doc-example	ALL	--exact --convergence --threshold 1e-4	0	Analytic-gradient statevector path	40	docs/reference/troubleshooting.md:47; Exit 0, early convergence.
+ex-ts-60a	doc-example	ALL	--exact --basis sto3g	0	Analytic-gradient statevector path	60	docs/reference/troubleshooting.md:63; Exit 0.
+ex-ts-60b	doc-example	ALL	--exact --ansatz-reps 1	0	Analytic-gradient statevector path	50	docs/reference/troubleshooting.md:66; Exit 0; fewer parameters (H2: 16 with reps 1) in analytic log line. Doc says default reps is 2: confirm.
+ex-ts-325	doc-example	ALL	--exact --enable-performance-monitoring	0		40	docs/reference/troubleshooting.md:332; Exit 0; pushgateway absent so push errors only logged.
+ex-cfg-104	doc-example	ALL	--exact	0	Analytic-gradient statevector path	60	docs/usage/configuration.md:104; Exit 0.
+ex-cfg-113	doc-example	LiH	--exact	0	Analytic-gradient statevector path	30	docs/usage/configuration.md:113; Doc implies a second molecule. NOTE: repo data/molecules.json index 1 is H2O (14 qubits), host file index 1 is LiH. Check which is described in the doc text near line 113.
+ex-exa-14	doc-example	H2	--exact --basis sto3g --max-iterations 50 --optimizer L-BFGS-B	0	Analytic-gradient statevector path	15	docs/usage/examples.md:14; Exit 0, H2 4 qubits, fast path. Doc says expected ground state about -1.137 Ha (line 24).
+ex-exa-41	doc-example	ALL	--exact --basis sto3g --max-iterations 100 --optimizer L-BFGS-B --ansatz-reps 2 --shots 1024 --report	0	Analytic-gradient statevector path	60	docs/usage/examples.md:41; --exact overrides --shots (doc configuration.md): exit 0, fast path, NOT exit 2. Verify the shots value is ignored/null in recorded config.
+ex-exa-118	doc-example	ALL	--exact --basis sto3g --convergence --threshold 1e-6 --optimizer L-BFGS-B --shots 2048	0	Analytic-gradient statevector path	60	docs/usage/examples.md:118; Exit 0 exact fast path (--exact beats --shots 2048). Doc line 129 iteration counts for H2 thesis runs: compare.
+ex-exa-151	doc-example	ALL	--exact --basis cc-pvdz --convergence --threshold 1e-6 --optimizer L-BFGS-B --ansatz RealAmplitudes --init-strategy hf --ansatz-reps 2 --shots 2048 --gpu --simulation-method statevector --dump	0		10	docs/usage/examples.md:151; --dump: writes config and exits without simulating. Check dumped file has shots null (exact), gpu true, so doc line 170 reload works.
+ex-exa-200a	doc-example	ALL	--exact --basis sto3g --max-iterations 100 --optimizer L-BFGS-B --ansatz RealAmplitudes --init-strategy random --seed 42 --report	0	Analytic-gradient statevector path	60	docs/usage/examples.md:200; Exit 0 fast path.
+ex-exa-200c	doc-example	ALL	--exact --basis sto3g --max-iterations 100 --optimizer L-BFGS-B --ansatz ExcitationPreserving --ansatz-reps 3 --report	0	Analytic-gradient statevector path	90	docs/usage/examples.md:226; Exit 0 fast path; EP has more parameters (H2 reps 3: check count) and costlier steps.
+ex-opt-28	doc-example	ALL	--exact --optimizer L-BFGS-B	0	optimizer L-BFGS-B.	60	docs/usage/optimizers.md:28; Exit 0 fast path, optimizer L-BFGS-B in the log line.
+ex-opt-177	doc-example	ALL	--exact --optimizer L-BFGS-B --convergence --threshold 1e-6	0	Analytic-gradient statevector path	60	docs/usage/optimizers.md:177; Exit 0.
+ex-sim-16	doc-example	ALL	--exact --simulation-method statevector	0	Analytic-gradient statevector path	60	docs/usage/simulation-methods.md:16; Exit 0 fast path (statevector method with no gpu/noise).

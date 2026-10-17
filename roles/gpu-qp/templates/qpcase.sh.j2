@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# One validation-matrix case: a single container run of the solver with the
+# calling user's uid, its gen/ and run_configs/ in a private work directory.
+# Called by `gpu-qp matrix`; usable by hand too.
+#
+# usage: qpcase.sh <log-file> <work-dir> <H2|LiH|BeH2|NH3|ALL|NONE> [SOLVER-ARG]...
+#   H2, LiH   molecule 0 / 1 of the stack's rendered data/molecules.json
+#   BeH2, NH3 molecule 3 / 5 of the checkout's data/molecules.thesis.json
+#   ALL       every molecule of data/molecules.json
+#   NONE      no input file selection (the case brings its own)
+# Writes the combined output to <log-file> and prints one line: exit=<code> secs=<n>
+# (exit=124 means the 600 s limit killed it). Always exits 0 unless called wrongly.
+
+set -uo pipefail
+
+STACK_HOME="{{ gpu_qp_home }}"
+SOURCE="{{ gpu_qp_source_path }}"
+COMPOSE_FILE="$STACK_HOME/docker-compose.yml"
+SERVICE="quantum-pipeline-gpu"
+CONTAINER_ROOT="/usr/src/quantum_pipeline"
+CASE_TIMEOUT=600
+
+if [ $# -lt 3 ]; then
+  echo "usage: qpcase.sh <log-file> <work-dir> <H2|LiH|BeH2|NH3|ALL|NONE> [SOLVER-ARG]..." >&2
+  exit 2
+fi
+log=$1
+work=$2
+molecule=$3
+shift 3
+
+case "$molecule" in
+  H2)   selection=(-f data/molecules.json --molecule-index 0) ;;
+  LiH)  selection=(-f data/molecules.json --molecule-index 1) ;;
+  BeH2) selection=(-f data/molecules.thesis.json --molecule-index 3) ;;
+  NH3)  selection=(-f data/molecules.thesis.json --molecule-index 5) ;;
+  ALL)  selection=(-f data/molecules.json) ;;
+  NONE) selection=() ;;
+  *) echo "qpcase.sh: unknown molecule $molecule" >&2; exit 2 ;;
+esac
+
+mkdir -p "$work/run_configs"
+
+# The stack mounts only its own data/ (molecules.json); the thesis molecules
+# come from the checkout, read-only, as `gpu-qp bench` does.
+mounts=()
+if [ -f "$SOURCE/data/molecules.thesis.json" ]; then
+  mounts=(-v "$SOURCE/data/molecules.thesis.json:$CONTAINER_ROOT/data/molecules.thesis.json:ro")
+fi
+
+start=$(date +%s)
+timeout -k 10 "$CASE_TIMEOUT" docker compose -f "$COMPOSE_FILE" run --rm -T \
+  --user "$(id -u):$(id -g)" -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
+  -v "$work:$CONTAINER_ROOT/gen" \
+  -v "$work/run_configs:$CONTAINER_ROOT/run_configs" \
+  ${mounts[@]+"${mounts[@]}"} \
+  "$SERVICE" ${selection[@]+"${selection[@]}"} "$@" </dev/null >"$log" 2>&1
+code=$?
+echo "exit=$code secs=$(( $(date +%s) - start ))"

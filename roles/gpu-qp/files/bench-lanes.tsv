@@ -1,0 +1,32 @@
+# gpu-qp benchmark run matrix — one row per phase/lane. The launcher (gpu-qp-lane.sh) expands
+# the molecule/seed ranges into cells; state lives in <bench>/<phase>/state.tsv.
+#
+# max_iterations: a number, or "convergence" for the thesis protocol
+#   (--convergence --threshold 1e-6, capped at LBFGSB_DEFAULT_MAXITER=15000 optimiser steps).
+#   NOTE the Aer lanes estimate gradients by finite differences, so one optimiser step costs
+#   n_params+1 evaluations: a fixed *evaluation* budget starves them (10-40 steps at 1000 evals),
+#   which is why the convergence phases are the ones that yield converged energies.
+#
+# est_wall: measured on gpu-station 2026-10; the convergence phases are open-ended (see
+# BENCH-NEXT.md "runtime risk").
+#
+# phase	lane	service	extra_args	basis	seeds	molecules	max_iterations	est_wall
+A	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1,2,3	0,1,2,3,4,5	1000	4.4h
+A	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1,2,3	0,1,2,3,4,5	1000	4.4h
+A	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1,2,3	0,1,2,3,4,5	1000	4.4h
+A	analytic	quantum-pipeline-cpu	(empty)	sto3g	1,2,3	0,1,2,3,4,5	1000	0.2h
+A2	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1,2,3	0,1,2,3,4,5	convergence	days
+A2	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1,2,3	0,1,2,3,4,5	convergence	days
+A2	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1,2,3	0,1,2,3,4,5	convergence	days
+A2	analytic	quantum-pipeline-cpu	(empty)	sto3g	1,2,3	0,1,2,3,4,5	convergence	hours
+B	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	0,1,2,3,4,5	200	0.8h
+B	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	0,1,2,3,4,5	200	0.8h
+B	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	0,1,2,3,4,5	200	0.8h
+B	analytic	quantum-pipeline-cpu	(empty)	sto3g	1	0,1,2,3,4,5	200	0.1h
+C	cpu-aer	quantum-pipeline-cpu	--no-analytic	cc-pvdz	1	0	100	0.3h
+C	gpu1	quantum-pipeline-gpu1	--gpu	cc-pvdz	1	0	100	0.3h
+C	gpu2	quantum-pipeline-gpu2	--gpu	cc-pvdz	1	0	100	0.3h
+S	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	0	20	smoke
+S	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	0	20	smoke
+S	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	0	20	smoke
+S	analytic	quantum-pipeline-cpu	(empty)	sto3g	1	0	20	smoke

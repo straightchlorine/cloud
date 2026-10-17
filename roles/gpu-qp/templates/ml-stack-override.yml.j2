@@ -1,0 +1,56 @@
+# Managed by Ansible - Do not edit manually
+#
+# Compose override for the ML stack on a userns-remap daemon. Pass it as a second -f on every
+# compose command for the `ml` project:
+#
+#   docker compose -p ml --env-file .env \
+#     -f compose/docker-compose.ml.yaml -f {{ gpu_qp_home }}/bench/override.yml up -d
+#
+# Why each key:
+#   userns_mode: "host"   the remapped daemon refuses `runtime: nvidia` inside a remapped user
+#                         namespace; the role's own compose already runs this way.
+#   MONITORING_EXPORT_FORMAT: json
+#                         the batch services default to prometheus +
+#                         PUSHGATEWAY_URL=http://localhost:9091, which is not reachable from
+#                         inside the container. The benchmark reads
+#                         gen/performance_metrics/*.jsonl.
+#   gen/run_configs       the batch services mount ../gen but not run_configs, so --dump output
+#                         is lost under --rm.
+#   nvidia-gpu-exporter   port {{ gpu_qp_gpu_exporter_port }} is already served by this role's own exporter.
+#
+# If `runtime: nvidia` is still refused, add device reservations instead of the env var:
+#   deploy:
+#     resources:
+#       reservations:
+#         devices:
+#           - driver: nvidia
+#             device_ids: ["0"]
+#             capabilities: [gpu]
+#
+# Two workers, one card each: the role's `gpu_qp_workers` list is the intended source of one
+# service block per device (see notes/BENCH-NEXT.md, to-do 3).
+services:
+  nvidia-gpu-exporter:
+    profiles:
+      - disabled
+
+  quantum-pipeline-cpu:
+    userns_mode: "host"
+    environment:
+      MONITORING_EXPORT_FORMAT: "json"
+    volumes:
+      - ../gen/run_configs:/usr/src/quantum_pipeline/run_configs
+
+  quantum-pipeline-gpu1:
+    userns_mode: "host"
+    environment:
+      MONITORING_EXPORT_FORMAT: "json"
+    volumes:
+      - ../gen/run_configs:/usr/src/quantum_pipeline/run_configs
+
+  quantum-pipeline-gpu2:
+    userns_mode: "host"
+    environment:
+      MONITORING_EXPORT_FORMAT: "json"
+    volumes:
+      - ../gen/run_configs:/usr/src/quantum_pipeline/run_configs

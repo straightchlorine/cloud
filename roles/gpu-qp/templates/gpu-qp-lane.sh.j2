@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# One lane of one benchmark phase. Resumable: a cell whose row in <phase>/state.tsv is already
+# `done` or `done-unstreamed` is skipped; a failed cell is retried once, then recorded `failed` and
+# the lane continues.
+#
+# Phases: A/A2 = sto-3g, 6 molecules x seeds 1,2,3;  A2 uses the thesis convergence protocol
+#                 (--convergence --threshold 1e-6, no evaluation cap) instead of a fixed budget.
+#         B    = sto-3g, 6 molecules x seed 1, 200 evaluations
+#         C    = cc-pvdz, H2 x seed 1, 100 evaluations
+#         S    = smoke: sto-3g, H2 x seed 1, 20 evaluations
+# Lanes:  cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
+#
+# state.tsv columns: lane  molecule  seed  status  exit  started  ended
+#   status: done             exit 0
+#           done-unstreamed  exit != 0, but the VQE finished (the log has `Total energy`) and the
+#                            record was spooled to <cell>.gen/undelivered/ because Kafka refused
+#                            it. The result is complete, the record is not in the stream. No retry.
+#           failed           anything else, after one retry
+# Every cell mounts its own <phase>/<lane>/<molecule>_seed<S>.gen/ as gen/ (and its run_configs/
+# subdirectory as run_configs/), so no cell can overwrite another cell's spool or metrics.
+#
+# Candidate `gpu-qp lane <phase> <lane>` subcommand. The run matrix is files/bench-lanes.tsv.
+set -u
+set -o pipefail
+
+ROOT=${GPU_QP_ROOT:-{{ gpu_qp_source_path }}}
+BENCH=${GPU_QP_BENCH:-{{ gpu_qp_home }}/bench}
+OVERRIDE=$BENCH/override.yml
+
+PHASE=${1:-}
+LANE=${2:-}
+case "$PHASE" in
+  A)  BASIS=sto3g;   MAXIT=1000; SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
+  A2) BASIS=sto3g;   MAXIT='';   SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
+  B)  BASIS=sto3g;   MAXIT=200;  SEEDS='1';     MOLS='0 1 2 3 4 5' ;;
+  C)  BASIS=cc-pvdz; MAXIT=100;  SEEDS='1';     MOLS='0' ;;
+  S)  BASIS=sto3g;   MAXIT=20;   SEEDS='1';     MOLS='0' ;;
+  *) echo "usage: $0 <A|A2|B|C|S> <cpu-aer|gpu1|gpu2|analytic>" >&2; exit 2 ;;
+esac
+
+# A2 is the thesis protocol: no evaluation cap, stop on convergence instead. The fixed-budget
+# phases starve the finite-difference lanes (a gradient costs n_params+1 evaluations), so only
+# A2 yields converged energies.
+if [ "$PHASE" = A2 ]; then
+  BUDGET=(--convergence --threshold 1e-6)
+else
+  BUDGET=(--max-iterations "$MAXIT")
+fi
+
+case "$LANE" in
+  cpu-aer)  SERVICE=quantum-pipeline-cpu;  EXTRA=(--no-analytic) ;;
+  gpu1)     SERVICE=quantum-pipeline-gpu1; EXTRA=(--gpu) ;;
+  gpu2)     SERVICE=quantum-pipeline-gpu2; EXTRA=(--gpu) ;;
+  analytic) SERVICE=quantum-pipeline-cpu;  EXTRA=() ;;
+  *) echo "unknown lane: $LANE" >&2; exit 2 ;;
+esac
+
+MOLNAME=(H2 'HeH+' LiH BeH2 H2O NH3)
+OUT=$BENCH/$PHASE/$LANE
+STATE=$BENCH/$PHASE/state.tsv
+mkdir -p "$OUT" "$BENCH/$PHASE"
+# bind-mounted dirs must exist and be world-writable for the remapped daemon
+mkdir -p "{{ gpu_qp_gen_path }}"
+chmod 1777 "{{ gpu_qp_gen_path }}" 2>/dev/null || true
+
+COMPOSE=(docker compose -p ml --env-file "$ROOT/.env"
+  -f "$ROOT/compose/docker-compose.ml.yaml"
+  -f "$OVERRIDE"
+  --profile batch)
+
+COMMON=(--file data/molecules.thesis.json --basis "$BASIS" --ansatz EfficientSU2
+  --ansatz-reps 2 --optimizer L-BFGS-B --init-strategy random "${BUDGET[@]}"
+  --kafka --log-level DEBUG --dump --enable-performance-monitoring
+  --performance-export-format json)
+
+is_done() {
+  [ -f "$STATE" ] || return 1
+  awk -v l="$LANE" -v m="$1" -v s="$2" \
+    '$1==l && $2==m && $3==s && ($4=="done" || $4=="done-unstreamed"){f=1} END{exit !f}' "$STATE"
+}
+
+run_cell() {
+  local mol=$1 seed=$2 name=${MOLNAME[$1]}
+  local log="$OUT/${name}_seed${seed}.log"
+  local genroot="$OUT/${name}_seed${seed}.gen"
+  mkdir -p "$genroot/run_configs"
+  chmod 1777 "$genroot" "$genroot/run_configs" 2>/dev/null || true
+
+  local attempt=1 rc started ended status
+  while :; do
+    # a spool left by an earlier invocation must not pass for this attempt's: set it aside
+    if [ -n "$(ls -A "$genroot/undelivered" 2>/dev/null)" ]; then
+      mv "$genroot/undelivered" "$genroot/undelivered.stale-$(date -u +%Y%m%dT%H%M%SZ)"
+    fi
+    started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cd "$ROOT" || return 3
+    # per-cell gen/ and run_configs/ mounts: the spool, the metrics jsonl and the --dump file
+    # otherwise collide across cells on one path
+    "${COMPOSE[@]}" run --rm -T --user "$(id -u):$(id -g)" \
+      -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
+      -v "$genroot:/usr/src/quantum_pipeline/gen" \
+      -v "$genroot/run_configs:/usr/src/quantum_pipeline/run_configs" \
+      "$SERVICE" "${COMMON[@]}" --molecule-index "$mol" --seed "$seed" \
+      "${EXTRA[@]}" 2>&1 | tee "$log"
+    rc=${PIPESTATUS[0]}
+    ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [ "$rc" -eq 0 ]; then status=done; break; fi
+    # VQE finished but Kafka refused the record (MessageSizeTooLargeError): the CLI spooled it
+    # and exited 1. Rerunning would only spool again, so record it and move on.
+    if grep -q 'Total energy' "$log" && [ -n "$(ls -A "$genroot/undelivered" 2>/dev/null)" ]; then
+      status=done-unstreamed; break
+    fi
+    if [ "$attempt" -ge 2 ]; then status=failed; break; fi
+    echo "[retry] $LANE $name seed=$seed (exit $rc)" >&2
+    attempt=$((attempt + 1))
+  done
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$LANE" "$name" "$seed" "$status" "$rc" "$started" "$ended" >> "$STATE"
+  # [done] exit 0 | [done-unstreamed] VQE finished, Kafka refused the record, spooled | [failed]
+  echo "[$status] $LANE $name seed=$seed exit=$rc"
+}
+
+echo "[lane] $PHASE $LANE service=$SERVICE basis=$BASIS maxit=$MAXIT"
+for mol in $MOLS; do
+  for seed in $SEEDS; do
+    if is_done "${MOLNAME[$mol]}" "$seed"; then
+      echo "[skip] $LANE ${MOLNAME[$mol]} seed=$seed (done)"
+      continue
+    fi
+    run_cell "$mol" "$seed"
+  done
+done
+echo "LANE_DONE $PHASE $LANE"

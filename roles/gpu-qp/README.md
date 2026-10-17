@@ -72,6 +72,7 @@ on any command) shows the options.
 | `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` — which cannot silently fall back to the CPU — and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
 | `gpu-qp run [--cpu] [OPTION]...` | one simulation, on the GPU by default (`--gpu` and the role's optimizer are injected). Options are appended to the role's defaults, so they override them by name. `--cpu` omits `--gpu` (CPU / fast-path cases); an `--optimizer` you pass replaces the default one. With no arguments the run is unchanged. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
 | `gpu-qp bench [ARG]...` | runs `scripts/benchmark_fast_path.py` from the checkout inside the image, as the calling user, ARGs passed through. Mounts the checkout's `scripts/` and `data/` read-only (so `data/molecules.thesis.json` is available) and a writable `benchmarks/` under the run directory; defaults `--output` to `gen/<UTC timestamp>/bench.json`, log in `bench.log`. Reports the missing script if the checkout lacks it. |
+| `gpu-qp matrix [--group NAME]... [--only ID]... [--list]` | runs the phase-02 validation matrix (143 single-command cases from `files/matrix-cases.tsv`, installed as `matrix-cases.tsv` next to the compose file) against the image: one container run per case through `qpcase.sh`, 600 s limit each. `--group` / `--only` select (repeatable, union), `--list` prints the cases and runs nothing. Verdict per case: **pass** when the exit code equals the expected one (if given) and the expected log substring is present (if given; a leading `!` means absent); **fail** otherwise; **env** instead of fail when the log shows a known host limit (`IBM connection failed`, `Invalid combination of simulation method and device`, `KafkaProducerError`); **info** for record-only cases. Writes `gen/matrix-<UTC timestamp>/` with `<id>.log` per case and `summary.tsv` (id, group, exit, secs, verdict, decisive line); prints a per-group count table and the failing ids; exits 1 on any fail. Groups: `opt-fast opt-gpu opt-shots sim noise init budget io repro scale errors doc-example`. |
 | `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
 
 The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
@@ -85,6 +86,14 @@ gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
 gpu-qp scan                                         # vulnerabilities, as CI counts them
 gpu-qp bench [ARG]...                               # fast-path benchmark, args pass through
+gpu-qp matrix --group opt-fast                      # validation matrix, one group (all: ~2 h)
+```
+
+The validation matrix from the workstation, in one line; `gpu-qp matrix` exits
+non-zero on any fail:
+
+```bash
+ssh gpu 'gpu-qp matrix --group opt-fast'
 ```
 
 Test uncommitted workstation work (the host cannot reach the workstation, so

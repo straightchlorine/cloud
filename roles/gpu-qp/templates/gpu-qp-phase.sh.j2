@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Managed by Ansible - Do not edit manually
+#
+# Drives one phase: starts the sampler, runs its lanes, stops the sampler, extracts.
+# Per-lane stdout goes to <bench>/<phase>/<lane>.driver.log; per-cell container output is
+# already tee'd into <bench>/<phase>/<lane>/<mol>_seed<S>.log.
+#
+#   A/A2: cpu-aer + gpu1 + gpu2 concurrently, then analytic.
+#   B:    each lane alone, in order analytic, gpu1, gpu2, cpu-aer.
+#   C:    cpu-aer + gpu1 + gpu2 concurrently (H2, cc-pvdz).
+#
+# GPU_QP_BENCH selects the bench root. Candidate `gpu-qp phase <phase>` subcommand.
+set -u
+
+BENCH=${GPU_QP_BENCH:-{{ gpu_qp_home }}/bench}
+# Sibling scripts live beside this file, not in the bench tree: GPU_QP_BENCH may point at a
+# second tree (e.g. bench/conv) that holds only data.
+HERE=$(cd "$(dirname "$0")" && pwd)
+PHASE=${1:-}
+LOG=$BENCH/$PHASE/phase.log
+mkdir -p "$BENCH/$PHASE"
+
+lane() { bash "$HERE/gpu-qp-lane.sh" "$PHASE" "$1" >> "$BENCH/$PHASE/$1.driver.log" 2>&1; }
+
+case "$PHASE" in
+  A|A2)
+    for L in cpu-aer gpu1 gpu2; do lane "$L" & done
+    wait
+    lane analytic
+    ;;
+  B)
+    for L in analytic gpu1 gpu2 cpu-aer; do lane "$L"; done
+    ;;
+  C)
+    for L in cpu-aer gpu1 gpu2; do lane "$L" & done
+    wait
+    ;;
+  *) echo "usage: $0 <A|A2|B|C>" >&2; exit 2 ;;
+esac
+
+echo "PHASE_DONE $PHASE $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"

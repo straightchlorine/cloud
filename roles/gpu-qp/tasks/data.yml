@@ -32,6 +32,24 @@
     mode: "0755"
   become: true
 
+- name: Install the validation matrix for gpu-qp matrix
+  # The case list and its one-case runner sit next to the compose file; the
+  # runner is templated for the stack paths.
+  ansible.builtin.copy:
+    src: matrix-cases.tsv
+    dest: "{{ gpu_qp_home }}/matrix-cases.tsv"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Install the validation matrix case runner
+  ansible.builtin.template:
+    src: qpcase.sh.j2
+    dest: "{{ gpu_qp_home }}/qpcase.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
 - name: Remove the per-command tools earlier role versions installed
   # ponytail: migration only - drop once every host has run this once
   ansible.builtin.file:

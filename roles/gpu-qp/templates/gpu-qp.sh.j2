@@ -21,6 +21,9 @@ TRIVY_CACHE="{{ gpu_qp_home }}/.cache/trivy"
 PATCH_MARKER="$SOURCE/.git/gpu-qp-patch"
 BENCH_SCRIPT="scripts/benchmark_fast_path.py"
 CONTAINER_ROOT="/usr/src/quantum_pipeline"
+# The validation matrix: the case list and the one-case runner, both installed by the role.
+MATRIX_CASES="$STACK_HOME/matrix-cases.tsv"
+MATRIX_RUNNER="$STACK_HOME/qpcase.sh"
 
 # Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
 BUILD_ARGS=(
@@ -99,6 +102,26 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
       is writable under the run directory. Defaults to --output <run dir>/bench.json
       (an ARG --output overrides it). Writes $GEN_DIR/<UTC timestamp>/bench.log
       and bench.json. Prints what is missing if the script is not in the checkout.
+
+  matrix [--group NAME]... [--only ID]... [--list]
+      Run the phase-02 validation matrix against the image: every case of
+      $MATRIX_CASES is one container run (600 s limit each, through
+      $MATRIX_RUNNER) of the solver on H2, LiH, BeH2 or NH3. Takes about two hours
+      in full; a group is minutes. Meant for a quiet host - cases use the GPU.
+      --group NAME  only that group (repeatable): opt-fast opt-gpu opt-shots sim
+                    noise init budget io repro scale errors doc-example
+      --only ID     only that case (repeatable; combines with --group as a union)
+      --list        print the selected cases (id, group, molecule, expectation,
+                    estimated seconds) and run nothing
+      Verdict per case: pass when the exit code equals the expected one (if the
+      case has one) and the expected substring is in the log (if it has one; a
+      leading ! means absent); fail otherwise. env instead of fail when the log
+      shows a known host limit (IBM connection failed, Invalid combination of
+      simulation method and device, KafkaProducerError); info for cases that
+      only record an outcome. Exit 1 if any case fails.
+      Writes $GEN_DIR/matrix-<UTC timestamp>/: <id>.log per case and
+      summary.tsv (id, group, exit, secs, verdict, decisive line).
+      e.g.  ssh gpu 'gpu-qp matrix --group opt-fast'
 
   scan [--all] [IMAGE]
       Scan IMAGE (default $IMAGE) for vulnerabilities with Trivy, filtered the
@@ -443,6 +466,142 @@ cmd_bench() {
   return "$status"
 }
 
+cmd_matrix() {
+  local groups=() only=() list=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --group|--only)
+        [ $# -ge 2 ] || bad_usage "matrix: $1 needs a value"
+        if [ "$1" = "--group" ]; then groups+=("$2"); else only+=("$2"); fi
+        shift ;;
+      --group=*) groups+=("${1#--group=}") ;;
+      --only=*) only+=("${1#--only=}") ;;
+      --list) list=true ;;
+      *) bad_usage "matrix: unknown argument $1" ;;
+    esac
+    shift
+  done
+  [ -f "$MATRIX_CASES" ] || die "no case list at $MATRIX_CASES - deploy the role first"
+
+  # Select in Python: a tab-separated read in bash collapses the empty columns.
+  # Selected rows come back separated by the unit separator (0x1f), which does not collapse.
+  local selected
+  selected="$(GPU_QP_GROUPS="${groups[*]-}" GPU_QP_ONLY="${only[*]-}" GPU_QP_LIST="$list" \
+    python3 - "$MATRIX_CASES" <<'PY'
+import csv
+import os
+import sys
+
+rows = list(csv.DictReader(open(sys.argv[1]), delimiter="\t"))
+groups = os.environ["GPU_QP_GROUPS"].split()
+only = os.environ["GPU_QP_ONLY"].split()
+known_groups = {row["group"] for row in rows}
+known_ids = {row["id"] for row in rows}
+for group in groups:
+    if group not in known_groups:
+        sys.exit(f"unknown group {group} (known: {' '.join(sorted(known_groups))})")
+for case in only:
+    if case not in known_ids:
+        sys.exit(f"unknown case {case} (see: gpu-qp matrix --list)")
+if groups or only:
+    rows = [row for row in rows if row["group"] in groups or row["id"] in only]
+if os.environ["GPU_QP_LIST"] == "true":
+    for row in rows:
+        want = " ".join(
+            part
+            for part in (
+                f"exit {row['expect_exit']}" if row["expect_exit"] else "",
+                f"log {row['expect_substr']!r}" if row["expect_substr"] else "",
+            )
+            if part
+        )
+        print(f"{row['id']:34} {row['group']:12} {row['molecule']:5} {row['est_s']:>5}s  {want or 'record only'}", file=sys.stderr)
+    print(f"{len(rows)} cases", file=sys.stderr)
+    sys.exit(0)
+fields = ("id", "group", "molecule", "args", "expect_exit", "expect_substr")
+for row in rows:
+    print("\x1f".join(row[field] for field in fields))
+PY
+  )" || die "matrix: case selection failed"
+  [ "$list" = false ] || return 0
+  [ -n "$selected" ] || die "no cases selected"
+
+  require_checkout
+  require_image
+  [ -f "$MATRIX_RUNNER" ] || die "no case runner at $MATRIX_RUNNER - deploy the role first"
+
+  local matrix_dir total n=0 started
+  matrix_dir="$GEN_DIR/matrix-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$matrix_dir"
+  total="$(grep -c '' <<<"$selected")"
+  started="$(date +%s)"
+  printf 'id\tgroup\texit\tsecs\tverdict\tdecisive\n' >"$matrix_dir/summary.tsv"
+  echo "matrix: $total cases -> $matrix_dir"
+
+  # Cases come in on fd 3: the container must not read the loop's stdin.
+  local id group molecule args want_exit want_substr
+  while IFS=$'\x1f' read -r -u 3 id group molecule args want_exit want_substr; do
+    n=$((n + 1))
+    local log="$matrix_dir/$id.log" line code secs argv=()
+    read -r -a argv <<<"$args"
+    line="$(bash "$MATRIX_RUNNER" "$log" "$matrix_dir/$id" "$molecule" ${argv[@]+"${argv[@]}"} </dev/null)" \
+      || line="exit=99 secs=0"
+    code="${line#exit=}"; code="${code%% *}"
+    secs="${line##*secs=}"
+
+    local ok=true
+    [ -z "$want_exit" ] || [ "$code" = "$want_exit" ] || ok=false
+    if [ -n "$want_substr" ]; then
+      if [ "${want_substr:0:1}" = "!" ]; then
+        if grep -qF -- "${want_substr:1}" "$log"; then ok=false; fi
+      else
+        grep -qF -- "$want_substr" "$log" || ok=false
+      fi
+    fi
+    [ "$code" != 124 ] && [ "$code" != 99 ] || ok=false
+
+    local verdict
+    if [ "$ok" = true ]; then
+      verdict=pass
+      [ -n "$want_exit$want_substr" ] || verdict=info
+    elif grep -qE 'IBM connection failed|Invalid combination of simulation method and device|KafkaProducerError' "$log"; then
+      verdict=env
+    else
+      verdict=fail
+    fi
+
+    # The first line that explains the outcome: the fast-path line, the energy, or the error.
+    local decisive
+    decisive="$({
+      grep -m1 'Analytic-gradient statevector path' "$log"
+      grep -i -m1 -E 'final energy|minimum energy|best energy|ground.state energy' "$log"
+      grep -m1 -E 'quantum-pipeline: error|^Error|Traceback|Exception' "$log"
+    } 2>/dev/null | cut -c1-200 | head -3 | tr -d '\t\r' | paste -sd '|' || true)"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$group" "$code" "$secs" "$verdict" "$decisive" >>"$matrix_dir/summary.tsv"
+    printf '[%d/%d] %-34s %-5s exit=%s %ss\n' "$n" "$total" "$id" "$verdict" "$code" "$secs"
+  done 3<<<"$selected"
+
+  echo
+  echo "== matrix summary ($(( $(date +%s) - started )) s) =="
+  awk -F'\t' '
+    NR > 1 {
+      seen[$2] = 1; count[$2, $5]++; total[$2]++
+      all[$5]++
+      if ($5 == "fail") failed = failed " " $1
+    }
+    END {
+      printf "  %-14s %5s %5s %5s %5s %5s\n", "group", "pass", "fail", "env", "info", "total"
+      for (g in seen)
+        printf "  %-14s %5d %5d %5d %5d %5d\n", g, count[g, "pass"], count[g, "fail"], count[g, "env"], count[g, "info"], total[g] | "sort"
+      close("sort")
+      printf "  %-14s %5d %5d %5d %5d %5d\n", "all", all["pass"], all["fail"], all["env"], all["info"], NR - 1
+      if (failed != "") print "failing:" failed
+    }' "$matrix_dir/summary.tsv"
+  echo "summary: $matrix_dir/summary.tsv"
+  ! awk -F'\t' 'NR > 1 && $5 == "fail" { found = 1 } END { exit !found }' "$matrix_dir/summary.tsv"
+}
+
 cmd_scan() {
   local all=false image=""
   while [ $# -gt 0 ]; do
@@ -534,7 +693,7 @@ PY
 command="${1:-}"
 [ $# -eq 0 ] || shift
 case "$command" in
-  pull|patch|build|check|run|bench|scan) "cmd_$command" "$@" ;;
+  pull|patch|build|check|run|bench|matrix|scan) "cmd_$command" "$@" ;;
   help|-h|--help) usage ;;
   "") usage >&2; exit 2 ;;
   *) bad_usage "unknown command: $command" ;;
