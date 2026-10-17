@@ -292,6 +292,45 @@ print('dropped', len(gone), 'row(s) of', len(wanted), 'file(s)')
     printf '%s\n' "$paths" | register_paths /config/adopt.yaml
 }
 
+# Title comparison for complete_plan, as python source that is prepended to it (and
+# run by engine-test.sh, so the test exercises exactly this code).
+#
+# Two titles are the same track when they match after normalisation, or one is the
+# start of the other ("Principles of Lust" / "Principles of Lust: Sadeness / ..."),
+# or they are nearly identical. A parenthetical both carry - the "(Live In Mexico
+# City)" every track of a live album ends with - is taken off first: left on, it
+# is most of every title and makes "Ride" and "Trees" 88% alike. A parenthetical
+# only one has ("(Slowed)", "(Sped Up)") is kept, because that is a different track.
+# shellcheck disable=SC2016  # python source, not shell: nothing here should expand
+TITLE_PY='
+import difflib, re, unicodedata
+
+def key(text):
+    return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", text or "").casefold())
+
+def split_tail(text):
+    m = re.match(r"^(.*?)\s*([(\[][^()\[\]]*[)\]])\s*$", text or "")
+    return (m.group(1), m.group(2)) if m and m.group(1).strip() else (text or "", "")
+
+def same_title(mine, theirs):
+    (a_base, a_tail), (b_base, b_tail) = split_tail(mine), split_tail(theirs)
+    if a_tail and b_tail and key(a_tail) == key(b_tail):
+        mine, theirs = a_base, b_base
+    a, b = key(mine), key(theirs)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # One title opening the other is the same track ("Principles of Lust" /
+    # "Principles of Lust: Sadeness / ...") unless what follows is a parenthetical:
+    # "Song (Slowed)" is not "Song", and "Heathens (Live)" is not "Heathens".
+    ra, rb = " ".join(mine.casefold().split()), " ".join(theirs.casefold().split())
+    short, long_ = (ra, rb) if len(ra) <= len(rb) else (rb, ra)
+    if len(key(short)) >= 4 and long_.startswith(short):
+        return long_[len(short):].lstrip()[:1] not in ("(", "[")
+    return min(len(a), len(b)) >= 8 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
+'
+
 # Albums where most tracks found their release and some did not, as the plan
 # `media-sync --complete` acts on: lines of <release id> TAB <album> TAB <path>.
 # An album qualifies with one release id among its matched tracks, at least three
@@ -302,24 +341,13 @@ print('dropped', len(gone), 'row(s) of', len(wanted), 'file(s)')
 # it (another download, the other format): pinning it would put the same track
 # into the album twice, so it is left alone and counted on stderr.
 complete_plan() {
-    "${BEET_PY[@]}" -c "
-import collections, difflib, json, re, sys, time, unicodedata, urllib.request
+    "${BEET_PY[@]}" -c "$TITLE_PY
+import collections, json, sys, time, urllib.request
 from beets.library import Library
-
-def key(text):
-    return re.sub(r'[\W_]+', '', unicodedata.normalize('NFKC', text or '').casefold())
 
 def who(item):
     name = (item.albumartist or item.artist or '').casefold()
     return key(re.sub(r'\s*-\s*topic\$', '', name))
-
-def same_title(mine, theirs):
-    a, b = key(mine), key(theirs)
-    if not a or not b:
-        return False
-    if a == b or (min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a))):
-        return True
-    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.85
 
 def release_titles(mbid):
     url = 'https://musicbrainz.org/ws/2/release/%s?inc=recordings&fmt=json' % mbid
