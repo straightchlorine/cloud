@@ -52,12 +52,12 @@ media_backup_retention: 14
 media_backup_schedule_hour: "02"
 media_backup_schedule_minute: "30"
 
-# Resolvers handed to the beets container (see the service's service_dns). Public
-# fallback for a host that sets none; a host on a LAN with its own resolvers
-# overrides this in host_vars (the media host does).
+# Resolvers handed to the beets container (see the service's service_dns). Quad9
+# (primary and secondary) as the fallback for a host that sets none; a host on a
+# LAN with its own resolvers overrides this in host_vars (the media host does).
 media_beets_dns:
-  - 1.1.1.1
   - 9.9.9.9
+  - 149.112.112.112
 
 media_compose_networks:
   - name: stack
