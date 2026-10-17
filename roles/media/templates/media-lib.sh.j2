@@ -55,9 +55,11 @@ audio_files() {  # [<host dir>]
         -o -iname '*.ogg' -o -iname '*.wav' \)
 }
 
-# The container paths beets already holds a row for. Sorted with LC_ALL=C: comm
-# needs both lists sorted by the same rule, and the library holds names in every
-# script.
+# The container paths beets already holds a row for. Sorted with LC_ALL=C, and every
+# comm that reads them runs under LC_ALL=C too: comm judges "sorted" by the locale's
+# collation, so a host in en_GB.UTF-8 (the media Pi) rejects a byte-sorted list as
+# "not in sorted order" as soon as names differ in case or script, and stops with a
+# truncated result.
 registered_paths() {
     "${BEET[@]}" ls -f '$path' < /dev/null | LC_ALL=C sort -u
 }
@@ -66,7 +68,7 @@ registered_paths() {
 # host mirrors the container's /music and /downloads under $LIB, so the mapping
 # is a prefix.
 unregistered_files() {  # <container dir>
-    comm -23 \
+    LC_ALL=C comm -23 \
         <(audio_files "$LIB$1" | sed "s|^$LIB||" | LC_ALL=C sort -u) \
         <(registered_paths)
 }
@@ -83,7 +85,7 @@ register_paths() {  # <beets config>
     # No array-length expansions in a .j2 (their brace-hash opens a Jinja comment).
     # Only files still on disk: a pin hands over the paths its files had BEFORE the
     # import moved them, and a path that no longer exists is not "unregistered".
-    list="$(comm -23 <(LC_ALL=C sort -u) <(registered_paths) |
+    list="$(LC_ALL=C comm -23 <(LC_ALL=C sort -u) <(registered_paths) |
         while IFS= read -r path; do [ ! -e "$LIB$path" ] || printf '%s\n' "$path"; done)"
     if [ -z "$list" ]; then
         echo "to register: 0 file(s)"
@@ -205,11 +207,10 @@ except OSError as err:
 #
 #   release -> album.yaml + import.quiet: no            (prompt with candidates)
 #   keep    -> adopt.yaml + import.move: yes            (register a directory as-is)
-#   pinned  -> album.yaml + match.strong_rec_thresh 0.3 + duplicate_action merge
-#              (the release was chosen with --id: a lone candidate is accepted
-#              even when the pressing's own track list or credits differ from the
-#              files, and a file imported on its own joins the album row of the
-#              same release instead of starting a one-track album of its own)
+#   pinned  -> album.yaml + match.strong_rec_thresh 0.3 (the release was chosen
+#              with --id: a lone candidate is accepted even when the pressing's
+#              own track list or credits differ from the files. Used by `--albums
+#              <dir> --id` and as the config pin_files reads its settings from)
 #
 # The prompting kinds are human-driven runs, so they let reviewed.py turn a
 # "use as-is" answer into a marker.
@@ -219,7 +220,7 @@ import sys, yaml
 base, imp, top = {
     'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
     'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
-    'pinned': ('/config/album.yaml', {'duplicate_action': 'merge'}, {'match': {'strong_rec_thresh': 0.3}}),
+    'pinned': ('/config/album.yaml', {}, {'match': {'strong_rec_thresh': 0.3}}),
 }[sys.argv[1]]
 conf = yaml.safe_load(open(base))
 for key, value in top.items():
@@ -257,39 +258,113 @@ files_for_query() {  # <beets query...>
     "${BEET[@]}" ls -f '$path' "$@" < /dev/null | LC_ALL=C sort -u
 }
 
-# Give the files on stdin (container paths) the MusicBrainz release <id>. Their
-# rows are dropped first - an import of a file the library already holds stops
-# at the duplicate check - and they are imported with the pinned overlay, which
-# merges every file of the release into one album row wherever the files lie.
-# Rows only: no file is deleted. Whatever the importer refuses is registered again
-# as it was, so a pin that does not fit costs no row.
+# Give the files on stdin (container paths) the MusicBrainz release <id>.
+#
+# The release is applied to the files directly, not by importing them. An import
+# into an album that already has members re-imports those members too and lets
+# beets re-assign every track to a slot: a second copy of a track (the same song
+# from two sources, both matched) was pushed into the one vacant slot and came out
+# retitled as another song. Here each file is matched to a track of the release by
+# title, and nothing else is touched - rows keep their ids and flags, other members
+# stay exactly as they are.
+#
+#   - a file whose title is not on the release is left as it is
+#   - a file whose track the album already holds (a copy) is left as it is
+#   - two files claiming one track: the closer in length takes it
+#   - the album row of the release is joined if there is one, created if not
+#
+# Matched files get the release's tags written and are moved to where the album
+# keeps its files; a new album also gets its cover art. Prints a summary and a
+# line per file left alone.
+PIN_PY='
+import sys
+from beets import config, plugins, metadata_plugins, ui
+from beets.autotag import AlbumMatch
+from beets.autotag.distance import Distance
+from beets.dbcore import MatchQuery
+
+mbid = sys.argv[1]
+wanted = set(l.rstrip("\n") for l in sys.stdin if l.strip())
+config.read(user=False, defaults=True)
+config.set_file("/config/config.yaml")
+config.set_file("/config/.run.yaml")
+config["plugins"].set(["musicbrainz"])
+plugins.load_plugins()
+lib = ui._open_library(config)
+
+info = metadata_plugins.album_for_id(mbid, "MusicBrainz")
+if info is None:
+    print("pin: MusicBrainz has no release %s (or is unreachable)" % mbid)
+    sys.exit(1)
+
+def path_of(item):
+    return item.path.decode("utf-8", "surrogateescape")
+
+existing = list(lib.albums(MatchQuery("mb_albumid", mbid)))
+album = existing[0] if existing else None
+members = list(album.items()) if album else []
+todo = [i for i in lib.items() if path_of(i) in wanted and (album is None or i.album_id != album.id)]
+skipped = []
+claims = {}
+for item in todo:
+    tracks = [t for t in info.tracks if same_title(item.title, t.title)]
+    if not tracks:
+        skipped.append((item, "its title is not on the release"))
+        continue
+    free = [t for t in tracks if not any(
+        (m.mb_releasetrackid and m.mb_releasetrackid == t.release_track_id) or same_title(m.title, t.title)
+        for m in members)]
+    if not free:
+        skipped.append((item, "the album already holds that track (a copy)"))
+        continue
+    best = min(free, key=lambda t: abs((item.length or 0) - (t.length or 0)))
+    other = claims.get(id(best))
+    if other is not None:
+        if abs((item.length or 0) - (best.length or 0)) < abs((other.length or 0) - (best.length or 0)):
+            skipped.append((other, "another file is closer to that track"))
+            claims[id(best)] = item
+        else:
+            skipped.append((item, "another file is closer to that track"))
+        continue
+    claims[id(best)] = item
+mapping = {item: next(t for t in info.tracks if id(t) == tid) for tid, item in claims.items()}
+for item, why in skipped:
+    print("left alone: %s - %s" % (path_of(item), why))
+new_album = False
+if mapping:
+    AlbumMatch(Distance(), info, mapping).apply_metadata()
+    if album is None:
+        album = lib.add_album(list(mapping))
+        AlbumMatch(Distance(), info, mapping).apply_album_metadata(album)
+        album.store()
+        new_album = True
+    else:
+        for item in mapping:
+            item.album_id = album.id
+    for item in mapping:
+        item.try_write()
+        item.move()
+        item.store()
+        print("@pinned %d" % item.id)
+if new_album:
+    print("@album %d" % album.id)
+print("pinned %d of %d file(s)%s" % (len(mapping), len(wanted), "" if not skipped else ", %d left alone" % len(skipped)))
+'
 pin_files() {  # <release id>
-    local id="$1" paths
+    local id="$1" paths out n
     paths="$(cat)"
     [ -n "$paths" ] || { echo "pin: no files given"; return 0; }
-    printf '%s\n' "$paths" | "${BEET_PY[@]}" -c "
-import sys
-from beets.library import Library
-
-wanted = set(l.rstrip('\n') for l in sys.stdin if l.strip())
-lib = Library('/config/library.db', directory='/music')
-gone = [i for i in lib.items() if i.path.decode('utf-8', 'surrogateescape') in wanted]
-with lib.transaction():
-    for item in gone:
-        item.remove(False)
-print('dropped', len(gone), 'row(s) of', len(wanted), 'file(s)')
-"
     overlay pinned
-    # One beets process per file, in order. Handed several files at once, beets
-    # pipelines them (fingerprinting the next while the previous is still being
-    # moved) and a file that joins an album row re-imports that row's members too,
-    # so a path can be taken twice and the run dies on a file that has just moved:
-    # FileNotFoundError out of the fingerprint stage. A file that fails here only
-    # costs itself; the register below catches it.
-    printf '%s\n' "$paths" |
-        xargs -d '\n' -n 1 -- "${BEET[@]}" -c /config/.run.yaml import -S "$id" ||
-        echo "pin: some files could not be imported; they are registered as they were"
-    printf '%s\n' "$paths" | register_paths /config/adopt.yaml
+    out="$(printf '%s\n' "$paths" | "${BEET_PY[@]}" -c "$TITLE_PY
+$PIN_PY" "$id")" || { printf '%s\n' "$out"; return 1; }
+    printf '%s\n' "$out" | grep -v '^@'
+    # A new album row has no cover yet: fetch it, then embed it in the new files.
+    if printf '%s\n' "$out" | grep -q '^@album '; then
+        "${BEET[@]}" fetchart -q "mb_albumid:$id" < /dev/null || true
+        for n in $(printf '%s\n' "$out" | sed -n 's/^@pinned //p'); do
+            "${BEET[@]}" embedart -y "id:$n" < /dev/null || true
+        done
+    fi
 }
 
 # Title comparison for complete_plan, as python source that is prepended to it (and

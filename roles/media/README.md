@@ -310,11 +310,17 @@ file of the release into one album row wherever the files lie:
   under the same album tag stays out. It is step 6 of the maintenance run; run
   `--regroup` before it, so the matched tracks already share one album row.
 
-Both take a checkpoint first, drop only the *rows* of the files concerned (never a
-file), import them one beets process at a time, and register again, as they were,
-any file the release did not fit - so a pin that does not fit costs no row. beets
-may re-import the album's existing tracks as part of a merge, so their ids can
-change; their tags and release stay.
+Both take a checkpoint first and apply the release **directly to the files**, not by
+importing them. An import into an album that already has members re-imports those
+members as well and lets beets re-assign every track to a slot; on a real library
+that pushed a second copy of a track (the same song from two sources, both matched)
+into the one vacant slot and retitled it as another song. A pin matches each file to
+a track of the release by title and touches nothing else: rows keep their ids and
+flags, other members stay as they are. A file whose title is not on the release, or
+whose track the album already holds, is left as it is and reported; two files
+claiming one track go to the closer in length. The release's album row is joined if
+it exists and created if not, tags are written and files moved into the album's
+folder, and a new album also gets its cover.
 
 **Ripped CDs and pressings MusicBrainz does not match well.** `--albums <dir>`
 imports a directory as one album and applies only a *strong* match. If a release

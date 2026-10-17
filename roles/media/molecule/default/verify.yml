@@ -280,7 +280,11 @@
           - "'--complete)' in media_sync"
           - "'pin_files() {' in media_lib"
           - "'complete_plan() {' in media_lib"
-          - "'duplicate_action' in media_lib"
+          - "'PIN_PY=' in media_lib"
+          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_lib"
+          - "'the album already holds that track (a copy)' in media_lib"
+          # a pin applies the release itself: it never imports into an existing album
+          - "'import -S' not in media_lib"
           - "'--plan)' in media_sync"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"
