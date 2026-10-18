@@ -129,6 +129,18 @@
     mode: "0755"
   become: true
 
+- name: Create the library review directory
+  # Mounted into the beets container as /review before docker would create it
+  # root-owned: the audit writes candidates.json and its MusicBrainz cache here.
+  # Under state/, so restic keeps the decisions (it excludes *.log, not *.json).
+  ansible.builtin.file:
+    path: "{{ media_library_path }}/state/review"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+
 - name: Install the python tools
   ansible.builtin.copy:
     src: "tools/{{ item }}"
@@ -139,6 +151,7 @@
   loop:
     - media_common.py
     - media_tools.py
+    - media_audit.py
 
 - name: Install the pipeline scripts
   # One engine, an interactive wrapper, and a host-side `beet` for looking at the

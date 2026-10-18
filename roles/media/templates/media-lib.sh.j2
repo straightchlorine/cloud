@@ -28,6 +28,10 @@ BEET_PY=("${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets)
 # The role's python tools, as the beets container sees them (deployed to
 # $LIB/beets/tools). Each shell function below is a thin call into media_tools.py.
 TOOLS=/config/tools
+# The library review's files (candidates, decisions, the MusicBrainz cache): on the
+# host $LIB/state/review, in the container /review.
+REVIEW=/review
+MB_URL="{{ media_musicbrainz_url }}"
 
 ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
 
@@ -63,17 +67,25 @@ audio_files() {  # [<host dir>]
 # collation, so a host in en_GB.UTF-8 (the media Pi) rejects a byte-sorted list as
 # "not in sorted order" as soon as names differ in case or script, and stops with a
 # truncated result.
+#
+# Callers read it into a variable first: inside <( ) a failed beet ls is invisible,
+# the list just comes out empty, and then EVERY file looks unregistered - the audit
+# reports the whole library and register_paths re-imports it (row churn).
 registered_paths() {
-    "${BEET[@]}" ls -f '$path' < /dev/null | LC_ALL=C sort -u
+    local out
+    out="$("${BEET[@]}" ls -f '$path' < /dev/null)" || { echo "beet ls failed: cannot tell what has a row" >&2; return 1; }
+    printf '%s\n' "$out" | LC_ALL=C sort -u
 }
 
 # Container paths of the files under <container dir> that have no row yet. The
 # host mirrors the container's /music and /downloads under $LIB, so the mapping
 # is a prefix.
 unregistered_files() {  # <container dir>
+    local registered
+    registered="$(registered_paths)" || return 1
     LC_ALL=C comm -23 \
         <(audio_files "$LIB$1" | sed "s|^$LIB||" | LC_ALL=C sort -u) \
-        <(registered_paths)
+        <(printf '%s\n' "$registered")
 }
 
 # Register files as they are, but ONLY the ones with no row. Pointing the importer
@@ -84,11 +96,12 @@ unregistered_files() {  # <container dir>
 # (container paths, one per line) come on stdin; whatever already has a row is
 # dropped from them here.
 register_paths() {  # <beets config>
-    local cfg="$1" list
+    local cfg="$1" list registered
+    registered="$(registered_paths)" || return 1
     # No array-length expansions in a .j2 (their brace-hash opens a Jinja comment).
     # Only files still on disk: a pin hands over the paths its files had BEFORE the
     # import moved them, and a path that no longer exists is not "unregistered".
-    list="$(LC_ALL=C comm -23 <(LC_ALL=C sort -u) <(registered_paths) |
+    list="$(LC_ALL=C comm -23 <(LC_ALL=C sort -u) <(printf '%s\n' "$registered") |
         while IFS= read -r path; do [ ! -e "$LIB$path" ] || printf '%s\n' "$path"; done)"
     if [ -z "$list" ]; then
         echo "to register: 0 file(s)"
@@ -141,7 +154,7 @@ checkpoint() {
 # Can the beets container reach MusicBrainz? A pass that cannot silently matches
 # nothing and logs "Skipping." for days, so ask before starting one.
 musicbrainz_reachable() {
-    "${BEET_PY[@]}" "$TOOLS/media_tools.py" reachable
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" reachable --mb-url "$MB_URL"
 }
 
 # Compose an overlay with one extra setting, inside the container, so each
@@ -252,5 +265,14 @@ pin_files() {  # <release id>
 # it (another download, the other format): pinning it would put the same track
 # into the album twice, so it is left alone and counted on stderr.
 complete_plan() {
-    "${BEET_PY[@]}" "$TOOLS/media_tools.py" plan
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" plan --mb-url "$MB_URL" --cache "$REVIEW/mb-cache"
+}
+
+# What the nightly release pass left half placed (see media_audit.py), written to
+# $LIB/state/review/candidates.json; changes nothing in the library. The files with
+# no row come from unregistered_files, so the audit and the adopt agree on them.
+audit_library() {
+    local loose
+    loose="$(unregistered_files /music)" || return 1
+    printf '%s\n' "$loose" | "${BEET_PY[@]}" "$TOOLS/media_audit.py" --mb-url "$MB_URL" --review "$REVIEW"
 }

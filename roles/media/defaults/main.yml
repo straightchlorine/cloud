@@ -27,6 +27,10 @@ media_youtube_enabled: false
 # Beets query excluded from `media-sync --backfill` (e.g. audiobooks). Empty = whole library.
 media_backfill_exclude: ""
 
+# The MusicBrainz web service the review tools (`media-sync --audit`, --complete's
+# plan) ask. The tests point it at a local stub of fixture releases.
+media_musicbrainz_url: "https://musicbrainz.org"
+
 media_library_directories:
   - music
   - downloads
@@ -142,6 +146,7 @@ media_compose_services:
       - "{{ media_library_path }}/beets:/config"
       - "{{ media_library_path }}/music:/music"
       - "{{ media_library_path }}/downloads:/downloads"
+      - "{{ media_library_path }}/state/review:/review"
     service_networks:
       - stack
     # Pinned on purpose: inheriting the host's resolver list (a Pi-hole plus a

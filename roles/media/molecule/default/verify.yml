@@ -28,6 +28,7 @@
         - "{{ media_home }}/scripts/media-status.sh"
         - "{{ media_library_path }}/beets/tools/media_tools.py"
         - "{{ media_library_path }}/beets/tools/media_common.py"
+        - "{{ media_library_path }}/beets/tools/media_audit.py"
       register: media_files
 
     - name: Parse the deployed files
@@ -50,6 +51,7 @@
         media_status: "{{ media_files.results[15].content | b64decode }}"
         media_tools_py: "{{ media_files.results[16].content | b64decode }}"
         media_common_py: "{{ media_files.results[17].content | b64decode }}"
+        media_audit_py: "{{ media_files.results[18].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -95,6 +97,7 @@
           - compose.services.beets.userns_mode == 'host'
           - compose.services.beets.profiles == ['tools']
           - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
+          - "'/mnt/music/state/review:/review' in compose.services.beets.volumes"
           - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
           - "'WATCHTOWER_EPHEMERAL_SELF_UPDATE=true' in watchtower.environment"
           - "watchtower_hostname in watchtower.environment"
@@ -294,7 +297,8 @@
           - "'complete_plan() {' in media_lib"
           - "'def cmd_pin(' in media_tools_py"
           - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_tools_py"
-          - "'the album already holds that track (a copy)' in media_tools_py"
+          - "'the album already holds that track (a copy)' in media_common_py"
+          - "'mc.assign(todo, info.tracks, held)' in media_tools_py"
           - "'def same_title(' in media_common_py"
           # python lives in the tools, not in shell strings; a pin applies the release itself
           # and never imports into an existing album
@@ -302,6 +306,12 @@
           - "'import -S' not in media_lib"
           - "'importer' not in media_tools_py"
           - "'--plan)' in media_sync"
+          # the library review's audit: one read-only container run into /review
+          - "'--audit)' in media_sync"
+          - "'$TOOLS/media_audit.py\"' in media_lib"
+          - "'REVIEW=/review' in media_lib"
+          - "'import media_common as mc' in media_audit_py"
+          - "'.store()' not in media_audit_py"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"
           # the dashboard stays read-only: no container, no lock

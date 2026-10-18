@@ -1,6 +1,7 @@
 # Library review tooling - plan
 
-Status: agreed 2026-10-17; phase 0 done 2026-10-18 (uncommitted, undeployed), phase 1 next. This file is the plan, not the
+Status: agreed 2026-10-17; phases 0 and 1 done 2026-10-18 (phase 0 deployed, phase 1 not),
+phase 2 next. This file is the plan, not the
 documentation: once a phase ships, its behaviour moves into `README.md` and the
 code comments, and the phase is ticked off here.
 
@@ -44,7 +45,8 @@ Everything else is a module those load; nothing else is a command.
     and cache, decisions file I/O.
   * `media_tools.py` - the subcommands the shell calls inside the beets
     container: `pin`, `plan`, `regroup`, `prune`, `reachable`, `overlay`.
-  * later: `media_audit.py`, `media_apply.py` (container) and
+  * `media_audit.py` - `--audit` (container).
+  * later: `media_apply.py` (container) and
     `media_review.py` (host: sqlite, the cache and fzf only; the Pi has
     Python 3.13 and fzf).
 
@@ -66,9 +68,28 @@ Actions: `pin` (give targets a release), `keep` (mark reviewed so upgrades stop
 asking), `register` (register a file that is on disk but has no row),
 `quarantine` (move a copy to `removed/<date>`), `skip` (do not ask again).
 
+## Audit rules
+
+The hand count (2026-10-17, re-run on a copy of the library 2026-10-18: same
+numbers) used these, and phase 1 is held to them:
+
+* An album group is (artist, album): the album artist, else the artist, with a
+  YouTube `- Topic` suffix taken off; the album with one trailing parenthetical
+  taken off (`Scaled and Icy (Livestream Version)` joins `Scaled and Icy`). Both
+  compared by `key()` - case, punctuation and spacing do not matter. Tracks with
+  no album tag are in no group.
+* **split**: the group's tracks carry two or more release ids.
+* **partial**: some tracks carry a release id and some carry none (bare).
+* **whole**: no track carries one, at least 3 bare tracks, and the album title is
+  not an edit (`slowed|sped|nightcore|reverb|remix|bass boosted`): MusicBrainz
+  never has those.
+* A group can be split and partial at once (*Vessel*). Tracks marked `reviewed`
+  are left out (none are yet, so the counts are unaffected).
+
 ## Flow
 
-1. **Audit** - `media-sync --audit`, read-only, manual, about two minutes. Groups
+1. **Audit** - `media-sync --audit`, read-only, manual; about 6 minutes cold
+   (~370 MusicBrainz requests at 1/s for ~70 groups), seconds once cached. Groups
    tracks by normalised artist and album title, classifies the groups above,
    looks up candidates on MusicBrainz, writes `candidates.json`.
 2. **Review** - `media-import --library [query]`. Re-reads the library per album
@@ -119,7 +140,7 @@ asking), `register` (register a file that is on disk but has no row),
 | phase | content | done when |
 |---|---|---|
 | 0 ✓ | move the pin, complete, regroup, prune and title code out of shell strings into Python files | all existing engine tests still pass, tested locally and in the container |
-| 1 | audit and `candidates.json`, with the MusicBrainz stub | it reproduces the hand count (13 split, 26 partial, 30 whole) |
+| 1 ✓ | audit and `candidates.json`, with the MusicBrainz stub | it reproduces the hand count (13 split, 26 partial, 30 whole) |
 | 2 | apply: decisions schema, log, undo, gates, cron, ntfy | a scripted decisions file applies, undoes and goes stale correctly |
 | 3 | the review menu and `pick fix` | a scripted session produces the expected file |
 | 4 | edition correction (remove the emptied album row), copy handling (register one, demote the other), downloads through the same menu | the Shaun Baker case resolves |

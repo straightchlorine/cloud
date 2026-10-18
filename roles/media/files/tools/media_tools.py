@@ -7,10 +7,10 @@ Deployed to /config/tools/ and run with beets' own python:
 
 Commands:
     overlay <release|keep|pinned>   write /config/.run.yaml from an overlay
-    reachable                       can this container reach MusicBrainz?
+    reachable --mb-url URL          can this container reach MusicBrainz?
     prune [--dry-run]               drop rows whose file is gone
     regroup                         album rows for tracks that carry a release id
-    plan                            the albums --complete would finish (stdout)
+    plan --mb-url URL --cache DIR   the albums --complete would finish (stdout)
     pin <release id>                give the files on stdin that release
 
 beets is imported inside each command, so media_common stays importable (and
@@ -22,20 +22,9 @@ import collections
 import os
 import socket
 import sys
+import urllib.parse
 
 import media_common as mc
-
-
-def open_library():
-    """The library, with the user's config.yaml read - the CLI's own entry point does
-    this, a bare Library() would not. directory= is explicit: without it the default
-    ~/Music applies and every item looks like an orphan."""
-    from beets import config
-    from beets.library import Library
-
-    config.read(user=False, defaults=True)
-    config.set_file("/config/config.yaml")
-    return Library("/config/library.db", directory="/music")
 
 
 # ---------------------------------------------------------------------- overlay
@@ -60,11 +49,13 @@ def cmd_overlay(args):
 
 # -------------------------------------------------------------------- reachable
 
-def cmd_reachable(_args):
+def cmd_reachable(args):
+    url = urllib.parse.urlsplit(args.mb_url)
+    port = url.port or (443 if url.scheme == "https" else 80)
     try:
-        socket.create_connection((socket.gethostbyname("musicbrainz.org"), 443), 10).close()
+        socket.create_connection((socket.gethostbyname(url.hostname), port), 10).close()
     except OSError as err:
-        print("musicbrainz.org unreachable from the beets container:", err)
+        print("%s unreachable from the beets container:" % url.hostname, err)
         return 1
     return 0
 
@@ -75,7 +66,7 @@ def cmd_prune(args):
     """Drop rows whose file is gone (a track removed on purpose). Rows only: delete=False
     never touches a file, and with_album (the default) removes an album row with its
     last item."""
-    lib = open_library()
+    lib = mc.open_library()
     items = list(lib.items())
     gone = [i for i in items if not os.path.exists(i.path)]
     print("orphan rows:", len(gone), "of", len(items))
@@ -99,7 +90,7 @@ def cmd_regroup(_args):
     becomes the art of a row that has none. No file and no tag changes."""
     from beets.dbcore import MatchQuery
 
-    lib = open_library()
+    lib = mc.open_library()
     groups = collections.defaultdict(list)
     for item in lib.items():
         if item.album_id is None and (item.get("mb_albumid") or ""):
@@ -128,7 +119,7 @@ def cmd_regroup(_args):
 
 # -------------------------------------------------------------------------- plan
 
-def cmd_plan(_args):
+def cmd_plan(args):
     """The plan `media-sync --complete` acts on: lines of <release id> TAB <album> TAB
     <path>. An album qualifies with one release id among its matched tracks, at least
     three of them, and no more bare tracks than matched ones. A bare track is included
@@ -137,7 +128,8 @@ def cmd_plan(_args):
     a matched track of the album already has is a second copy of it (another download,
     the other format): pinning it would put the same track into the album twice, so it
     is left alone and counted on stderr."""
-    lib = open_library()
+    lib = mc.open_library()
+    mb = mc.MusicBrainz(args.mb_url, args.cache)
     copies = 0
     groups = collections.defaultdict(list)
     for item in lib.items():
@@ -150,7 +142,7 @@ def cmd_plan(_args):
         if len(ids) != 1 or len(matched) < 3 or not bare or len(bare) > len(matched):
             continue
         mbid = next(iter(ids))
-        titles = mc.release_titles(mbid)
+        titles = mc.release_titles(mb, mbid)
         if titles is None:
             continue
         for item in bare:
@@ -210,31 +202,13 @@ def cmd_pin(args):
     members = list(album.items()) if album else []
     todo = [i for i in lib.items()
             if mc.path_of(i) in wanted and (album is None or i.album_id != album.id)]
-    skipped = []
-    claims = {}
-    for item in todo:
-        tracks = [t for t in info.tracks if mc.same_title(item.title, t.title)]
-        if not tracks:
-            skipped.append((item, "its title is not on the release"))
-            continue
-        free = [t for t in tracks if not any(
-            (m.mb_releasetrackid and m.mb_releasetrackid == t.release_track_id)
-            or mc.same_title(m.title, t.title)
-            for m in members)]
-        if not free:
-            skipped.append((item, "the album already holds that track (a copy)"))
-            continue
-        best = min(free, key=lambda t: abs((item.length or 0) - (t.length or 0)))
-        other = claims.get(id(best))
-        if other is not None:
-            if abs((item.length or 0) - (best.length or 0)) < abs((other.length or 0) - (best.length or 0)):
-                skipped.append((other, "another file is closer to that track"))
-                claims[id(best)] = item
-            else:
-                skipped.append((item, "another file is closer to that track"))
-            continue
-        claims[id(best)] = item
-    mapping = {item: next(t for t in info.tracks if id(t) == tid) for tid, item in claims.items()}
+
+    def held(track):
+        return any((m.mb_releasetrackid and m.mb_releasetrackid == track.release_track_id)
+                   or mc.same_title(m.title, track.title) for m in members)
+
+    claims, skipped = mc.assign(todo, info.tracks, held)
+    mapping = {item: info.tracks[i] for i, item in claims.items()}
     for item, why in skipped:
         print("left alone: %s - %s" % (mc.path_of(item), why))
     new_album = False
@@ -271,12 +245,17 @@ def main(argv=None):
     p = sub.add_parser("overlay")
     p.add_argument("kind", choices=sorted(OVERLAYS))
     p.set_defaults(func=cmd_overlay)
-    sub.add_parser("reachable").set_defaults(func=cmd_reachable)
+    p = sub.add_parser("reachable")
+    p.add_argument("--mb-url", required=True)
+    p.set_defaults(func=cmd_reachable)
     p = sub.add_parser("prune")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_prune)
     sub.add_parser("regroup").set_defaults(func=cmd_regroup)
-    sub.add_parser("plan").set_defaults(func=cmd_plan)
+    p = sub.add_parser("plan")
+    p.add_argument("--mb-url", required=True)
+    p.add_argument("--cache", required=True)
+    p.set_defaults(func=cmd_plan)
     p = sub.add_parser("pin")
     p.add_argument("release")
     p.set_defaults(func=cmd_pin)

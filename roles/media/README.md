@@ -156,7 +156,7 @@ Any failed step sends `... failed` with the line number, at high priority.
                             scripts/media-sync.sh  scripts/media-import.sh  scripts/media-status.sh
                             scripts/media-lib.sh  scripts/media-maintenance.sh   (sourced, not in PATH)
 /mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/ (tools/: the python)
-                            cache/  logs/  state/youtube-archive.txt
+                            cache/  logs/  state/youtube-archive.txt  state/review/ (the audit)
                             syncthing/backup/  docker/  journal/  backup-tmp/
 ```
 
@@ -359,6 +359,31 @@ row, for manual review (`beet` is the deployed helper - it runs beets in the
 container for you). The existing tags (reposts filed under the uploader,
 `- Topic` artists) are left alone. Fixing them means re-fetching each video's
 metadata from YouTube (the URL is embedded in the file), a separate one-off job.
+
+### Reviewing the library (audit)
+
+The release pass judges each file on its own, so it leaves albums half placed: an
+album on two releases (*Vessel*), partly matched (16 of 21 *Mexico City* tracks),
+or a whole rip with no release. `media-sync --audit` finds them, read-only:
+
+```bash
+media-sync --audit     # a few minutes the first time (MusicBrainz, 1 request/s)
+```
+
+It groups tracks by album artist and album (case, punctuation, a `- Topic` suffix
+and one trailing edition parenthetical do not matter), classifies each group as
+*split* (two or more release ids), *partial* (some tracks bare) or *whole* (no
+release, at least three tracks, not a slowed/sped/remix edit), and looks up the
+releases a person would choose from: the ones the group already carries plus the
+best MusicBrainz search results, each with which file goes to which track (the
+pin's rule) and how far each file's length is from the track's. Files on disk
+with no row are listed with the registered tracks they copy. Tracks marked
+`reviewed` are left out.
+
+The result is `$LIB/state/review/candidates.json` (the beets container sees
+`state/review` as `/review`), with MusicBrainz answers cached for 30 days in
+`mb-cache/`, so a second audit costs no requests. The review menu that turns it
+into decisions, and the Sunday apply, come next (`PLAN-library-review.md`).
 
 ## Configuration
 
