@@ -26,6 +26,8 @@
         - "{{ media_home }}/scripts/media-lib.sh"
         - "{{ media_home }}/scripts/media-maintenance.sh"
         - "{{ media_home }}/scripts/media-status.sh"
+        - "{{ media_library_path }}/beets/tools/media_tools.py"
+        - "{{ media_library_path }}/beets/tools/media_common.py"
       register: media_files
 
     - name: Parse the deployed files
@@ -46,6 +48,8 @@
         media_lib: "{{ media_files.results[13].content | b64decode }}"
         media_maintenance: "{{ media_files.results[14].content | b64decode }}"
         media_status: "{{ media_files.results[15].content | b64decode }}"
+        media_tools_py: "{{ media_files.results[16].content | b64decode }}"
+        media_common_py: "{{ media_files.results[17].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -253,22 +257,23 @@
           - "'-c /config/adopt.yaml import /music' not in media_lib"
           - "'-c /config/adopt.yaml import /music' not in media_sync"
           # regroup builds album rows from release ids and touches no file
-          - "'lib.add_album(items)' in media_lib"
+          - "'lib.add_album(items)' in media_tools_py"
           # prune drops rows, never files (delete=False)
-          - "'item.remove(False)' in media_lib"
+          - "'item.remove(False)' in media_tools_py"
           - "'prune_rows() {' in media_lib"
           # checkpoint, preflight, the pinned-release overlay
           - "'checkpoint() {' in media_lib"
           - "'musicbrainz_reachable() {' in media_lib"
-          - "'strong_rec_thresh' in media_lib"
+          - "'strong_rec_thresh' in media_tools_py"
           # one definition of the constants, in the library only
           - "'LIB=\"' in media_lib"
           - "'LIB=\"' not in media_sync"
           - "'media-lib.sh' in media_sync"
           - "'media-lib.sh' in media_status"
-          # the maintenance routine: six marked steps, a resume point, and the
+          # the maintenance routine: eight marked steps, a resume point, and the
           # step-3 warning
-          - "'MAINT_STEPS=7' in media_maintenance"
+          - "'MAINT_STEPS=8' in media_maintenance"
+          - "'settle_library' in media_maintenance"
           - "'maint_complete' in media_maintenance"
           - "'--from $CURRENT_STEP' in media_maintenance"
           - "'musicbrainz_reachable' in media_maintenance"
@@ -280,11 +285,15 @@
           - "'--complete)' in media_sync"
           - "'pin_files() {' in media_lib"
           - "'complete_plan() {' in media_lib"
-          - "'PIN_PY=' in media_lib"
-          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_lib"
-          - "'the album already holds that track (a copy)' in media_lib"
-          # a pin applies the release itself: it never imports into an existing album
+          - "'def cmd_pin(' in media_tools_py"
+          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_tools_py"
+          - "'the album already holds that track (a copy)' in media_tools_py"
+          - "'def same_title(' in media_common_py"
+          # python lives in the tools, not in shell strings; a pin applies the release itself
+          # and never imports into an existing album
+          - "'media_tools.py\" pin' in media_lib"
           - "'import -S' not in media_lib"
+          - "'importer' not in media_tools_py"
           - "'--plan)' in media_sync"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"

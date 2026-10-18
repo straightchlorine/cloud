@@ -118,6 +118,28 @@
   loop:
     - reviewed.py
 
+- name: Create the python tools directory
+  # The beets container sees $LIB/beets as /config, so these run there as
+  # /config/tools/*.py with beets' own python (see media-lib).
+  ansible.builtin.file:
+    path: "{{ media_library_path }}/beets/tools"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the python tools
+  ansible.builtin.copy:
+    src: "tools/{{ item }}"
+    dest: "{{ media_library_path }}/beets/tools/{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  loop:
+    - media_common.py
+    - media_tools.py
+
 - name: Install the pipeline scripts
   # One engine, an interactive wrapper, and a host-side `beet` for looking at the
   # library; deployed unconditionally so the wrapper always has its target. Only

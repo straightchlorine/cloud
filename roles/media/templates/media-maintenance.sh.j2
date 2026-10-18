@@ -16,12 +16,14 @@
 #   4 adopt     re-register what step 3 found no release for
 #   5 regroup   album rows for tracks that carry a release id
 #   6 complete  pin the bare tracks of partly matched albums to their release
-#   7 backfill  lyrics + ReplayGain
+#   7 settle    stamp the library as older than the 4-week "recent" window, so the
+#               weekly --retag does not mistake a rebuilt library for new downloads
+#   8 backfill  lyrics + ReplayGain
 #
 # A failed or interrupted run says where to resume: `--from N`. Resume from 4 or
 # later after step 3 started - never from 1-3 on a collapsed library.
 MAINT_LOG="$LIB/logs/maintenance.log"
-MAINT_STEPS=7
+MAINT_STEPS=8
 
 maint_log() { printf '\n=== %s  %s\n' "$(date -Is)" "$*"; }
 
@@ -78,7 +80,7 @@ maint_complete() {
 
 maintenance() {
     case "$FROM" in
-        [1-7]) ;;
+        [1-8]) ;;
         *) echo "media-sync --maintenance --from takes a step number, 1-$MAINT_STEPS" >&2; exit 2 ;;
     esac
     mkdir -p "$LIB/logs"
@@ -93,7 +95,7 @@ maintenance() {
     trap 'notify failed "Step $CURRENT_STEP/$MAINT_STEPS (line $LINENO). See $MAINT_LOG. Resume with: media-sync --maintenance --from $CURRENT_STEP" high rotating_light,error' ERR
 
     maint_log "maintenance run start from step $FROM/$MAINT_STEPS (log: $MAINT_LOG)"
-    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, complete, backfill. Hours to days; one more ntfy when it is done."
+    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, complete, settle, backfill. Hours to days; one more ntfy when it is done."
     # Only step 3 and the backfill need MusicBrainz or lrclib, but a collapsed
     # library is the wrong place to find out it is unreachable.
     if [ "$FROM" -le 3 ] && ! musicbrainz_reachable; then
@@ -107,7 +109,8 @@ maintenance() {
     maint_step 4 "adopt    (re-register what step 3 found no release for)" adopt_library
     maint_step 5 "regroup  (album rows for tracks that carry a release id)" regroup_albums
     maint_step 6 "complete (pin the bare tracks of partly matched albums to their release)" maint_complete
-    maint_step 7 "backfill (lyrics and ReplayGain)" backfill
+    maint_step 7 "settle   (stamp the library as older than the 4-week window)" settle_library
+    maint_step 8 "backfill (lyrics and ReplayGain)" backfill
 
     maint_log "maintenance run complete"
     local took=$(( $(date +%s) - began ))

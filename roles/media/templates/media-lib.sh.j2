@@ -25,6 +25,9 @@ BEET_TTY=("${COMPOSE[@]}" run --rm -it -e PYTHONUNBUFFERED=1 \
     --entrypoint /lsiopy/bin/beet beets)
 # beets' own python, for the few things the CLI has no command for.
 BEET_PY=("${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets)
+# The role's python tools, as the beets container sees them (deployed to
+# $LIB/beets/tools). Each shell function below is a thin call into media_tools.py.
+TOOLS=/config/tools
 
 ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
 
@@ -105,31 +108,11 @@ register_new() {  # <beets config> <container dir>
 # Drop rows whose file is gone (a track removed on purpose). The row only: a
 # file is never deleted. With <dry> the rows are counted and nothing changes.
 prune_rows() {  # [dry]
-    local apply=1
-    [ "${1:-}" != dry ] || apply=0
-    "${COMPOSE[@]}" run --rm -T -e "PRUNE=$apply" --entrypoint /lsiopy/bin/python3 beets -c "
-import os
-from beets.library import Library
-
-# directory= is explicit on purpose: only beets' CLI entry point reads
-# /config/config.yaml, so a bare Library() falls back to the default ~/Music
-# and then EVERY item looks like an orphan.
-lib = Library('/config/library.db', directory='/music')
-items = list(lib.items())
-gone = [i for i in items if not os.path.exists(i.path)]
-print('orphan rows:', len(gone), 'of', len(items))
-for item in gone[:5]:
-    print('  e.g.', item.path)
-if os.environ.get('PRUNE') == '1':
-    # delete=False: the ROW only, never the file. with_album defaults to True,
-    # so an album row goes with the last item that belonged to it.
-    with lib.transaction():
-        for item in gone:
-            item.remove(False)
-    print('pruned', len(gone), 'row(s); beets now tracks', len(list(lib.items())))
-else:
-    print('dry run: nothing removed.')
-"
+    local flag=()
+    if [ "${1:-}" = dry ]; then
+        flag=(--dry-run)
+    fi
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" prune "${flag[@]}"
 }
 
 # Give tracks that carry a release id but no album row their album row back.
@@ -140,39 +123,7 @@ else:
 # that already has an album row takes the orphans into it (one row per release);
 # a folder's cover.jpg becomes the art of a row that has none.
 regroup_albums() {
-    "${BEET_PY[@]}" -c "
-import collections, os
-from beets import config
-from beets.dbcore import MatchQuery
-from beets.library import Library
-
-config.read(user=False, defaults=True)
-config.set_file('/config/config.yaml')
-lib = Library('/config/library.db', directory='/music')
-groups = collections.defaultdict(list)
-for item in lib.items():
-    if item.album_id is None and (item.get('mb_albumid') or ''):
-        groups[item.mb_albumid].append(item)
-made = joined = 0
-with lib.transaction():
-    for mbid, items in groups.items():
-        existing = list(lib.albums(MatchQuery('mb_albumid', mbid)))
-        if existing:
-            album = existing[0]
-            for item in items:
-                item.album_id = album.id
-                item.store()
-            joined += 1
-        else:
-            album = lib.add_album(items)
-            made += 1
-        art = os.path.join(os.path.dirname(items[0].path), b'cover.jpg')
-        if not album.get('artpath') and os.path.exists(art):
-            album.artpath = art
-            album.store()
-print('regrouped', made, 'album(s) from', sum(len(g) for g in groups.values()), 'track(s)', end='')
-print(' (%d joined an existing album)' % joined if joined else '')
-"
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" regroup
 }
 
 # A copy of library.db to fall back on. Plain cp is consistent here because the
@@ -190,14 +141,7 @@ checkpoint() {
 # Can the beets container reach MusicBrainz? A pass that cannot silently matches
 # nothing and logs "Skipping." for days, so ask before starting one.
 musicbrainz_reachable() {
-    "${BEET_PY[@]}" -c "
-import socket, sys
-try:
-    socket.create_connection((socket.gethostbyname('musicbrainz.org'), 443), 10).close()
-except OSError as err:
-    print('musicbrainz.org unreachable from the beets container:', err)
-    sys.exit(1)
-"
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" reachable
 }
 
 # Compose an overlay with one extra setting, inside the container, so each
@@ -215,19 +159,24 @@ except OSError as err:
 # The prompting kinds are human-driven runs, so they let reviewed.py turn a
 # "use as-is" answer into a marker.
 overlay() {  # <release|keep|pinned>
-    "${BEET_PY[@]}" -c "
-import sys, yaml
-base, imp, top = {
-    'release': ('/config/album.yaml', {'quiet': False}, {'reviewed': {'mark': True}}),
-    'keep': ('/config/adopt.yaml', {'move': True}, {'reviewed': {'mark': True}}),
-    'pinned': ('/config/album.yaml', {}, {'match': {'strong_rec_thresh': 0.3}}),
-}[sys.argv[1]]
-conf = yaml.safe_load(open(base))
-for key, value in top.items():
-    conf.setdefault(key, {}).update(value)
-conf.setdefault('import', {}).update(imp)
-yaml.safe_dump(conf, open('/config/.run.yaml', 'w'))
-" "$1"
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" overlay "$1"
+}
+
+# Make the whole library older than the pipeline's "recent" window.
+#
+# `added` is set when a row is CREATED. Every row a rebuild, an adopt or an upgrade
+# pass creates is therefore "added now", and `media-sync --retag` (weekly) and the
+# default `--upgrade` scope (both `added:-4w..`) then see the entire library as new
+# downloads: a multi-hour re-match of thousands of tracks that already went through
+# it, with the library collapsed for the duration. Stamping the rows added inside
+# the window as 29 days old leaves only what arrives afterwards - the nightly
+# downloads - inside it. Touches the database only, never a file; run it while
+# nothing else writes (media-sync holds the lock).
+settle_library() {
+    sqlite3 -cmd '.timeout 20000' "$DB" "
+        update items set added = strftime('%s','now','-29 days') where added > strftime('%s','now','-28 days');
+        update albums set added = strftime('%s','now','-29 days') where added > strftime('%s','now','-28 days');"
+    echo "settled: $(count 'added:-4w..') track(s) still count as recent"
 }
 
 # Register what is on disk and has no row, then restore the reviewed markers.
@@ -276,89 +225,13 @@ files_for_query() {  # <beets query...>
 # Matched files get the release's tags written and are moved to where the album
 # keeps its files; a new album also gets its cover art. Prints a summary and a
 # line per file left alone.
-PIN_PY='
-import sys
-from beets import config, plugins, metadata_plugins, ui
-from beets.autotag import AlbumMatch
-from beets.autotag.distance import Distance
-from beets.dbcore import MatchQuery
-
-mbid = sys.argv[1]
-wanted = set(l.rstrip("\n") for l in sys.stdin if l.strip())
-config.read(user=False, defaults=True)
-config.set_file("/config/config.yaml")
-config.set_file("/config/.run.yaml")
-config["plugins"].set(["musicbrainz"])
-plugins.load_plugins()
-lib = ui._open_library(config)
-
-info = metadata_plugins.album_for_id(mbid, "MusicBrainz")
-if info is None:
-    print("pin: MusicBrainz has no release %s (or is unreachable)" % mbid)
-    sys.exit(1)
-
-def path_of(item):
-    return item.path.decode("utf-8", "surrogateescape")
-
-existing = list(lib.albums(MatchQuery("mb_albumid", mbid)))
-album = existing[0] if existing else None
-members = list(album.items()) if album else []
-todo = [i for i in lib.items() if path_of(i) in wanted and (album is None or i.album_id != album.id)]
-skipped = []
-claims = {}
-for item in todo:
-    tracks = [t for t in info.tracks if same_title(item.title, t.title)]
-    if not tracks:
-        skipped.append((item, "its title is not on the release"))
-        continue
-    free = [t for t in tracks if not any(
-        (m.mb_releasetrackid and m.mb_releasetrackid == t.release_track_id) or same_title(m.title, t.title)
-        for m in members)]
-    if not free:
-        skipped.append((item, "the album already holds that track (a copy)"))
-        continue
-    best = min(free, key=lambda t: abs((item.length or 0) - (t.length or 0)))
-    other = claims.get(id(best))
-    if other is not None:
-        if abs((item.length or 0) - (best.length or 0)) < abs((other.length or 0) - (best.length or 0)):
-            skipped.append((other, "another file is closer to that track"))
-            claims[id(best)] = item
-        else:
-            skipped.append((item, "another file is closer to that track"))
-        continue
-    claims[id(best)] = item
-mapping = {item: next(t for t in info.tracks if id(t) == tid) for tid, item in claims.items()}
-for item, why in skipped:
-    print("left alone: %s - %s" % (path_of(item), why))
-new_album = False
-own = {item.id: item.length for item in mapping}
-if mapping:
-    AlbumMatch(Distance(), info, mapping).apply_metadata()
-    if album is None:
-        album = lib.add_album(list(mapping))
-        AlbumMatch(Distance(), info, mapping).apply_album_metadata(album)
-        album.store()
-        new_album = True
-    else:
-        for item in mapping:
-            item.album_id = album.id
-    for item in mapping:
-        item.length = own[item.id]
-        item.try_write()
-        item.move()
-        item.store()
-        print("@pinned %d" % item.id)
-if new_album:
-    print("@album %d" % album.id)
-print("pinned %d of %d file(s)%s" % (len(mapping), len(wanted), "" if not skipped else ", %d left alone" % len(skipped)))
-'
 pin_files() {  # <release id>
     local id="$1" paths out n
     paths="$(cat)"
     [ -n "$paths" ] || { echo "pin: no files given"; return 0; }
     overlay pinned
-    out="$(printf '%s\n' "$paths" | "${BEET_PY[@]}" -c "$TITLE_PY
-$PIN_PY" "$id")" || { printf '%s\n' "$out"; return 1; }
+    out="$(printf '%s\n' "$paths" | "${BEET_PY[@]}" "$TOOLS/media_tools.py" pin "$id")" ||
+        { printf '%s\n' "$out"; return 1; }
     printf '%s\n' "$out" | grep -v '^@'
     # A new album row has no cover yet: fetch it, then embed it in the new files.
     if printf '%s\n' "$out" | grep -q '^@album '; then
@@ -368,45 +241,6 @@ $PIN_PY" "$id")" || { printf '%s\n' "$out"; return 1; }
         done
     fi
 }
-
-# Title comparison for complete_plan, as python source that is prepended to it (and
-# run by engine-test.sh, so the test exercises exactly this code).
-#
-# Two titles are the same track when they match after normalisation, or one is the
-# start of the other ("Principles of Lust" / "Principles of Lust: Sadeness / ..."),
-# or they are nearly identical. A parenthetical both carry - the "(Live In Mexico
-# City)" every track of a live album ends with - is taken off first: left on, it
-# is most of every title and makes "Ride" and "Trees" 88% alike. A parenthetical
-# only one has ("(Slowed)", "(Sped Up)") is kept, because that is a different track.
-# shellcheck disable=SC2016  # python source, not shell: nothing here should expand
-TITLE_PY='
-import difflib, re, unicodedata
-
-def key(text):
-    return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", text or "").casefold())
-
-def split_tail(text):
-    m = re.match(r"^(.*?)\s*([(\[][^()\[\]]*[)\]])\s*$", text or "")
-    return (m.group(1), m.group(2)) if m and m.group(1).strip() else (text or "", "")
-
-def same_title(mine, theirs):
-    (a_base, a_tail), (b_base, b_tail) = split_tail(mine), split_tail(theirs)
-    if a_tail and b_tail and key(a_tail) == key(b_tail):
-        mine, theirs = a_base, b_base
-    a, b = key(mine), key(theirs)
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    # One title opening the other is the same track ("Principles of Lust" /
-    # "Principles of Lust: Sadeness / ...") unless what follows is a parenthetical:
-    # "Song (Slowed)" is not "Song", and "Heathens (Live)" is not "Heathens".
-    ra, rb = " ".join(mine.casefold().split()), " ".join(theirs.casefold().split())
-    short, long_ = (ra, rb) if len(ra) <= len(rb) else (rb, ra)
-    if len(key(short)) >= 4 and long_.startswith(short):
-        return long_[len(short):].lstrip()[:1] not in ("(", "[")
-    return min(len(a), len(b)) >= 8 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
-'
 
 # Albums where most tracks found their release and some did not, as the plan
 # `media-sync --complete` acts on: lines of <release id> TAB <album> TAB <path>.
@@ -418,48 +252,5 @@ def same_title(mine, theirs):
 # it (another download, the other format): pinning it would put the same track
 # into the album twice, so it is left alone and counted on stderr.
 complete_plan() {
-    "${BEET_PY[@]}" -c "$TITLE_PY
-import collections, json, sys, time, urllib.request
-from beets.library import Library
-
-def who(item):
-    name = (item.albumartist or item.artist or '').casefold()
-    return key(re.sub(r'\s*-\s*topic\$', '', name))
-
-def release_titles(mbid):
-    url = 'https://musicbrainz.org/ws/2/release/%s?inc=recordings&fmt=json' % mbid
-    for _ in range(3):
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'media-library-complete/1.0'})
-            data = json.load(urllib.request.urlopen(req, timeout=40))
-            time.sleep(1.1)
-            return [t['title'] for m in data.get('media', []) for t in m.get('tracks', [])]
-        except Exception:
-            time.sleep(3)
-    return None
-
-lib = Library('/config/library.db', directory='/music')
-copies = 0
-groups = collections.defaultdict(list)
-for item in lib.items():
-    if (item.album or '').strip():
-        groups[(who(item), key(item.album))].append(item)
-for items in groups.values():
-    matched = [i for i in items if (i.get('mb_albumid') or '')]
-    bare = [i for i in items if not (i.get('mb_albumid') or '') and not i.get('reviewed')]
-    ids = set(i.mb_albumid for i in matched)
-    if len(ids) != 1 or len(matched) < 3 or not bare or len(bare) > len(matched):
-        continue
-    mbid = next(iter(ids))
-    titles = release_titles(mbid)
-    if titles is None:
-        continue
-    for item in bare:
-        if any(same_title(item.title, m.title) for m in matched):
-            copies += 1
-        elif any(same_title(item.title, t) for t in titles):
-            print('%s\t%s\t%s' % (mbid, matched[0].album, item.path.decode('utf-8', 'surrogateescape')))
-if copies:
-    print('%d bare track(s) are copies of a track the album already has; left alone' % copies, file=sys.stderr)
-"
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" plan
 }

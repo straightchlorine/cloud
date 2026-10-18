@@ -69,7 +69,10 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   Every pass, overlay and beets invocation has exactly one implementation, and
   the shared parts live in two modules beside the scripts: `media-lib.sh` (the
   library operations) and `media-maintenance.sh` (the one-off routine), sourced,
-  never run. `beet` is a convenience wrapper for looking at the library.
+  never run. What beets' CLI has no command for (pin, plan, regroup, prune) is
+  python in `beets/tools/` (`media_tools.py`, `media_common.py`), run with beets'
+  own python in the container. `beet` is a convenience wrapper for looking at the
+  library.
   - nightly **`media-sync`** — unattended (`quiet_fallback: skip`): release pass
     then singleton pass, applying only strong matches and leaving the rest in
     `downloads/`.
@@ -149,7 +152,7 @@ Any failed step sends `... failed` with the line number, at high priority.
                             scripts/manage-media.sh  scripts/beet.sh
                             scripts/media-sync.sh  scripts/media-import.sh  scripts/media-status.sh
                             scripts/media-lib.sh  scripts/media-maintenance.sh   (sourced, not in PATH)
-/mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/
+/mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/ (tools/: the python)
                             cache/  logs/  state/youtube-archive.txt
                             syncthing/backup/  docker/  journal/  backup-tmp/
 ```
@@ -238,7 +241,7 @@ tmux new -s maintenance 'media-sync --maintenance'   # hours to days on a Pi 3
 media-status                            # progress, ETA, DNS health (in another pane)
 ```
 
-The seven steps, each marked `=== <time>  n/7  ...` in `$LIB/logs/maintenance.log`
+The eight steps, each marked `=== <time>  n/8  ...` in `$LIB/logs/maintenance.log`
 (which `media-status` reads), with an ntfy at the start, at the end and on failure:
 
 | # | step | what |
@@ -249,7 +252,8 @@ The seven steps, each marked `=== <time>  n/7  ...` in `$LIB/logs/maintenance.lo
 | 4 | adopt | re-register what step 3 found no release for |
 | 5 | regroup | album rows for tracks that carry a release id |
 | 6 | complete | pin the bare tracks of partly matched albums to their release |
-| 7 | backfill | lyrics and ReplayGain |
+| 7 | settle | stamp the library as older than the 4-week "recent" window |
+| 8 | backfill | lyrics and ReplayGain |
 
 A failure notification names the step and the resume command,
 `media-sync --maintenance --from N`. **Step 3 is the point of no return:** it
@@ -275,6 +279,15 @@ Why each step is there:
 - **It writes what it matches** (`import.write: yes`). Genres are protected by
   `upgrade.yaml`, which `--upgrade` and `--retag` use; the nightly release pass
   keeps `album.yaml`, where new downloads *should* get Last.fm genres.
+
+**Why there is a settle step.** `added` is set when a row is *created*, so every row an
+adopt, an upgrade or a rebuild creates is "added now". The weekly `--retag` and the
+default `--upgrade` scope both mean `added:-4w..`, so on a library rebuilt this way
+they see everything as a new download and re-match thousands of tracks, for hours,
+with the library collapsed meanwhile. Step 7 stamps rows added inside the window as 29
+days old (database only, no file), leaving only what arrives afterwards - the nightly
+downloads - inside it. `media-sync --settle` does the same on its own; run it after
+any rebuild, before the next Sunday 04:15.
 
 **`--adopt` registers only files that have no row.** Pointing the importer at
 `music/` instead re-imports files the library already holds, and beets replaces

@@ -30,12 +30,15 @@
 #                                     MusicBrainz release, into one album row
 #   media-sync --complete [--dry-run] finish partly matched albums: pin their
 #                                     bare tracks to the release the rest found
+#   media-sync --settle               stamp the library as older than the 4-week
+#                                     "recent" window (after a rebuild, so --retag
+#                                     does not re-match all of it); DB only
 #   media-sync --plan                 what --maintenance would face; changes nothing
-#   media-sync --maintenance [--from <1-7>]
+#   media-sync --maintenance [--from <1-8>]
 #                                     the one-time routine for an existing library:
 #                                     adopt, prune, upgrade, adopt, regroup,
-#                                     complete, backfill - with a checkpoint and a
-#                                     resume point (media-maintenance)
+#                                     complete, settle, backfill - with a checkpoint
+#                                     and a resume point (media-maintenance)
 #   media-sync --backfill             one-time: lyrics + ReplayGain for adopted
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
@@ -341,6 +344,14 @@ case "$MODE" in
         done
         notify "done" "$total track(s) of $(printf '%s\n' "$plan" | cut -f1 | sort -u | wc -l) album(s) given their release."
         exit 0 ;;
+    --settle)
+        # A rebuilt library is "added now" row by row, and the weekly --retag then
+        # re-matches all of it. See settle_library.
+        echo "checkpoint: $(checkpoint)"
+        result="$(settle_library)"
+        echo "$result"
+        notify "done" "$result"
+        exit 0 ;;
     --plan)
         # What --maintenance would face, changing nothing.
         maintenance_plan || exit 1
@@ -385,7 +396,7 @@ case "$MODE" in
         interactive_pass -c /config/.run.yaml import "${DIR:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--pin '<query>' --id <release> [--dry-run]|--complete [--dry-run]|--backfill|--plan|--maintenance [--from <1-7>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
+        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--settle|--pin '<query>' --id <release> [--dry-run]|--complete [--dry-run]|--backfill|--plan|--maintenance [--from <1-8>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
         exit 2 ;;
 esac
 
