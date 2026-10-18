@@ -31,18 +31,14 @@ import argparse
 import collections
 import datetime
 import errno
-import fcntl
 import glob
 import json
 import os
-import re
 import shutil
 import sys
 
 import media_common as mc
 
-ACTIONS = {"pin", "keep", "register", "quarantine", "merge", "skip"}
-UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 QUARANTINE = "/removed"
 # The marker reviewed.py writes (see that plugin): the flexible field the passes query,
 # and a comments prefix so the decision survives in the file.
@@ -54,28 +50,6 @@ def stamp():
 
 
 # ----------------------------------------------------------------- decisions
-
-def malformed(d):
-    """Why a decision cannot be read, or None. Only the shape: the library is checked later."""
-    if not isinstance(d, dict) or d.get("v") != 1:
-        return "not a version 1 decision"
-    if d.get("action") not in ACTIONS:
-        return "unknown action %r" % d.get("action")
-    targets = d.get("targets")
-    if not isinstance(targets, list) or not targets:
-        return "no targets"
-    for t in targets:
-        if not (isinstance(t, dict) and isinstance(t.get("path"), str) and isinstance(t.get("size"), int)
-                and (t.get("id") is None or isinstance(t.get("id"), int))):
-            return "a target needs path (text), size (bytes) and id (a row id or null)"
-        if t.get("id") is None and d["action"] in ("pin", "keep", "merge"):
-            return "%s needs the row id of every target" % d["action"]
-        if t.get("id") is not None and d["action"] == "register":
-            return "register is for files with no row (id null)"
-    if d["action"] in ("pin", "merge") and not UUID.match(d.get("release") or ""):
-        return "%s needs a release id (a UUID)" % d["action"]
-    return None
-
 
 def target_key(t):
     return ("id", t["id"]) if t.get("id") is not None else ("path", t["path"])
@@ -95,7 +69,7 @@ def read_decisions(path):
             except ValueError as err:
                 entry["result"] = "malformed: %s" % err
             if entry["d"] is not None:
-                why = malformed(entry["d"])
+                why = mc.malformed(entry["d"])
                 if why:
                     entry["result"] = "malformed: %s" % why
             out.append(entry)
@@ -306,18 +280,10 @@ def do_merge(lib, log, n, d, rows):
 
 # ----------------------------------------------------------------- apply
 
-def lock(review):
-    """The decisions file's lock: whoever appends a decision holds it too, so a line
-    written while an apply runs is neither lost nor half read."""
-    f = open(os.path.join(review, ".decisions.lock"), "a")
-    fcntl.flock(f, fcntl.LOCK_EX)
-    return f
-
-
 def queue_again(review, lines):
     """Put decisions back at the end of the decisions file, for the next run."""
     if lines:
-        held = lock(review)
+        held = mc.decisions_lock(review)
         with open(os.path.join(review, "decisions.jsonl"), "a", encoding="utf-8") as f:
             f.writelines(line if line.endswith("\n") else line + "\n" for line in lines)
         held.close()
@@ -330,7 +296,7 @@ def cmd_apply(args):
         print("apply: refused - an earlier apply did not finish (%s). Undo it from its log in apply-log/, "
               "then move that file back to decisions.jsonl or away." % ", ".join(unfinished))
         return 4
-    held = lock(args.review)
+    held = mc.decisions_lock(args.review)
     if not os.path.exists(path):
         print("apply: no decisions to apply")
         return 0
@@ -355,7 +321,8 @@ def cmd_apply(args):
             entry["n"], d.get("action", "?"), len(d.get("targets") or []), entry["result"] or "to apply"))
     print("apply: %d decision(s) to apply, %d file(s); %d not applied" % (len(todo), files, len(entries) - len(todo)))
     if files > args.max_files and not args.force:
-        print("apply: refused - %d files is over the limit of %d per run (--force to go ahead)" % (files, args.max_files))
+        print("apply: refused - %d files is over the limit of %d per run (--force to go ahead)"
+              % (files, args.max_files))
         return 3
     if args.dry_run:
         print("apply: dry run, nothing changed")
@@ -369,7 +336,8 @@ def cmd_apply(args):
     os.replace(path, pending)
     held.close()
     log = Log(os.path.join(args.review, "apply-log", ts + ".jsonl"))
-    print("apply: logging to %s (media-sync --undo %s takes it back)" % (log.path, os.path.basename(log.path)), flush=True)
+    print("apply: logging to %s (media-sync --undo %s takes it back)" % (log.path, os.path.basename(log.path)),
+          flush=True)
     day = ts[:8]
     releases, changed, lines, again = {}, 0, [], []
     try:

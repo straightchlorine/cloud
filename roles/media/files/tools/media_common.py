@@ -237,6 +237,62 @@ def changed(before, after):
     return sorted(k for k in set(before) | set(after) if k != "mtime" and before.get(k) != after.get(k))
 
 
+# ---------------------------------------------------------------- decisions
+
+DECISIONS = "decisions.jsonl"
+ACTIONS = {"pin", "keep", "register", "quarantine", "merge", "skip"}
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def malformed(d):
+    """Why a decision cannot be read, or None. Only the shape: the library is checked later."""
+    if not isinstance(d, dict) or d.get("v") != 1:
+        return "not a version 1 decision"
+    if d.get("action") not in ACTIONS:
+        return "unknown action %r" % d.get("action")
+    targets = d.get("targets")
+    if not isinstance(targets, list) or not targets:
+        return "no targets"
+    for t in targets:
+        if not (isinstance(t, dict) and isinstance(t.get("path"), str) and isinstance(t.get("size"), int)
+                and (t.get("id") is None or isinstance(t.get("id"), int))):
+            return "a target needs path (text), size (bytes) and id (a row id or null)"
+        if t.get("id") is None and d["action"] in ("pin", "keep", "merge"):
+            return "%s needs the row id of every target" % d["action"]
+        if t.get("id") is not None and d["action"] == "register":
+            return "register is for files with no row (id null)"
+    if d["action"] in ("pin", "merge") and not UUID.match(d.get("release") or ""):
+        return "%s needs a release id (a UUID)" % d["action"]
+    return None
+
+
+def decisions_lock(review):
+    """The decisions file's lock, held by whoever appends a decision and by the apply
+    while it takes the file over, so a line written meanwhile is neither lost nor half
+    read. A flock: the review menu on the host and the apply in the container share
+    it through the bind mount (one kernel, one inode)."""
+    import fcntl
+
+    f = open(os.path.join(review, ".decisions.lock"), "a")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
+def save_decision(review, d):
+    """Append one decision (checked first, so a bad one never reaches the file)."""
+    why = malformed(d)
+    if why:
+        raise ValueError("not saved: %s" % why)
+    held = decisions_lock(review)
+    try:
+        with open(os.path.join(review, DECISIONS), "a", encoding="utf-8") as f:
+            f.write(json.dumps(d, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+    finally:
+        held.close()
+
+
 # ----------------------------------------------------------------- library
 
 def open_library():

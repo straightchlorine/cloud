@@ -14,11 +14,32 @@
 #                                   offers only that MusicBrainz release
 #   media-import --interactive [<dir>]  the nightly pairing (quiet release pass,
 #                                   then the singleton pass) but asking per track
+#   media-import --library [<query>]
+#                                   the existing library: decide, album by album,
+#                                   what `media-sync --audit` found (media_review.py);
+#                                   choices are saved for `media-sync --apply`
+#   media-import --quarantine <row id>...
+#                                   queue files for the quarantine (pick remove)
 #
 # Answering "use as-is" marks the track reviewed (see reviewed.py), so no later
 # `--upgrade`/`--retag` re-matches something you chose to keep as it is.
 # Ctrl-C stops it cleanly and says so; nothing is half-applied.
 set -euo pipefail
+
+# The library review runs on the host's python, not in a beets container: it reads
+# the library with sqlite, so each prompt is instant. No lock: it writes nothing but
+# decisions, under their own lock, and the apply checks each before acting.
+case "${1:-}" in
+    --library | --quarantine)
+        # shellcheck source=/dev/null
+        . "$(dirname "$(readlink -f "$0")")/media-lib.sh"
+        cmd=review
+        [ "$1" = --library ] || cmd=quarantine
+        shift
+        review_args=(--review "$LIB/state/review" --db "$DB" --music "$LIB/music")
+        [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL")
+        exec python3 "$LIB/beets/tools/media_review.py" "$cmd" "${review_args[@]}" "$@" ;;
+esac
 
 if [ ! -t 0 ] || [ ! -t 1 ]; then
     echo "media-import needs an interactive terminal - run it from a shell." >&2

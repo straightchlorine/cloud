@@ -14,8 +14,9 @@ each with how many of the group's files it covers. The files on disk that have n
 row (stdin, one container path per line) are listed with the registered tracks
 they are copies of, and so are releases spread over several album rows and release
 tracks held twice (with a suggested copy to keep). Tracks marked `reviewed` are a
-person's decision and are left out of the album groups. The result goes to <review>/candidates.json, MusicBrainz answers to
-<review>/mb-cache/; the library is opened and never stored to.
+person's decision and are left out of the album groups. The result goes to
+<review>/candidates.json, MusicBrainz answers to <review>/mb-cache/; the library is
+opened and never stored to.
 """
 
 import argparse

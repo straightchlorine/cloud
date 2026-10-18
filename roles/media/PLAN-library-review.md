@@ -1,7 +1,7 @@
 # Library review tooling - plan
 
-Status: agreed 2026-10-17; phases 0 and 1 done 2026-10-18 (phase 0 deployed, phase 1 not),
-phase 2 next. This file is the plan, not the
+Status: agreed 2026-10-17; phases 0-3 done 2026-10-18 (0-2 deployed, 3 not),
+phase 4 next. This file is the plan, not the
 documentation: once a phase ships, its behaviour moves into `README.md` and the
 code comments, and the phase is ticked off here.
 
@@ -46,9 +46,9 @@ Everything else is a module those load; nothing else is a command.
   * `media_tools.py` - the subcommands the shell calls inside the beets
     container: `pin`, `plan`, `regroup`, `prune`, `reachable`, `overlay`.
   * `media_audit.py` - `--audit` (container).
-  * later: `media_apply.py` (container) and
-    `media_review.py` (host: sqlite, the cache and fzf only; the Pi has
-    Python 3.13 and fzf).
+  * `media_apply.py` - `--apply`, `--undo` (container).
+  * `media_review.py` - `media-import --library`, `--quarantine` (host: sqlite,
+    the cache and fzf only; the Pi has Python 3.13 and fzf).
 
 ## Data, under `$LIB/state/review/`
 
@@ -66,7 +66,9 @@ Names end in `.json` / `.jsonl`: restic excludes `*.log`.
 A decision: `{v, ts, action, targets: [{id, path, size}], release, note}`.
 Actions: `pin` (give targets a release), `keep` (mark reviewed so upgrades stop
 asking), `register` (register a file that is on disk but has no row),
-`quarantine` (move a copy to `removed/<date>`), `skip` (do not ask again).
+`quarantine` (move a copy to `removed/<date>`), `merge` (one release's tracks
+from several album rows into one row and one folder), `skip` (do not ask again).
+A later decision about a file replaces an earlier one.
 
 ## Audit rules
 
@@ -85,6 +87,12 @@ numbers) used these, and phase 1 is held to them:
   never has those.
 * A group can be split and partial at once (*Vessel*). Tracks marked `reviewed`
   are left out (none are yet, so the counts are unaffected).
+* Found later (2026-10-18, *Scaled and Icy*), reported beside the groups: a
+  release whose tracks sit in several album rows (**scattered**: 8 releases, 63
+  rows - the per-file pass made a row per track), and a release track held by
+  two or more rows (**duplicates**: 26 tracks, 52 rows - two rips of the same
+  CD). Fixed by `merge` and by `quarantine` of the worse copy (the audit suggests
+  the keeper: lossless, bitrate, fuller album row, older row).
 
 ## Flow
 
@@ -118,8 +126,8 @@ numbers) used these, and phase 1 is held to them:
 
 * Every apply: DB checkpoint, apply log with before-values, quarantine and never
   delete.
-* Apply validates each target (same id and path) before touching it, and refuses
-  a run that changes more than 200 files unless forced.
+* Apply validates each target (same id, path and size) before touching it, and
+  refuses a run that changes more than 200 files unless forced.
 * A pin changes only the files it was given: title match, duplicate-slot guard,
   files whose title is not on the release or whose track the album holds are
   left alone.
@@ -141,8 +149,8 @@ numbers) used these, and phase 1 is held to them:
 |---|---|---|
 | 0 ✓ | move the pin, complete, regroup, prune and title code out of shell strings into Python files | all existing engine tests still pass, tested locally and in the container |
 | 1 ✓ | audit and `candidates.json`, with the MusicBrainz stub | it reproduces the hand count (13 split, 26 partial, 30 whole) |
-| 2 | apply: decisions schema, log, undo, gates, cron, ntfy | a scripted decisions file applies, undoes and goes stale correctly |
-| 3 | the review menu and `pick fix` | a scripted session produces the expected file |
+| 2 ✓ | apply: decisions schema, log, undo, gates, cron, ntfy | a scripted decisions file applies, undoes and goes stale correctly |
+| 3 ✓ | the review menu and `pick fix` | a scripted session produces the expected file |
 | 4 | edition correction (remove the emptied album row), copy handling (register one, demote the other), downloads through the same menu | the Shaun Baker case resolves |
 | 5 | README, molecule, `media-status` integration | hooks and lint green |
 

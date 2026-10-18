@@ -388,11 +388,40 @@ whose tracks sit in several album rows (*scattered*, e.g. *Scaled and Icy* in 15
 rows) and release tracks held twice (*duplicates*, two rips of one CD), with a
 suggested copy to keep (lossless, bitrate, the fuller album row, the older row).
 
+### Reviewing it: `media-import --library`
+
+```bash
+media-import --library [<query>]   # on the media host; or from a workstation:
+scripts/media/pick.sh fix media [<query>]
+```
+
+A menu over what the audit found, run with the host's python (sqlite on the
+library, no beets container per prompt), so each answer is instant. The queue goes
+copies first, then releases in several rows, then the albums - a copy has to go
+before its release can be one row. Each screen is re-read from the library when its
+turn comes; what was fixed meanwhile, has a decision waiting, or was skipped is not
+asked again. Album screens list the files and the editions (covered files, date,
+country, label, track count, `!n far off` for files whose length is more than 10 s
+from their track's):
+
+| answer | does |
+|---|---|
+| `1`..`9` | duplicate: keep that copy, the others go to the quarantine; album: pin that edition |
+| `v<n>` | which file would take which track of edition n |
+| `e` / `s` | enter a release id (or a musicbrainz.org link) / search MusicBrainz |
+| `m` | merge a release's album rows into one |
+| `k` | keep the album as it is (marked reviewed) |
+| `x` | do not ask about this again |
+| `n` / `l` / `q` | next / the whole queue (fzf on a terminal, numbered otherwise) / quit |
+
+Every answer is saved at once as a decision; nothing changes until the apply.
+`pick remove` (workstation) saves a quarantine decision the same way.
+
 ### Applying review decisions (apply, undo)
 
 Decisions are JSON lines in `$LIB/state/review/decisions.jsonl` - written by the
-review menu (next phase) or by hand - each naming its target files by row id,
-container path and size:
+review menu or by hand - each naming its target files by row id, container path and
+size:
 
 ```json
 {"v": 1, "ts": "...", "action": "merge", "release": "<release id>",

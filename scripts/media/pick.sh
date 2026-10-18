@@ -4,13 +4,15 @@
 # pick - fzf helpers for the media library, run from your workstation.
 #
 #   pick album  <host> <query>      assign an album to the tracks the query matches
-#   pick remove <host> [<query>]    quarantine tracks (fzf multi-select, confirm)
+#   pick fix    <host> [<query>]    the library review (media-import --library) over ssh
+#   pick remove <host> [<query>]    queue tracks for the quarantine (fzf multi-select)
 #   pick remove <host> --purge      empty the quarantine
 #
 # Read-only until you confirm: album and track lists are fetched over ssh, fzf
-# runs locally, and the only writes are the ones you picked. Tracks are moved to
-# the quarantine rather than deleted - `music/` is a send-only Syncthing share,
-# so a delete here reaches the vault copy within seconds.
+# runs locally, and the only writes are the ones you picked. `remove` saves a
+# quarantine decision: the next `media-sync --apply` (Sundays 04:00) moves the
+# files - logged, undoable - rather than deleting them; `music/` is a send-only
+# Syncthing share, so a delete here would reach the vault copy within seconds.
 #
 # Flags: --yes (skip the confirmation), --purge (empty the quarantine instead of
 # picking tracks). Env: LIB (remote library root, /mnt/data), REMOVED
@@ -23,14 +25,14 @@ FZF="${FZF:-fzf}"
 SSH="${SSH:-ssh}"
 
 die() { echo "pick: $*" >&2; exit 1; }
-usage() { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 verb="${1:-}"
 host="${2:-}"
 if [ -z "$verb" ] || [ -z "$host" ]; then
     usage
 fi
-case "$verb" in album | remove) ;; *) usage ;; esac
+case "$verb" in album | fix | remove) ;; *) usage ;; esac
 shift 2
 
 purge=no
@@ -107,11 +109,6 @@ pick_album() {
 
 # ---- remove: quarantine tracks (or --purge the quarantine) --------------------
 
-quarantine() {  # <stamp>  (paths on stdin)
-    local stamp="$1"
-    remote "mkdir -p '$REMOVED/$stamp' && while IFS= read -r f; do mv -- \"\$f\" '$REMOVED/$stamp/' || echo \"could not move: \$f\" >&2; done"
-}
-
 purge_quarantine() {
     local listing
     listing="$(remote "if [ -d '$REMOVED' ]; then du -sh '$REMOVED'/* 2>/dev/null; fi")"
@@ -127,7 +124,7 @@ purge_quarantine() {
 }
 
 pick_remove() {
-    local list sel ids stamp count
+    local list sel count
     list="$(mktemp)"
     trap 'rm -f "$list"' RETURN
 
@@ -144,20 +141,19 @@ pick_remove() {
     printf '%s\n' "$sel" | awk -F'\t' '{ printf "  %s - %s\n", $2, $4 }'
     count="$(printf '%s\n' "$sel" | wc -l)"
     echo "$count track(s) selected"
-    confirm "quarantine them in $REMOVED/<stamp>?"
+    confirm "queue them for the quarantine ($REMOVED/<date>, with the next apply)?"
 
-    stamp="$(date +%Y%m%d-%H%M%S)"
-    ids="$(printf '%s\n' "$sel" | cut -f1)"
-    # DB first: if the move fails, the file is still on disk and --adopt finds it.
-    # -f is the verified flag (beets 2.14's `remove` has no -y).
-    printf '%s\n' "$ids" | while IFS= read -r id; do beet remove -f "id:$id" >&2; done
-    printf '%s\n' "$sel" | cut -f5 | quarantine "$stamp"
-    echo "done: $count track(s) moved to $REMOVED/$stamp"
-    echo "Navidrome drops them on its next scan."
+    remote "media-import --quarantine $(printf '%s\n' "$sel" | cut -f1 | tr '\n' ' ')"
+}
+
+pick_fix() {
+    # -t: the review asks, so it needs the terminal
+    "$SSH" -t "$host" "media-import --library${query:+ $(requote "$query")}"
 }
 
 case "$verb" in
     album) pick_album ;;
+    fix) pick_fix ;;
     remove)
         if [ "$purge" = yes ]; then
             purge_quarantine
