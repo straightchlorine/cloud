@@ -156,6 +156,87 @@ def group_albums(items):
     return groups
 
 
+# ---------------------------------------------------------- one release, many rows
+
+# Lossless first: a person keeps the better copy, and this is only the suggestion.
+FORMAT_RANK = {"FLAC": 3, "ALAC": 3, "WAV": 3, "AIFF": 3}
+
+
+def scattered(items):
+    """Releases whose tracks sit in two or more album rows: {release id: [items]}. One
+    release is one album; the per-file release pass created a row per track it placed."""
+    rows = collections.defaultdict(set)
+    for item in items:
+        if item.mb_albumid and item.album_id is not None:
+            rows[item.mb_albumid].add(item.album_id)
+    return {mbid: [i for i in items if i.mb_albumid == mbid]
+            for mbid, albums in rows.items() if len(albums) > 1}
+
+
+def duplicates(items):
+    """Release tracks held by two or more rows (the same song from two sources, both
+    matched): [(release track id, [items], suggested keeper)]. The keeper is the
+    better format, then the higher bitrate, then the one in the album row holding
+    most of its release, then the older row."""
+    by_track = collections.defaultdict(list)
+    members = collections.Counter()
+    for item in items:
+        if item.mb_releasetrackid:
+            by_track[item.mb_releasetrackid].append(item)
+        if item.album_id is not None:
+            members[item.album_id] += 1
+    out = []
+    for track, copies in sorted(by_track.items()):
+        if len(copies) > 1:
+            keep = max(copies, key=lambda i: (FORMAT_RANK.get((i.format or "").upper(), 1), i.bitrate or 0,
+                                              members[i.album_id] if i.album_id is not None else 0, -i.id))
+            out.append((track, sorted(copies, key=lambda i: i.id), keep))
+    return out
+
+
+# ------------------------------------------------------------ rows, as records
+
+def to_json(value):
+    """A field value for a JSON record; bytes (paths) survive as {"bytes": text}."""
+    if isinstance(value, bytes):
+        return {"bytes": value.decode("utf-8", "surrogateescape")}
+    return value
+
+
+def from_json(value):
+    if isinstance(value, dict) and set(value) == {"bytes"}:
+        return value["bytes"].encode("utf-8", "surrogateescape")
+    return value
+
+
+def snapshot(model):
+    """Every stored field of an item or album row (fixed and flexible), as JSON."""
+    return {k: to_json(model.get(k)) for k in model.keys(computed=False)}
+
+
+def restore(model, before, after=None):
+    """Put back what an operation changed. With `after`, only the fields that differ
+    between the two: a field changed since by something else (a retag, a later apply)
+    is not this operation's to take back. Without (it died before recording the
+    result), every field, and every flexible field the row has gained."""
+    keys = changed(before, after) if after is not None else [k for k in before if k != "mtime"]
+    if after is None:
+        keys += [k for k in model.keys(computed=False) if k not in before]
+    for k in keys:
+        if k == "id":
+            continue
+        if k in before:
+            model[k] = from_json(before[k])
+        elif k in model.keys(computed=False):
+            del model[k]
+
+
+def changed(before, after):
+    """The fields an operation changed. mtime is left out: beets bumps it on every tag
+    write (fetchart/embedart after a pin too), so it would make every undo look stale."""
+    return sorted(k for k in set(before) | set(after) if k != "mtime" and before.get(k) != after.get(k))
+
+
 # ----------------------------------------------------------------- library
 
 def open_library():
@@ -168,6 +249,94 @@ def open_library():
     config.read(user=False, defaults=True)
     config.set_file("/config/config.yaml")
     return Library("/config/library.db", directory="/music")
+
+
+def open_beets(plugins=()):
+    """The library as the beets CLI opens it - config.yaml, the overlay in .run.yaml
+    and the configured path formats, so item.move() files a track where an import
+    would - with only `plugins` loaded (musicbrainz for album_for_id)."""
+    from beets import config, plugins as beets_plugins, ui
+
+    config.read(user=False, defaults=True)
+    config.set_file("/config/config.yaml")
+    config.set_file("/config/.run.yaml")
+    config["plugins"].set(list(plugins))
+    beets_plugins.load_plugins()
+    return ui._open_library(config)
+
+
+OVERLAYS = {
+    "release": ("/config/album.yaml", {"quiet": False}, {"reviewed": {"mark": True}}),
+    "keep": ("/config/adopt.yaml", {"move": True}, {"reviewed": {"mark": True}}),
+    "pinned": ("/config/album.yaml", {}, {"match": {"strong_rec_thresh": 0.3}}),
+}
+
+
+def write_overlay(kind):
+    """/config/.run.yaml: an import overlay with one extra setting (see media-lib's overlay)."""
+    import yaml
+
+    base, imp, top = OVERLAYS[kind]
+    with open(base, encoding="utf-8") as f:
+        conf = yaml.safe_load(f)
+    for k, value in top.items():
+        conf.setdefault(k, {}).update(value)
+    conf.setdefault("import", {}).update(imp)
+    with open("/config/.run.yaml", "w", encoding="utf-8") as f:
+        yaml.safe_dump(conf, f)
+
+
+def plan_pin(lib, info, items):
+    """Which of `items` a release takes: (album row or None, {item: track}, [(item, why)]).
+
+    Each file is matched to a track of the release by title (assign); the album row of
+    the release is joined if there is one. A file already in that row is not touched,
+    and a track the row already holds is not given to a second file (a copy).
+    """
+    from beets.dbcore import MatchQuery
+
+    existing = list(lib.albums(MatchQuery("mb_albumid", info.album_id)))
+    album = existing[0] if existing else None
+    members = list(album.items()) if album else []
+    todo = [i for i in items if album is None or i.album_id != album.id]
+
+    def held(track):
+        return any((m.mb_releasetrackid and m.mb_releasetrackid == track.release_track_id)
+                   or same_title(m.title, track.title) for m in members)
+
+    claims, skipped = assign(todo, info.tracks, held)
+    return album, {item: info.tracks[i] for i, item in claims.items()}, skipped
+
+
+def apply_pin(lib, info, album, mapping, moving=lambda item, dest: None, created_row=lambda album: None):
+    """Give the mapped files the release: tags written, the album row joined (or
+    created: returned), files moved to where the album keeps them. The release is
+    applied directly, not by importing: an import into an album with members re-imports
+    them and lets beets re-assign every slot, which retitled a copy as another song.
+    `created_row(album)` is called as soon as a new album row exists and `moving(item,
+    dest)` before each file moves: the apply logs both before going on."""
+    from beets.autotag import AlbumMatch
+    from beets.autotag.distance import Distance
+
+    created = None
+    # the release's length is not the file's: keep the file's own
+    own = {item.id: item.length for item in mapping}
+    AlbumMatch(Distance(), info, mapping).apply_metadata()
+    if album is None:
+        album = created = lib.add_album(list(mapping))
+        created_row(album)
+        AlbumMatch(Distance(), info, mapping).apply_album_metadata(album)
+        album.store()
+    else:
+        for item in mapping:
+            item.album_id = album.id
+    for item in mapping:
+        item.length = own[item.id]
+        moving(item, item.destination())
+        item.try_write()
+        item.move()
+        item.store()
+    return created
 
 
 def write_json(path, data):

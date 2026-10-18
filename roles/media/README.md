@@ -156,7 +156,8 @@ Any failed step sends `... failed` with the line number, at high priority.
                             scripts/media-sync.sh  scripts/media-import.sh  scripts/media-status.sh
                             scripts/media-lib.sh  scripts/media-maintenance.sh   (sourced, not in PATH)
 /mnt/data/ (SSD)   music/  downloads/  navidrome-data/  beets/ (tools/: the python)
-                            cache/  logs/  state/youtube-archive.txt  state/review/ (the audit)
+                            cache/  logs/  state/youtube-archive.txt  state/review/ (audit, decisions)
+                            removed/<date>/ (quarantine)
                             syncthing/backup/  docker/  journal/  backup-tmp/
 ```
 
@@ -382,8 +383,50 @@ with no row are listed with the registered tracks they copy. Tracks marked
 
 The result is `$LIB/state/review/candidates.json` (the beets container sees
 `state/review` as `/review`), with MusicBrainz answers cached for 30 days in
-`mb-cache/`, so a second audit costs no requests. The review menu that turns it
-into decisions, and the Sunday apply, come next (`PLAN-library-review.md`).
+`mb-cache/`, so a second audit costs no requests. The audit also lists releases
+whose tracks sit in several album rows (*scattered*, e.g. *Scaled and Icy* in 15
+rows) and release tracks held twice (*duplicates*, two rips of one CD), with a
+suggested copy to keep (lossless, bitrate, the fuller album row, the older row).
+
+### Applying review decisions (apply, undo)
+
+Decisions are JSON lines in `$LIB/state/review/decisions.jsonl` - written by the
+review menu (next phase) or by hand - each naming its target files by row id,
+container path and size:
+
+```json
+{"v": 1, "ts": "...", "action": "merge", "release": "<release id>",
+ "targets": [{"id": 15219, "path": "/music/...flac", "size": 26118698}], "note": ""}
+```
+
+| action | what it does |
+|---|---|
+| `pin` | gives the files a release, by the pin's rules (title match, copies left alone) |
+| `keep` | marks the files reviewed, as "use as-is" in an interactive run does |
+| `register` | gives a file on disk with no row (`"id": null`) a row, as it is |
+| `quarantine` | moves a file to `$LIB/removed/<date>/` and drops its row; nothing is deleted |
+| `merge` | one release's tracks from several album rows into one row and one folder; empty rows go |
+| `skip` | changes nothing; recorded so the review does not ask again |
+
+```bash
+media-sync --apply --dry-run     # what it would do, what is stale; changes nothing
+media-sync --apply               # cron does this Sundays 04:00, before the 04:15 retag
+media-sync --undo <apply log>    # a file name in $LIB/state/review/apply-log/
+```
+
+A later decision about a file replaces an earlier one. Every target is checked
+first (same id, path and size); a decision whose files changed since is skipped as
+*stale*, and a merge that would hold two copies of one track is stale until one is
+quarantined. A run that touches more than `media_apply_max_files` (200) files is
+refused unless `--force`, and the apply waits (with an ntfy) while the restic backup
+runs or when its last success is older than `media_apply_backup_max_age_hours` (36);
+`--force` also skips that. Each run takes a DB checkpoint and logs every change -
+the row as it was, then as it became, flushed before the next step - to
+`apply-log/<stamp>.jsonl`, and archives the decisions with their results in
+`applied/<stamp>.jsonl`. Undo reads the log backwards: rows, album rows, tags and
+file locations go back, quarantined files return under their old row id, and a row
+that changed since the apply (a retag, a hand edit) is reported and left alone. An
+apply that stopped halfway is undone the same way. Cover art a pin fetched stays.
 
 ## Configuration
 

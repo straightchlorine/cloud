@@ -29,22 +29,8 @@ import media_common as mc
 
 # ---------------------------------------------------------------------- overlay
 
-OVERLAYS = {
-    "release": ("/config/album.yaml", {"quiet": False}, {"reviewed": {"mark": True}}),
-    "keep": ("/config/adopt.yaml", {"move": True}, {"reviewed": {"mark": True}}),
-    "pinned": ("/config/album.yaml", {}, {"match": {"strong_rec_thresh": 0.3}}),
-}
-
-
 def cmd_overlay(args):
-    import yaml
-
-    base, imp, top = OVERLAYS[args.kind]
-    conf = yaml.safe_load(open(base))
-    for k, value in top.items():
-        conf.setdefault(k, {}).update(value)
-    conf.setdefault("import", {}).update(imp)
-    yaml.safe_dump(conf, open("/config/.run.yaml", "w"))
+    mc.write_overlay(args.kind)
 
 
 # -------------------------------------------------------------------- reachable
@@ -178,60 +164,25 @@ def cmd_pin(args):
     its files. Prints a summary and a line per file left alone; lines starting with @
     are for the shell (@pinned <id>, @album <id> for a newly created album).
     """
-    from beets import config, metadata_plugins, plugins, ui
-    from beets.autotag import AlbumMatch
-    from beets.autotag.distance import Distance
-    from beets.dbcore import MatchQuery
+    from beets import metadata_plugins
 
     mbid = args.release
     wanted = set(line.rstrip("\n") for line in sys.stdin if line.strip())
-    config.read(user=False, defaults=True)
-    config.set_file("/config/config.yaml")
-    config.set_file("/config/.run.yaml")
-    config["plugins"].set(["musicbrainz"])
-    plugins.load_plugins()
-    lib = ui._open_library(config)
-
+    lib = mc.open_beets(["musicbrainz"])
     info = metadata_plugins.album_for_id(mbid, "MusicBrainz")
     if info is None:
         print("pin: MusicBrainz has no release %s (or is unreachable)" % mbid)
         return 1
 
-    existing = list(lib.albums(MatchQuery("mb_albumid", mbid)))
-    album = existing[0] if existing else None
-    members = list(album.items()) if album else []
-    todo = [i for i in lib.items()
-            if mc.path_of(i) in wanted and (album is None or i.album_id != album.id)]
-
-    def held(track):
-        return any((m.mb_releasetrackid and m.mb_releasetrackid == track.release_track_id)
-                   or mc.same_title(m.title, track.title) for m in members)
-
-    claims, skipped = mc.assign(todo, info.tracks, held)
-    mapping = {item: info.tracks[i] for i, item in claims.items()}
+    album, mapping, skipped = mc.plan_pin(lib, info, [i for i in lib.items() if mc.path_of(i) in wanted])
     for item, why in skipped:
         print("left alone: %s - %s" % (mc.path_of(item), why))
-    new_album = False
-    # the release's length is not the file's: keep the file's own
-    own = {item.id: item.length for item in mapping}
     if mapping:
-        AlbumMatch(Distance(), info, mapping).apply_metadata()
-        if album is None:
-            album = lib.add_album(list(mapping))
-            AlbumMatch(Distance(), info, mapping).apply_album_metadata(album)
-            album.store()
-            new_album = True
-        else:
-            for item in mapping:
-                item.album_id = album.id
+        created = mc.apply_pin(lib, info, album, mapping)
         for item in mapping:
-            item.length = own[item.id]
-            item.try_write()
-            item.move()
-            item.store()
             print("@pinned %d" % item.id)
-    if new_album:
-        print("@album %d" % album.id)
+        if created is not None:
+            print("@album %d" % created.id)
     print("pinned %d of %d file(s)%s" % (
         len(mapping), len(wanted), "" if not skipped else ", %d left alone" % len(skipped)))
     return 0
@@ -243,7 +194,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="media_tools", description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("overlay")
-    p.add_argument("kind", choices=sorted(OVERLAYS))
+    p.add_argument("kind", choices=sorted(mc.OVERLAYS))
     p.set_defaults(func=cmd_overlay)
     p = sub.add_parser("reachable")
     p.add_argument("--mb-url", required=True)

@@ -152,6 +152,7 @@
     - media_common.py
     - media_tools.py
     - media_audit.py
+    - media_apply.py
 
 - name: Install the pipeline scripts
   # One engine, an interactive wrapper, and a host-side `beet` for looking at the

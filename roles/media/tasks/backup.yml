@@ -63,7 +63,7 @@
     name: common
     tasks_from: restic_backup
   vars:
-    common_backup_service_name: "media"
+    common_backup_service_name: "{{ media_restic_service_name }}"
     common_backup_paths:
       - "{{ media_home }}"
       - "{{ media_library_path }}"

@@ -170,6 +170,8 @@
   become: true
   loop:
     - {name: "Media nightly sync", weekday: "*", hour: "1", minute: "0", args: ""}
+    # the review decisions after the 03:00 restic run and before the retag
+    - {name: "Media weekly apply", weekday: "0", hour: "4", minute: "0", args: "--apply "}
     - {name: "Media weekly retag", weekday: "0", hour: "4", minute: "15", args: "--retag "}
   loop_control:
     label: "{{ item.name }}"

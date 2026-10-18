@@ -31,6 +31,13 @@ media_backfill_exclude: ""
 # plan) ask. The tests point it at a local stub of fixture releases.
 media_musicbrainz_url: "https://musicbrainz.org"
 
+# `media-sync --apply` (the review decisions, Sundays 04:00): a run touching more files
+# than this is refused unless --force, and it waits for a restic backup no older than
+# the age below. The unit is backup-<name>.service, from the common restic_backup task.
+media_apply_max_files: 200
+media_apply_backup_max_age_hours: 36
+media_restic_service_name: "media"
+
 media_library_directories:
   - music
   - downloads
@@ -38,6 +45,8 @@ media_library_directories:
   - beets
   - cache
   - logs
+  # Quarantined files (`media-sync --apply`): moved here by date, never deleted.
+  - removed
   # Pipeline state (the yt-dlp download archive) - kept out of the /mnt/data
   # root so the data path stays folders-only. Backed up by restic and the
   # nightly snapshot (unlike cache/, which is excluded).
@@ -147,6 +156,7 @@ media_compose_services:
       - "{{ media_library_path }}/music:/music"
       - "{{ media_library_path }}/downloads:/downloads"
       - "{{ media_library_path }}/state/review:/review"
+      - "{{ media_library_path }}/removed:/removed"
     service_networks:
       - stack
     # Pinned on purpose: inheriting the host's resolver list (a Pi-hole plus a

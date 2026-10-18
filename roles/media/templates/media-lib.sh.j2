@@ -239,20 +239,28 @@ files_for_query() {  # <beets query...>
 # keeps its files; a new album also gets its cover art. Prints a summary and a
 # line per file left alone.
 pin_files() {  # <release id>
-    local id="$1" paths out n
+    local id="$1" paths out n=()
     paths="$(cat)"
     [ -n "$paths" ] || { echo "pin: no files given"; return 0; }
     overlay pinned
     out="$(printf '%s\n' "$paths" | "${BEET_PY[@]}" "$TOOLS/media_tools.py" pin "$id")" ||
         { printf '%s\n' "$out"; return 1; }
-    printf '%s\n' "$out" | grep -v '^@'
-    # A new album row has no cover yet: fetch it, then embed it in the new files.
+    printf '%s\n' "$out" | grep -v '^@' || true
     if printf '%s\n' "$out" | grep -q '^@album '; then
-        "${BEET[@]}" fetchart -q "mb_albumid:$id" < /dev/null || true
-        for n in $(printf '%s\n' "$out" | sed -n 's/^@pinned //p'); do
-            "${BEET[@]}" embedart -y "id:$n" < /dev/null || true
-        done
+        mapfile -t n < <(printf '%s\n' "$out" | sed -n 's/^@pinned //p')
+        album_art "$id" "${n[@]}"
     fi
+}
+
+# A new album row has no cover yet: fetch it, then embed it in the album's new files.
+# Best effort - a release with no art on the Cover Art Archive is not an error.
+album_art() {  # <release id> <item id>...
+    local id="$1" n
+    shift
+    "${BEET[@]}" fetchart -q "mb_albumid:$id" < /dev/null || true
+    for n in "$@"; do
+        "${BEET[@]}" embedart -y "id:$n" < /dev/null || true
+    done
 }
 
 # Albums where most tracks found their release and some did not, as the plan
@@ -275,4 +283,44 @@ audit_library() {
     local loose
     loose="$(unregistered_files /music)" || return 1
     printf '%s\n' "$loose" | "${BEET_PY[@]}" "$TOOLS/media_audit.py" --mb-url "$MB_URL" --review "$REVIEW"
+}
+
+# The saved review decisions, applied in one container (see media_apply.py). Lines
+# starting with @ are for album_art; the rest is the report. Exit 3: refused, over
+# the per-run file limit.
+apply_decisions() {  # [--dry-run] [--force]
+    "${BEET_PY[@]}" "$TOOLS/media_apply.py" apply --review "$REVIEW" \
+        --max-files {{ media_apply_max_files }} "$@"
+}
+
+# Take an apply back from its log (a file name in $LIB/state/review/apply-log).
+undo_apply() {  # <log file name>
+    "${BEET_PY[@]}" "$TOOLS/media_apply.py" undo "$REVIEW/apply-log/$1"
+}
+
+# An apply rewrites tags and moves files, so it runs only with a fresh restic snapshot
+# to fall back on, and never while restic is reading the library (a file moved
+# mid-backup can be in neither place in that snapshot). systemd knows both, for the
+# stack user too; --timestamp=unix because the default format ends in a zone name
+# date(1) is not sure to parse. A unit that has not run since boot has no exit time:
+# that counts as no snapshot.
+backup_gate() {
+    local unit="backup-{{ media_restic_service_name }}.service" state result ended age
+    state="$(systemctl show -p ActiveState --value "$unit")"
+    case "$state" in
+        active | activating | deactivating | reloading)
+            echo "the restic backup is running ($unit is $state)"
+            return 1 ;;
+    esac
+    result="$(systemctl show -p Result --value "$unit")"
+    ended="$(systemctl show --timestamp=unix -p ExecMainExitTimestamp --value "$unit")"
+    if [ "$result" != success ] || [ -z "$ended" ]; then
+        echo "no successful restic backup since boot ($unit: ${result:-no result})"
+        return 1
+    fi
+    age=$(( ($(date +%s) - ${ended#@}) / 3600 ))
+    if [ "$age" -ge {{ media_apply_backup_max_age_hours }} ]; then
+        echo "the last restic backup finished $age h ago (the limit is {{ media_apply_backup_max_age_hours }} h)"
+        return 1
+    fi
 }

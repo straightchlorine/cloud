@@ -29,6 +29,7 @@
         - "{{ media_library_path }}/beets/tools/media_tools.py"
         - "{{ media_library_path }}/beets/tools/media_common.py"
         - "{{ media_library_path }}/beets/tools/media_audit.py"
+        - "{{ media_library_path }}/beets/tools/media_apply.py"
       register: media_files
 
     - name: Parse the deployed files
@@ -52,6 +53,7 @@
         media_tools_py: "{{ media_files.results[16].content | b64decode }}"
         media_common_py: "{{ media_files.results[17].content | b64decode }}"
         media_audit_py: "{{ media_files.results[18].content | b64decode }}"
+        media_apply_py: "{{ media_files.results[19].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -98,6 +100,7 @@
           - compose.services.beets.profiles == ['tools']
           - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
           - "'/mnt/music/state/review:/review' in compose.services.beets.volumes"
+          - "'/mnt/music/removed:/removed' in compose.services.beets.volumes"
           - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
           - "'WATCHTOWER_EPHEMERAL_SELF_UPDATE=true' in watchtower.environment"
           - "watchtower_hostname in watchtower.environment"
@@ -274,7 +277,7 @@
           # checkpoint, preflight, the pinned-release overlay
           - "'checkpoint() {' in media_lib"
           - "'musicbrainz_reachable() {' in media_lib"
-          - "'strong_rec_thresh' in media_tools_py"
+          - "'strong_rec_thresh' in media_common_py"
           # one definition of the constants, in the library only
           - "'LIB=\"' in media_lib"
           - "'LIB=\"' not in media_sync"
@@ -296,9 +299,13 @@
           - "'pin_files() {' in media_lib"
           - "'complete_plan() {' in media_lib"
           - "'def cmd_pin(' in media_tools_py"
-          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_tools_py"
+          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_common_py"
           - "'the album already holds that track (a copy)' in media_common_py"
-          - "'mc.assign(todo, info.tracks, held)' in media_tools_py"
+          - "'assign(todo, info.tracks, held)' in media_common_py"
+          # the pin and the apply share one implementation
+          - "'mc.plan_pin(' in media_tools_py"
+          - "'mc.apply_pin(' in media_tools_py"
+          - "'mc.plan_pin(' in media_apply_py"
           - "'def same_title(' in media_common_py"
           # python lives in the tools, not in shell strings; a pin applies the release itself
           # and never imports into an existing album
@@ -312,6 +319,16 @@
           - "'REVIEW=/review' in media_lib"
           - "'import media_common as mc' in media_audit_py"
           - "'.store()' not in media_audit_py"
+          # the apply: decisions in one container, gated on restic, undoable from its log
+          - "'--apply)' in media_sync"
+          - "'--undo)' in media_sync"
+          - "'backup_gate() {' in media_lib"
+          - "'backup-media.service' in media_lib"
+          - "'--max-files 200' in media_lib"
+          - "'-ge 36 ]' in media_lib"
+          - "'def cmd_undo(' in media_apply_py"
+          - "'os.fsync' in media_apply_py"
+          - "'import media_common as mc' in media_apply_py"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"
           # the dashboard stays read-only: no container, no lock
@@ -432,11 +449,13 @@
           - "'Media nightly sync' in media_crontab.stdout"
           - "'Media weekly retag' in media_crontab.stdout"
           - "'/usr/local/bin/media-sync --retag' in media_crontab.stdout"
+          # Sunday 04:00, after restic and before the 04:15 retag
+          - "'0 4 * * 0 /usr/local/bin/media-sync --apply' in media_crontab.stdout"
           - "'Media Syncthing local backup' in media_crontab.stdout"
           - "'/usr/local/bin/yt-dlp-update' in media_crontab.stdout"
           - "'PATH=\"/usr/local/bin:/usr/bin:/bin\"' in media_crontab.stdout"
         fail_msg: "crontab wrong:\n{{ media_crontab.stdout }}"
-        success_msg: "[OK] nightly sync, weekly retag and 02:30 snapshot scheduled"
+        success_msg: "[OK] nightly sync, weekly apply and retag, 02:30 snapshot scheduled"
 
     - name: Assert the snapshot backup script and destination
       ansible.builtin.assert:

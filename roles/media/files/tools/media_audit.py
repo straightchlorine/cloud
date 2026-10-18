@@ -12,8 +12,9 @@ partial, whole) and looks up the candidate releases a person would choose from:
 the releases the group already carries plus the best MusicBrainz search results,
 each with how many of the group's files it covers. The files on disk that have no
 row (stdin, one container path per line) are listed with the registered tracks
-they are copies of. Tracks marked `reviewed` are a person's decision and are left
-out. The result goes to <review>/candidates.json, MusicBrainz answers to
+they are copies of, and so are releases spread over several album rows and release
+tracks held twice (with a suggested copy to keep). Tracks marked `reviewed` are a
+person's decision and are left out of the album groups. The result goes to <review>/candidates.json, MusicBrainz answers to
 <review>/mb-cache/; the library is opened and never stored to.
 """
 
@@ -148,6 +149,22 @@ def main(argv=None):
             "+".join(kinds), groups[-1]["artist"], groups[-1]["album"], len(members)), file=sys.stderr)
     paths = [line.rstrip("\n") for line in sys.stdin if line.strip()]
     loose = unregistered(paths, everything)
+    # Reviewed tracks included: one release in many rows, or a track held twice, is
+    # wrong whether or not a person looked at the tags.
+    spread = [{
+        "release": mbid,
+        "artist": mc.album_artist(members[0]),
+        "album": members[0].album,
+        "album_rows": sorted({i.album_id for i in members}),
+        "tracks": [track_info(i) for i in sorted(members, key=lambda i: (i.disc or 0, i.track or 0, i.id))],
+    } for mbid, members in sorted(mc.scattered(everything).items())]
+    copies = [{
+        "release": keep.mb_albumid,
+        "track": track,
+        "title": keep.title,
+        "keep": keep.id,
+        "copies": [track_info(i) for i in members],
+    } for track, members, keep in mc.duplicates(everything)]
 
     def kind(k):
         return [g for g in groups if k in g["kinds"]]
@@ -160,6 +177,10 @@ def main(argv=None):
         "whole_tracks": sum(len(g["tracks"]) for g in kind("whole")),
         "unregistered": len(loose),
         "unregistered_copies": sum(1 for f in loose if f.get("copy_of")),
+        "scattered": len(spread),
+        "scattered_rows": sum(len(r["album_rows"]) for r in spread),
+        "duplicates": len(copies),
+        "duplicate_rows": sum(len(c["copies"]) for c in copies),
     }
     path = os.path.join(args.review, "candidates.json")
     mc.write_json(path, {
@@ -171,10 +192,14 @@ def main(argv=None):
         "errors": errors,
         "groups": groups,
         "unregistered": loose,
+        "scattered": spread,
+        "duplicates": copies,
     })
     print("audit: %(split)d split, %(partial)d partial (%(partial_bare)d bare), "
           "%(whole)d whole (%(whole_tracks)d tracks), %(unregistered)d unregistered "
           "(%(unregistered_copies)d copies of a registered track)" % counts)
+    print("audit: %(scattered)d release(s) in several album rows (%(scattered_rows)d rows), "
+          "%(duplicates)d track(s) held more than once (%(duplicate_rows)d rows)" % counts)
     print("audit: %d MusicBrainz request(s), %d answered from the cache, %d error(s); wrote %s"
           % (mb.requests, mb.cached, len(errors), path))
     return 0
