@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Managed by Ansible - Do not edit manually
+# gpu-qp-lane.sh <phase> <lane>
 #
-# One lane of one benchmark phase. Resumable: a cell whose row in <phase>/state.tsv is already
-# `done` or `done-unstreamed` is skipped; a failed cell is retried once, then recorded `failed` and
-# the lane continues.
+# Runs one lane of one phase of the thesis-benchmark rerun. Resumable: a cell whose row in
+# <phase>/state.tsv is already `done` or `done-unstreamed` is skipped. A cell that fails is
+# retried once, then recorded `failed` and the lane continues.
 #
-# Phases: A/A2 = sto-3g, 6 molecules x seeds 1,2,3;  A2 uses the thesis convergence protocol
-#                 (--convergence --threshold 1e-6, no evaluation cap) instead of a fixed budget.
-#         B    = sto-3g, 6 molecules x seed 1, 200 evaluations
-#         C    = cc-pvdz, H2 x seed 1, 100 evaluations
-#         S    = smoke: sto-3g, H2 x seed 1, 20 evaluations
-# Lanes:  cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
+# Phases (brief 5.2): A = sto3g, 6 molecules x seeds 1,2,3, 1000 evals.
+#                     B = sto3g, 6 molecules x seed 1, 200 evals.
+#                     C = cc-pvdz, H2 x seed 1, 100 evals.
+#                     S = smoke: sto3g, H2 x seed 1, 20 evals (launcher test).
+# Lanes: cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
 #
 # state.tsv columns: lane  molecule  seed  status  exit  started  ended
 #   status: done             exit 0
@@ -20,8 +19,6 @@
 #           failed           anything else, after one retry
 # Every cell mounts its own <phase>/<lane>/<molecule>_seed<S>.gen/ as gen/ (and its run_configs/
 # subdirectory as run_configs/), so no cell can overwrite another cell's spool or metrics.
-#
-# Candidate `gpu-qp lane <phase> <lane>` subcommand. The run matrix is files/bench-lanes.tsv.
 set -u
 set -o pipefail
 
@@ -35,19 +32,24 @@ case "$PHASE" in
   A)  BASIS=sto3g;   MAXIT=1000; SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
   A2) BASIS=sto3g;   MAXIT='';   SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
   B)  BASIS=sto3g;   MAXIT=200;  SEEDS='1';     MOLS='0 1 2 3 4 5' ;;
-  C)  BASIS=cc-pvdz; MAXIT=100;  SEEDS='1';     MOLS='0' ;;
+  C)  BASIS=cc-pvdz; MAXIT=1000; SEEDS='1';     MOLS='0' ;;
+  H)  BASIS=sto3g;   MAXIT='';   SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
   S)  BASIS=sto3g;   MAXIT=20;   SEEDS='1';     MOLS='0' ;;
-  *) echo "usage: $0 <A|A2|B|C|S> <cpu-aer|gpu1|gpu2|analytic>" >&2; exit 2 ;;
+  *) echo "usage: $0 <A|A2|B|C|H|S> <cpu-aer|gpu1|gpu2|analytic>" >&2; exit 2 ;;
 esac
 
 # A2 is the thesis protocol: no evaluation cap, stop on convergence instead. The fixed-budget
 # phases starve the finite-difference lanes (a gradient costs n_params+1 evaluations), so only
 # A2 yields converged energies.
-if [ "$PHASE" = A2 ]; then
-  BUDGET=(--convergence --threshold 1e-6)
-else
-  BUDGET=(--max-iterations "$MAXIT")
-fi
+# A2 and H stop on convergence, capped at 18,000 evaluations (2x the largest count seen in the
+# 2026-10 convergence run) so a cell can never run for days. H is the analytic lane started at
+# the Hartree-Fock point instead of a random point; it shows what the random-init plateau costs.
+INIT=random
+case "$PHASE" in
+  A2) BUDGET=(--convergence --threshold 1e-6 --max-evaluations 18000) ;;
+  H)  BUDGET=(--convergence --threshold 1e-6 --max-evaluations 18000); INIT=hf ;;
+  *)  BUDGET=(--max-iterations "$MAXIT") ;;
+esac
 
 case "$LANE" in
   cpu-aer)  SERVICE=quantum-pipeline-cpu;  EXTRA=(--no-analytic) ;;
@@ -56,14 +58,17 @@ case "$LANE" in
   analytic) SERVICE=quantum-pipeline-cpu;  EXTRA=() ;;
   *) echo "unknown lane: $LANE" >&2; exit 2 ;;
 esac
+if [ "$PHASE" = H ] && [ "$LANE" != analytic ]; then
+  echo "phase H runs the analytic lane only" >&2; exit 2
+fi
 
 MOLNAME=(H2 'HeH+' LiH BeH2 H2O NH3)
 OUT=$BENCH/$PHASE/$LANE
 STATE=$BENCH/$PHASE/state.tsv
 mkdir -p "$OUT" "$BENCH/$PHASE"
 # bind-mounted dirs must exist and be world-writable for the remapped daemon
-mkdir -p "{{ gpu_qp_gen_path }}"
-chmod 1777 "{{ gpu_qp_gen_path }}" 2>/dev/null || true
+mkdir -p "$ROOT/gen"
+chmod 1777 "$ROOT/gen" 2>/dev/null || true
 
 COMPOSE=(docker compose -p ml --env-file "$ROOT/.env"
   -f "$ROOT/compose/docker-compose.ml.yaml"
@@ -71,7 +76,7 @@ COMPOSE=(docker compose -p ml --env-file "$ROOT/.env"
   --profile batch)
 
 COMMON=(--file data/molecules.thesis.json --basis "$BASIS" --ansatz EfficientSU2
-  --ansatz-reps 2 --optimizer L-BFGS-B --init-strategy random "${BUDGET[@]}"
+  --ansatz-reps 2 --optimizer L-BFGS-B --init-strategy "$INIT" "${BUDGET[@]}"
   --kafka --log-level DEBUG --dump --enable-performance-monitoring
   --performance-export-format json)
 
@@ -124,7 +129,10 @@ run_cell() {
 
 echo "[lane] $PHASE $LANE service=$SERVICE basis=$BASIS maxit=$MAXIT"
 for mol in $MOLS; do
-  for seed in $SEEDS; do
+  seeds=$SEEDS
+  # NH3 to convergence costs 5-8 h per cell on the Aer lanes; one seed is the budgeted amount.
+  if [ "$PHASE" = A2 ] && [ "$mol" = 5 ] && [ "$LANE" != analytic ]; then seeds=1; fi
+  for seed in $seeds; do
     if is_done "${MOLNAME[$mol]}" "$seed"; then
       echo "[skip] $LANE ${MOLNAME[$mol]} seed=$seed (done)"
       continue

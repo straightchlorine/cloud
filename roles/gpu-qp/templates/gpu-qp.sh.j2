@@ -66,6 +66,17 @@ Commands:
       e.g.  (git diff HEAD; git ls-files -o --exclude-standard -z |
              xargs -0 -n1 git diff --no-index /dev/null) | ssh gpu 'gpu-qp patch --reset'
 
+  sync [--check] [--build]
+      Make the checkout the workstation's tree as it is: a bundle on stdin names
+      the base commit and carries the diff of everything on top of it (untracked
+      files included). Fetches origin, checks the branch out at exactly that
+      commit, drops whatever was applied before, applies the diff. The revision
+      becomes <base>+patched-<digest>, so 'gpu-qp build' rebuilds. Replaces the
+      reset / pull --reset / patch --reset sequence.
+      --check  only verify that the bundle would apply; change nothing
+      --build  run 'gpu-qp build' afterwards
+      Workstation side: roles/gpu-qp/files/gpu-qp-ship.sh [--build] [HOST|-]
+
   build [--force]
       Build $IMAGE from docker/Dockerfile.gpu with:
 $(printf '        %s\n' "${BUILD_ARGS[@]}")
@@ -251,6 +262,84 @@ cmd_pull() {
     git_src pull --ff-only
   fi
   echo "[OK] $branch at $(git_src --no-pager log --oneline -1)"
+}
+
+cmd_sync() {
+  local check=false build=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --check) check=true ;;
+      --build) build=true ;;
+      *) bad_usage "sync: unknown argument $1" ;;
+    esac
+    shift
+  done
+  require_checkout
+  [ ! -t 0 ] || die "sync reads a bundle from stdin - pipe one in (gpu-qp-ship.sh on the workstation)"
+
+  local bundle diff header
+  bundle="$(mktemp)"; diff="$(mktemp)"
+  trap "rm -f '$bundle' '$diff'" EXIT
+  cat >"$bundle"
+  header="$(head -n1 "$bundle")"
+  case "$header" in
+    "# gpu-qp-sync "*) ;;
+    *) die "stdin does not start with a gpu-qp-sync header (got: ${header:0:60})" ;;
+  esac
+  field() { echo "$header" | tr ' ' '\n' | sed -n "s/^$1=//p"; }
+  local base branch files digest
+  base="$(field base)"; branch="$(field branch)"; files="$(field files)"; digest="$(field sha256)"
+  [ -n "$base" ] && [ -n "$branch" ] || die "bundle header lacks base= or branch="
+  tail -n +2 "$bundle" >"$diff"
+  if [ -s "$diff" ]; then
+    [ "$(sha256sum <"$diff" | cut -c1-12)" = "$digest" ] \
+      || die "diff digest mismatch - bundle truncated in transit?"
+  fi
+
+  # origin is the workstation repository, so every commit on its branches is fetchable,
+  # pushed or not. A stash or an amended-away commit is not.
+  git_src fetch --prune --quiet origin || die "git fetch origin failed - is the route to the workstation up?"
+  git_src cat-file -e "${base}^{commit}" 2>/dev/null \
+    || die "base ${base:0:12} is not on origin - commit it on the workstation first"
+
+  if [ "$check" = true ]; then
+    # Verify against the base on a throwaway index; the working tree stays untouched.
+    local tmpidx
+    tmpidx="$(mktemp)"; rm -f "$tmpidx"
+    GIT_INDEX_FILE="$tmpidx" git_src read-tree "$base"
+    if [ -s "$diff" ]; then
+      GIT_INDEX_FILE="$tmpidx" git_src apply --cached --check "$diff" \
+        || { rm -f "$tmpidx"; die "diff does not apply onto ${base:0:12}"; }
+    fi
+    rm -f "$tmpidx"
+    echo "[OK] would sync to ${branch}@${base:0:12} + ${files:-0} file(s); nothing changed"
+    return 0
+  fi
+
+  # Exactly the workstation base: branch at the commit, tree clean, old marker gone.
+  # Ignored files (.env, rendered compose files, gen/) survive clean -fd on purpose.
+  git_src checkout -q -B "$branch" "$base"
+  git_src reset -q --hard "$base"
+  git_src clean -fdq
+  rm -f "$PATCH_MARKER"
+
+  if [ -s "$diff" ]; then
+    git_src apply --check "$diff" \
+      || die "diff does not apply onto ${base:0:12} - regenerate the bundle on the workstation"
+    git_src apply --index "$diff"
+    echo "$digest" >"$PATCH_MARKER"
+    git_src --no-pager diff --cached --stat | tail -n 3
+  fi
+  echo "[OK] synced ${branch}@${base:0:12} -> $(source_revision | cut -c1-52)"
+  if grep -q '^diff --git a/compose/.*\.template' "$diff" 2>/dev/null; then
+    echo "     compose templates changed: run  bash scripts/ml-setup.sh  in $SOURCE to re-render them"
+  fi
+  if [ "$build" = true ]; then
+    cmd_build
+  else
+    echo "     next: gpu-qp build"
+  fi
 }
 
 cmd_build() {
@@ -693,7 +782,7 @@ PY
 command="${1:-}"
 [ $# -eq 0 ] || shift
 case "$command" in
-  pull|patch|build|check|run|bench|matrix|scan) "cmd_$command" "$@" ;;
+  pull|patch|sync|build|check|run|bench|matrix|scan) "cmd_$command" "$@" ;;
   help|-h|--help) usage ;;
   "") usage >&2; exit 2 ;;
   *) bad_usage "unknown command: $command" ;;

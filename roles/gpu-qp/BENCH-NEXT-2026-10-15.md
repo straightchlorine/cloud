@@ -67,3 +67,21 @@ the role's `eta.py` scales from the fixed-budget phase and cannot see convergenc
 cell finishes. Two cheap additions: `gpu-qp supervise` takes a `--deadline <UTC>` after which it
 stops starting new cells (lanes finish their current cell, state stays resumable), and the ETA
 reports "unknown" for a molecule with no converged cell instead of a scaled guess.
+
+## (k) `gpu-qp sync`: ship the workstation tree as it is (added 2026-10-18)
+
+The final run was prepared from an uncommitted 2.4.1 tree. Getting it onto the host took the
+by-hand sequence `git reset --hard && git clean -fdq`, `gpu-qp pull --reset master`,
+`gpu-qp patch --reset < diff`, plus a hand-built diff that had to include untracked files. Two
+new files replace that:
+
+| file | runs on | what |
+|---|---|---|
+| `files/gpu-qp-ship.sh` | workstation | packs base commit + `git diff --binary HEAD` (untracked files via intent-to-add, undone on exit) into one bundle with a header line and pipes it to `gpu-qp sync` on the host over the usual remote shell; `-` writes the bundle to stdout |
+| `gpu-qp sync [--check] [--build]` in `templates/gpu-qp.sh.j2` | host | reads the bundle, fetches origin (the workstation repo, so unpushed commits are reachable), `checkout -B <branch> <base>`, reset, clean, applies the diff with `--index`, writes the patch marker so the revision reads `<base>+patched-<digest>`; `--check` dry-runs against the base on a temporary index; `--build` chains `gpu-qp build`; prints a hint when compose templates changed |
+
+Wired on 2026-10-18 at the user's request (this is the one existing-file edit in this note:
+`cmd_sync`, its usage entry and the dispatcher line in `gpu-qp.sh.j2`). Put `gpu-qp-ship.sh` on
+the workstation's PATH. Tested offline against a scratch clone: check mode, apply of 35 files,
+idempotent rerun, truncated bundle refused by the digest check. The CPU image build is still a
+separate `docker build`; a `gpu-qp build --cpu` would close that.
