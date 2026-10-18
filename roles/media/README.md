@@ -74,8 +74,11 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
   own python in the container. `beet` is a convenience wrapper for looking at the
   library.
   - nightly **`media-sync`** — unattended (`quiet_fallback: skip`): release pass
-    then singleton pass, applying only strong matches and leaving the rest in
-    `downloads/`.
+    then singleton pass over that night's downloads only, applying only strong
+    matches and leaving the rest in `downloads/`. A leftover is not judged again
+    on later nights (it would fail the same way, at a minute per file); it waits
+    for `media-import`. Age-restricted videos are skipped: the host has no
+    YouTube cookies.
   - **`media-import [<dir>]`** — a review session: the release pass asks per file
     (pick a candidate by number, `E` to search MusicBrainz yourself, `I` to paste
     a release id), then the singleton pass asks per track. Worth the asking: it
@@ -97,7 +100,7 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
     complete album or a ripped CD.
 - **Keeping something as it is.** `media-sync --keep [<dir>]` registers a
   directory without matching it (no MusicBrainz calls), moves it into `music/`
-  so the nightly run stops retrying it, and marks it reviewed. Answering "use
+  so it leaves `downloads/`, and marks it reviewed. Answering "use
   as-is" in an interactive run marks it the same way (see `reviewed.py` under
   `beets/plugins`). A reviewed track is never handed to `--upgrade`/`--retag`
   again; the marker is a `reviewed` field plus a `reviewed` prefix on
@@ -131,7 +134,7 @@ One per event, success or failure:
 
 | Event | Title | Body |
 |---|---|---|
-| nightly sync | `media-sync sync done` / `needs a look` | tracks imported, left in `downloads/`, unexpected yt-dlp errors |
+| nightly sync | `media-sync sync done` / `needs a look` | of tonight's downloads: imported, left in `downloads/`; unexpected yt-dlp errors; older tracks waiting for `media-import` (no warning by themselves) |
 | weekly retag | `media-sync retag done` | as-is tracks matched MusicBrainz, matches given a release |
 | upgrade | `media-sync upgrade done` | tracks that gained release metadata |
 | keep | `media-sync keep done` | files registered as-is and marked reviewed |

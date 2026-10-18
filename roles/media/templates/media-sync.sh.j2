@@ -109,10 +109,11 @@ esac
 # the one-file-at-a-time property, needs no shell loop and survives odd
 # filenames; `! -name ".*"` keeps the old glob's habit of ignoring hidden files
 # (a half-written .part or thumbnail).
-release_pass() {  # [<dir>] [<overlay>] [tty]
+release_pass() {  # [<dir>] [<overlay>] [tty] [<stamp>]
     # `tty` hands beets a terminal so it can ask (used by --review); the default
     # is unattended, where only strong matches are applied and the rest are
-    # printed as "Skipping.".
+    # printed as "Skipping.". With a <stamp> (a container path) only files
+    # created after it are taken - the nightly run's own downloads.
     local run=(-T)
     if [ "${3:-}" = tty ]; then
         run=(-it)
@@ -126,11 +127,11 @@ release_pass() {  # [<dir>] [<overlay>] [tty]
     # kills find and the container goes with PID 1.
     "${COMPOSE[@]}" run "${run[@]}" --rm -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
         trap "kill \$pid 2>/dev/null; exit 130" INT TERM
-        find "$1" -type f ! -name ".*" \
+        find "$1" -type f ! -name ".*" ${3:+-cnewer "$3"} \
             -exec /lsiopy/bin/beet --config "$2" import {} \; &
         pid=$!
         wait $pid' \
-        release-pass "${1:-/downloads}" "${2:-/config/album.yaml}"
+        release-pass "${1:-/downloads}" "${2:-/config/album.yaml}" "${4:-}"
 }
 
 # Run beets interactively and keep this shell alive to catch Ctrl-C: `exec` would
@@ -402,28 +403,49 @@ esac
 
 mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
 
-# yt-dlp exits non-zero when a single video is gone; that is expected, other errors alert.
+# Only what this run downloads goes through the two passes. A leftover was judged
+# the night it arrived and would be judged the same again: re-running the whole
+# backlog costs about a minute per file (fingerprint and lookups, twice), which
+# for 263 leftovers was a 4.5-hour run through the restic backup and past the
+# Sunday retag. Leftovers wait for media-import. The stamp marks the end of the
+# last run that got through its passes, so what an interrupted night downloaded
+# is taken the next night; it is hidden, so the passes never see it. ctime,
+# because yt-dlp may set mtime to the upload date.
+stamp="$LIB/downloads/.last-sync"
+[ -e "$stamp" ] || touch "$stamp"
+fresh() { find "$LIB/downloads" -type f ! -name '.*' -cnewer "$stamp" -printf '/downloads/%P\n'; }
+
+# yt-dlp exits non-zero when a single video is gone; that is expected, as is what
+# needs an account (age-restricted, members-only). Other errors alert.
 run_log="$(mktemp)"
 trap 'rm -f "$run_log"' EXIT
 for url in "${playlists[@]}"; do
     yt-dlp --config-location "{{ media_home }}/config/yt-dlp.conf" "$url" 2>&1 | tee -a "$run_log" || true
 done
 errors="$(grep '^ERROR:' "$run_log" \
-    | grep -cvE 'Video unavailable|Private video|video has been removed|not available in your country|members-only' \
+    | grep -cvE 'Video unavailable|Private video|video has been removed|not available in your country|members-only|Sign in to confirm your age' \
     || true)"
 
-new="$(find "$LIB/downloads" -type f | wc -l)"
+new="$(fresh | wc -l)"
 if [ "$new" -gt 0 ]; then
     # Release pass, one file at a time (see release_pass), then a singleton pass
     # for whatever is left.
-    release_pass /downloads /config/album.yaml
+    release_pass /downloads /config/album.yaml "" /downloads/.last-sync
     # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
     # lookup carries no album-level metadata by design, so this is the fallback.
-    "${BEET[@]}" import /downloads
+    mapfile -t rest < <(fresh)
+    if [ -n "${rest[*]:-}" ]; then
+        "${BEET[@]}" import "${rest[@]}"
+    fi
 fi
-left="$(find "$LIB/downloads" -type f | wc -l)"
+left="$(fresh | wc -l)"
+older=$(( $(find "$LIB/downloads" -type f ! -name '.*' | wc -l) - left ))
+touch "$stamp"
 
 summary="$(grep -cv '^\s*$' "{{ media_home }}/config/playlists.txt") playlist(s): $((new - left)) track(s) imported, $left left in downloads/, $errors unexpected yt-dlp error(s)."
+if [ "$older" -gt 0 ]; then
+    summary="$summary $older older track(s) wait for media-import."
+fi
 if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ]; then
     notify "needs a look" \
         "$summary Run 'media-import' to resolve what is left, interactively. See $LIB/logs/media-sync.log." \

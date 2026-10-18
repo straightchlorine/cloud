@@ -34,8 +34,10 @@
 --embed-thumbnail
 --convert-thumbnails jpg
 
-# Flat and transient: beets renames on import.
---output "{{ media_library_path }}/downloads/%(artist)s - %(title)s [%(id)s].%(ext)s"
+# Flat and transient: beets renames on import. The B limits are BYTES: ext4 caps a
+# name at 255 and a title in 4-byte "bold" letters passes that at ~60 characters
+# (it failed every night); the tags keep the full text.
+--output "{{ media_library_path }}/downloads/%(artist).60B - %(title).120B [%(id)s].%(ext)s"
 --download-archive "{{ media_library_path }}/state/youtube-archive.txt"
 --cache-dir "{{ media_library_path }}/cache"
 
