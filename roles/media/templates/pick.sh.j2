@@ -1,0 +1,5 @@
+#!/bin/sh
+# pick on the media host: the same tool as on a workstation (pick-core.sh, the repo's
+# scripts/media/pick.sh), but everything it asks for is local - no ssh, no host argument:
+#   pick remove [<query>]   pick fix [<query>]   pick album <query>
+PICK_LOCAL=1 LIB="{{ media_library_path }}" exec "{{ media_home }}/scripts/pick-core.sh" "$@"

@@ -272,13 +272,22 @@ YOUTUBE = re.compile(r"(?:youtube\.com/watch\?(?:[^\s#]*?&)?v=|youtu\.be/)([A-Za
                      re.IGNORECASE)
 
 
+def same_recording_title(a, b):
+    """Two titles that name one track, for deciding two files are the same recording: equal once
+    case, punctuation and spacing are ignored, nothing looser. same_title's "one opens the other"
+    and "nearly identical" rules are right for matching a file to a release and wrong here:
+    "1 Corinthians 1" opens "1 Corinthians 11" and "Galatians 2" is 90% of "Galatians 5" - the
+    chapters of an audiobook, all the same length."""
+    return bool(key(a)) and key(a) == key(b)
+
+
 def loose_copies(title, length, rows):
     """(copies, other cuts) among `rows` for a loose file: copies share the title and the length
     within COPY_SECONDS; another cut shares the title and is up to PROBABLE_SECONDS away (shown,
     never a reason to quarantine). Anything further apart is another recording."""
     copies, cuts = [], []
     for r in rows:
-        if not same_title(title, r.title):
+        if not same_recording_title(title, r.title):
             continue
         gap = abs((length or 0) - (r.length or 0))
         if gap <= COPY_SECONDS:
@@ -322,7 +331,7 @@ def twins(items, queued=()):
     [{"kind", "keep": item, "drop": [items], "offsets": {row id: seconds}, "reason"}].
 
     video: the same YouTube video id in the comments, lengths within VIDEO_SECONDS.
-    recording: the same artist (artist_key), the same title (same_title) and a length
+    recording: the same artist (artist_key), the same title (same_recording_title) and a length
     within RECORDING_SECONDS, unless the two rows carry different release ids (an album and
     a compilation). probable: the same, within PROBABLE_SECONDS but not
     RECORDING_SECONDS, from another source (a different format, or a YouTube download
@@ -360,7 +369,8 @@ def twins(items, queued=()):
 
     def same_song(a, b):
         # one master on an album and on a single or compilation is two wanted tracks, not a copy
-        return same_title(a.title, b.title) and not (a.mb_albumid and b.mb_albumid and a.mb_albumid != b.mb_albumid)
+        return (same_recording_title(a.title, b.title)
+                and not (a.mb_albumid and b.mb_albumid and a.mb_albumid != b.mb_albumid))
 
     by_artist = collections.defaultdict(list)
     for row in rows:

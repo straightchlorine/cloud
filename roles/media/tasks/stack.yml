@@ -173,6 +173,19 @@
     # Read-only dashboard for a long pass; deliberately not a media-sync mode,
     # because it must not take the writer lock. See its header.
     - media-status
+    # The fzf helper, host-local (a wrapper over pick-core, see the next task)
+    - pick
+
+- name: Install pick, the fzf helper shared with the workstation
+  # One script for both: scripts/media/pick.sh in the repo is what a workstation runs
+  # over ssh; here it is the core behind the `pick` wrapper above, which sets
+  # PICK_LOCAL so nothing goes through ssh.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../scripts/media/pick.sh"
+    dest: "{{ media_home }}/scripts/pick-core.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
 
 - name: Install the shared script modules
   # Sourced by media-sync and media-status, never run and never in PATH: the
@@ -201,6 +214,7 @@
     - media-import
     - beet
     - media-status
+    - pick
 
 - name: Remove the retired command artifacts
   # media-import-album folded into `media-sync --albums`. A host deployed before

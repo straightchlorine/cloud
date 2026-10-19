@@ -161,6 +161,20 @@ def shape(groups):
     return [(g["kind"], g["keep"].id, [d.id for d in g["drop"]]) for g in groups]
 
 
+# chapters of an audiobook: one artist, near-identical titles, near-identical lengths - different tracks
+chap = [tw(40, artist="David Suchet", title="1 Corinthians 1", length=268.4, fmt="MP3", mb="rb"),
+        tw(41, artist="David Suchet", title="1 Corinthians 11", length=267.9, fmt="MP3", mb="rb"),
+        tw(42, artist="David Suchet", title="Galatians 2", length=216.4, fmt="MP3", mb="rb"),
+        tw(43, artist="David Suchet", title="Galatians 5", length=216.0, fmt="MP3", mb="rb")]
+check("twins: chapters whose titles differ by a number are different tracks, never twins", mc.twins(chap), [])
+check("same_recording_title: one title opening the other is not the same track",
+      mc.same_recording_title("1 Corinthians 1", "1 Corinthians 11"), False)
+check("same_recording_title: one digit apart is not the same track",
+      mc.same_recording_title("Galatians 2", "Galatians 5"), False)
+check("same_recording_title: case, punctuation and spacing do not matter",
+      mc.same_recording_title("Nico/Heavydirtysoul", "nico  heavydirtysoul"), True)
+check("same_recording_title: an empty title matches nothing", mc.same_recording_title("", ""), False)
+check("loose_copies: a chapter 11 file is no copy of chapter 1", mc.loose_copies("1 Corinthians 11", 268.0, chap[:1]), ([], []))
 V1, V2 = "abcDEF12345", "zyxWVU98765"
 akane_m = tw(1, url=V1, mb="r1", path="/music/Akane/Color Me Blue/01 Color Me Blue.opus", album_id=5)
 akane_b = tw(2, artist="Akane - Topic", url=V1, path="/music/Akane - Topic/Color Me Blue.opus")

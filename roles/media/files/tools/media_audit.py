@@ -115,7 +115,7 @@ def read_tags(path):
 
 def unregistered(paths, items):
     """Files on disk without a row, with the registered tracks they are copies of: same
-    artist, same title (media_common.same_title) AND the same length (media_common.
+    artist, same title (media_common.same_recording_title) AND the same length (media_common.
     loose_copies); a same-titled track a few seconds off is listed as `other_cut`, a
     different recording is not listed at all. Reviewed tracks count: a loose copy of a
     track a person kept is still a copy. A copy also gets `suggest`, which of the two the

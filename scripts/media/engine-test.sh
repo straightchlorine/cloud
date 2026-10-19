@@ -885,10 +885,11 @@ has "every request names the client" "$(cut -f2 "$MBD/requests" | sort -u)" "^me
 DEC="$LIBD/state/review/decisions.jsonl"
 rm -f "$DEC"
 out=$(printf '%s\n' l '' q | media-import --library 2>&1)
-has "the queue puts the copies after the duplicates and before the releases in several rows" \
-    "$(printf '%s' "$out" | tr '\n' '~')" "1  duplicate .*~ +2  copy +Fixture Band - One.*~ +3  copy +Kept - Keep 1.*~ +4  scattered"
+has "the queue puts the copies after the duplicates, then the loose files that copy nothing, then the releases in several rows" \
+    "$(printf '%s' "$out" | tr '\n' '~')" "1  duplicate .*~ +2  copy +Fixture Band - One.*~ +3  copy +Kept - Keep 1.*~ +4  loose .*~ +5  loose .*~ +6  scattered"
 # the copies have screens of their own (see phase 4 below); the rest of this part is about the others
-rm "$LIBD/music/Fixture Band/Loose/One (copy).opus" "$LIBD/music/Kept/Loose/Keep 1.opus"
+rm "$LIBD/music/Fixture Band/Loose/One (copy).opus" "$LIBD/music/Kept/Loose/Keep 1.opus" \
+    "$LIBD/music/Other Band/One.opus" "$LIBD/music/Nobody/Stray.opus"
 # throwaway sessions first, each undone by removing the file
 out=$(printf '%s\n' n m q | media-import --library 2>&1)
 has "a release with a track held twice cannot be merged yet" "$out" "1 track\(s\) of it are held twice: decide those first"
@@ -991,6 +992,32 @@ eq "as a quarantine decision" "$(tail -1 "$DEC" | "$PY" -c "import json,sys; d=j
 eq "and moves nothing itself" "$(find "$LIBD/removed" -type f | wc -l)" 0
 out=$(printf 'q\n' | SSH="$T/fake-ssh" scripts/media/pick.sh fix media Game 2>&1)
 has "pick fix opens the review over ssh, with its query" "$out" "\[1/1\] album      Composer - Game Soundtrack"
+
+# ---- pick on the media host: the role's wrapper and the same script, nothing through ssh
+"$PY" - "$STACK/scripts" "$LIBD" "$STACK" << 'PYEOF3'
+import jinja2, pathlib, sys
+scripts, lib, stack = sys.argv[1:4]
+env = jinja2.Environment(loader=jinja2.FileSystemLoader('roles/media/templates'))
+out = pathlib.Path(scripts, 'pick.sh')
+out.write_text(env.get_template('pick.sh.j2').render(media_library_path=lib, media_home=stack))
+out.chmod(0o755)
+PYEOF3
+install -m 0755 scripts/media/pick.sh "$STACK/scripts/pick-core.sh"
+has "the wrapper sets the local mode and runs the core" "$(cat "$STACK/scripts/pick.sh")" "PICK_LOCAL=1 .*pick-core.sh"
+before_n=$(wc -l < "$DEC")
+out=$(FZF="$T/fake-fzf" "$STACK/scripts/pick.sh" remove 'title:Keep 3' --yes 2>&1)
+has "on the host pick remove takes no host and queues the picked track" "$out" \
+    "1 file\(s\) go to the quarantine with the next media-sync --apply"
+eq "as one more quarantine decision" "$(($(wc -l < "$DEC") - before_n)) $(tail -1 "$DEC" | "$PY" -c "import json,sys; d=json.load(sys.stdin); print(d['action'], [t['id'] for t in d['targets']])")" \
+    "1 quarantine [$(id_k 3)]"
+eq "and it moves nothing itself" "$(find "$LIBD/removed" -type f | wc -l)" 0
+out=$(printf 'q\n' | "$STACK/scripts/pick.sh" fix Game 2>&1)
+has "on the host pick fix opens the review with its query, without ssh" "$out" \
+    "\[1/1\] album      Composer - Game Soundtrack"
+out=$("$STACK/scripts/pick.sh" 2>&1 || true)
+has "pick with no verb says how to use it" "$out" "pick remove <host>"
+out=$(scripts/media/pick.sh remove 2>&1 || true)
+has "from a workstation the host is still required" "$out" "pick remove <host>"
 kill "$STUB" 2> /dev/null
 wait "$STUB" 2> /dev/null
 cj_before=$(md5sum < "$CJ")

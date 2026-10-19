@@ -31,6 +31,8 @@
         - "{{ media_library_path }}/beets/tools/media_audit.py"
         - "{{ media_library_path }}/beets/tools/media_apply.py"
         - "{{ media_library_path }}/beets/tools/media_review.py"
+        - "{{ media_home }}/scripts/pick.sh"
+        - "{{ media_home }}/scripts/pick-core.sh"
       register: media_files
 
     - name: Parse the deployed files
@@ -56,6 +58,8 @@
         media_audit_py: "{{ media_files.results[18].content | b64decode }}"
         media_apply_py: "{{ media_files.results[19].content | b64decode }}"
         media_review_py: "{{ media_files.results[20].content | b64decode }}"
+        pick_wrapper: "{{ media_files.results[21].content | b64decode }}"
+        pick_core: "{{ media_files.results[22].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -70,6 +74,7 @@
         - /tmp/molecule-media-backup
         - /usr/local/bin/media-import
         - /usr/local/bin/beet
+        - /usr/local/bin/pick
       register: media_stats
 
     - name: Stat the retired command
@@ -331,6 +336,11 @@
           - "'def cmd_undo(' in media_apply_py"
           - "'os.fsync' in media_apply_py"
           - "'import media_common as mc' in media_apply_py"
+          # pick on the host: the wrapper sets PICK_LOCAL and runs the same script the workstation uses
+          - "'PICK_LOCAL=1' in pick_wrapper"
+          - "'pick-core.sh' in pick_wrapper"
+          - "'PICK_LOCAL' in pick_core"
+          - "'media-import --quarantine' in pick_core"
           # the review menu: host python on the library, decisions through the shared writer
           - "'--library | --quarantine)' in media_import"
           - "'beets/tools/media_review.py' in media_import"
@@ -456,6 +466,7 @@
           - media_stats.results[2].stat.islnk
           - media_stats.results[3].stat.mode == '0600'
           - media_stats.results[8].stat.islnk
+          - media_stats.results[9].stat.islnk
           - "'--entrypoint /lsiopy/bin/beet' in beet_helper"
           - "'docker compose' in beet_helper"
           - not media_import_album_retired.stat.exists

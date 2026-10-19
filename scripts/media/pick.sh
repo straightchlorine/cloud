@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # '$id', '$path', '$album' are beets format fields
 # and query strings, never shell expansion - hence the single quotes.
-# pick - fzf helpers for the media library, run from your workstation.
+# pick - fzf helpers for the media library, from your workstation or on the media host.
 #
 #   pick album  <host> <query>      assign an album to the tracks the query matches
 #   pick fix    <host> [<query>]    the library review (media-import --library) over ssh
 #   pick remove <host> [<query>]    queue tracks for the quarantine (fzf multi-select)
 #   pick remove <host> --purge      empty the quarantine
 #
-# Read-only until you confirm: album and track lists are fetched over ssh, fzf
-# runs locally, and the only writes are the ones you picked. `remove` saves a
+# On the media host the `pick` command (a wrapper the media role installs) leaves the
+# host out and runs everything locally: pick remove [<query>], pick fix [<query>], ...
+#
+# Read-only until you confirm: album and track lists are fetched over ssh (or read
+# locally on the host), fzf runs where you are, and the only writes are the ones you
+# picked. `remove` saves a
 # quarantine decision: the next `media-sync --apply` (Sundays 04:00) moves the
 # files - logged, undoable - rather than deleting them; `music/` is a send-only
 # Syncthing share, so a delete here would reach the vault copy within seconds.
 #
 # Flags: --yes (skip the confirmation), --purge (empty the quarantine instead of
 # picking tracks). Env: LIB (remote library root, /mnt/data), REMOVED
-# ($LIB/removed), FZF, SSH (overridable for tests).
+# ($LIB/removed), FZF, SSH (overridable for tests), PICK_LOCAL=1 (set by the host's
+# wrapper: no ssh, no host argument).
 set -euo pipefail
 
 LIB="${LIB:-/mnt/data}"
@@ -25,15 +30,18 @@ FZF="${FZF:-fzf}"
 SSH="${SSH:-ssh}"
 
 die() { echo "pick: $*" >&2; exit 1; }
-usage() { sed -n '4,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,12p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
+LOCAL="${PICK_LOCAL:-}"
 verb="${1:-}"
-host="${2:-}"
-if [ -z "$verb" ] || [ -z "$host" ]; then
-    usage
+host=""
+if [ -z "$LOCAL" ]; then
+    host="${2:-}"
+    [ -n "$host" ] || usage
 fi
+[ -n "$verb" ] || usage
 case "$verb" in album | fix | remove) ;; *) usage ;; esac
-shift 2
+if [ -n "$LOCAL" ]; then shift; else shift 2; fi
 
 purge=no
 yes=no
@@ -49,7 +57,11 @@ if [ "$verb" = album ] && [ -z "$query" ]; then
     die "pick album needs a query, e.g. 'path:Rodrigo' or 'albumartist:Blondie'"
 fi
 
-remote() { "$SSH" "$host" "$@"; }
+# On the media host the commands run right here: bash -c reads the same quoted string
+# an ssh login shell would.
+remote() {
+    if [ -n "$LOCAL" ]; then bash -c "$*"; else "$SSH" "$host" "$@"; fi
+}
 
 # One ssh call per beet invocation, with the arguments quoted so the remote shell
 # sees exactly what we built (queries like 'path:Rodrigo 7r6' have spaces).
@@ -147,8 +159,12 @@ pick_remove() {
 }
 
 pick_fix() {
-    # -t: the review asks, so it needs the terminal
-    "$SSH" -t "$host" "media-import --library${query:+ $(requote "$query")}"
+    if [ -n "$LOCAL" ]; then
+        bash -c "media-import --library${query:+ $(requote "$query")}"
+    else
+        # -t: the review asks, so it needs the terminal
+        "$SSH" -t "$host" "media-import --library${query:+ $(requote "$query")}"
+    fi
 }
 
 case "$verb" in
