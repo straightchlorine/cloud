@@ -55,7 +55,8 @@ count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
 # --- files and rows -------------------------------------------------------------
 
 # Host paths of every audio file under a directory (default: the whole music/).
-# One definition of "audio file", used by registration and by the dashboard.
+# One definition of "audio file", used by registration and by the dashboard
+# (media_common.AUDIO_EXTENSIONS lists the same extensions for the audit).
 audio_files() {  # [<host dir>]
     find "${1:-$LIB/music}" -type f ! -name '.*' \
         \( -iname '*.opus' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \
@@ -278,11 +279,13 @@ complete_plan() {
 
 # What the nightly release pass left half placed (see media_audit.py), written to
 # $LIB/state/review/candidates.json; changes nothing in the library. The files with
-# no row come from unregistered_files, so the audit and the adopt agree on them.
+# no row come from unregistered_files, so the audit and the adopt agree on them; the
+# audit lists /downloads itself.
 audit_library() {
     local loose
     loose="$(unregistered_files /music)" || return 1
-    printf '%s\n' "$loose" | "${BEET_PY[@]}" "$TOOLS/media_audit.py" --mb-url "$MB_URL" --review "$REVIEW"
+    printf '%s\n' "$loose" | "${BEET_PY[@]}" "$TOOLS/media_audit.py" --mb-url "$MB_URL" --review "$REVIEW" \
+        --downloads /downloads
 }
 
 # The saved review decisions, applied in one container (see media_apply.py). Lines

@@ -5,16 +5,21 @@ library read-only with sqlite, the audit's candidates.json, MusicBrainz through 
 shared cache, and appends each choice to decisions.jsonl the moment it is made.
 `media-sync --apply` (Sundays 04:00, or by hand) carries them out.
 
-    media_review.py review --review DIR --db FILE --music DIR --mb-url URL [query]
+    media_review.py review --review DIR --db FILE --music DIR --downloads DIR --mb-url URL [query]
     media_review.py quarantine --review DIR --db FILE --music DIR <row id>...
 
 The queue, in this order (a copy has to go before its release can be one row):
   duplicate   a release track held by two or more rows: keep one, quarantine the rest
+  copy        a file with no row that copies a registered track: keep the registered
+              one, use the loose one instead, or keep both
   scattered   one release in several album rows: merge them
   album       what the audit classified (split, partial, whole): pick an edition,
               enter an id, search, or keep as it is
+  download    the files the nightly passes left in downloads/, one screen per folder:
+              adopt as they are or with a release, search, or quarantine
 Each is re-read from the library when its turn comes, so what was fixed meanwhile,
-or has a decision waiting, or was skipped, is not asked again.
+or has a decision waiting, or was skipped, is not asked again. A file the audit could
+not read is not offered (candidates.json lists it with its error).
 
 Plain numbered prompts on stdin, so a session can be scripted; fzf only for the
 long list (`l`) when there is a terminal, with a numbered fallback.
@@ -69,6 +74,14 @@ def read_library(db, music):
     return items
 
 
+def host_path(args, path):
+    """Where a container path (/music/..., /downloads/...) is on this host."""
+    for prefix, root in (("/music/", args.music), (mc.DOWNLOADS, args.downloads)):
+        if path.startswith(prefix):
+            return os.path.join(root, path[len(prefix):])
+    return path
+
+
 def target(item):
     return {"id": item.id, "path": item.path, "size": os.path.getsize(item.host)}
 
@@ -82,8 +95,9 @@ def decision(action, items, note, release=None):
 
 
 def already_decided(review):
-    """Row ids with a decision waiting in decisions.jsonl, and the ids a person said
-    not to ask about again (a skip, waiting or applied)."""
+    """Keys with a decision waiting in decisions.jsonl, and the keys a person said not to
+    ask about again (a skip, waiting or applied). A key is a row id, or the container
+    path for a target with no row."""
     waiting, skipped = {}, set()
     for path in [os.path.join(review, mc.DECISIONS)] + sorted(glob.glob(os.path.join(review, "applied", "*.jsonl"))):
         if not os.path.exists(path):
@@ -98,12 +112,12 @@ def already_decided(review):
                 d = r.get("decision") if archived else r
                 if not isinstance(d, dict) or mc.malformed(d):
                     continue
-                ids = {t["id"] for t in d["targets"] if t.get("id") is not None}
+                keys = {t["id"] if t.get("id") is not None else t["path"] for t in d["targets"]}
                 if d["action"] == "skip" and (not archived or r.get("result", "").startswith("applied")):
-                    skipped |= ids
+                    skipped |= keys
                 elif not archived:
-                    for i in ids:
-                        waiting[i] = d["action"]
+                    for k in keys:
+                        waiting[k] = d["action"]
     return waiting, skipped
 
 
@@ -142,6 +156,18 @@ class Session:
         return int(answer) - 1 if answer.isdigit() and 1 <= int(answer) <= len(lines) else None
 
 
+def guess_search(files):
+    """The artist and album to search MusicBrainz for: from the tags, else from a
+    yt-dlp style file name, 'Artist - Title [id].ext'."""
+    artist = next((f.artist for f in files if f.artist), "")
+    album = next((f.album for f in files if f.album), "") or next((f.title for f in files if f.title), "")
+    if not (artist and album):
+        name = re.sub(r"\s*\[[^\]]*\]$", "", os.path.splitext(os.path.basename(files[0].path))[0])
+        who, _sep, what = name.partition(" - ")
+        artist, album = (artist or (who.strip() if what else "")), (album or (what or who).strip())
+    return artist, album
+
+
 def minutes(seconds):
     s = int(round(seconds or 0))
     return "%d:%02d" % (s // 60, s % 60)
@@ -156,16 +182,21 @@ class Review:
         path = os.path.join(args.review, "candidates.json")
         self.audit = {}
         self.made = None
+        self.loose, self.leftovers = [], []
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             self.made = data.get("made")
             self.audit = {tuple(g["key"]): [c["id"] for c in g["candidates"]] for g in data.get("groups", [])}
+            self.loose = [u for u in data.get("unregistered", []) if u.get("copy_of")]
+            self.leftovers = data.get("downloads", [])
         self.saved = 0
 
     def reload(self):
         self.items = read_library(self.args.db, self.args.music)
         self.by_id = {i.id: i for i in self.items}
+        self.paths = {i.path for i in self.items}
+        self.sizes = mc.album_sizes(self.items)
         self.waiting, self.skipped = already_decided(self.args.review)
         self.groups = mc.group_albums([i for i in self.items if not i.reviewed])
         # A copy with its quarantine waiting is as good as gone: the release's rows are
@@ -192,12 +223,51 @@ class Review:
         """The rows of a screen nobody has decided about yet."""
         return [i for i in items if i.id not in self.waiting and i.id not in self.skipped]
 
+    def present(self, rec):
+        """A file the audit listed, as an object the menu can show and save, or None: it
+        could not be read, is gone or changed since, has a row now, or has a decision."""
+        host = host_path(self.args, rec["path"])
+        if (rec.get("error") or rec["path"] in self.paths or rec["path"] in self.waiting
+                or rec["path"] in self.skipped or not os.path.exists(host) or os.path.getsize(host) != rec["size"]):
+            return None
+        return types.SimpleNamespace(
+            id=None, path=rec["path"], host=host, albumartist="", artist=rec.get("artist") or "",
+            title=rec.get("title") or "", album=rec.get("album") or "", length=rec.get("length") or 0,
+            format=rec.get("format") or "", bitrate=rec.get("bitrate") or 0,
+            mb_albumid=rec.get("mb_albumid") or "", album_id=None)
+
+    def copies(self):
+        """[(loose file, the registered rows it copies, best first)] nobody has decided about."""
+        out = []
+        for rec in self.loose:
+            f = self.present(rec)
+            # a copy with its quarantine waiting is as good as gone (see reload): the screen
+            # goes on over the rows that stay
+            rows = [self.by_id[i] for i in rec["copy_of"] if i in self.by_id and self.waiting.get(i) != "quarantine"]
+            if f is not None and rows and len(self.open_rows(rows)) == len(rows):
+                out.append((f, sorted(rows, key=lambda r: mc.copy_rank(r, self.sizes), reverse=True)))
+        return out
+
+    def download_screens(self):
+        """{screen key: [files]}: the folder of a file in a subfolder of downloads/, the
+        file itself when it lies directly in it."""
+        out = {}
+        for rec in self.leftovers:
+            f = self.present(rec)
+            if f is not None:
+                folder = os.path.dirname(f.path)
+                out.setdefault(f.path if folder == mc.DOWNLOADS.rstrip("/") else folder, []).append(f)
+        return out
+
     # Each screen kind: a key that finds it again after a reload, and its rows now.
     def queue(self):
         out = []
         for track, copies, _keep in mc.duplicates(self.items):
             if len(self.open_rows(copies)) == len(copies) and self.matches(copies):
                 out.append(("duplicate", track))
+        for f, rows in self.copies():
+            if self.matches([f] + rows):
+                out.append(("copy", f.path))
         # All of a release's rows open, or it waits: a merge naming a row another decision
         # names would supersede that one (the apply takes the later decision about a file).
         for mbid, members in sorted(mc.scattered(self.staying).items()):
@@ -209,6 +279,10 @@ class Review:
             members = self.groups[key]
             if mc.classify(members) and self.open_rows(members) and self.matches(members):
                 out.append(("album", key))
+        for key, files in sorted(self.download_screens().items()):
+            q = (self.args.query or "").casefold()
+            if not q or any(q in ("%s %s %s %s" % (f.path, f.artist, f.album, f.title)).casefold() for f in files):
+                out.append(("download", key))
         return out
 
     def label(self, entry):
@@ -217,6 +291,13 @@ class Review:
             copies = [i for i in self.items if i.mb_releasetrackid == key]
             return "duplicate  %s - %s: %s (%d rows)" % (mc.album_artist(copies[0]), copies[0].album,
                                                         copies[0].title, len(copies))
+        if kind == "copy":
+            f, rows = next(c for c in self.copies() if c[0].path == key)
+            return "copy       %s - %s (%d registered row%s)" % (
+                f.artist, f.title, len(rows), "" if len(rows) == 1 else "s")
+        if kind == "download":
+            files = self.download_screens()[key]
+            return "download   %s%s" % (key, " (%d files)" % len(files) if key != files[0].path else "")
         if kind == "scattered":
             members = [i for i in self.staying if i.mb_albumid == key]
             return "scattered  %s - %s (%d album rows)" % (mc.album_artist(members[0]), members[0].album,
@@ -260,8 +341,12 @@ class Review:
         self.s.say("[%d/%d] %s" % (n, total, self.label(entry)))
         if kind == "duplicate":
             return self.duplicate(key)
+        if kind == "copy":
+            return self.copy(key)
         if kind == "scattered":
             return self.scattered(key)
+        if kind == "download":
+            return self.download(key)
         return self.album(key)
 
     # ---------------------------------------------------------------- screens
@@ -292,6 +377,113 @@ class Review:
                           "keep row %d; %d copy(ies) to the quarantine" % (kept.id, len(gone)))
                 return "next"
             self.s.say("?")
+
+    def copy(self, path):
+        f, rows = next(c for c in self.copies() if c[0].path == path)
+        keep = mc.suggest_copy(f, rows, self.sizes)
+        for n, r in enumerate(rows):
+            self.s.say("  %s registered %6d  %-5s %4dk %s  %-16s %s" % (
+                "*" if keep == "registered" and n == 0 else " ", r.id, r.format, (r.bitrate or 0) // 1000,
+                minutes(r.length), r.mb_albumid[:8] if r.mb_albumid else "(bare)", r.path))
+        self.s.say("  %s loose      %6s  %-5s %4dk %s  %-16s %s" % (
+            "*" if keep == "loose" else " ", "-", f.format, (f.bitrate or 0) // 1000, minutes(f.length),
+            f.mb_albumid[:8] if f.mb_albumid else "(bare)", f.path))
+        self.s.say("  * suggested: the better format, then bitrate, then the fuller album row, then the older row")
+        more = "" if len(rows) == 1 else " (it replaces row %d; the other %d stay)" % (rows[0].id, len(rows) - 1)
+        while True:
+            a = self.ask_common("1 keep the registered one (the loose file goes to the quarantine), 2 use the loose "
+                                "one%s, b keep both, x don't ask again, n next, l list, q quit > " % more)
+            if a in ("next", "quit", "list"):
+                return a
+            if a == "skip":
+                self.save("skip", [f] + rows, "copy %s" % path, "won't ask about this file and its copies again")
+                return "next"
+            if a == "1":
+                self.save("quarantine", [f], "copy of row %d" % rows[0].id, "the loose file to the quarantine")
+                return "next"
+            if a == "2":
+                self.save("replace", [f, rows[0]], "replaces row %d" % rows[0].id,
+                          "the loose file replaces row %d (that file goes to the quarantine)" % rows[0].id)
+                return "next"
+            if a == "b":
+                self.save("register", [f], "copy of row %d, kept as well" % rows[0].id, "the loose file registered")
+                return "next"
+            self.s.say("?")
+
+    def download(self, key):
+        files = sorted(self.download_screens()[key], key=lambda f: f.path)
+        # negative ids: only to tell the files apart in an edition's mapping; never saved
+        members = [types.SimpleNamespace(id=-n, title=f.title, length=f.length, album=f.album)
+                   for n, f in enumerate(files, 1)]
+        for f in files:
+            self.s.say("    %-5s %4dk %s  %-28.28s %-24.24s %s" % (
+                f.format, (f.bitrate or 0) // 1000, minutes(f.length), f.title or "(no title)",
+                f.artist or "(no artist)", os.path.relpath(f.path, mc.DOWNLOADS)))
+        editions = []
+        while True:
+            if editions:
+                self.show_editions(editions, len(files))
+            pick = "[1-%d] adopt with that edition, v<n> its tracks, " % len(editions) if editions else ""
+            a = self.ask_common("%sk adopt as it is, e adopt with a release id, s search, r quarantine, x don't ask "
+                                "again, n next, l list, q quit > " % pick)
+            if a in ("next", "quit", "list"):
+                return a
+            if a == "skip":
+                self.save("skip", files, key, "won't ask about these %d file(s) again" % len(files))
+                return "next"
+            if a == "k":
+                self.save("adopt", files, "%s as it is" % key, "%d file(s) to be adopted as they are" % len(files))
+                return "next"
+            if a == "r":
+                self.save("quarantine", files, "downloads: %s" % key, "%d file(s) to the quarantine" % len(files))
+                return "next"
+            if a.startswith("v") and a[1:].isdigit() and 1 <= int(a[1:]) <= len(editions):
+                self.show_mapping(editions[int(a[1:]) - 1], members)
+                continue
+            if a == "e":
+                answer = self.s.ask("release id (or a musicbrainz.org/release/... link): ")
+                if answer is None:
+                    return "quit"
+                m = ANY_UUID.search(answer.lower())
+                if not m:
+                    self.s.say("that holds no release id")
+                    continue
+                editions = self.editions([m.group(0)] + [e["id"] for e in editions], members)
+                chosen = next((e for e in editions if e["id"] == m.group(0)), None)
+                if chosen is None:
+                    continue
+                self.show_mapping(chosen, members)
+                answer = self.s.ask("adopt the files with that release? [y/N] ")
+                if answer is None:
+                    return "quit"
+                if answer.lower() == "y":
+                    return self.adopt_with(files, chosen)
+                continue
+            if a == "s":
+                artist, album = guess_search(files)
+                q = self.s.ask("search 'artist / album' (enter: %s / %s): " % (artist, album))
+                if q is None:
+                    return "quit"
+                if "/" in q:
+                    artist, album = (p.strip() for p in q.split("/", 1))
+                elif q:
+                    album = q
+                found = []
+                try:
+                    found = [r["id"] for r in (self.mb.search(artist, album, 5) if artist else [])
+                             + self.mb.search_title(album, 5)]
+                except OSError as err:
+                    self.s.say("MusicBrainz: %s" % err)
+                editions = self.editions([e["id"] for e in editions] + found, members)
+                continue
+            if a.isdigit() and 1 <= int(a) <= len(editions):
+                return self.adopt_with(files, editions[int(a) - 1])
+            self.s.say("?")
+
+    def adopt_with(self, files, e):
+        self.save("adopt", files, "-> %s %s" % (e["title"], e["date"]),
+                  "adopt %d file(s) with %s (%s %s)" % (len(files), e["title"], e["date"], e["country"]), e["id"])
+        return "next"
 
     def scattered(self, mbid):
         members = [i for i in self.staying if i.mb_albumid == mbid]
@@ -404,6 +596,7 @@ class Review:
     def editions(self, ids, members):
         """Releases as choices for these files, best first: which file each would take."""
         out, seen = [], set()
+        lengths = {m.id: m.length for m in members}
         for mbid in ids:
             if mbid in seen:
                 continue
@@ -422,7 +615,7 @@ class Review:
             e["covers"] = len(claims)
             e["claims"] = {item.id: tracks[n] for n, item in claims.items()}
             e["far"] = sum(1 for item_id, t in e["claims"].items()
-                           if t.length and abs((self.by_id[item_id].length or 0) - t.length) > FAR_SECONDS)
+                           if t.length and abs((lengths[item_id] or 0) - t.length) > FAR_SECONDS)
             out.append(e)
         return mc.rank(out, members[0].album, len(members))
 
@@ -499,6 +692,7 @@ def main(argv=None):
         p.set_defaults(func=func)
         if name == "review":
             p.add_argument("--mb-url", required=True)
+            p.add_argument("--downloads", required=True)
             p.add_argument("query", nargs="?")
         else:
             p.add_argument("ids", nargs="+", type=int)

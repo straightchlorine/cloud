@@ -3,7 +3,7 @@
 Run inside the beets container with beets' own python:
 
     <unregistered paths on stdin> | python3 /config/tools/media_audit.py \
-        --mb-url https://musicbrainz.org --review /review
+        --mb-url https://musicbrainz.org --review /review --downloads /downloads
 
 The release pass judges each file on its own, so an album can end up on two
 releases, partly matched, or not matched at all. This groups the library by album
@@ -13,8 +13,11 @@ the releases the group already carries plus the best MusicBrainz search results,
 each with how many of the group's files it covers. The files on disk that have no
 row (stdin, one container path per line) are listed with the registered tracks
 they are copies of, and so are releases spread over several album rows and release
-tracks held twice (with a suggested copy to keep). Tracks marked `reviewed` are a
-person's decision and are left out of the album groups. The result goes to
+tracks held twice (with a suggested copy to keep). A loose file that copies a
+registered track also says which of the two to keep ("suggest": loose or registered,
+the duplicates' ranking). The audio files left in /downloads are listed with their
+tags. Tracks marked `reviewed` are a person's decision and are left out of the album
+groups. The result goes to
 <review>/candidates.json, MusicBrainz answers to <review>/mb-cache/; the library is
 opened and never stored to.
 """
@@ -93,37 +96,59 @@ def candidates_for(mb, items, errors):
     return mc.rank(out, items[0].album, len(items))
 
 
+def read_tags(path):
+    """What the menu shows of an audio file: tags, length, format, bitrate (or an error)."""
+    import mediafile
+
+    entry = {"path": path, "size": os.path.getsize(path) if os.path.exists(path) else None}
+    try:
+        f = mediafile.MediaFile(path)
+    except (mediafile.UnreadableFileError, OSError) as err:
+        entry["error"] = "%s: %s" % (type(err).__name__, err)
+        return entry, None
+    entry.update(title=f.title, artist=f.artist, album=f.album, length=round(f.length or 0, 1),
+                 format=f.format, bitrate=f.bitrate)
+    return entry, f
+
+
 def unregistered(paths, items):
     """Files on disk without a row, with the registered tracks they are copies of: same
     artist, same title (media_common.same_title). Reviewed tracks count: a loose copy
-    of a track a person kept is still a copy."""
-    import mediafile
-
+    of a track a person kept is still a copy. A copy also gets `suggest`, which of the
+    two the duplicates' ranking keeps, and the release tags the menu shows."""
     by_artist = {}
     for item in items:
         by_artist.setdefault(mc.artist_key(item), []).append(item)
+    sizes = mc.album_sizes(items)
     out = []
     for path in paths:
-        entry = {"path": path, "size": os.path.getsize(path) if os.path.exists(path) else None}
-        try:
-            f = mediafile.MediaFile(path)
-        except (mediafile.UnreadableFileError, OSError) as err:
-            entry["error"] = "%s: %s" % (type(err).__name__, err)
-            out.append(entry)
-            continue
-        tags = types.SimpleNamespace(albumartist=f.albumartist, artist=f.artist)
-        entry.update(title=f.title, artist=f.artist, album=f.album, length=round(f.length or 0, 1),
-                     format=f.format, bitrate=f.bitrate)
-        entry["copy_of"] = [i.id for i in by_artist.get(mc.artist_key(tags), [])
-                            if mc.same_title(f.title, i.title)]
+        entry, f = read_tags(path)
         out.append(entry)
+        if f is None:
+            continue
+        entry.update(mb_albumid=f.mb_albumid or "", mb_releasetrackid=f.mb_releasetrackid or "")
+        tags = types.SimpleNamespace(albumartist=f.albumartist, artist=f.artist)
+        copies = [i for i in by_artist.get(mc.artist_key(tags), []) if mc.same_title(f.title, i.title)]
+        entry["copy_of"] = [i.id for i in copies]
+        if copies:
+            loose = types.SimpleNamespace(id=None, album_id=None, format=f.format, bitrate=f.bitrate)
+            entry["suggest"] = mc.suggest_copy(loose, copies, sizes)
     return out
+
+
+def downloads(root):
+    """Every audio file under the downloads directory the nightly passes left behind,
+    with its tags: what `media-import --library` offers to adopt."""
+    paths = sorted(os.path.join(dirpath, name) for dirpath, _dirs, names in os.walk(root) for name in names
+                   if not name.startswith(".") and name.lower().endswith(mc.AUDIO_EXTENSIONS))
+    return [read_tags(path)[0] for path in paths]
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="media_audit", description=__doc__.split("\n")[0])
     parser.add_argument("--mb-url", required=True)
     parser.add_argument("--review", required=True, help="directory for candidates.json and mb-cache/")
+    parser.add_argument("--downloads", required=True, help="the downloads directory to list")
     args = parser.parse_args(argv)
 
     mb = mc.MusicBrainz(args.mb_url, os.path.join(args.review, "mb-cache"))
@@ -150,6 +175,7 @@ def main(argv=None):
             "+".join(kinds), groups[-1]["artist"], groups[-1]["album"], len(members)), file=sys.stderr)
     paths = [line.rstrip("\n") for line in sys.stdin if line.strip()]
     loose = unregistered(paths, everything)
+    leftovers = downloads(args.downloads)
     # Reviewed tracks included: one release in many rows, or a track held twice, is
     # wrong whether or not a person looked at the tags.
     spread = [{
@@ -178,6 +204,7 @@ def main(argv=None):
         "whole_tracks": sum(len(g["tracks"]) for g in kind("whole")),
         "unregistered": len(loose),
         "unregistered_copies": sum(1 for f in loose if f.get("copy_of")),
+        "downloads": len(leftovers),
         "scattered": len(spread),
         "scattered_rows": sum(len(r["album_rows"]) for r in spread),
         "duplicates": len(copies),
@@ -193,6 +220,7 @@ def main(argv=None):
         "errors": errors,
         "groups": groups,
         "unregistered": loose,
+        "downloads": leftovers,
         "scattered": spread,
         "duplicates": copies,
     })
@@ -200,7 +228,8 @@ def main(argv=None):
           "%(whole)d whole (%(whole_tracks)d tracks), %(unregistered)d unregistered "
           "(%(unregistered_copies)d copies of a registered track)" % counts)
     print("audit: %(scattered)d release(s) in several album rows (%(scattered_rows)d rows), "
-          "%(duplicates)d track(s) held more than once (%(duplicate_rows)d rows)" % counts)
+          "%(duplicates)d track(s) held more than once (%(duplicate_rows)d rows), "
+          "%(downloads)d audio file(s) left in downloads" % counts)
     print("audit: %d MusicBrainz request(s), %d answered from the cache, %d error(s); wrote %s"
           % (mb.requests, mb.cached, len(errors), path))
     return 0

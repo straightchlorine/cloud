@@ -16,7 +16,16 @@ review menu or by hand (container paths; "id" null for a file with no row):
     quarantine  move a file to /removed/<date>/ and drop its row; nothing is deleted
     merge       put tracks of one release that sit in several album rows into one row,
                 remove the album rows left empty, file the tracks in one folder
+    replace     targets [a file with no row, the row of a copy of it]: register the file
+                as it is, then quarantine the copy; the new row takes over the copy's
+                "added" time and reviewed marker
+    adopt       register files from /downloads (id null), mark them reviewed, file them
+                in the library; with a "release", then pin them to it
     skip        nothing changes; recorded so the review does not ask again
+
+Whichever action leaves an album row with no track (a pin or quarantine of its last
+tracks) removes that row in the same decision; the log holds it first, so undo
+re-inserts it under its own id.
 
 A later decision about a file replaces an earlier one (the earlier is "superseded").
 Every target is checked first: the row still has that id and path, the file that
@@ -180,40 +189,70 @@ def quarantine_path(path, day):
     return os.path.join(QUARANTINE, day, path.lstrip("/"))
 
 
-def do_pin(lib, log, n, d, rows, releases):
+def drop_emptied(lib, log, n, album_ids):
+    """Remove the album rows a decision emptied (media_common.drop_emptied_albums), each
+    logged with its fields before it goes."""
+    return mc.drop_emptied_albums(
+        lib, album_ids, lambda album: log.done(log.begin(n, "album_removed", id=album.id, before=mc.snapshot(album))))
+
+
+def emptied_note(removed):
+    return ", %d emptied album row(s) removed" % len(removed) if removed else ""
+
+
+def release_info(releases, release):
+    """A release as beets parsed it, fetched once per run; None when unavailable."""
     from beets import metadata_plugins
 
-    if d["release"] not in releases:
-        releases[d["release"]] = metadata_plugins.album_for_id(d["release"], "MusicBrainz")
-    info = releases[d["release"]]
-    if info is None:
-        return "failed: MusicBrainz has no release %s (or is unreachable); nothing changed" % d["release"], 0, []
-    items = [rows[t["id"]] for t in d["targets"]]
+    if release not in releases:
+        releases[release] = metadata_plugins.album_for_id(release, "MusicBrainz")
+    return releases[release]
+
+
+def pin_items(lib, log, n, release, info, items):
+    """Give `items` the release (the pin's rules), logging every row and file move, and
+    drop the album rows that leaves empty. Returns (report, files changed, shell lines)."""
     album, mapping, skipped = mc.plan_pin(lib, info, items)
     if not mapping:
-        return "applied: none of %d file(s) fit the release (%s)" % (
+        return "none of %d file(s) fit the release (%s)" % (
             len(items), "; ".join(why for _, why in skipped)), 0, []
+    old_albums = {item.album_id for item in mapping}
     seqs = {item.id: log.begin(n, "item", id=item.id, before=mc.snapshot(item)) for item in mapping}
     created = mc.apply_pin(lib, info, album, mapping,
                            moving=lambda item, dest: log.write(seq=seqs[item.id], phase="moving", to=mc.to_json(dest)),
                            created_row=lambda row: log.done(log.begin(n, "album_created", id=row.id)))
     for item in mapping:
         log.done(seqs[item.id], after=mc.snapshot(item))
+    removed = drop_emptied(lib, log, n, old_albums)
     note = "" if not skipped else ", %d left alone (%s)" % (len(skipped), "; ".join(sorted({w for _, w in skipped})))
     # a new album row has no cover yet: the shell fetches it and embeds it in these files
-    art = ["@art %s %s" % (d["release"], " ".join(str(i.id) for i in mapping))] if created is not None else []
-    return "applied: %d of %d file(s) pinned%s" % (len(mapping), len(items), note), len(mapping), art
+    art = ["@art %s %s" % (release, " ".join(str(i.id) for i in mapping))] if created is not None else []
+    return "%d of %d file(s) pinned%s%s" % (len(mapping), len(items), note, emptied_note(removed)), len(mapping), art
+
+
+def do_pin(lib, log, n, d, rows, releases):
+    info = release_info(releases, d["release"])
+    if info is None:
+        return "failed: MusicBrainz has no release %s (or is unreachable); nothing changed" % d["release"], 0, []
+    report, k, art = pin_items(lib, log, n, d["release"], info, [rows[t["id"]] for t in d["targets"]])
+    return "applied: " + report, k, art
+
+
+def mark_reviewed(item):
+    """The marker an interactive "use as-is" leaves (see reviewed.py): the flexible field
+    the passes query, and a comments prefix that survives in the file."""
+    item[REVIEWED] = "1"
+    if not (item.comments or "").startswith(REVIEWED):
+        item.comments = REVIEWED_PREFIX + item.comments if item.comments else REVIEWED
+    item.try_write()
+    item.store()
 
 
 def do_keep(lib, log, n, d, rows):
     for t in d["targets"]:
         item = rows[t["id"]]
         seq = log.begin(n, "item", id=item.id, before=mc.snapshot(item))
-        item[REVIEWED] = "1"
-        if not (item.comments or "").startswith(REVIEWED):
-            item.comments = REVIEWED_PREFIX + item.comments if item.comments else REVIEWED
-        item.try_write()
-        item.store()
+        mark_reviewed(item)
         log.done(seq, after=mc.snapshot(item))
     return "applied: %d file(s) marked reviewed" % len(d["targets"]), len(d["targets"]), []
 
@@ -229,44 +268,105 @@ def do_register(lib, log, n, d):
     return "applied: %d file(s) registered" % len(d["targets"]), len(d["targets"]), []
 
 
-def do_quarantine(lib, log, n, d, rows, day):
-    for t in d["targets"]:
-        dest = quarantine_path(t["path"], day)
+def quarantine_one(log, n, path, item, day):
+    """Move one file to the quarantine and drop its row (None: it has none)."""
+    dest = quarantine_path(path, day)
+    seq = log.begin(n, "quarantine", path=path, to=dest, before=item and mc.snapshot(item))
+    move_file(path, dest)
+    if item is not None:
+        # with_album=False: the album row is dropped afterwards by drop_emptied, which logs it
+        item.remove(delete=False, with_album=False)
+    log.done(seq)
+
+
+def check_quarantine_free(paths, day):
+    for path in paths:
+        dest = quarantine_path(path, day)
         if os.path.exists(dest):
             raise RuntimeError("%s is in the quarantine already" % dest)
+
+
+def do_quarantine(lib, log, n, d, rows, day):
+    check_quarantine_free([t["path"] for t in d["targets"]], day)
+    items = {t["path"]: rows.get(t["id"]) if t["id"] is not None else None for t in d["targets"]}
+    albums = {i.album_id for i in items.values() if i is not None}
+    for path, item in items.items():
+        quarantine_one(log, n, path, item, day)
+    removed = drop_emptied(lib, log, n, albums)
+    return "applied: %d file(s) moved to %s/%s%s" % (
+        len(d["targets"]), QUARANTINE, day, emptied_note(removed)), len(d["targets"]), []
+
+
+def do_replace(lib, log, n, d, rows, day):
+    """Register the loose file, then quarantine the copy it replaces."""
+    from beets.library import Item
+
+    loose, old = d["targets"]
+    gone = rows[old["id"]]
+    check_quarantine_free([old["path"]], day)
+    new = Item.from_path(loose["path"])
+    # the comments are logged for undo: a reviewed marker rewrites them in the file
+    seq = log.begin(n, "register", path=loose["path"], comments=new.comments)
+    new.add(lib)
+    # The new row stands in for the old one: the weekly retag window runs from "added",
+    # and a track a person marked reviewed stays marked, in the file too (a library
+    # rebuild reads the marker back from the comments).
+    new.added = gone.added
+    if gone.get(REVIEWED):
+        mark_reviewed(new)
+    else:
+        new.store()
+    log.done(seq, after=mc.snapshot(new))
+    quarantine_one(log, n, old["path"], gone, day)
+    removed = drop_emptied(lib, log, n, {gone.album_id})
+    return "applied: row %d replaced by %s (the old file is in %s/%s)%s" % (
+        gone.id, loose["path"], QUARANTINE, day, emptied_note(removed)), 2, []
+
+
+def do_adopt(lib, log, n, d, releases):
+    """Register files from /downloads as reviewed and file them in the library; with a
+    release, pin them to it afterwards (a file whose title is not on it stays as adopted)."""
+    from beets import util
+    from beets.library import Item
+
+    # asked before any file is touched: with no answer nothing is adopted and the decision waits
+    info = release_info(releases, d["release"]) if d.get("release") else None
+    if d.get("release") and info is None:
+        return "failed: MusicBrainz has no release %s (or is unreachable); nothing changed" % d["release"], 0, []
+    adopted = []
     for t in d["targets"]:
-        dest = quarantine_path(t["path"], day)
-        item = rows.get(t["id"]) if t["id"] is not None else None
-        seq = log.begin(n, "quarantine", path=t["path"], to=dest, before=item and mc.snapshot(item))
-        move_file(t["path"], dest)
-        if item is not None:
-            # with_album=False: the album row stays even when this was its last track,
-            # so undo can put the track back into it (a merge removes empty rows).
-            item.remove(delete=False, with_album=False)
-        log.done(seq)
-    return "applied: %d file(s) moved to %s/%s" % (len(d["targets"]), QUARANTINE, day), len(d["targets"]), []
+        item = Item.from_path(t["path"])
+        seq = log.begin(n, "adopt", path=t["path"], comments=item.comments)
+        item.add(lib)
+        mark_reviewed(item)
+        # the name move() will pick: a taken one is made unique, and undo must look where the file went
+        log.write(seq=seq, phase="moving", to=mc.to_json(util.unique_path(item.destination())))
+        item.move()
+        item.store()
+        log.done(seq, after=mc.snapshot(item))
+        adopted.append(item)
+    report = "applied: %d file(s) adopted" % len(adopted)
+    if not d.get("release"):
+        return report, len(adopted), []
+    pinned, k, art = pin_items(lib, log, n, d["release"], info, adopted)
+    return "%s; %s" % (report, pinned), len(adopted), art
 
 
 def do_merge(lib, log, n, d, rows):
-    from beets.dbcore import MatchQuery
-
     items = [rows[t["id"]] for t in d["targets"]]
     held = collections.Counter(i.album_id for i in items if i.album_id is not None)
     keep = lib.get_album(min(held, key=lambda a: (-held[a], a))) if held else None
     if keep is None:
         return "failed: no album row to merge into; nothing changed", 0, []
     seqs = {}
+    left = set()
     for item in items:
         if item.album_id != keep.id:
             seqs[item.id] = log.begin(n, "item", id=item.id, before=mc.snapshot(item))
+            left.add(item.album_id)
             item.album_id = keep.id
             item.store()
-    removed = 0
-    for album in lib.albums(MatchQuery("mb_albumid", d["release"])):
-        if album.id != keep.id and not list(album.items()):
-            log.done(log.begin(n, "album_removed", id=album.id, before=mc.snapshot(album)))
-            album.remove(delete=False, with_items=False)
-            removed += 1
+    removed = drop_emptied(lib, log, n, left)
     for item in keep.items():
         if item.id not in seqs:
             seqs[item.id] = log.begin(n, "item", id=item.id, before=mc.snapshot(item))
@@ -275,7 +375,7 @@ def do_merge(lib, log, n, d, rows):
         item.store()
         log.done(seqs[item.id], after=mc.snapshot(item))
     return "applied: %d track(s) in album row %d, %d emptied row(s) removed" % (
-        len(items), keep.id, removed), len(seqs), []
+        len(items), keep.id, len(removed)), len(seqs), []
 
 
 # ----------------------------------------------------------------- apply
@@ -363,6 +463,10 @@ def cmd_apply(args):
                 entry["result"], k, extra = do_quarantine(lib, log, n, d, now, day)
             elif action == "merge":
                 entry["result"], k, extra = do_merge(lib, log, n, d, now)
+            elif action == "replace":
+                entry["result"], k, extra = do_replace(lib, log, n, d, now, day)
+            elif action == "adopt":
+                entry["result"], k, extra = do_adopt(lib, log, n, d, releases)
             else:
                 entry["result"], k, extra = "applied: nothing to change (skip)", 0, []
             changed += k
@@ -484,6 +588,53 @@ def undo_quarantine(lib, begin, done, kept):
     return True
 
 
+def as_text(path):
+    return path.decode("utf-8", "surrogateescape") if isinstance(path, bytes) else path
+
+
+def restore_comments(path, comments):
+    """Put back the comments tag mark_reviewed wrote into a file."""
+    import mediafile
+
+    f = mediafile.MediaFile(path)
+    if (f.comments or None) != (comments or None):
+        f.comments = comments or None
+        f.save()
+
+
+def undo_adopt(lib, begin, done, moving, kept):
+    """Take an adopted file out of the library again: the row gone, the file back at its
+    /downloads path, its comments tag as it was. True when done."""
+    want = begin["path"]
+    after = (done or {}).get("after")
+    # Where the file can be: filed after the adopt, never moved (its row still names the
+    # /downloads path until the move is stored), or at the move's logged target, which was
+    # free when logged. The target is last: it must never win over the file's own path.
+    spots = [as_text(p) for p in (after and mc.from_json(after["path"]), want, mc.from_json((moving or {}).get("to")))
+             if p]
+    here = next((p for p in spots if os.path.exists(p)), None)
+    if after:
+        item = lib.get_item(after["id"])
+    else:
+        by_path = {mc.path_of(i): i for i in lib.items()}
+        item = next((by_path[p] for p in spots if p in by_path), None)
+    if item is not None and after is not None:
+        moved_on = mc.changed(after, mc.snapshot(item))
+        if moved_on:
+            kept.append("row %d changed since the apply (%s)" % (item.id, ", ".join(moved_on)))
+            return False
+    if here is not None and here != want:
+        if os.path.lexists(want):
+            kept.append("%s is taken now; the adopted file stays at %s" % (want, here))
+            return False
+        move_file(here, want)
+    if item is not None:
+        item.remove(delete=False)
+    if os.path.exists(want):
+        restore_comments(want, begin["comments"])
+    return True
+
+
 def cmd_undo(args):
     from beets.library import Album
 
@@ -515,6 +666,8 @@ def cmd_undo(args):
                 back += 1
         elif kind == "quarantine":
             back += undo_quarantine(lib, begin, done, kept)
+        elif kind == "adopt":
+            back += undo_adopt(lib, begin, done, moving, kept)
         elif kind == "register":
             rid = ((done or {}).get("after") or {}).get("id")
             item = lib.get_item(rid) if rid is not None else None
@@ -522,6 +675,8 @@ def cmd_undo(args):
                 item = next((i for i in lib.items() if mc.path_of(i) == begin["path"]), None)
             if item is not None and mc.path_of(item) == begin["path"]:
                 item.remove(delete=False)
+                if "comments" in begin:
+                    restore_comments(begin["path"], begin["comments"])
                 back += 1
             elif item is not None:
                 kept.append("row %d moved since it was registered" % item.id)

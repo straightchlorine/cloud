@@ -16,7 +16,9 @@
 #                                   then the singleton pass) but asking per track
 #   media-import --library [<query>]
 #                                   the existing library: decide, album by album,
-#                                   what `media-sync --audit` found (media_review.py);
+#                                   what `media-sync --audit` found (media_review.py):
+#                                   duplicates, copies of registered tracks, split
+#                                   releases, albums, and the files left in downloads/;
 #                                   choices are saved for `media-sync --apply`
 #   media-import --quarantine <row id>...
 #                                   queue files for the quarantine (pick remove)
@@ -37,7 +39,7 @@ case "${1:-}" in
         [ "$1" = --library ] || cmd=quarantine
         shift
         review_args=(--review "$LIB/state/review" --db "$DB" --music "$LIB/music")
-        [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL")
+        [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL" --downloads "$LIB/downloads")
         exec python3 "$LIB/beets/tools/media_review.py" "$cmd" "${review_args[@]}" "$@" ;;
 esac
 

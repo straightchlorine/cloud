@@ -159,6 +159,7 @@ def cmd_pin(args):
       - a file whose track the album already holds (a copy) is left as it is
       - two files claiming one track: the closer in length takes it
       - the album row of the release is joined if there is one, created if not
+      - an album row the pin leaves with no track is removed
 
     Matched files get the release's tags written and are moved to where the album keeps
     its files. Prints a summary and a line per file left alone; lines starting with @
@@ -177,14 +178,18 @@ def cmd_pin(args):
     album, mapping, skipped = mc.plan_pin(lib, info, [i for i in lib.items() if mc.path_of(i) in wanted])
     for item, why in skipped:
         print("left alone: %s - %s" % (mc.path_of(item), why))
+    removed = []
     if mapping:
+        old_albums = {item.album_id for item in mapping}
         created = mc.apply_pin(lib, info, album, mapping)
+        removed = mc.drop_emptied_albums(lib, old_albums)
         for item in mapping:
             print("@pinned %d" % item.id)
         if created is not None:
             print("@album %d" % created.id)
-    print("pinned %d of %d file(s)%s" % (
-        len(mapping), len(wanted), "" if not skipped else ", %d left alone" % len(skipped)))
+    print("pinned %d of %d file(s)%s%s" % (
+        len(mapping), len(wanted), "" if not skipped else ", %d left alone" % len(skipped),
+        "" if not removed else ", %d emptied album row(s) removed" % len(removed)))
     return 0
 
 

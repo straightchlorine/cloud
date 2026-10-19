@@ -378,15 +378,17 @@ release, at least three tracks, not a slowed/sped/remix edit), and looks up the
 releases a person would choose from: the ones the group already carries plus the
 best MusicBrainz search results, each with which file goes to which track (the
 pin's rule) and how far each file's length is from the track's. Files on disk
-with no row are listed with the registered tracks they copy. Tracks marked
-`reviewed` are left out.
+with no row are listed with the registered tracks they copy (and `suggest`, which
+of the two the ranking below keeps), and the audio files left in `downloads/` are
+listed with their tags. Tracks marked `reviewed` are left out of the album groups.
 
 The result is `$LIB/state/review/candidates.json` (the beets container sees
 `state/review` as `/review`), with MusicBrainz answers cached for 30 days in
 `mb-cache/`, so a second audit costs no requests. The audit also lists releases
 whose tracks sit in several album rows (*scattered*, e.g. *Scaled and Icy* in 15
 rows) and release tracks held twice (*duplicates*, two rips of one CD), with a
-suggested copy to keep (lossless, bitrate, the fuller album row, the older row).
+suggested copy to keep (lossless, bitrate, the fuller album row, the older row;
+a loose file counts as the newest row in no album).
 
 ### Reviewing it: `media-import --library`
 
@@ -397,22 +399,39 @@ scripts/media/pick.sh fix media [<query>]
 
 A menu over what the audit found, run with the host's python (sqlite on the
 library, no beets container per prompt), so each answer is instant. The queue goes
-copies first, then releases in several rows, then the albums - a copy has to go
-before its release can be one row. Each screen is re-read from the library when its
+duplicates first, then copies of registered tracks that are files with no row, then
+releases in several rows, then the albums, then the files left in `downloads/` - a
+copy has to go before its release can be one row. Each screen is re-read from the library when its
 turn comes; what was fixed meanwhile, has a decision waiting, or was skipped is not
 asked again. Album screens list the files and the editions (covered files, date,
 country, label, track count, `!n far off` for files whose length is more than 10 s
 from their track's):
 
+| screen | shows |
+|---|---|
+| duplicate | the rows holding one release track, the suggestion marked `*` |
+| copy | a file with no row beside the registered row(s) it copies (format, bitrate, length, release id or `(bare)`, path), the suggestion marked `*` |
+| scattered | the album rows one release sits in |
+| album | the files and the editions |
+| download | the files of one `downloads/` folder with their tags (a file directly in `downloads/` is a screen of its own); a file the audit could not read is not offered |
+
 | answer | does |
 |---|---|
-| `1`..`9` | duplicate: keep that copy, the others go to the quarantine; album: pin that edition |
+| `1`..`9` | duplicate: keep that copy, the others go to the quarantine; album, or a download after `s`: that edition; copy: `1` keeps the registered one (the loose file goes to the quarantine), `2` uses the loose one (`replace`) |
 | `v<n>` | which file would take which track of edition n |
-| `e` / `s` | enter a release id (or a musicbrainz.org link) / search MusicBrainz |
+| `e` / `s` | enter a release id (or a musicbrainz.org link) / search MusicBrainz; on a download, `e` shows the edition's file-to-track mapping and asks before it adopts, and `s` starts from the tags, or from a file name like `Artist - Title [id].opus` |
 | `m` | merge a release's album rows into one |
-| `k` | keep the album as it is (marked reviewed) |
-| `x` | do not ask about this again |
+| `k` | album: keep as it is (marked reviewed); download: adopt the files as they are |
+| `b` | copy: keep both (register the loose file) |
+| `r` | download: move the files to the quarantine |
+| `x` | do not ask about this again (a copy's skip names the file and its rows) |
 | `n` / `l` / `q` | next / the whole queue (fzf on a terminal, numbered otherwise) / quit |
+
+When a file copies several registered rows, `2` replaces the best-ranked one (the first
+listed) and leaves the others for the duplicate screens. A row whose quarantine is
+already waiting is not counted: the screen goes on over the rows that stay. A query given to `--library`
+also filters the downloads, by path and tags. Plain `media-import` (no arguments) keeps
+the beets prompts for new downloads.
 
 Every answer is saved at once as a decision; nothing changes until the apply.
 `pick remove` (workstation) saves a quarantine decision the same way.
@@ -435,6 +454,8 @@ size:
 | `register` | gives a file on disk with no row (`"id": null`) a row, as it is |
 | `quarantine` | moves a file to `$LIB/removed/<date>/` and drops its row; nothing is deleted |
 | `merge` | one release's tracks from several album rows into one row and one folder; empty rows go |
+| `replace` | targets: a file with no row, then the registered row it beats: registers the file as it is, quarantines the old file, and the new row takes over the old row's `added` time and `reviewed` marker (the comments prefix in the file too) |
+| `adopt` | files under `/downloads` (`"id": null`, optional `"release"`): registered, marked reviewed like `keep`, filed in the library by the path formats; with a release then pinned to it (a file whose title is not on it stays as adopted, and the report says so). A release MusicBrainz does not answer for fails the decision before any file is touched, and it is queued again |
 | `skip` | changes nothing; recorded so the review does not ask again |
 
 ```bash
@@ -442,6 +463,10 @@ media-sync --apply --dry-run     # what it would do, what is stale; changes noth
 media-sync --apply               # cron does this Sundays 04:00, before the 04:15 retag
 media-sync --undo <apply log>    # a file name in $LIB/state/review/apply-log/
 ```
+
+Any action that leaves an album row with no track (a pin to another edition, a
+quarantine of a row's last track, a replace) removes that row in the same decision,
+logged first; `media-sync --pin` does the same. Undo re-inserts it under its own id.
 
 A later decision about a file replaces an earlier one. Every target is checked
 first (same id, path and size); a decision whose files changed since is skipped as
@@ -453,7 +478,9 @@ runs or when its last success is older than `media_apply_backup_max_age_hours` (
 the row as it was, then as it became, flushed before the next step - to
 `apply-log/<stamp>.jsonl`, and archives the decisions with their results in
 `applied/<stamp>.jsonl`. Undo reads the log backwards: rows, album rows, tags and
-file locations go back, quarantined files return under their old row id, and a row
+file locations go back, quarantined files return under their old row id, adopted files
+return to `downloads/` and a replaced-in file keeps its place, each with its comments tag
+as it was (also after a crash between an adopted file's move and its log line), and a row
 that changed since the apply (a retag, a hand edit) is reported and left alone. An
 apply that stopped halfway is undone the same way. Cover art a pin fetched stays.
 

@@ -173,25 +173,59 @@ def scattered(items):
             for mbid, albums in rows.items() if len(albums) > 1}
 
 
+def album_sizes(items):
+    """How many rows each album row holds: {album id: count}."""
+    return collections.Counter(i.album_id for i in items if i.album_id is not None)
+
+
+def copy_rank(copy, sizes):
+    """How good a copy of a track is, higher better: the format (lossless first), the
+    bitrate, the album row holding most of its release, then the older row. Works on
+    items and on the audit's loose-file records (id and album_id None: no row, so no
+    album and, on a tie, the newest). `sizes` is album_sizes(...)."""
+    held = sizes.get(copy.album_id, 0) if copy.album_id is not None else 0
+    return (FORMAT_RANK.get((copy.format or "").upper(), 1), copy.bitrate or 0, held,
+            -(copy.id if copy.id is not None else float("inf")))
+
+
+def best_copy(copies, sizes):
+    return max(copies, key=lambda c: copy_rank(c, sizes))
+
+
 def duplicates(items):
     """Release tracks held by two or more rows (the same song from two sources, both
-    matched): [(release track id, [items], suggested keeper)]. The keeper is the
-    better format, then the higher bitrate, then the one in the album row holding
-    most of its release, then the older row."""
+    matched): [(release track id, [items], suggested keeper)]; the keeper is best_copy."""
     by_track = collections.defaultdict(list)
-    members = collections.Counter()
+    sizes = album_sizes(items)
     for item in items:
         if item.mb_releasetrackid:
             by_track[item.mb_releasetrackid].append(item)
-        if item.album_id is not None:
-            members[item.album_id] += 1
     out = []
     for track, copies in sorted(by_track.items()):
         if len(copies) > 1:
-            keep = max(copies, key=lambda i: (FORMAT_RANK.get((i.format or "").upper(), 1), i.bitrate or 0,
-                                              members[i.album_id] if i.album_id is not None else 0, -i.id))
-            out.append((track, sorted(copies, key=lambda i: i.id), keep))
+            out.append((track, sorted(copies, key=lambda i: i.id), best_copy(copies, sizes)))
     return out
+
+
+def suggest_copy(loose, rows, sizes):
+    """Which of a loose file and the registered rows it copies to keep: 'loose' or
+    'registered', by the same ranking as the duplicates. A tie keeps the registered row."""
+    return "loose" if best_copy(list(rows) + [loose], sizes) is loose else "registered"
+
+
+def drop_emptied_albums(lib, album_ids, before_remove=lambda album: None):
+    """Remove the album rows among `album_ids` that hold no item any more (a decision
+    moved or quarantined their last track); returns their ids. `before_remove(album)`
+    runs first, with the row still whole: the apply logs the row there. Rows only: no
+    file is touched."""
+    removed = []
+    for aid in sorted({a for a in album_ids if a is not None}):
+        album = lib.get_album(aid)
+        if album is not None and not list(album.items()):
+            before_remove(album)
+            album.remove(delete=False, with_items=False)
+            removed.append(aid)
+    return removed
 
 
 # ------------------------------------------------------------ rows, as records
@@ -240,7 +274,10 @@ def changed(before, after):
 # ---------------------------------------------------------------- decisions
 
 DECISIONS = "decisions.jsonl"
-ACTIONS = {"pin", "keep", "register", "quarantine", "merge", "skip"}
+ACTIONS = {"pin", "keep", "register", "quarantine", "merge", "replace", "adopt", "skip"}
+DOWNLOADS = "/downloads/"
+# The files the library holds; the shell's audio_files (media-lib) lists the same.
+AUDIO_EXTENSIONS = (".opus", ".m4a", ".mp3", ".flac", ".ogg", ".wav")
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -259,10 +296,17 @@ def malformed(d):
             return "a target needs path (text), size (bytes) and id (a row id or null)"
         if t.get("id") is None and d["action"] in ("pin", "keep", "merge"):
             return "%s needs the row id of every target" % d["action"]
-        if t.get("id") is not None and d["action"] == "register":
-            return "register is for files with no row (id null)"
+        if t.get("id") is not None and d["action"] in ("register", "adopt"):
+            return "%s is for files with no row (id null)" % d["action"]
+        if d["action"] == "adopt" and not t["path"].startswith(DOWNLOADS):
+            return "adopt is for files under %s" % DOWNLOADS
     if d["action"] in ("pin", "merge") and not UUID.match(d.get("release") or ""):
         return "%s needs a release id (a UUID)" % d["action"]
+    if d["action"] == "adopt" and d.get("release") is not None and not UUID.match(d["release"] or ""):
+        return "adopt takes a release id (a UUID) or none"
+    if d["action"] == "replace" and not (len(targets) == 2 and targets[0].get("id") is None
+                                         and targets[1].get("id") is not None):
+        return "replace needs two targets: the loose file (id null), then the row it replaces"
     return None
 
 

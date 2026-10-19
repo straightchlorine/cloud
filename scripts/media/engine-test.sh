@@ -46,14 +46,16 @@ ntfy() { cat "$T/ntfy.log" 2> /dev/null; }
 count_recent() { q "select count(*) from items where added > strftime('%s','now','-28 days')"; }
 
 FREQ=300
+# TONE_COMMENT adds a comment tag, TONE_BITRATE sets the opus bitrate (12k)
 tone() {  # <music-relative path> <artist> <title> [album] [track] [seconds] [albumartist]
     local out="$LIBD/music/$1" meta=(-metadata "artist=$2" -metadata "title=$3")
     [ -z "${4:-}" ] || meta+=(-metadata "album=$4" -metadata "albumartist=${7:-$2}")
     [ -z "${5:-}" ] || meta+=(-metadata "track=$5")
+    [ -z "${TONE_COMMENT:-}" ] || meta+=(-metadata "comment=$TONE_COMMENT")
     mkdir -p "$(dirname "$out")"
     FREQ=$((FREQ + 7))
     ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$FREQ:duration=${6:-2}" \
-        -c:a libopus -b:a 12k "${meta[@]}" "$out"
+        -c:a libopus -b:a "${TONE_BITRATE:-12k}" "${meta[@]}" "$out"
 }
 
 # ---------------------------------------------------------------------------------
@@ -839,7 +841,7 @@ def g(k): return [x for x in d['groups'] if x['key'][1] == k][0]
 print($1)" "$CJ"
 }
 eq "candidates.json counts" "$(jq_ "sorted(d['counts'].items())")" \
-    "[('duplicate_rows', 2), ('duplicates', 1), ('partial', 2), ('partial_bare', 2), ('scattered', 1), ('scattered_rows', 2), ('split', 1), ('unregistered', 4), ('unregistered_copies', 2), ('whole', 2), ('whole_tracks', 6)]"
+    "[('downloads', 0), ('duplicate_rows', 2), ('duplicates', 1), ('partial', 2), ('partial_bare', 2), ('scattered', 1), ('scattered_rows', 2), ('split', 1), ('unregistered', 4), ('unregistered_copies', 2), ('whole', 2), ('whole_tracks', 6)]"
 eq "a release in two album rows is listed, reviewed tracks too" \
     "$(jq_ "[(s['release'][-1], len(s['album_rows']), len(s['tracks'])) for s in d['scattered']]")" "[('5', 2, 3)]"
 eq "a track held twice is listed with the keeper (the higher bitrate)" \
@@ -882,6 +884,11 @@ has "every request names the client" "$(cut -f2 "$MBD/requests" | sort -u)" "^me
 # ---- the review menu over what the audit found (media-import --library)
 DEC="$LIBD/state/review/decisions.jsonl"
 rm -f "$DEC"
+out=$(printf '%s\n' l '' q | media-import --library 2>&1)
+has "the queue puts the copies after the duplicates and before the releases in several rows" \
+    "$(printf '%s' "$out" | tr '\n' '~')" "1  duplicate .*~ +2  copy +Fixture Band - One.*~ +3  copy +Kept - Keep 1.*~ +4  scattered"
+# the copies have screens of their own (see phase 4 below); the rest of this part is about the others
+rm "$LIBD/music/Fixture Band/Loose/One (copy).opus" "$LIBD/music/Kept/Loose/Keep 1.opus"
 # throwaway sessions first, each undone by removing the file
 out=$(printf '%s\n' n m q | media-import --library 2>&1)
 has "a release with a track held twice cannot be merged yet" "$out" "1 track\(s\) of it are held twice: decide those first"
@@ -1017,8 +1024,8 @@ section "apply and undo: the saved review decisions"
 REL=bbbbbbbb-0000-4000-8000-000000000001
 DAY=$(date -u +%Y%m%d)
 REVIEWD="$LIBD/state/review"
-# decide <action> [release=<id>] <row id | music-relative path>...: append one decision
-# the way the review menu will (container paths, the file's size now)
+# decide <action> [release=<id>] <row id | music-relative path | /downloads/ path>...: append
+# one decision the way the review menu will (container paths, the file's size now)
 decide() {
     "$PY" - "$DBF" "$LIBD" "$@" >> "$REVIEWD/decisions.jsonl" << 'PYEOF2'
 import json, os, sqlite3, sys
@@ -1031,7 +1038,8 @@ for t in rest:
         rel, tid = bytes(con.execute("select path from items where id=?", (int(t),)).fetchone()[0]).decode(), int(t)
     else:
         rel, tid = t, None
-    targets.append({"id": tid, "path": "/music/" + rel, "size": os.path.getsize(os.path.join(lib, "music", rel))})
+    where = "downloads/" + rel[len("/downloads/"):] if rel.startswith("/downloads/") else "music/" + rel
+    targets.append({"id": tid, "path": "/" + where, "size": os.path.getsize(os.path.join(lib, where))})
 d = {"v": 1, "ts": "2026-10-18T00:00:00Z", "action": action, "targets": targets, "note": "engine-test"}
 if release:
     d["release"] = release
@@ -1276,6 +1284,442 @@ if [ "$NETWORK" = 1 ]; then
 else
     skip "apply: pin (needs MusicBrainz)"
 fi
+
+# ---------------------------------------------------------------------------------
+section "phase 4: emptied album rows, copies of registered tracks, downloads"
+# ---------------------------------------------------------------------------------
+# The stub serves beets' own musicbrainz plugin as well (musicbrainz.host), so a pin
+# runs offline here.
+E1=cccccccc-0000-4000-8000-000000000001 E2=cccccccc-0000-4000-8000-000000000002
+DLR=cccccccc-0000-4000-8000-000000000003 LSR=cccccccc-0000-4000-8000-000000000004
+SBR=cccccccc-0000-4000-8000-000000000005
+P4D="$T.mb4"
+rm -rf "$P4D" && mkdir -p "$P4D/fx"
+"$PY" - "$P4D/fx" "$E1" "$E2" "$DLR" "$LSR" << 'PYEOF2'
+import json, pathlib, sys
+out, *ids = sys.argv[1:]
+ARTIST_ID = "dddddddd-0000-4000-8000-000000000001"
+def release(mbid, title, artist, date, titles):
+    credit = [{"name": artist, "joinphrase": "",
+               "artist": {"id": ARTIST_ID, "name": artist, "sort-name": artist, "disambiguation": "", "aliases": []}}]
+    tracks = [{"id": "%s-t%d" % (mbid[-4:], n), "number": str(n), "position": n, "title": t, "length": 2000,
+               "artist-credit": credit,
+               "recording": {"id": "%s-r%d" % (mbid[-4:], n), "title": t, "length": 2000, "disambiguation": "",
+                             "video": False, "aliases": [], "artist-credit": credit}}
+              for n, t in enumerate(titles, 1)]
+    return {"id": mbid, "title": title, "date": date, "country": "XW", "disambiguation": "", "status": "Official",
+            "asin": None, "barcode": None, "text-representation": {"language": "eng", "script": "Latn"},
+            "release-group": {"id": "eeeeeeee-0000-4000-8000-%012d" % int(mbid[-3:]), "title": title,
+                              "primary-type": "Album", "secondary-types": [], "first-release-date": date,
+                              "disambiguation": ""},
+            "artist-credit": credit, "label-info": [{"catalog-number": None, "label": {"name": "Stub Records"}}],
+            "media": [{"position": 1, "format": "Digital Media", "title": "", "track-count": len(tracks),
+                       "tracks": tracks}]}
+e1, e2, dl, ls = ids
+for r in (release(e1, "Split Album", "Split Band", "2001", ["S One", "S Two", "S Three", "S Four"]),
+          release(e2, "Split Album", "Split Band", "2005", ["S One", "S Two", "S Three"]),
+          release(dl, "Download Album", "Dl Band", "2010", ["D One", "D Two", "D Three"]),
+          release(ls, "Loose Single", "Dl Band", "2012", ["Loose Single"])):
+    pathlib.Path(out, r["id"] + ".json").write_text(json.dumps(r))
+PYEOF2
+python3 -I scripts/media/mb-stub.py "$P4D/fx" "$P4D/port" "$P4D/requests" &
+STUB4=$!
+trap 'kill "$STUB4" 2> /dev/null' EXIT
+for _ in $(seq 50); do [ -s "$P4D/port" ] && break; sleep 0.1; done
+GATEWAY=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}')
+build_host '' "http://$GATEWAY:$(cat "$P4D/port")"
+cat >> "$LIBD/beets/config.yaml" << YAML
+
+musicbrainz:
+    host: $GATEWAY:$(cat "$P4D/port")
+    https: no
+    ratelimit: 100
+YAML
+CJ="$REVIEWD/candidates.json"
+DEC="$REVIEWD/decisions.jsonl"
+# a python expression over candidates.json (d)
+jq4() { "$PY" -c "import json,sys; d=json.load(open(sys.argv[1])); print($1)" "$CJ"; }
+# a python expression over the decisions saved so far (ds, in order)
+ds4() { "$PY" -c "import json,sys; ds=[json.loads(l) for l in open(sys.argv[1])]; print($1)" "$DEC"; }
+p4_reset() {
+    rm -rf "$LIBD/music" "$LIBD/downloads" "$LIBD/beets/library.db" "$REVIEWD" "$LIBD/removed"
+    mkdir -p "$LIBD/music" "$LIBD/downloads" "$REVIEWD" "$LIBD/removed"
+}
+# rows with their added time and format, the album rows in full, and every file
+state4() {
+    state
+    q "select 'row', id, cast(added as int), format from items order by id"
+    q "select * from albums order by id"
+    (cd "$LIBD" && find downloads -type f | LC_ALL=C sort)
+}
+# the tags of a file, for comparing a file before and after
+tags_of() { ffprobe -v error -show_entries format_tags -of default=nw=1 "$1" | LC_ALL=C sort; }
+# a file's comments tag (ffprobe lists an opus file's tags under the stream, a flac file's under the format)
+comment_of() { ffprobe -v error -show_entries format_tags:stream_tags -of default=nw=1 "$1" | sed -n 's/^TAG:comment=//Ip' | head -1; }
+tone_flac() {  # <music-relative path> <artist> <title> [release id] [release track id]; TONE_COMMENT as in tone
+    local out="$LIBD/music/$1" meta=(-metadata "artist=$2" -metadata "title=$3")
+    [ -z "${4:-}" ] || meta+=(-metadata "musicbrainz_albumid=$4" -metadata "musicbrainz_releasetrackid=${5:-}")
+    [ -z "${TONE_COMMENT:-}" ] || meta+=(-metadata "comment=$TONE_COMMENT")
+    mkdir -p "$(dirname "$out")"
+    FREQ=$((FREQ + 7))
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$FREQ:duration=2" -c:a flac "${meta[@]}" "$out"
+}
+# one release in two album rows: S One, S Two, S Four on E1 (folder A), S Three on E2 (folder B)
+split_fixture() {
+    p4_reset
+    local t
+    for t in "S One" "S Two" "S Four"; do tone "Split/A/$t.opus" "Split Band" "$t" "Split Album" 1; done
+    tone "Split/B/S Three.opus" "Split Band" "S Three" "Split Album" 3
+    beet -c /config/as-album.yaml import /music/Split/A /music/Split/B > /dev/null 2>&1
+    sqlite3 -cmd '.timeout 20000' "$DBF" "
+        update items set mb_albumid='$E1' where title in ('S One','S Two','S Four');
+        update items set mb_albumid='$E2' where title='S Three';
+        update albums set mb_albumid='$E1' where id=(select album_id from items where title='S One');
+        update albums set mb_albumid='$E2' where id=(select album_id from items where title='S Three');"
+}
+
+# ---- an album row a decision empties goes with it, and comes back with undo
+split_fixture
+eq "fixture: one album in two rows" "$(q "select count(*) from albums")" 2
+row_b=$(q "select album_id from items where title='S Three'")
+before=$(state4)
+decide pin "release=$E1" "$(id_of 'S Three' Split)"
+ms --apply
+has "a pin to the other edition reports the emptied row" "$OUT" "applied: 1 of 1 file\(s\) pinned, 1 emptied album row\(s\) removed"
+eq "the other edition's album row is gone" "$(q "select count(*) from albums where id=$row_b")" 0
+eq "and the album has all four tracks in one row" "$(q "select count(distinct album_id) || '/' || count(*) from items")" "1/4"
+LOGF=$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")
+has "the log holds the row before it goes" "$(cat "$REVIEWD/apply-log/$LOGF")" "\"kind\": \"album_removed\", \"id\": $row_b"
+ms --undo "$LOGF"
+eq "undo brings the row back, same id and fields, and the file and tags" "$(state4)" "$before"
+eq "the row is back under its id" "$(q "select mb_albumid from albums where id=$row_b")" "$E2"
+
+split_fixture
+before=$(state4)
+ms --pin 'title:S Three' --id "$E1"
+eq "media-sync --pin drops the row it empties too" "$(q "select count(*) from albums where id=$row_b")" 0
+has "and says so" "$OUT" "pinned 1 of 1 file\(s\), 1 emptied album row\(s\) removed"
+
+# a quarantine of an album row's only track
+p4_reset
+tone "Lone/Only/01 Only One.opus" "Lone Artist" "Only One" "Lonely" 1
+tone "Lone/Pair/01 Pair One.opus" "Lone Artist" "Pair One" "Pair" 1
+tone "Lone/Pair/02 Pair Two.opus" "Lone Artist" "Pair Two" "Pair" 2
+beet -c /config/as-album.yaml import /music/Lone/Only /music/Lone/Pair > /dev/null 2>&1
+row_lonely=$(q "select album_id from items where title='Only One'")
+before=$(state4)
+decide quarantine "$(id_of 'Only One' Lone)"
+decide quarantine "$(id_of 'Pair One' Lone)"
+ms --apply
+has "quarantining an album row's only track reports the emptied row" "$OUT" "applied: 1 file\(s\) moved to /removed/$DAY, 1 emptied album row"
+eq "the emptied row is gone" "$(q "select count(*) from albums where id=$row_lonely")" 0
+eq "while the row that still has a track stays" "$(q "select count(*) from albums")" 1
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo restores the row, the track and the file" "$(state4)" "$before"
+
+# ---- a registered track whose better copy is the file with no row (the Shaun Baker case)
+p4_reset
+tone "Shaun Baker/Shaun Song.opus" "Shaun Baker" "Shaun Song"
+tone_flac "Reg Artist/Reg Song.flac" "Reg Artist" "Reg Song"
+beet -c /config/adopt.yaml import -s /music/Shaun\ Baker /music/Reg\ Artist > /dev/null 2>&1
+tone "Reg Artist/Reg Song copy.opus" "Reg Artist" "Reg Song"
+TONE_COMMENT='loose note' tone_flac "Shaun Baker/1/Shaun Song.flac" "Shaun Baker" "Shaun Song" "$SBR" "$SBR-track"
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set added=1700000000, comments='reviewed' where title='Shaun Song';
+    insert into item_attributes (entity_id, key, value) select id, 'reviewed', '1' from items where title='Shaun Song';"
+shaun_old=$(q "select id from items where title='Shaun Song'")
+reg_old=$(q "select id from items where title='Reg Song'")
+before=$(state4)
+flac_comment=$(comment_of "$LIBD/music/Shaun Baker/1/Shaun Song.flac")
+ms --audit
+eq "--audit exits 0 with a stub and files with no row" "$RC" 0
+eq "a loose copy suggests which of the two to keep, and carries its release tags" \
+    "$(jq4 "[(f['path'].rsplit('/', 1)[1], f['suggest'], f['copy_of'], f['mb_albumid'][-1:], f['mb_releasetrackid'][-5:]) for f in sorted(d['unregistered'], key=lambda f: f['path'])]")" \
+    "[('Reg Song copy.opus', 'registered', [$reg_old], '', ''), ('Shaun Song.flac', 'loose', [$shaun_old], '5', 'track')]"
+eq "the first menu screen is the copy; the ranking marks the lossless file" \
+    "$(printf 'q\n' | media-import --library Shaun 2>&1 | grep -c '^  \* loose .*FLAC')" 1
+out=$(printf '%s\n' 2 q | media-import --library Shaun 2>&1)
+has "the copy screen comes first, with the registered row" "$out" "\[1/1\] copy       Shaun Baker - Shaun Song \(1 registered row\)"
+has "it shows the registered file, bare" "$out" "registered +$shaun_old +Opus .*\(bare\) +/music/Shaun Baker/Shaun Song.opus"
+has "and the loose one with its release" "$out" "\* loose +- +FLAC .* ${SBR:0:8} +/music/Shaun Baker/1/Shaun Song.flac"
+has "answer 2 is saved as a replace" "$out" "saved: the loose file replaces row $shaun_old"
+eq "the replace names the loose file first, then the row" \
+    "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
+    "[('replace', [(None, '/music/Shaun Baker/1/Shaun Song.flac'), ($shaun_old, '/music/Shaun Baker/Shaun Song.opus')])]"
+out=$(printf 'q\n' | media-import --library Shaun 2>&1)
+has "a copy with a decision waiting is not asked again" "$out" "0 to review matching 'Shaun'"
+rm -f "$DEC"
+out=$(printf '%s\n' 1 q | media-import --library Shaun 2>&1)
+eq "answer 1 keeps the registered one: the loose file is quarantined" \
+    "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
+    "[('quarantine', [(None, '/music/Shaun Baker/1/Shaun Song.flac')])]"
+rm -f "$DEC"
+out=$(printf '%s\n' b q | media-import --library Shaun 2>&1)
+eq "b keeps both: the loose file is registered" \
+    "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
+    "[('register', [(None, '/music/Shaun Baker/1/Shaun Song.flac')])]"
+rm -f "$DEC"
+out=$(printf '%s\n' x q | media-import --library Shaun 2>&1)
+eq "x is a skip naming the loose file and the row" \
+    "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
+    "[('skip', [(None, '/music/Shaun Baker/1/Shaun Song.flac'), ($shaun_old, '/music/Shaun Baker/Shaun Song.opus')])]"
+out=$(printf 'q\n' | media-import --library 2>&1)
+has "the skipped row is out of the queue, the other copy still waits" "$out" "\[1/1\] copy       Reg Artist - Reg Song"
+has "and its registered FLAC is the suggestion" "$out" "\* registered +$reg_old +FLAC"
+rm -f "$DEC"
+cp "$LIBD/music/Shaun Baker/1/Shaun Song.flac" "$T/shaun.flac"
+printf 'x' >> "$LIBD/music/Shaun Baker/1/Shaun Song.flac"
+out=$(printf 'q\n' | media-import --library Shaun 2>&1)
+has "a file that changed since the audit is not offered" "$out" "0 to review matching 'Shaun'"
+cp "$T/shaun.flac" "$LIBD/music/Shaun Baker/1/Shaun Song.flac"
+rm -f "$DEC"
+printf '%s\n' 2 q | media-import --library Shaun > /dev/null 2>&1
+: > "$T/ntfy.log"
+ms --apply
+has "the apply replaces the registered file" "$OUT" "applied: row $shaun_old replaced by /music/Shaun Baker/1/Shaun Song.flac"
+has "and counts both files" "$OUT" "apply: 1 of 1 decision\(s\) applied, 2 file\(s\) changed"
+eq "the FLAC is registered with its release, where it lies" \
+    "$(q "select format, mb_albumid, cast(path as text) from items where title='Shaun Song'")" \
+    "FLAC|$SBR|Shaun Baker/1/Shaun Song.flac"
+eq "the new row has the old row's added time" "$(q "select cast(added as int) from items where title='Shaun Song' and id != $shaun_old")" 1700000000
+eq "and its reviewed marker" "$(q "select count(*) from item_attributes a join items i on i.id=a.entity_id where i.title='Shaun Song' and i.id != $shaun_old and a.key='reviewed' and a.value='1'")" 1
+eq "and the marker's comments prefix, before the loose file's own comment" \
+    "$(q "select comments from items where title='Shaun Song' and id != $shaun_old")" "reviewed | loose note"
+eq "which is in the file, where a library rebuild reads it" \
+    "$(comment_of "$LIBD/music/Shaun Baker/1/Shaun Song.flac")" "reviewed | loose note"
+eq "the old row is gone" "$(q "select count(*) from items where id=$shaun_old")" 0
+eq "and its file is in the quarantine, nothing else" "$(cd "$LIBD/removed" && find . -type f)" "./$DAY/music/Shaun Baker/Shaun Song.opus"
+eq "the other copy was left alone" "$(q "select count(*) from items where title='Reg Song'")" 1
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo puts rows, markers, added times and files back exactly" "$(state4)" "$before"
+eq "the old row is back under its id, reviewed" "$(q "select count(*) from item_attributes where entity_id=$shaun_old and key='reviewed'")" 1
+eq "the loose file's comment is back as it was" "$(comment_of "$LIBD/music/Shaun Baker/1/Shaun Song.flac")" "$flac_comment"
+rm -f "$T/shaun.flac"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# a replaced row nobody reviewed leaves the new one unreviewed, with the old added time
+sqlite3 -cmd '.timeout 20000' "$DBF" "update items set added=1600000000 where title='Reg Song'"
+before=$(state4)
+decide replace "Reg Artist/Reg Song copy.opus" "$reg_old"
+ms --apply
+has "replace applies" "$OUT" "applied: row $reg_old replaced by /music/Reg Artist/Reg Song copy.opus"
+eq "the new row has the old row's added time" "$(q "select cast(added as int) from items where title='Reg Song'")" 1600000000
+eq "and no reviewed marker, as the old row had none" "$(q "select count(*) from item_attributes a join items i on i.id=a.entity_id where i.title='Reg Song' and a.key='reviewed'")" 0
+eq "nor a comments prefix" "$(q "select coalesce(comments, '') from items where title='Reg Song'")" ""
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo puts it back" "$(state4)" "$before"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# replacing the only track of an album row drops that row, and undo brings it back
+p4_reset
+tone "Solo Album/Solo Tune.opus" "Solo Artist" "Solo Tune" "Solo Album" 1
+beet -c /config/as-album.yaml import /music/Solo\ Album > /dev/null 2>&1
+tone_flac "Solo Loose/Solo Tune.flac" "Solo Artist" "Solo Tune"
+row_solo=$(q "select album_id from items where title='Solo Tune'")
+solo_old=$(q "select id from items where title='Solo Tune'")
+before=$(state4)
+decide replace "Solo Loose/Solo Tune.flac" "$solo_old"
+ms --apply
+has "replace reports the album row it emptied" "$OUT" "emptied album row\(s\) removed"
+eq "and the row is gone" "$(q "select count(*) from albums where id=$row_solo")" 0
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo restores the album row with the old track" "$(state4)" "$before"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# a loose file that copies two registered rows: the menu offers the better row first
+p4_reset
+TONE_BITRATE=12k tone "Multi/Low/Multi Song.opus" "Multi Band" "Multi Song" "Multi Low"
+TONE_BITRATE=96k tone "Multi/High/Multi Song.opus" "Multi Band" "Multi Song" "Multi High"
+beet -c /config/as-album.yaml import /music/Multi/Low /music/Multi/High > /dev/null 2>&1
+tone_flac "Multi/Loose/Multi Song.flac" "Multi Band" "Multi Song"
+multi_low=$(id_of 'Multi Song' Low)
+multi_high=$(id_of 'Multi Song' High)
+ms --audit
+eq "the audit names both rows" "$(jq4 "[sorted(f['copy_of']) for f in d['unregistered']]")" "[[$multi_low, $multi_high]]"
+out=$(printf '%s\n' 2 q | media-import --library "Multi Song" 2>&1)
+has "the screen counts the rows" "$out" "copy       Multi Band - Multi Song \(2 registered rows\)"
+has "answer 2 says which row it replaces" "$out" "it replaces row $multi_high; the other 1 stay"
+eq "and replaces the better-ranked one, not the first by id" \
+    "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
+    "[('replace', [(None, '/music/Multi/Loose/Multi Song.flac'), ($multi_high, '/music/Multi/High/Multi Song.opus')])]"
+rm -f "$DEC"
+out=$(printf '%s\n' x q | media-import --library "Multi Song" 2>&1)
+eq "x names the loose file and every row, best first" "$(ds4 "[(d['action'], [t['id'] for t in d['targets']]) for d in ds]")" \
+    "[('skip', [None, $multi_high, $multi_low])]"
+rm -f "$DEC"
+# a copy with its quarantine waiting is as good as gone: the screen goes on over the row that stays
+decide quarantine "$multi_low"
+out=$(printf '%s\n' 2 q | media-import --library "Multi Song" 2>&1)
+has "the copy screen is still offered, over the row that stays" "$out" "copy       Multi Band - Multi Song \(1 registered row\)"
+eq "and a replace of that row is saved" "$(ds4 "[(d['action'], [t['id'] for t in d['targets']]) for d in ds]")" \
+    "[('quarantine', [$multi_low]), ('replace', [None, $multi_high])]"
+rm -f "$DEC"
+
+# ---- files left in downloads/
+dl_fixture() {
+    p4_reset
+    TONE_COMMENT='yt note' tone "../downloads/Dl Album/01 D One.opus" "Dl Band" "D One" "Download Album" 1
+    tone "../downloads/Dl Album/02 D Two.opus" "Dl Band" "D Two" "Download Album" 2
+    tone "../downloads/Dl Album/03 D Odd.opus" "Dl Band" "D Odd" "Download Album" 3
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=611:duration=2" -c:a libopus -b:a 12k -map_metadata -1 \
+        "$LIBD/downloads/Dl Band - Loose Single [abc123def45].opus"
+    printf 'not audio' > "$LIBD/downloads/broken.opus"
+    printf 'hidden' > "$LIBD/downloads/.hidden.opus"
+    printf 'notes' > "$LIBD/downloads/notes.txt"
+}
+dl_fixture
+tags_before=$(tags_of "$LIBD/downloads/Dl Album/01 D One.opus")
+before=$(state4)
+ms --audit
+eq "--audit lists the audio files in downloads, hidden and non-audio files left out" \
+    "$(jq4 "[(f['path'][11:], 'error' in f) for f in d['downloads']]")" \
+    "[('Dl Album/01 D One.opus', False), ('Dl Album/02 D Two.opus', False), ('Dl Album/03 D Odd.opus', False), ('Dl Band - Loose Single [abc123def45].opus', False), ('broken.opus', True)]"
+eq "with their tags" "$(jq4 "[(f['title'], f['artist'], f['album'], f['format'], f['size'] > 0, f['length']) for f in d['downloads'][:1]]")" \
+    "[('D One', 'Dl Band', 'Download Album', 'Opus', True, 2.0)]"
+has "an unreadable one is listed with its error" "$(jq4 "d['downloads'][-1]['error']")" "^[A-Za-z]+Error: "
+eq "and counted" "$(jq4 "d['counts']['downloads']")" 5
+has "the audit says how many" "$OUT" "5 audio file\(s\) left in downloads"
+
+# adopt as it is
+decide adopt "/downloads/Dl Album/01 D One.opus" "/downloads/Dl Album/02 D Two.opus"
+ms --apply
+has "adopt registers the files and files them" "$OUT" "applied: 2 file\(s\) adopted"
+eq "both have rows, filed under the configured path" "$(q "select group_concat(cast(path as text), ' ') from (select path from items order by id)")" \
+    "Dl Band/D One.opus Dl Band/D Two.opus"
+eq "marked reviewed like keep does" "$(q "select count(*) from item_attributes where key='reviewed' and value='1'")" 2
+eq "with the comments prefix, ahead of the note the file had" "$(q "select group_concat(comments) from items")" "reviewed | yt note,reviewed"
+eq "in the file too" "$(comment_of "$LIBD/music/Dl Band/D One.opus")" "reviewed | yt note"
+eq "and the files left downloads" "$(ls "$LIBD/downloads/Dl Album")" "03 D Odd.opus"
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo removes the rows and returns the files to downloads" "$(state4)" "$before"
+eq "with their tags as they were" "$(tags_of "$LIBD/downloads/Dl Album/01 D One.opus")" "$tags_before"
+eq "and the note the file had, not the marker" "$(comment_of "$LIBD/downloads/Dl Album/01 D One.opus")" "yt note"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# adopt with a release: the file whose title is not on it is adopted as it is, and reported
+decide adopt "release=$DLR" "/downloads/Dl Album/01 D One.opus" "/downloads/Dl Album/02 D Two.opus" "/downloads/Dl Album/03 D Odd.opus"
+ms --apply
+has "adopt with a release pins what fits" "$OUT" "applied: 3 file\(s\) adopted; 2 of 3 file\(s\) pinned"
+has "and reports what does not" "$OUT" "1 left alone \(its title is not on the release\)"
+eq "two rows carry the release, in one album row" "$(q "select count(*) || '/' || count(distinct album_id) from items where mb_albumid='$DLR'")" "2/1"
+eq "filed in the album's folder" "$(q "select count(*) from items where cast(path as text) like 'Dl Band/Download Album/%'")" 2
+eq "the third stays as it was adopted, reviewed too" \
+    "$(q "select cast(path as text) || '|' || (select count(*) from item_attributes a where a.entity_id=i.id and key='reviewed') from items i where title='D Odd'")" \
+    "Dl Band/D Odd.opus|1"
+eq "downloads holds only what is not adopted" "$(find "$LIBD/downloads" -type f | wc -l)" 4
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo takes the pin, the album row, the rows and the moves back" "$(state4)" "$before"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# a download to the quarantine
+decide quarantine "/downloads/Dl Album/03 D Odd.opus"
+ms --apply
+eq "a download is quarantined under removed/<day>/downloads/" "$(cd "$LIBD/removed" && find . -type f)" "./$DAY/downloads/Dl Album/03 D Odd.opus"
+eq "and is gone from downloads" "$(find "$LIBD/downloads/Dl Album" -type f | wc -l)" 2
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo returns it" "$(state4)" "$before"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# adopt with a release MusicBrainz does not have changes nothing and waits for the next run
+decide adopt "release=cccccccc-0000-4000-8000-0000000000ff" "/downloads/Dl Album/03 D Odd.opus"
+ms --apply
+has "adopt with an unknown release fails whole" "$OUT" "failed: MusicBrainz has no release .*; nothing changed - queued again"
+eq "no row, no file moved" "$(state4)" "$before"
+eq "and the decision is queued again" "$(ds4 "[(d['action'], d['release'][-4:]) for d in ds]")" "[('adopt', '00ff')]"
+eq "with no unfinished apply left behind" "$(find "$REVIEWD/applied" -name "*.pending" | wc -l)" 0
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+rm -f "$DEC"
+# a file whose title is not on the release is adopted as it is, and the report says why
+decide adopt "release=$DLR" "/downloads/Dl Album/03 D Odd.opus"
+ms --apply
+has "adopt with a release none of the files fit" "$OUT" "applied: 1 file\(s\) adopted; none of 1 file\(s\) fit the release"
+eq "the file is filed and reviewed" \
+    "$(q "select cast(path as text) || '|' || (select count(*) from item_attributes a where a.entity_id=i.id and key='reviewed') from items i")" \
+    "Dl Band/D Odd.opus|1"
+eq "with no unfinished apply left behind" "$(find "$REVIEWD/applied" -name "*.pending" | wc -l)" 0
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "undo returns it" "$(state4)" "$before"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+
+# A crash after the adopted file moved, onto a name that was free only because the library
+# already held a file at its path: undo must find the adopted file, not the library's.
+p4_reset
+tone "Dl Band/D One.opus" "Dl Band" "D One"
+TONE_COMMENT='dup note' tone "../downloads/Dup/D One.opus" "Dl Band" "D One"
+beet -c /config/adopt.yaml import -s /music/Dl\ Band > /dev/null 2>&1
+before=$(state4)
+decide adopt "/downloads/Dup/D One.opus"
+ms --apply
+eq "an adopted file whose destination is taken is filed under another name" \
+    "$(q "select cast(path as text) from items order by id desc limit 1")" "Dl Band/D One.1.opus"
+LOGF=$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")
+# the state a crash leaves after the move: the row still names /downloads, the log has no "done"
+grep -v '"phase": "done"' "$REVIEWD/apply-log/$LOGF" > "$T/log.cut"
+cp "$T/log.cut" "$REVIEWD/apply-log/$LOGF"
+sqlite3 -cmd '.timeout 20000' "$DBF" "update items set path=cast('/downloads/Dup/D One.opus' as blob) where id=2"
+ms --undo "$LOGF"
+eq "undo after the crash takes back the adopted file, and leaves the library's own" "$(state4)" "$before"
+eq "with the comment it had" "$(comment_of "$LIBD/downloads/Dup/D One.opus")" "dup note"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied" "$T/log.cut"
+
+echo '{"v": 1, "action": "adopt", "targets": [{"id": null, "path": "/music/x.opus", "size": 1}]}' >> "$DEC"
+ms --apply --dry-run
+has "adopt names files in downloads only" "$OUT" "malformed: adopt is for files under /downloads/"
+rm -f "$DEC"
+
+# the menu: one screen per folder, one per file directly in downloads, last in the queue. The
+# adopts above rewrote tags in these files and undid them, so the audit is made again first.
+dl_fixture
+ms --audit
+has "the unreadable one is not offered" "$(printf 'l\nq\n' | media-import --library 2>&1)" "2  download   /downloads/Dl Band - Loose"
+out=$(printf '%s\n' k r | media-import --library 2>&1)
+has "a folder is one screen" "$out" "\[1/2\] download   /downloads/Dl Album \(3 files\)"
+has "listing each file's tags" "$out" "Opus .*0:02 +D One +Dl Band +Dl Album/01 D One.opus"
+has "a file directly in downloads is a screen of its own" "$out" "\[2/2\] download   /downloads/Dl Band - Loose Single \[abc123def45\].opus"
+lacks_text "broken.opus" "$out" "broken"
+eq "k adopts the folder's files as they are, r quarantines the single" \
+    "$(ds4 "[(d['action'], d.get('release'), sorted(t['path'][11:] for t in d['targets'])) for d in ds]")" \
+    "[('adopt', None, ['Dl Album/01 D One.opus', 'Dl Album/02 D Two.opus', 'Dl Album/03 D Odd.opus']), ('quarantine', None, ['Dl Band - Loose Single [abc123def45].opus'])]"
+out=$(printf 'q\n' | media-import --library 2>&1)
+has "downloads with a decision waiting are not asked again" "$out" "0 to review"
+rm -f "$DEC"
+out=$(printf '%s\n' e "https://musicbrainz.org/release/$DLR" y x | media-import --library 2>&1)
+has "e shows which file takes which track first" "$out" "D One +-> 1-1 +D One"
+has "and what the files lack" "$out" "the files lack 1 of its tracks: D Three"
+has "then asks" "$out" "adopt the files with that release\? \[y/N\]"
+eq "y adopts with the release, x skips the other screen" \
+    "$(ds4 "[(d['action'], d.get('release', '')[-1:], len(d['targets'])) for d in ds]")" "[('adopt', '3', 3), ('skip', '', 1)]"
+rm -f "$DEC"
+out=$(printf '%s\n' n s '' 1 | media-import --library 2>&1)
+has "s searches for what the file name says when the tags are empty" "$out" "search 'artist / album' \(enter: Dl Band / Loose Single\)"
+has "and lists the editions" "$out" "1\)  0/1 +Loose Single"
+eq "a number adopts with that edition" "$(ds4 "[(d['action'], d['release'][-1:], [t['path'][11:] for t in d['targets']]) for d in ds]")" \
+    "[('adopt', '4', ['Dl Band - Loose Single [abc123def45].opus'])]"
+rm -f "$DEC"
+out=$(printf '%s\n' s 'Dl Band / Download Album' 1 | media-import --library 2>&1)
+has "s on a folder searches by its tags" "$out" "search 'artist / album' \(enter: Dl Band / Download Album\)"
+eq "and a pick adopts the whole folder with it" "$(ds4 "[(d['action'], d['release'][-1:], len(d['targets'])) for d in ds]")" "[('adopt', '3', 3)]"
+rm -f "$DEC"
+out=$(printf 'q\n' | media-import --library "Loose Single" 2>&1)
+has "a query narrows the downloads by name" "$out" "1 to review matching 'Loose Single'"
+out=$(printf 'q\n' | media-import --library "Dl Album" 2>&1)
+has "and by path, tags and all" "$out" "\[1/1\] download   /downloads/Dl Album"
+out=$(printf '%s\n' x x | media-import --library 2>&1)
+eq "x names every file of the screen" "$(ds4 "[(d['action'], len(d['targets'])) for d in ds]")" "[('skip', 3), ('skip', 1)]"
+has "a skipped download is not asked about again" "$(printf 'q\n' | media-import --library 2>&1)" "0 to review"
+ms --apply
+has "the skips are applied (archived)" "$OUT" "apply: 2 of 2 decision\(s\) applied, 0 file\(s\) changed"
+has "and an applied skip is not asked about again either" "$(printf 'q\n' | media-import --library 2>&1)" "0 to review"
+rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"
+rm -f "$DEC"
+printf 'x' >> "$LIBD/downloads/Dl Album/01 D One.opus"
+has "a download that changed since the audit is left out of its folder's screen" \
+    "$(printf 'q\n' | media-import --library 2>&1)" "\[1/2\] download   /downloads/Dl Album \(2 files\)"
+
+kill "$STUB4" 2> /dev/null
+wait "$STUB4" 2> /dev/null
+rm -rf "$P4D"
+build_host ''
 
 # ---------------------------------------------------------------------------------
 section "media-import under a terminal"

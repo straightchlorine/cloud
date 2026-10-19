@@ -123,6 +123,52 @@ check("duplicates: the better copy is the keeper (bitrate, then lossless)",
 check("duplicates: a tie goes to the row in the fullest album, then the older row",
       [k.id for _, _, k in mc.duplicates([row(8, "r", 30, "a"), row(9, "r", 31, "a"), row(10, "r", 31, "b")])], [9])
 
+# ---- one rank for the duplicates and for a loose copy of a registered track
+sizes = mc.album_sizes(lib_rows)
+check("album_sizes counts the rows of each album row", dict(sizes), {10: 3, 11: 1, 12: 1, 20: 1})
+loose_flac = item(id=None, album_id=None, format="FLAC", bitrate=950000)
+loose_opus = item(id=None, album_id=None, format="Opus", bitrate=64000)
+check("copy_rank: lossless beats a higher lossy bitrate",
+      mc.best_copy([row(1, fmt="Opus", bitrate=320000), loose_flac], {}), loose_flac)
+check("suggest_copy: a lossless loose file beats a registered opus",
+      mc.suggest_copy(loose_flac, [row(1, fmt="Opus")], {}), "loose")
+check("suggest_copy: a registered flac beats a loose opus", mc.suggest_copy(loose_opus, [row(1, fmt="FLAC")], {}),
+      "registered")
+same = item(id=None, album_id=None, format="FLAC", bitrate=900000)
+check("suggest_copy: a tie keeps the registered row, in an album or not",
+      (mc.suggest_copy(same, [row(1, album_id=10)], sizes), mc.suggest_copy(same, [row(1)], sizes)),
+      ("registered", "registered"))
+check("suggest_copy: the best of several registered rows is compared",
+      mc.suggest_copy(loose_opus, [row(1, fmt="Opus", bitrate=32000), row(2, fmt="Opus", bitrate=128000)], {}),
+      "registered")
+check("duplicates rank like copies", mc.best_copy([row(1), row(2, bitrate=950000)], {}).id, 2)
+
+
+class FakeAlbum:
+    def __init__(self, id_, items):
+        self.id, self.held, self.removed = id_, items, None
+
+    def items(self):
+        return self.held
+
+    def remove(self, delete, with_items):
+        self.removed = (delete, with_items)
+
+
+class FakeLib:
+    def __init__(self, *albums):
+        self.rows = {a.id: a for a in albums}
+
+    def get_album(self, id_):
+        return self.rows.get(id_)
+
+
+empty, full = FakeAlbum(5, []), FakeAlbum(6, [1])
+seen = []
+gone = mc.drop_emptied_albums(FakeLib(empty, full), [6, 5, None, 5, 99], lambda a: seen.append((a.id, a.removed)))
+check("drop_emptied_albums removes only the empty rows, rows only, calling back first",
+      (gone, seen, empty.removed, full.removed), ([5], [(5, None)], (False, False), None))
+
 # ---- rows as JSON records, for the apply log and undo
 before = {"path": mc.to_json(b"/music/a\xff.flac"), "title": "A", "mtime": 1.0, "reviewed": None}
 check("to_json/from_json keep bytes that are not utf-8", mc.from_json(json.loads(json.dumps(before["path"]))),
@@ -154,6 +200,32 @@ check("rank: a tie goes to the album's own title, editions and all", [c["title"]
     "Persona 3 Reload: Original Soundtrack (Deluxe)", 3)], ["Persona 3 Reload: Original Soundtrack", "Persona 4 Arena"])
 check("rank: then the nearest track count", [c["track_count"] for c in mc.rank(
     [cand("A", 3, 16), cand("A", 3, 12)], "A", 12)], [12, 16])
+
+# ---- the shape of decisions
+def decision(action, *targets, **kw):
+    return {"v": 1, "action": action, "targets": [{"id": i, "path": p, "size": 1} for i, p in targets], **kw}
+
+
+UUID1 = "11111111-1111-4111-8111-111111111111"
+check("malformed: replace is a loose file, then a row",
+      mc.malformed(decision("replace", (None, "/music/a.flac"), (7, "/music/a.opus"))), None)
+check("malformed: replace needs both",
+      "two targets" in mc.malformed(decision("replace", (None, "/music/a.flac"))), True)
+check("malformed: replace in the wrong order", "two targets" in mc.malformed(
+    decision("replace", (7, "/music/a.opus"), (None, "/music/a.flac"))), True)
+check("malformed: replace of two rows", "two targets" in mc.malformed(
+    decision("replace", (6, "/music/a.flac"), (7, "/music/a.opus"))), True)
+check("malformed: adopt with and without a release",
+      [mc.malformed(decision("adopt", (None, "/downloads/a.opus"), **kw)) for kw in ({}, {"release": UUID1})],
+      [None, None])
+check("malformed: adopt takes a UUID or none", "UUID" in mc.malformed(
+    decision("adopt", (None, "/downloads/a.opus"), release="nope")), True)
+check("malformed: adopt is for files without a row", "no row" in mc.malformed(
+    decision("adopt", (3, "/downloads/a.opus"))), True)
+check("malformed: adopt is for downloads", "under /downloads/" in mc.malformed(
+    decision("adopt", (None, "/music/a.opus"))), True)
+check("malformed: a quarantine may name a download", mc.malformed(decision("quarantine", (None, "/downloads/a.opus"))),
+      None)
 
 # ---- MusicBrainz answers
 release = {

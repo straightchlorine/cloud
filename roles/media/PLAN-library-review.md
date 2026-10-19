@@ -1,7 +1,7 @@
 # Library review tooling - plan
 
-Status: agreed 2026-10-17; phases 0-3 done 2026-10-18 (0-2 deployed, 3 not),
-phase 4 next. This file is the plan, not the
+Status: agreed 2026-10-17; phases 0-4 done 2026-10-18 (0-2 deployed, 3-4 not),
+phase 5 next. This file is the plan, not the
 documentation: once a phase ships, its behaviour moves into `README.md` and the
 code comments, and the phase is ticked off here.
 
@@ -67,8 +67,11 @@ A decision: `{v, ts, action, targets: [{id, path, size}], release, note}`.
 Actions: `pin` (give targets a release), `keep` (mark reviewed so upgrades stop
 asking), `register` (register a file that is on disk but has no row),
 `quarantine` (move a copy to `removed/<date>`), `merge` (one release's tracks
-from several album rows into one row and one folder), `skip` (do not ask again).
-A later decision about a file replaces an earlier one.
+from several album rows into one row and one folder), `replace` (register a file
+with no row and quarantine the registered copy it beats), `adopt` (register files
+left in `/downloads`, optionally pinned to a release), `skip` (do not ask again).
+A later decision about a file replaces an earlier one. A decision that leaves an
+album row with no track removes the row too (logged first, so undo restores it).
 
 ## Audit rules
 
@@ -151,7 +154,7 @@ numbers) used these, and phase 1 is held to them:
 | 1 ✓ | audit and `candidates.json`, with the MusicBrainz stub | it reproduces the hand count (13 split, 26 partial, 30 whole) |
 | 2 ✓ | apply: decisions schema, log, undo, gates, cron, ntfy | a scripted decisions file applies, undoes and goes stale correctly |
 | 3 ✓ | the review menu and `pick fix` | a scripted session produces the expected file |
-| 4 | edition correction (remove the emptied album row), copy handling (register one, demote the other), downloads through the same menu | the Shaun Baker case resolves |
+| 4 ✓ | edition correction (remove the emptied album row), copy handling (register one, demote the other), downloads through the same menu | the Shaun Baker case resolves |
 | 5 | README, molecule, `media-status` integration | hooks and lint green |
 
 ## Decisions (agreed)
@@ -161,8 +164,9 @@ numbers) used these, and phase 1 is held to them:
 3. Gates: snapshot under 36 hours old; at most 200 changed files per apply
    unless forced.
 4. First version covers split releases, partial albums, whole albums, copies
-   and unregistered files. The downloads flow keeps the current beets prompts
-   until phase 4.
+   and unregistered files. Plain `media-import` keeps the beets prompts for
+   downloads; `--library` also offers what the nightly passes left in
+   `downloads/` (phase 4).
 5. `keep` marks the tracks `reviewed` and the audit skips them (assumed; not
    contradicted).
 
