@@ -155,8 +155,12 @@ state_counts() {
 
 # free_gb PATH prints the whole GB free on PATH's filesystem (0 when it cannot be read).
 free_gb() {
-  local kb
-  kb=$(df -Pk -- "$1" 2> /dev/null | awk 'NR == 2 { print $4 }')
+  local kb p=$1
+  # userns-remap: the docker root (/var/lib/docker/100000.100000) is unreadable to the bench user,
+  # so df the nearest parent it can stat; same filesystem unless the root is its own mount.
+  until kb=$(df -Pk -- "$p" 2> /dev/null | awk 'NR == 2 { print $4 }') && [ -n "$kb" ] || [ "$p" = / ]; do
+    p=$(dirname -- "$p")
+  done
   echo $((${kb:-0} / 1048576))
 }
 
