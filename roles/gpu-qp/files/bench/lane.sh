@@ -10,6 +10,7 @@
 #                     C = cc-pvdz, H2 x seed 1, 1000 evals.
 #                     S = smoke: sto3g, H2 x seed 1, 20 evals (launcher test).
 #                     A2, H = convergence runs (see below).
+#                     C2, C2H = H2 cc-pvdz (20 qubits) to convergence, random / HF start.
 # Lanes: cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
 #
 # state.tsv columns: lane  molecule  seed  status  exit  started  ended
@@ -43,9 +44,11 @@ case "$PHASE" in
   A2) BASIS=sto3g;   MAXIT='';   SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
   B)  BASIS=sto3g;   MAXIT=200;  SEEDS='1';     MOLS='0 1 2 3 4 5' ;;
   C)  BASIS=cc-pvdz; MAXIT=1000; SEEDS='1';     MOLS='0' ;;
+  C2) BASIS=cc-pvdz; MAXIT='';   SEEDS='1 2 3'; MOLS='0' ;;
+  C2H) BASIS=cc-pvdz; MAXIT='';  SEEDS='1 2 3'; MOLS='0' ;;
   H)  BASIS=sto3g;   MAXIT='';   SEEDS='1 2 3'; MOLS='0 1 2 3 4 5' ;;
   S)  BASIS=sto3g;   MAXIT=20;   SEEDS='1';     MOLS='0' ;;
-  *) echo "usage: $0 <A|A2|B|C|H|S> <cpu-aer|gpu1|gpu2|analytic>" >&2; exit 2 ;;
+  *) echo "usage: $0 <A|A2|B|C|C2|C2H|H|S> <cpu-aer|gpu1|gpu2|analytic>" >&2; exit 2 ;;
 esac
 
 # A2 is the thesis protocol: no evaluation cap, stop on convergence instead. The fixed-budget
@@ -54,10 +57,14 @@ esac
 # A2 and H stop on convergence, capped at 18,000 evaluations (2x the largest count seen in the
 # 2026-10 convergence run) so a cell can never run for days. H is the analytic lane started at
 # the Hartree-Fock point instead of a random point; it shows what the random-init plateau costs.
+# C2 and C2H redo the cc-pvdz H2 cell to convergence (the thesis run never converged), capped at
+# 24,000 evaluations; C2H is C2's analytic lane started at the Hartree-Fock point.
 INIT=random
 case "$PHASE" in
   A2) BUDGET=(--convergence --threshold 1e-6 --max-evaluations 18000) ;;
   H)  BUDGET=(--convergence --threshold 1e-6 --max-evaluations 18000); INIT=hf ;;
+  C2) BUDGET=(--convergence --threshold 1e-6 --max-evaluations 24000) ;;
+  C2H) BUDGET=(--convergence --threshold 1e-6 --max-evaluations 24000); INIT=hf ;;
   *)  BUDGET=(--max-iterations "$MAXIT") ;;
 esac
 
@@ -68,8 +75,8 @@ case "$LANE" in
   analytic) SERVICE=quantum-pipeline-cpu;  EXTRA=() ;;
   *) echo "unknown lane: $LANE" >&2; exit 2 ;;
 esac
-if [ "$PHASE" = H ] && [ "$LANE" != analytic ]; then
-  echo "phase H runs the analytic lane only" >&2; exit 2
+if { [ "$PHASE" = H ] || [ "$PHASE" = C2H ]; } && [ "$LANE" != analytic ]; then
+  echo "phase $PHASE runs the analytic lane only" >&2; exit 2
 fi
 
 MOLNAME=(H2 'HeH+' LiH BeH2 H2O NH3)
@@ -142,6 +149,8 @@ for mol in $MOLS; do
   seeds=$SEEDS
   # NH3 to convergence costs 5-8 h per cell on the Aer lanes; one seed is the budgeted amount.
   if [ "$PHASE" = A2 ] && [ "$mol" = 5 ] && [ "$LANE" != analytic ]; then seeds=1; fi
+  # C2: the Aer lanes take one seed (hours per cell); the analytic lane takes all three.
+  if [ "$PHASE" = C2 ] && [ "$LANE" != analytic ]; then seeds=1; fi
   for seed in $seeds; do
     if is_done "${MOLNAME[$mol]}" "$seed"; then
       echo "[skip] $LANE ${MOLNAME[$mol]} seed=$seed (done)"

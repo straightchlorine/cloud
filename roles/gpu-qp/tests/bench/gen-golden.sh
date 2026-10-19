@@ -13,6 +13,8 @@ PAIRS=()
 for p in A A2 B S; do for l in cpu-aer gpu1 gpu2 analytic; do PAIRS+=("$p $l"); done; done
 for l in cpu-aer gpu1 gpu2; do PAIRS+=("C $l"); done
 PAIRS+=("H analytic")
+for l in gpu1 gpu2 analytic; do PAIRS+=("C2 $l"); done
+PAIRS+=("C2H analytic")
 
 for pair in "${PAIRS[@]}"; do
   : > "$FAKE_LOG"

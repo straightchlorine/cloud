@@ -7,7 +7,9 @@
 #   A, A2: cpu-aer + gpu1 + gpu2 concurrently, then analytic.
 #   B:     each lane alone, in order analytic, gpu1, gpu2, cpu-aer.
 #   C:     cpu-aer + gpu1 + gpu2 concurrently (H2, cc-pvdz).
+#   C2:    gpu1 + gpu2 + analytic concurrently (H2, cc-pvdz, to convergence).
 #   H:     analytic.
+#   C2H:   analytic (H2, cc-pvdz, to convergence from the HF point).
 #   S:     each lane alone, in order analytic, cpu-aer, gpu1, gpu2.
 #
 # Exits 1 when any lane did. A stop.request in the run dir skips the steps not yet started.
@@ -27,9 +29,10 @@ case "$PHASE" in
   A | A2) STEPS=("cpu-aer gpu1 gpu2" analytic) ;;
   B) STEPS=(analytic gpu1 gpu2 cpu-aer) ;;
   C) STEPS=("cpu-aer gpu1 gpu2") ;;
-  H) STEPS=(analytic) ;;
+  C2) STEPS=("gpu1 gpu2 analytic") ;;
+  C2H | H) STEPS=(analytic) ;;
   S) STEPS=(analytic cpu-aer gpu1 gpu2) ;;
-  *) echo "usage: $0 <A|A2|B|C|H|S>" >&2; exit 2 ;;
+  *) echo "usage: $0 <A|A2|B|C|C2|C2H|H|S>" >&2; exit 2 ;;
 esac
 
 lane() { bash "$HERE/lane.sh" "$PHASE" "$1" >> "$BENCH/$PHASE/$1.driver.log" 2>&1; }

@@ -34,6 +34,10 @@ C	cpu-aer	quantum-pipeline-cpu	--no-analytic	cc-pvdz	1	0	1000	random	1
 C	gpu1	quantum-pipeline-gpu1	--gpu	cc-pvdz	1	0	1000	random	1
 C	gpu2	quantum-pipeline-gpu2	--gpu	cc-pvdz	1	0	1000	random	1
 H	analytic	quantum-pipeline-cpu	-	sto3g	1,2,3	0,1,2,3,4,5	conv:18000	hf	1
+C2	gpu1	quantum-pipeline-gpu1	--gpu	cc-pvdz	1	0	conv:24000	random	1
+C2	gpu2	quantum-pipeline-gpu2	--gpu	cc-pvdz	1	0	conv:24000	random	1
+C2	analytic	quantum-pipeline-cpu	-	cc-pvdz	1,2,3	0	conv:24000	random	1
+C2H	analytic	quantum-pipeline-cpu	-	cc-pvdz	1,2,3	0	conv:24000	hf	1
 S	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	0	20	random	2
 S	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	0	20	random	3
 S	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	0	20	random	4

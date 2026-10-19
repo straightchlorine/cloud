@@ -8,6 +8,8 @@ B	3	gpu2
 B	4	cpu-aer
 C	1	cpu-aer gpu1 gpu2
 H	1	analytic
+C2	1	gpu1 gpu2 analytic
+C2H	1	analytic
 S	1	analytic
 S	2	cpu-aer
 S	3	gpu1

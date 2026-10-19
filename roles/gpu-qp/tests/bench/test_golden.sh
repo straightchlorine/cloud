@@ -8,6 +8,6 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 got=$(bash "$HERE/gen-golden.sh")
 check "golden: argv of every cell" "$(diff <(echo "$got") "$HERE/golden/argv.txt" > /dev/null && echo same || echo differ)" "same"
-check "golden: 187 cells" "$(echo "$got" | wc -l)" "187"
+check "golden: 195 cells" "$(echo "$got" | wc -l)" "195"
 
 finish

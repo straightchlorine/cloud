@@ -15,17 +15,19 @@ want=$(sed -E "s/^(\\S+) (\\S+) .*--molecule-index ([0-9]+) --seed ([0-9]+).*/\\
   "$HERE/golden/argv.txt" | sort -s -t "$TAB" -k1,2)
 got=$(for p in $(lanes phases); do lanes cells "$p"; done | sort -s -t "$TAB" -k1,2)
 check "cells equal the golden argv" "$got" "$want"
-check "cells: golden has 187 cells" "$(printf '%s\n' "$want" | wc -l)" "187"
+check "cells: golden has 195 cells" "$(printf '%s\n' "$want" | wc -l)" "195"
 
 # steps, prefixed with the phase, equal the old phase script's order
 got=$(for p in $(lanes phases); do lanes steps "$p" | sed "s/^/$p\\t/"; done)
 check "steps equal golden/steps.tsv" "$got" "$(cat "$HERE/golden/steps.tsv")"
 
-want=$(printf 'B\t24\nA\t72\nC\t3\nA2\t66\nH\t18\nS\t4\ntotal\t187')
-check "expect" "$(lanes expect B A C A2 H S)" "$want"
+want=$(printf 'B\t24\nA\t72\nC\t3\nA2\t66\nH\t18\nC2\t5\nC2H\t3\nS\t4\ntotal\t195')
+check "expect" "$(lanes expect B A C A2 H C2 C2H S)" "$want"
 check "C runs 1000 evaluations" "$(lanes lanes C | cut -f1,2 | paste -sd' ' -)" "cpu-aer${TAB}1000 gpu1${TAB}1000 gpu2${TAB}1000"
 check "row: NH3 on an Aer lane" "$(lanes row A2 gpu1 5)" "quantum-pipeline-gpu1${TAB}--gpu${TAB}sto3g${TAB}conv:18000${TAB}random"
 check "row: H starts at the HF point" "$(lanes row H analytic 3)" "quantum-pipeline-cpu${TAB}-${TAB}sto3g${TAB}conv:18000${TAB}hf"
+check "row: C2H starts at the HF point" "$(lanes row C2H analytic 0)" "quantum-pipeline-cpu${TAB}-${TAB}cc-pvdz${TAB}conv:24000${TAB}hf"
+check "cells: C2 Aer lanes take one seed" "$(lanes cells C2 | awk -F'\t' '$2!="analytic"' | wc -l)" "2"
 check "cells: A2 NH3 has one seed on an Aer lane" "$(lanes cells A2 cpu-aer | awk -F'\t' '$3==5' | wc -l)" "1"
 
 for bad in "cells Z" "cells A nope" "steps Z" "lanes Z" "expect A Z" "row A analytic 9" "row Z analytic 0" "frobnicate"; do

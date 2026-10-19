@@ -121,7 +121,7 @@ lock_holder() {
 # Legacy runs hold a `SUPERVISE_DONE <ts>` line.
 done_state() {
   local word=''
-  [ -r "$1/supervise.done" ] && read -r word < "$1/supervise.done"
+  [ -r "$1/supervise.done" ] && read -r word _ < "$1/supervise.done"
   case "$word" in
     ok | SUPERVISE_DONE*) echo DONE ;;
     failed:*) echo FAILED ;;
@@ -169,7 +169,7 @@ newest_log() {
 run_phases() {
   local p
   if [ -r "$1/phases" ]; then cat "$1/phases"; return; fi
-  for p in A A2 B C H S; do [ -f "$1/$p/state.tsv" ] && printf '%s ' "$p"; done
+  for p in A A2 B C C2 C2H H S; do [ -f "$1/$p/state.tsv" ] && printf '%s ' "$p"; done
   echo
 }
 

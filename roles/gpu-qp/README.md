@@ -209,7 +209,7 @@ The pilot tree (`A A2 B C H S out`) stays in place and is the run `pilot`.
 | Gotcha | State |
 |---|---|
 | The ML stack's Prometheus export path is unverified; the benchmark reads the JSON export (`MONITORING_EXPORT_FORMAT=json`). | open |
-| Fixed evaluation budgets (A, B, C) starve the finite-difference Aer lanes to 10-40 optimiser steps, because a step costs `n_params + 1` evaluations. Only the convergence phases (A2, H) give converged energies. | by design, see `lanes.tsv` |
+| Fixed evaluation budgets (A, B, C) starve the finite-difference Aer lanes to 10-40 optimiser steps, because a step costs `n_params + 1` evaluations. Only the convergence phases (A2, H, C2, C2H) give converged energies. | by design, see `lanes.tsv` |
 | Convergence on the Aer lanes can run for days (NH3 at the measured seconds per evaluation: about 1170 h). | capped: every convergence row carries `conv:18000` |
 | One shared `run_configs` mount made cells overwrite each other's dump. | fixed: each cell mounts its own `<cell>.gen/` |
 | The unattended-upgrades job (01:00) can update the NVIDIA driver under a run; the loaded module and the new NVML then disagree and every GPU cell fails. | open: the `gpu` preflight refuses a start on a mismatch; hold the `nvidia-*` packages for a long run |
