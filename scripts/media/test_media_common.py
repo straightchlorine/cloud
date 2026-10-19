@@ -9,10 +9,13 @@ engine-test.sh runs this too. Exits non-zero and names each failing case.
 import json
 import pathlib
 import sys
+import tempfile
 import types
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "roles/media/files/tools"))
+import media_apply
 import media_common as mc
+import media_review
 
 LIVE = " (Live In Mexico City)"
 # (same track?, mine, theirs) - what --complete and the pin compare
@@ -144,6 +147,150 @@ check("suggest_copy: the best of several registered rows is compared",
 check("duplicates rank like copies", mc.best_copy([row(1), row(2, bitrate=950000)], {}).id, 2)
 
 
+# ---- twins: the same recording on two rows, found over the whole library
+def tw(id_, artist="Akane", title="Color Me Blue", length=190.65, url="", fmt="Opus", mb="", bitrate=128000,
+       path="", album_id=None, **kw):
+    comments = ("https://www.youtube.com/watch?v=%s" % url) if url and "/" not in url else url
+    return item(
+        id=id_, mb_albumid=mb, album_id=album_id, mb_releasetrackid="", format=fmt, bitrate=bitrate, comments=comments,
+        path=path or "/music/%s/%s.opus" % (artist, title), artist=artist, albumartist=kw.pop("albumartist", ""),
+        title=title, length=length, **kw)
+
+
+def shape(groups):
+    return [(g["kind"], g["keep"].id, [d.id for d in g["drop"]]) for g in groups]
+
+
+V1, V2 = "abcDEF12345", "zyxWVU98765"
+akane_m = tw(1, url=V1, mb="r1", path="/music/Akane/Color Me Blue/01 Color Me Blue.opus", album_id=5)
+akane_b = tw(2, artist="Akane - Topic", url=V1, path="/music/Akane - Topic/Color Me Blue.opus")
+g = mc.twins([akane_b, akane_m])
+check("twins: the Akane case (matched + bare '- Topic', same URL) is a video twin", shape(g), [("video", 1, [2])])
+check("twins: offsets are each row's length minus the keeper's", g[0]["offsets"], {1: 0.0, 2: 0.0})
+check("twins: the reason names the video", V1 in g[0]["reason"], True)
+check("video_id: watch URL, &list= suffix, list first, youtu.be, 'reviewed | ' prefix",
+      [mc.video_id(item(comments=c)) for c in (
+          "https://www.youtube.com/watch?v=%s&list=PLx" % V1, "https://www.youtube.com/watch?list=PL1&v=%s" % V1,
+          "https://youtu.be/%s" % V1, "reviewed | https://music.youtube.com/watch?v=%s" % V1)], [V1] * 4)
+check("video_id: no URL, another site, a short id, a missing field",
+      [mc.video_id(item(comments=c)) for c in ("", None, "https://vimeo.com/watch?v=%s" % V1, "watch?v=abc")]
+      + [mc.video_id(item())], [None] * 5)
+check("twins: the URL decides across forms of it, ids are case-sensitive",
+      shape(mc.twins([tw(1, url="https://youtu.be/%s" % V1), tw(2, url="x https://www.youtube.com/watch?v=%s&t=9" % V1),
+                      tw(3, url=V1.upper())])), [("video", 1, [2])])
+check("twins: a bare-bare pair with the same URL, no album anywhere",
+      shape(mc.twins([tw(1, "Solo", "Song", url=V2), tw(2, "Solo - Topic", "Song (Official Audio)", url=V2)])),
+      [("video", 1, [2])])
+check("twins: one URL on tracks of very different length is a cut video, not twins",
+      mc.twins([tw(1, title="One", length=100.0, url=V2), tw(2, title="Two", length=400.0, url=V2)]), [])
+check("twins: Hemenesy - the pair spans two artists and two album groups, the URL finds it",
+      shape(mc.twins([tw(1, "NNX LXSY - Topic", "Hemenesy", 211.3, url=V1, album_id=7),
+                      tw(2, "NNX LXSY, Nurkalyi Adinbek", "Hemenesy", 211.3, url=V1, album_id=9, mb="r2")])),
+      [("video", 2, [1])])
+
+check("twins: same artist (- Topic dropped), title and length within 1 s is a recording twin",
+      shape(mc.twins([tw(1, "Solo", "Song", 200.0), tw(2, "Solo - Topic", "song", 200.9)])), [("recording", 1, [2])])
+check("twins: exactly 1 s still counts, rounding noise too",
+      shape(mc.twins([tw(1, length=190.65), tw(2, length=189.65 + 1e-12 * 3)])), [("recording", 1, [2])])
+check("twins: 1.5 s from the same source is no recording twin and not probable either",
+      mc.twins([tw(1, "Solo", "Song", 200.0), tw(2, "Solo", "Song", 201.5)]), [])
+check("twins: another artist or title is no twin",
+      mc.twins([tw(1, "Solo", "Song", 200.0), tw(2, "Other", "Song", 200.0), tw(3, "Solo", "Tune", 200.0)]), [])
+check("twins: rows with no artist or no title are never grouped",
+      mc.twins([tw(1, "", "Song", 200.0), tw(2, "", "Song", 200.0), tw(3, "A", "", 200.0), tw(4, "A", "", 200.0)]), [])
+check("twins: a parenthetical on one side only is another track",
+      mc.twins([tw(1, "Solo", "Heathens", 200.0), tw(2, "Solo", "Heathens (Slowed)", 200.0)]), [])
+
+bounce_yt = tw(1, "Bounce Man", "Bounce Man", 187.0, url=V2, path="/music/Bounce Man - Topic/Bounce Man.opus")
+bounce_cd = tw(2, "Bounce Man", "Bounce Man", 185.0, fmt="FLAC", mb="r3", bitrate=900000, album_id=3)
+g = mc.twins([bounce_yt, bounce_cd])
+check("twins: Bounce Man (YouTube opus 187 s, CD flac 185 s) is probable, the CD is kept", shape(g),
+      [("probable", 2, [1])])
+check("twins: and the offset is shown", (g[0]["offsets"], "+2 s" in g[0]["reason"]), ({2: 0.0, 1: 2.0}, True))
+check("twins: The Craving +13 s and Paladin Strait -65 s are different versions, never grouped",
+      mc.twins([tw(1, "A", "The Craving", 200.0, url=V1), tw(2, "A", "The Craving", 213.0, fmt="FLAC"),
+                tw(3, "A", "Paladin Strait", 300.0, url=V2), tw(4, "A", "Paladin Strait", 235.0, fmt="FLAC")]), [])
+check("twins: 6 s is probable, 6.1 and 7 s are not",
+      [shape(mc.twins([tw(1, length=200.0, url=V1), tw(2, length=200.0 + d, fmt="FLAC")])) for d in (6.0, 6.1, 7.0)],
+      [[("probable", 2, [1])], [], []])
+check("twins: probable wants another source (two plain opus rows 3 s apart are not)",
+      mc.twins([tw(1, length=200.0), tw(2, length=203.0)]), [])
+check("twins: two YouTube opus rows of different videos 3 s apart are the same source",
+      mc.twins([tw(1, length=200.0, url=V1), tw(2, length=203.0, url=V2)]), [])
+check("twins: a YouTube row against an opus row with no URL is another source",
+      shape(mc.twins([tw(1, length=200.0, url=V1), tw(2, length=203.0)])), [("probable", 1, [2])])
+
+check("twins: the same master on an album and on a compilation (two release ids) is two wanted tracks",
+      mc.twins([tw(1, "Solo", "Song", 200.0, mb="aaaa", album_id=1),
+                tw(2, "Solo", "Song", 200.3, mb="bbbb", album_id=2)]), [])
+check("twins: nor a probable copy of a track that sits on two releases",
+      mc.twins([tw(1, "Solo", "Song", 200.0, mb="aaaa", album_id=1, fmt="FLAC"),
+                tw(2, "Solo", "Song", 203.0, mb="bbbb", album_id=2)]), [])
+check("twins: a matched row and a bare one, or two rows on one release, are still twins",
+      [shape(mc.twins([tw(1, mb="aaaa", album_id=1), tw(2)])),
+       shape(mc.twins([tw(1, mb="aaaa", album_id=1), tw(2, mb="aaaa", album_id=2)]))],
+      [[("recording", 1, [2])], [("recording", 1, [2])]])
+check("twins: one video on two releases is still one video (the URL decides)",
+      shape(mc.twins([tw(1, url=V1, mb="aaaa", album_id=1), tw(2, url=V1, mb="bbbb", album_id=2)])),
+      [("video", 1, [2])])
+
+# the keeper: one ranking (copy_rank twin=True): matched, lossless, bitrate, fuller album, not '- Topic', older
+def keeper(*rows):
+    return mc.twins(list(rows))[0]["keep"].id
+
+
+check("twin keeper: a matched opus beats a bare flac (the release id is what the library is organised by)",
+      keeper(tw(1, fmt="Opus", mb="r"), tw(2, fmt="FLAC", bitrate=900000)), 1)
+check("twin keeper: then lossless", keeper(tw(1, fmt="Opus", bitrate=320000), tw(2, fmt="FLAC", bitrate=1)), 2)
+check("twin keeper: then the higher bitrate", keeper(tw(1, bitrate=64000), tw(2, bitrate=128000)), 2)
+check("twin keeper: a percent of bitrate (a cover in one copy) does not decide, the '- Topic' path does",
+      keeper(tw(1, bitrate=128100, path="/music/A - Topic/x.opus"), tw(2, bitrate=127400, path="/music/A/x.opus")), 2)
+check("twin keeper: then the row in the fuller album",
+      keeper(tw(1, album_id=1), tw(2, album_id=2), tw(3, "Z", "Q", album_id=2), tw(4, "Y", "R", album_id=2)), 2)
+check("twin keeper: a bare '- Topic' path loses a tie even to a newer row",
+      keeper(tw(1, path="/music/Akane - Topic/Color Me Blue.opus"), tw(2, path="/music/Akane/Color Me Blue.opus")), 2)
+check("twin keeper: then the older row", keeper(tw(5), tw(3), tw(4)), 3)
+check("twin keeper: bytes paths work (beets items)",
+      keeper(tw(1, path=b"/music/Akane - Topic/x.opus"), tw(2, path=b"/music/Akane/x.opus")), 2)
+check("copy_rank without twin ignores the release id and the folder (the duplicates' ranking is unchanged)",
+      (mc.copy_rank(tw(1, mb="r"), {}) == mc.copy_rank(tw(1), {}),
+       mc.best_copy([tw(3, path="/music/A - Topic/x.opus"), tw(4)], {}).id), (True, 3))
+
+check("twins: a reviewed track is still a twin, and may be the keeper",
+      shape(mc.twins([tw(1, url=V1, reviewed=True, mb="r"), tw(2, url=V1)])), [("video", 1, [2])])
+check("twins: a waiting quarantine on the better row makes the other the keeper; the queued row is still listed",
+      shape(mc.twins([tw(1, url=V1, mb="r"), tw(2, url=V1)], queued={1})), [("video", 2, [1])])
+check("twins: nothing to keep when every row waits for a quarantine",
+      mc.twins([tw(1, url=V1), tw(2, url=V1)], queued={1, 2}), [])
+check("twins: a row is in one group, the strongest kind's",
+      shape(mc.twins([tw(1, url=V1), tw(2, url=V1), tw(3)])), [("video", 1, [2])])
+three = mc.twins([tw(1, url=V1), tw(2, url=V1), tw(3, "B", "S", 100.0), tw(4, "B", "S", 100.5),
+                  tw(5, "C", "T", 100.0, url=V2), tw(6, "C", "T", 104.0, fmt="FLAC")])
+check("twins: all three kinds at once, strongest first, no row twice",
+      (shape(three), len({r.id for g in three for r in [g["keep"]] + g["drop"]})),
+      ([("video", 1, [2]), ("recording", 3, [4]), ("probable", 6, [5])], 6))
+check("twins: three copies of one video are one group", shape(mc.twins([tw(1, url=V1), tw(2, url=V1), tw(3, url=V1)])),
+      [("video", 1, [2, 3])])
+
+import random
+import time
+
+rng = random.Random(7)
+synthetic = []
+for n in range(6000):
+    artist = "Artist %d" % (n % 300) if n < 5000 else "Prolific"
+    synthetic.append(tw(n + 1, artist, "Song %d" % rng.randrange(40), round(rng.uniform(60, 400), 2),
+                        url=("v%010d" % rng.randrange(3000)) if n % 3 == 0 else "", fmt=rng.choice(["Opus", "FLAC"]),
+                        mb="r" if n % 5 == 0 else "", album_id=n % 200))
+started = time.monotonic()
+found = mc.twins(synthetic)
+took = time.monotonic() - started
+check("twins: 6000 synthetic rows are done in a few seconds (%.2f s)" % took, took < 3.0, True)
+check("twins: the synthetic library has twins of every kind and no row twice",
+      (sorted({g["kind"] for g in found}), len({r.id for g in found for r in [g["keep"]] + g["drop"]})
+       == sum(1 + len(g["drop"]) for g in found)), (["probable", "recording", "video"], True))
+
+
 class FakeAlbum:
     def __init__(self, id_, items):
         self.id, self.held, self.removed = id_, items, None
@@ -188,6 +335,20 @@ r = Row(id=1, path=b"/x", title="B", reviewed="1")
 mc.restore(r, {"id": 9, "path": {"bytes": "/y"}, "title": "A"}, after={"reviewed": "1"})
 check("restore: fields back, an added flexible field removed, the id kept", dict(r), {"id": 1, "path": b"/y", "title": "A"})
 
+# ---- a loose file is a copy only with the same length: the Austin City Limits half-album case
+reg = [types.SimpleNamespace(id=1, title="Ride", length=214.5), types.SimpleNamespace(id=2, title="Ride", length=247.1),
+       types.SimpleNamespace(id=3, title="Other", length=214.5)]
+c, cut = mc.loose_copies("Ride", 214.5, reg)
+check("loose_copies: the same title and length is a copy", ([r.id for r in c], [r.id for r, _ in cut]), ([1], []))
+c, cut = mc.loose_copies("Ride", 247.1, reg[:1])
+check("loose_copies: Ride 247 s against the studio 215 s is another recording, not listed", (c, cut), ([], []))
+c, cut = mc.loose_copies("Ride", 218.5, reg[:1])
+check("loose_copies: 4 s off is another cut, never a copy", ([r.id for r in c], [(r.id, round(o, 1)) for r, o in cut]),
+      ([], [(1, 4.0)]))
+c, cut = mc.loose_copies("Ride", 215.4, reg[:1])
+check("loose_copies: under a second is still a copy", [r.id for r in c], [1])
+check("loose_copies: a title that is not there matches nothing", mc.loose_copies("Nope", 214.5, reg), ([], []))
+
 # ---- rank: the order a person sees the candidate releases in
 def cand(title, covers, n):
     return {"title": title, "covers": covers, "track_count": n}
@@ -226,6 +387,204 @@ check("malformed: adopt is for downloads", "under /downloads/" in mc.malformed(
     decision("adopt", (None, "/music/a.opus"))), True)
 check("malformed: a quarantine may name a download", mc.malformed(decision("quarantine", (None, "/downloads/a.opus"))),
       None)
+
+# a pin's map: {row id: release track id}, keys among the targets
+pin = [(7, "/music/a.opus"), (8, "/music/b.opus")]
+check("malformed: a pin without a map", mc.malformed(decision("pin", *pin, release=UUID1)), None)
+check("malformed: a pin with a map", mc.malformed(decision("pin", *pin, release=UUID1, map={"7": "t-1", "8": "t-2"})),
+      None)
+check("malformed: a map may be empty", mc.malformed(decision("pin", *pin, release=UUID1, map={})), None)
+check("malformed: a map names targets only", "not a target" in mc.malformed(
+    decision("pin", *pin, release=UUID1, map={"9": "t-1"})), True)
+check("malformed: a map value is text", "release track id" in mc.malformed(
+    decision("pin", *pin, release=UUID1, map={"7": 3})), True)
+check("malformed: a map value is not empty", "release track id" in mc.malformed(
+    decision("pin", *pin, release=UUID1, map={"7": " "})), True)
+check("malformed: a map is an object", "{row id: release track id}" in mc.malformed(
+    decision("pin", *pin, release=UUID1, map=["7"])), True)
+check("malformed: a map belongs to a pin", "pin decisions only" in mc.malformed(
+    decision("keep", *pin, map={"7": "t-1"})), True)
+
+# ---- force_tracks: a person names the track, no title check
+# beets' TrackInfo names its track id release_track_id
+R = [types.SimpleNamespace(title=t, length=n, release_track_id="t-%d" % k)
+     for k, (t, n) in enumerate([("Heavydirtysoul (live)", 238.0), ("Ride", 214.0), ("Trees", 300.0)], 1)]
+
+
+class File:  # hashable, as a beets Item is: the mapping is keyed by it
+    def __init__(self, id_, title):
+        self.id, self.title = id_, title
+
+
+def f(id_, title):
+    return File(id_, title)
+
+
+a, b, c = f(1, "Heavydirtysoul"), f(2, "Ride"), f(3, "Trees")
+named, left = mc.force_tracks([a, b, c], R, {1: "t-1"}, lambda t: False)
+check("force_tracks: a file takes the track named, whatever its title",
+      [(i.id, t.release_track_id) for i, t in named.items()], [(1, "t-1")])
+check("force_tracks: the files not named are not its business", left, [])
+named, left = mc.force_tracks([a], R, {1: "t-9"}, lambda t: False)
+check("force_tracks: a track the release lacks leaves the file alone", (named, [(i.id, w) for i, w in left]),
+      ({}, [(1, "track t-9 is not on the release")]))
+named, left = mc.force_tracks([a, b], R, {1: "t-1", 2: "t-1"}, lambda t: False)
+check("force_tracks: two files for one track: neither", (named, sorted(i.id for i, _ in left)), ({}, [1, 2]))
+named, left = mc.force_tracks([a], R, {1: "t-1"}, lambda t: t.release_track_id == "t-1")
+check("force_tracks: a track the album holds is not given twice", (named, [w for _, w in left]),
+      ({}, ["the album already holds that track (a copy)"]))
+
+# ---- read_decisions: a later line narrows an earlier one instead of dropping it whole
+def read(*decisions):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp, "decisions.jsonl")
+        path.write_text("".join(json.dumps(d) + "\n" for d in decisions))
+        return media_apply.read_decisions(str(path))
+
+
+files = [(i, "/music/%d.opus" % i) for i in (1, 2, 3)]
+out = read(decision("keep", *files), decision("quarantine", *files[1:]))
+check("read_decisions: a keep a later quarantine takes two of three from runs on the third",
+      (out[0]["result"], [t["id"] for t in out[0]["run"]["targets"]], out[0]["narrowed"]), (None, [1], (1, 3)))
+check("read_decisions: the later one is whole", (out[1]["result"], out[1]["narrowed"]), (None, None))
+out = read(decision("keep", *files[:2]), decision("skip", *files[:2]))
+check("read_decisions: all targets named later: superseded", (out[0]["result"], out[0]["run"]),
+      ("superseded by line 2", None))
+out = read(decision("merge", *files[:2], release=UUID1), decision("quarantine", files[1]))
+check("read_decisions: a merge is all or nothing", out[0]["result"], "superseded by line 2")
+out = read(decision("replace", (None, "/music/9.flac"), files[0]), decision("keep", files[0]))
+check("read_decisions: so is a replace", out[0]["result"], "superseded by line 2")
+out = read(decision("pin", *files[:2], release=UUID1, map={"1": "t-1", "2": "t-2"}), decision("quarantine", files[0]))
+check("read_decisions: a narrowed pin drops the map entries of the rows that went",
+      (out[0]["run"]["map"], out[0]["d"]["map"]), ({"2": "t-2"}, {"1": "t-1", "2": "t-2"}))
+out = read(decision("keep", *files), decision("keep", files[0]), decision("skip", files[1]))
+check("read_decisions: two later lines narrow one earlier", [t["id"] for t in out[0]["run"]["targets"]], [3])
+check("apply order: quarantine and replace, then merge, pin and adopt, then the rest",
+      [media_apply.RANK[a] for a in ("quarantine", "replace", "merge", "pin", "adopt", "keep", "register", "skip")],
+      [0, 0, 1, 1, 1, 2, 2, 2])
+
+# ---- 4b menu: length-aware matching, the edition table's rank, the suggestion helpers
+live = [T("Heavydirtysoul (live)", 238.0, "1-1", "a"), T("Double Trouble (live)", 486.0, "1-2", "b"),
+        T("Original Mix", 100.0, "1-3", "c")]
+f_live, f_dt = track(title="Heavydirtysoul", length=238.4), track(title="Double Trouble", length=485.2)
+check("same_title_lenient: a parenthetical only one side carries",
+      [mc.same_title_lenient(a, b) for a, b in (("Heavydirtysoul", "Heavydirtysoul (live)"),
+                                                ("学園の記憶 (P3R ver.)", "学園の記憶"), ("Ride", "Trees (live)"),
+                                                ("Ride (Live)", "Ride (Remix)"), ("Ride", "Ride"))],
+      [True, True, False, False, True])
+check("assign strict: the missing (live) is a different track", mc.assign([f_live, f_dt], live)[0], {})
+claims, _ = mc.assign([f_live, f_dt], live, lenient=True)
+check("assign lenient: the (live) pairs by length", {i: it.title for i, it in claims.items()},
+      {0: "Heavydirtysoul", 1: "Double Trouble"})
+claims, left = mc.assign([track(title="Heavydirtysoul", length=241.0)], live, lenient=True)
+check("assign lenient: 3 s apart is not the same track", (claims, [w for _, w in left]),
+      ({}, ["its title is not on the release"]))
+claims, _ = mc.assign([track(title="Original Mix (P3R ver.)", length=99.0)], live, lenient=True)
+check("assign lenient: a parenthetical on the file's side too", {i: it.title for i, it in claims.items()},
+      {2: "Original Mix (P3R ver.)"})
+claims, _ = mc.assign([track(title="Heavydirtysoul", length=None)], live, lenient=True)
+check("assign lenient: no length, no leniency", claims, {})
+check("assign lenient: strict matches stay",
+      mc.assign([track(title="Ride", length=213)], rel, lenient=True)[0], {0: f_ride})
+
+mr = media_review
+a_, b_, c_ = (item(id=n, title=t, length=l) for n, t, l in ((1, "Heavydirtysoul", 238.4), (2, "Ride", 214.0),
+                                                              (3, "Odd", 50.0)))
+live2 = live + [T("Ride", 214.0, "1-4", "d")]
+claims = {1: live2[0], 2: live2[3]}
+check("pin_map: only the pairs the strict rule would not make", mr.pin_map([a_, b_, c_], live2, claims), {"1": "a"})
+check("pin_map: a hand pair of any title", mr.pin_map([a_, b_, c_], live2, {**claims, 3: live2[2]}),
+      {"1": "a", "3": "c"})
+check("find_track: by number or by position", [(mr.find_track(live2, x) or T("", 0, "", "")).id
+                                               for x in ("1", "1-3", "4", "9", "2-1", "x")], ["a", "c", "d", "", "", ""])
+
+
+def edition(covers, exact, original=False, flagged=False, title="Album", tracks=10):
+    return {"covers": covers, "exact": exact, "original": original, "flagged": flagged, "title": title,
+            "track_count": tracks}
+
+
+def best_of(*eds, files=10):
+    return sorted(range(len(eds)), key=lambda i: mr.edition_rank(eds[i], "Album", files))
+
+
+check("edition_rank: files covered first", best_of(edition(8, 8), edition(9, 0)), [1, 0])
+check("edition_rank: exact lengths next (the CD against the digital release)",
+      best_of(edition(10, 0), edition(10, 10)), [1, 0])
+check("edition_rank: an original-language edition ahead on a tie",
+      best_of(edition(10, 10), edition(10, 10, original=True)), [1, 0])
+check("edition_rank: a flagged edition sinks below a plain one", best_of(edition(10, 10, flagged=True), edition(10, 10)),
+      [1, 0])
+check("edition_rank: then the track count nearest the files'", best_of(edition(10, 10, tracks=14), edition(10, 10)),
+      [1, 0])
+check("edition_rank: the flag sinks below original language too",
+      best_of(edition(10, 10, flagged=True, original=True), edition(10, 10, original=True)), [1, 0])
+check("FLAGGED: what a disambiguation says is another version",
+      [bool(mr.FLAGGED.search(d)) for d in ("Dolby Atmos mix", "24bit/44.1 kHz", "clean edit", "bonus disc",
+                                            "Hi-Res", "deluxe edition", "", "Japan")], [True] * 6 + [False] * 2)
+check("is_original_language: kana, kanji, hangul", [mr.is_original_language(t) for t in (
+    ["私を喰べたい", "ひとでなし"], ["안녕", "Ride"], ["ひとでなし", "Ride", "Trees"])], [True, False, False])
+check("other_artist: case and spacing do not count", [mr.other_artist(a, b) for a, b in (
+    ("twenty one pilots", "Twenty One Pilots"), ("Dl  Band", "dl band"), ("Sound Team", "Composer"))],
+    [False, False, True])
+check("offset_text", [mr.offset_text(l, 122.086) for l in (122.09, 122.79, 121.0)], ["exact", "+0.70 s", "-1.09 s"])
+
+
+class FakeMB:
+    def __init__(self, release=None, fail=False):
+        self.release_, self.fail = release, fail
+
+    def release(self, mbid):
+        if self.fail:
+            raise OSError("down")
+        return self.release_
+
+
+official = {"media": [{"position": 1, "tracks": [{"id": "t1", "title": "wiv", "length": 122086, "position": 1}]}]}
+check("official_length: the release's seconds", mr.official_length(FakeMB(official), "r", "t1"), 122.086)
+check("official_length: a failed lookup falls back silently", mr.official_length(FakeMB(fail=True), "r", "t1"), None)
+check("official_length: a release MusicBrainz does not have", mr.official_length(FakeMB(None), "r", "t1"), None)
+check("official_length: a track it does not have, a bare row", (mr.official_length(FakeMB(official), "r", "zz"),
+                                                              mr.official_length(FakeMB(official), "", "t1")), (None, None))
+sz = {1: 4}
+check("why_keep: format, then bitrate, then the album row, then age", [mr.why_keep(*a, sz) for a in (
+    (item(id=1, format="FLAC", bitrate=1, album_id=1), [item(id=2, format="Opus", bitrate=9, album_id=1)]),
+    (item(id=1, format="Opus", bitrate=96000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=1)]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=2)]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=1)]))],
+    ["the better format (FLAC)", "the higher bitrate (96k)", "it sits in the fuller album row", "the older row"])
+
+
+
+def suggest_for(editions, members, searched=True, failed=False):
+    """Review.album_suggest over an edition table, without a library or a terminal."""
+    stub = types.SimpleNamespace(lookup_failed=failed, searched={mc.album_key(members[0])} if searched else set(),
+                                 by_id={m.id: m for m in members})
+    return mr.Review.album_suggest(stub, editions, members, "Band")
+
+
+def full_edition(exact, max_offset, **kw):
+    ed = {"id": "e" * 8 + "-0000-4000-8000-000000000001", "artist": "Band", "claims": {1: 0, 2: 1, 3: 2},
+          **edition(3, exact, **kw)}
+    ed["max_offset"] = max_offset
+    return ed
+
+
+album3 = [item(id=n, album="Album", artist="Band", albumartist="Band", mb_albumid="", length=200.0) for n in (1, 2, 3)]
+check("album_suggest: an edition that takes every file, exact, is the pin",
+      suggest_for([full_edition(3, 0)], album3)[0], "1")
+check("album_suggest: digital lengths a few seconds off are still a pin",
+      suggest_for([full_edition(0, 5)], album3)[0], "1")
+check("album_suggest: titles that all match but lengths 13 to 65 s off (another version) are no pin",
+      suggest_for([full_edition(0, 65)], album3), None)
+check("album_suggest: one file beyond FAR_SECONDS is enough to withhold the pin",
+      suggest_for([full_edition(2, mr.FAR_SECONDS + 3)], album3), None)
+check("album_suggest: nothing found by an audit search that went through is k, worded as what it is",
+      suggest_for([], album3), ("k", "the MusicBrainz search found no edition"))
+check("album_suggest: no k when the audit's search failed for the group, or never covered it",
+      (suggest_for([], album3, searched=False), suggest_for([], album3, failed=True)), (None, None))
+check("album_suggest: editions credited to another artist are k",
+      suggest_for([{**full_edition(3, 0), "artist": "Sound Team"}], album3)[0], "k")
 
 # ---- MusicBrainz answers
 release = {

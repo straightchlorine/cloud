@@ -841,7 +841,7 @@ def g(k): return [x for x in d['groups'] if x['key'][1] == k][0]
 print($1)" "$CJ"
 }
 eq "candidates.json counts" "$(jq_ "sorted(d['counts'].items())")" \
-    "[('downloads', 0), ('duplicate_rows', 2), ('duplicates', 1), ('partial', 2), ('partial_bare', 2), ('scattered', 1), ('scattered_rows', 2), ('split', 1), ('unregistered', 4), ('unregistered_copies', 2), ('whole', 2), ('whole_tracks', 6)]"
+    "[('downloads', 0), ('duplicate_rows', 2), ('duplicates', 1), ('partial', 2), ('partial_bare', 2), ('scattered', 1), ('scattered_rows', 2), ('split', 1), ('twins_probable', 0), ('twins_recording', 0), ('twins_video', 0), ('unregistered', 4), ('unregistered_copies', 2), ('whole', 2), ('whole_tracks', 6)]"
 eq "a release in two album rows is listed, reviewed tracks too" \
     "$(jq_ "[(s['release'][-1], len(s['album_rows']), len(s['tracks'])) for s in d['scattered']]")" "[('5', 2, 3)]"
 eq "a track held twice is listed with the keeper (the higher bitrate)" \
@@ -948,11 +948,12 @@ out=$(printf '%s\n' 1 m v1 1 e "$R4" x q | media-import --library 2>&1)
 has "the review works through the queue, copies first" "$out" "\[1/6\] duplicate  Kept - Kept Album: Keep 1 \(2 rows\)"
 has "then the scattered release" "$out" "\[2/6\] scattered  Kept - Kept Album \(2 album rows\)"
 has "then the albums, with their editions" "$out" "\[3/6\] album      Bare Trio - Whole Thing \(whole, 3 tracks\)"
-has "the far-off file is flagged" "$out" "1\)  3/3 +Whole Thing .*1999.*!1 far off"
+has "the table counts the covered and exact files and the largest offset" "$out" \
+    "1\) ${R3:0:8} +3/3 exact 2 max 11s +Whole Thing +1999"
 has "v shows which file takes which track, and how far off it is" "$out" "! Uno +-> 1-1 +Uno .*\(file \+11 s\)"
 has "and what the files lack" "$out" "the files lack 1 of its tracks: Cuatro"
 has "a release MusicBrainz cannot serve is said, not fatal" "$out" "\(aaaaaaaa: MusicBrainz: "
-has "an entered id joins the editions" "$out" "1\)  0/2 +Game Soundtrack"
+has "an entered id joins the editions" "$out" "1\) ${R4:0:8} +0/2 exact 0 max 0s +Game Soundtrack"
 has "it ends with what was saved and what is left" "$out" "4 decision\(s\) saved this session, 2 left to review"
 ids_of() { q "select group_concat(id, ', ') from (select id from items where $1 order by id)"; }
 eq "each choice was saved as one decision" \
@@ -965,8 +966,8 @@ out=$(printf '%s\n' l 2 s '' 1 | media-import --library 2>&1)
 has "decided screens are not asked again" "$out" "2 to review"
 has "l lists the queue (numbered without a terminal)" "$out" "2  album      Fixture Band - Alpha Album"
 has "s searches MusicBrainz for the album" "$out" "search 'artist / album' \(enter: Fixture Band / Alpha Album\)"
-has "its releases ranked by what they cover" "$out" "1\)  4/4 +Alpha Album .*2001"
-has "the other edition second" "$out" "2\)  3/4 +Alpha Album .*2005"
+has "its releases ranked by what they cover" "$out" "1\) ${R1:0:8} +4/4 exact 4 max 0s +Alpha Album .*2001"
+has "the other edition second" "$out" "2\) ${R2:0:8} +3/4 exact 3 max 0s +Alpha Album .*2005"
 eq "pinning the split album names every file the edition takes (the apply leaves those on it)" \
     "$(tail -1 "$DEC" | "$PY" -c "import json,sys; d=json.load(sys.stdin); print(d['action'], d['release'][-1], sorted(t['id'] for t in d['targets']))")" \
     "pin 1 [$(ids_of "artist='Fixture Band'")]"
@@ -1178,9 +1179,9 @@ ms --apply
 has "a decisions file of blank lines is no work" "$OUT" "no decisions to apply"
 eq "and sends no ntfy" "$(ntfy)" ""
 
-# an apply that stops halfway: the second decision cannot go ahead
+# an apply that stops halfway: the second decision (a quarantine runs before a keep) cannot go ahead
 apply_fixture
-decide keep "$(id_of 'Keep 1' Keep)"
+decide quarantine "$(id_of 'Keep 1' Keep)"
 decide quarantine "$(id_of 'Keep 2' Keep)"
 decide keep "$(id_of 'Keep 3' Keep)"
 mkdir -p "$LIBD/removed/$DAY/music/Keep/Me" && : > "$LIBD/removed/$DAY/music/Keep/Me/02 Keep 2.opus"
@@ -1190,10 +1191,10 @@ ms --apply
 eq "an apply that fails halfway exits 1" "$RC" 1
 LOGF=$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")
 has "and the ntfy says how to take it back" "$(ntfy)" "apply failed \| Stopped halfway .*media-sync --undo $LOGF"
-eq "what it did is done" "$(q "select count(*) from item_attributes where key='reviewed'")" 1
+eq "what it did is done" "$(find "$LIBD/removed" -name '01 Keep 1.opus' | wc -l)" 1
 eq "the archive says where it stopped" \
     "$("$PY" -c "import json,sys; print([json.loads(l)['result'] for l in open(sys.argv[1])])" "$(ls "$REVIEWD"/applied/*.jsonl)")" \
-    "['applied: 1 file(s) marked reviewed', 'failed: interrupted here', 'not reached - queued again']"
+    "['applied: 1 file(s) moved to /removed/$DAY', 'failed: interrupted here', 'not reached - queued again']"
 eq "what it did not reach waits for the next run" "$(grep -c 'Keep 3' "$REVIEWD/decisions.jsonl")" 1
 ms --undo "$LOGF"
 eq "and undo puts it back" "$(state)" "$before"
@@ -1293,9 +1294,12 @@ section "phase 4: emptied album rows, copies of registered tracks, downloads"
 E1=cccccccc-0000-4000-8000-000000000001 E2=cccccccc-0000-4000-8000-000000000002
 DLR=cccccccc-0000-4000-8000-000000000003 LSR=cccccccc-0000-4000-8000-000000000004
 SBR=cccccccc-0000-4000-8000-000000000005
+# 4b: apply (below)
+MAPR=cccccccc-0000-4000-8000-000000000006 TIER=cccccccc-0000-4000-8000-000000000007
+CASER=cccccccc-0000-4000-8000-000000000008 TIDYR=cccccccc-0000-4000-8000-000000000009
 P4D="$T.mb4"
 rm -rf "$P4D" && mkdir -p "$P4D/fx"
-"$PY" - "$P4D/fx" "$E1" "$E2" "$DLR" "$LSR" << 'PYEOF2'
+"$PY" - "$P4D/fx" "$E1" "$E2" "$DLR" "$LSR" "$MAPR" "$TIER" "$CASER" "$TIDYR" << 'PYEOF2'
 import json, pathlib, sys
 out, *ids = sys.argv[1:]
 ARTIST_ID = "dddddddd-0000-4000-8000-000000000001"
@@ -1315,11 +1319,15 @@ def release(mbid, title, artist, date, titles):
             "artist-credit": credit, "label-info": [{"catalog-number": None, "label": {"name": "Stub Records"}}],
             "media": [{"position": 1, "format": "Digital Media", "title": "", "track-count": len(tracks),
                        "tracks": tracks}]}
-e1, e2, dl, ls = ids
+e1, e2, dl, ls, mp, tie, case, tidy = ids
 for r in (release(e1, "Split Album", "Split Band", "2001", ["S One", "S Two", "S Three", "S Four"]),
           release(e2, "Split Album", "Split Band", "2005", ["S One", "S Two", "S Three"]),
           release(dl, "Download Album", "Dl Band", "2010", ["D One", "D Two", "D Three"]),
-          release(ls, "Loose Single", "Dl Band", "2012", ["Loose Single"])):
+          release(ls, "Loose Single", "Dl Band", "2012", ["Loose Single"]),
+          release(mp, "Map Album", "Map Band", "2013", ["M One", "M Two (live)", "M Three"]),
+          release(tie, "Tie Album", "Tie Band", "2014", ["T One", "T Two"]),
+          release(case, "Case Album", "Twenty One Pilots", "2015", ["C One", "C Two"]),
+          release(tidy, "Tidy Album", "Tidy Band", "2016", ["Y One", "Y Two", "Y Three", "Y Four"])):
     pathlib.Path(out, r["id"] + ".json").write_text(json.dumps(r))
 PYEOF2
 python3 -I scripts/media/mb-stub.py "$P4D/fx" "$P4D/port" "$P4D/requests" &
@@ -1692,7 +1700,7 @@ eq "y adopts with the release, x skips the other screen" \
 rm -f "$DEC"
 out=$(printf '%s\n' n s '' 1 | media-import --library 2>&1)
 has "s searches for what the file name says when the tags are empty" "$out" "search 'artist / album' \(enter: Dl Band / Loose Single\)"
-has "and lists the editions" "$out" "1\)  0/1 +Loose Single"
+has "and lists the editions" "$out" "1\) [0-9a-f]{8} +0/1 exact 0 max 0s +Loose Single"
 eq "a number adopts with that edition" "$(ds4 "[(d['action'], d['release'][-1:], [t['path'][11:] for t in d['targets']]) for d in ds]")" \
     "[('adopt', '4', ['Dl Band - Loose Single [abc123def45].opus'])]"
 rm -f "$DEC"
@@ -1715,6 +1723,1204 @@ rm -f "$DEC"
 printf 'x' >> "$LIBD/downloads/Dl Album/01 D One.opus"
 has "a download that changed since the audit is left out of its folder's screen" \
     "$(printf 'q\n' | media-import --library 2>&1)" "\[1/2\] download   /downloads/Dl Album \(2 files\)"
+
+# ---------------------------------------------------------------------------------
+section "4b: apply - a map, the order, narrowing, empty album rows, tidy folders"
+# ---------------------------------------------------------------------------------
+# add_map <row id>=<release track id>...: put a "map" on the decision appended last
+add_map() {
+    "$PY" - "$DEC" "$@" << 'PYEOF2'
+import json, sys
+path, *pairs = sys.argv[1:]
+lines = open(path).read().splitlines()
+d = json.loads(lines[-1])
+d["map"] = dict(p.split("=", 1) for p in pairs)
+lines[-1] = json.dumps(d)
+open(path, "w").write("\n".join(lines) + "\n")
+PYEOF2
+}
+last_log() { basename "$(ls "$REVIEWD"/apply-log/*.jsonl)"; }
+clear_logs() { rm -rf "$REVIEWD/apply-log" "$REVIEWD/applied"; rm -f "$DEC"; }
+row_of() { q "select id from items where title='$1' order by id limit 1"; }
+
+# ---- map: a file takes the track a person named, whatever its title
+p4_reset
+tone "Map/M One.opus" "Map Band" "M One"
+tone "Map/M Two.opus" "Map Band" "M Two"
+tone "Map/M Odd.opus" "Map Band" "M Odd"
+tone "Map/M Copy.opus" "Map Band" "M Copy"
+beet -c /config/adopt.yaml import -s /music/Map > /dev/null 2>&1
+m_one=$(row_of "M One") m_two=$(row_of "M Two") m_odd=$(row_of "M Odd") m_copy=$(row_of "M Copy")
+before=$(state4)
+decide pin "release=$MAPR" "$m_two"
+ms --apply
+has "without a map a file whose title the release has under another is left alone" "$OUT" \
+    "none of 1 file\(s\) fit the release \(its title is not on the release\)"
+clear_logs
+decide pin "release=$MAPR" "$m_one" "$m_two" "$m_odd"
+add_map "$m_two=${MAPR: -4}-t2" "$m_odd=${MAPR: -4}-t9"
+decide pin "release=$MAPR" "$m_copy"
+add_map "$m_copy=${MAPR: -4}-t1"
+ms --apply
+has "a mapped file takes its track; the unmapped one is matched by title" "$OUT" \
+    "applied: 2 of 3 file\(s\) pinned, 1 left alone \(track ${MAPR: -4}-t9 is not on the release\)"
+eq "the mapped file carries the track's title and id" \
+    "$(q "select title || '|' || mb_releasetrackid from items where id=$m_two")" "M Two (live)|${MAPR: -4}-t2"
+eq "the unmapped file is on its track" "$(q "select mb_releasetrackid from items where id=$m_one")" "${MAPR: -4}-t1"
+eq "the file mapped to a missing track is as it was" \
+    "$(q "select title || '|' || coalesce(mb_albumid, '') from items where id=$m_odd")" "M Odd|"
+has "a file mapped to a track the album holds stays out" "$OUT" \
+    "applied: none of 1 file\(s\) fit the release \(the album already holds that track"
+eq "and keeps its own title" "$(q "select title || '|' || coalesce(mb_albumid, '') from items where id=$m_copy")" "M Copy|"
+eq "the pinned files are one album" "$(q "select count(distinct album_id) from items where mb_albumid='$MAPR'")" 1
+ms --undo "$(last_log)"
+eq "undo puts the mapped pin back" "$(state4)" "$before"
+clear_logs
+decide pin "release=$MAPR" "$m_one" "$m_two"
+add_map "$m_one=${MAPR: -4}-t2" "$m_two=${MAPR: -4}-t2"
+ms --apply
+has "two files mapped to one track are both left alone" "$OUT" \
+    "none of 2 file\(s\) fit the release \(another file is mapped to the same track\)"
+eq "and nothing changed" "$(state4)" "$before"
+clear_logs
+decide pin "release=$MAPR" "$m_one"
+add_map "999=${MAPR: -4}-t1"
+ms --apply --dry-run
+has "a map naming a row that is not a target is malformed" "$OUT" "malformed: map names row 999, which is not a target"
+clear_logs
+
+# ---- apply order: a pin never ties a track to a copy about to go
+two_copies() {  # an Opus row and a FLAC row of one song, registered, the same length
+    p4_reset
+    tone "Tie/Opus/T One.opus" "Tie Band" "T One" "Tie Album" 1
+    tone_flac "Tie/Flac/T One.flac" "Tie Band" "T One"
+    beet -c /config/as-album.yaml import /music/Tie/Opus > /dev/null 2>&1
+    beet -c /config/as-album.yaml import /music/Tie/Flac > /dev/null 2>&1
+    t_opus=$(q "select id from items where format='Opus'") t_flac=$(q "select id from items where format='FLAC'")
+    sqlite3 -cmd '.timeout 20000' "$DBF" "update items set length=2.0"
+}
+two_copies
+before=$(state4)
+decide pin "release=$TIER" "$t_opus" "$t_flac"
+decide quarantine "$t_opus"
+ms --apply --dry-run
+has "the dry run shows what the pin is narrowed to" "$OUT" \
+    "line 1 +pin +1 target\(s\) +to apply \(narrowed: 1 of 2 target\(s\) left\)"
+ms --apply
+has "the pin runs on the target nobody else named" "$OUT" \
+    "applied \(narrowed: 1 of 2 target\(s\) left\): 1 of 1 file\(s\) pinned"
+eq "the FLAC takes the track, not the Opus that ties it on length" \
+    "$(q "select format || '|' || mb_albumid || '|' || mb_releasetrackid from items")" "FLAC|$TIER|${TIER: -4}-t1"
+eq "the Opus is in the quarantine" "$(cd "$LIBD/removed" && find . -type f -name '*.opus')" "./$DAY/music/Tie/Opus/T One.opus"
+ms --undo "$(last_log)"
+eq "undo puts both back" "$(state4)" "$before"
+clear_logs
+
+# a pin of the FLAC listed BEFORE the quarantine of the Opus row that holds the track: the quarantine goes first
+two_copies
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set mb_albumid='$TIER', mb_releasetrackid='${TIER: -4}-t1' where id=$t_opus;
+    update albums set mb_albumid='$TIER' where id=(select album_id from items where id=$t_opus);"
+before=$(state4)
+decide pin "release=$TIER" "$t_flac"
+decide quarantine "$t_opus"
+ms --apply
+has "the quarantine runs before the pin, so the album no longer holds the track" "$OUT" "line 1 +pin +applied: 1 of 1 file\(s\) pinned"
+eq "the FLAC is on the release" "$(q "select format || '|' || mb_releasetrackid from items")" "FLAC|${TIER: -4}-t1"
+eq "and the results are listed in file order" "$(printf '%s\n' "$OUT" | grep -E '^  line [0-9]+ +(pin|quarantine) +applied' | awk '{print $2 $3}' | tr '\n' ' ')" "1pin 2quarantine "
+ms --undo "$(last_log)"
+eq "undo puts both back" "$(state4)" "$before"
+clear_logs
+
+# ---- narrowing: a keep on three files that a later quarantine of two of them supersedes
+apply_fixture
+k1=$(id_of 'Keep 1' Keep) k2=$(id_of 'Keep 2' Keep) k3=$(id_of 'Keep 3' Keep)
+decide keep "$k1" "$k2" "$k3"
+decide quarantine "$k2" "$k3"
+before=$(state)
+ms --apply --dry-run
+has "the dry run shows the narrowing" "$OUT" "line 1 +keep +1 target\(s\) +to apply \(narrowed: 1 of 3 target\(s\) left\)"
+has "and that the quarantine is whole" "$OUT" "line 2 +quarantine +2 target\(s\) +to apply$"
+has "and counts the files it will touch" "$OUT" "apply: 2 decision\(s\) to apply, 3 file\(s\)"
+eq "a dry run changed nothing" "$(state)" "$before"
+ms --apply
+has "the keep applies to the one left and says so" "$OUT" \
+    "line 1 +keep +applied \(narrowed: 1 of 3 target\(s\) left\): 1 file\(s\) marked reviewed"
+eq "only that file is marked reviewed" "$(q "select group_concat(entity_id) from item_attributes where key='reviewed'")" "$k1"
+eq "the two are in the quarantine" "$(cd "$LIBD/removed" && find . -type f | wc -l)" 2
+has "the archive keeps the decision as it was written, with the result" \
+    "$("$PY" -c "import json,sys; r=[json.loads(l) for l in open(sys.argv[1])]; print(len(r[0]['decision']['targets']), r[0]['result'])" "$(ls "$REVIEWD"/applied/*.jsonl)")" \
+    "^3 applied \(narrowed: 1 of 3"
+ms --undo "$(last_log)"
+eq "undo restores all three" "$(state)" "$before"
+clear_logs
+# ---- album rows with no track
+p4_reset
+tone "Gh/Ghost/01 Boo.opus" "Gh Artist" "Boo" "Ghost" 1
+tone "Gh/Live/01 Alive.opus" "Gh Artist" "Alive" "Alive" 1
+tone "Gh/Live/02 Alive Too.opus" "Gh Artist" "Alive Too" "Alive" 2
+beet -c /config/as-album.yaml import /music/Gh/Ghost /music/Gh/Live > /dev/null 2>&1
+ghost=$(q "select album_id from items where title='Boo'")
+sqlite3 -cmd '.timeout 20000' "$DBF" "delete from items where title='Boo'"
+before=$(state4)
+eq "fixture: an album row with no track" "$(q "select count(*) from albums where id=$ghost")" 1
+out=$(lib prune_rows dry)
+has "the prune's dry run counts the empty album rows" "$out" "empty album rows: 1"
+has "and removes nothing" "$out" "dry run: nothing removed"
+eq "the row is still there" "$(state4)" "$before"
+decide keep "$(row_of Alive)"
+ms --apply
+has "an apply drops every album row with no track, not only those it emptied" "$OUT" "apply: 1 album row\(s\) with no track removed"
+eq "the row is gone" "$(q "select count(*) from albums where id=$ghost")" 0
+eq "the other album is left" "$(q "select count(*) from albums")" 1
+has "the log holds it first" "$(cat "$REVIEWD/apply-log/$(last_log)")" "\"kind\": \"album_removed\", \"id\": $ghost"
+ms --undo "$(last_log)"
+eq "undo restores the row under its id with every field" "$(state4)" "$before"
+clear_logs
+out=$(lib prune_rows)
+has "the prune removes it, rows only" "$out" "pruned 0 row\(s\) and 1 empty album row\(s\); beets now tracks 2$"
+eq "the row is gone after the prune" "$(q "select count(*) from albums where id=$ghost")" 0
+eq "and both files are where they were" "$(cd "$LIBD/music" && find . -type f | wc -l)" 3
+
+# ---- tidy folders: after a pin has dropped the emptied rows the album is filed again
+tidy_fixture() {
+    p4_reset
+    tone "Tidy/A/Y One.opus" "Tidy Band" "Y One" "Tidy Album" 1
+    tone "Tidy/A/Y Two.opus" "Tidy Band" "Y Two" "Tidy Album" 2
+    tone "Tidy/B/Y Three.opus" "Tidy Band" "Y Three" "Tidy Album" 3
+    tone "Tidy/C/Y Four.opus" "Tidy Band" "Y Four" "Tidy Album" 4
+    beet -c /config/as-album.yaml import /music/Tidy/A /music/Tidy/B /music/Tidy/C > /dev/null 2>&1
+}
+tidy_fixture
+eq "fixture: one album in three rows" "$(q "select count(*) from albums")" 3
+before=$(state4)
+decide pin "release=$TIDYR" "$(row_of 'Y One')" "$(row_of 'Y Two')" "$(row_of 'Y Three')" "$(row_of 'Y Four')"
+ms --apply
+has "the pin reports the three emptied rows" "$OUT" "applied: 4 of 4 file\(s\) pinned, 3 emptied album row\(s\) removed"
+eq "every track sits in one folder" "$(cd "$LIBD/music" && find . -name '*Y *.opus' -printf '%h\n' | LC_ALL=C sort -u)" "./Tidy Band/Tidy Album"
+eq "and every row says so" "$(q "select count(*) from items where cast(path as text) like 'Tidy Band/Tidy Album/%'")" 4
+eq "the old folders are gone" "$(cd "$LIBD/music" && find . -mindepth 2 -type d | LC_ALL=C sort)" "./Tidy Band/Tidy Album"
+ms --undo "$(last_log)"
+eq "undo puts every file and row back where it was" "$(state4)" "$before"
+clear_logs
+# an album row that already exists takes the files, and its own members are filed again too
+tidy_fixture
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set mb_albumid='$TIDYR', mb_releasetrackid='${TIDYR: -4}-t1' where title='Y One';
+    update albums set mb_albumid='$TIDYR' where id=(select album_id from items where title='Y One');"
+before=$(state4)
+decide pin "release=$TIDYR" "$(row_of 'Y Three')" "$(row_of 'Y Four')"
+ms --apply
+has "files pinned into an existing row empty their own rows" "$OUT" "applied: 2 of 2 file\(s\) pinned, 2 emptied album row\(s\) removed"
+eq "and the album keeps one folder, its members that were not named included" \
+    "$(cd "$LIBD/music" && find . -name '*Y *.opus' -printf '%h\n' | LC_ALL=C sort -u)" "./Tidy Band/Tidy Album"
+has "the move of a member that was not named is logged" "$(cat "$REVIEWD/apply-log/$(last_log)")" "\"phase\": \"moving\""
+ms --undo "$(last_log)"
+eq "undo restores them all" "$(state4)" "$before"
+clear_logs
+
+# a tidy-up leaves alone the rows another decision of the run names (that one would go stale, and a
+# keep a person made on it would silently not happen) and the rows whose file is gone (an orphan)
+tidy_member_fixture() {
+    tidy_fixture
+    sqlite3 -cmd '.timeout 20000' "$DBF" "
+        update items set mb_albumid='$TIDYR', mb_releasetrackid='${TIDYR: -4}-t1' where title='Y One';
+        update albums set mb_albumid='$TIDYR' where id=(select album_id from items where title='Y One');"
+}
+tidy_member_fixture
+y_one=$(row_of 'Y One') y_one_path=$(q "select cast(path as text) from items where id=$y_one")
+before=$(state4)
+decide pin "release=$TIDYR" "$(row_of 'Y Three')" "$(row_of 'Y Four')"
+decide keep "$y_one"
+ms --apply
+has "a keep on a row of the pinned album, written before the pin ran, still happens" "$OUT" "line 2 +keep +applied: 1 file"
+lacks_text "and is not reported stale" "$OUT" "changed earlier in this run"
+eq "the row is marked reviewed" "$(q "select group_concat(entity_id) from item_attributes where key='reviewed'")" "$y_one"
+eq "the pin did not file the row the keep names" "$(q "select cast(path as text) from items where id=$y_one")" "$y_one_path"
+eq "the files it named, and the member nobody else names, are filed with the album" \
+    "$(q "select count(*) from items where cast(path as text) like 'Tidy Band/Tidy Album/%'")" 3
+eq "nothing is left to queue again" "$(cat "$DEC" 2> /dev/null)" ""
+ms --undo "$(last_log)"
+eq "undo restores them all" "$(state4)" "$before"
+clear_logs
+# a second pin naming a row the first one's tidy-up would move
+tidy_member_fixture
+y_two=$(row_of 'Y Two')
+before=$(state4)
+decide pin "release=$TIDYR" "$(row_of 'Y Three')"
+decide pin "release=$TIDYR" "$y_two"
+ms --apply
+eq "two pins into one album: both applied, none stale" "$(printf '%s\n' "$OUT" | grep -cE '^  line [0-9]+ +pin +applied')" 2
+ms --undo "$(last_log)"
+eq "undo restores them all" "$(state4)" "$before"
+clear_logs
+# an orphan row among the album's members
+tidy_member_fixture
+y_two=$(row_of 'Y Two')
+rm -f "$LIBD/music/$(q "select cast(path as text) from items where id=$y_two")"
+before=$(state4)
+decide pin "release=$TIDYR" "$(row_of 'Y Three')" "$(row_of 'Y Four')"
+ms --apply
+eq "an unnamed member whose file is gone does not stop the apply" "$RC" 0
+lacks_text "no traceback" "$OUT" "Traceback"
+has "the pin is applied" "$OUT" "applied: 2 of 2 file\(s\) pinned, 2 emptied album row\(s\) removed"
+eq "the orphan row is as it was, for the prune" "$(q "select cast(path as text) from items where id=$y_two")" \
+    "Tidy/A/Y Two.opus"
+lacks_text "and the log holds no step for it: nothing of it was moved" "$(cat "$REVIEWD/apply-log/$(last_log)")" \
+    "\"kind\": \"item\", \"id\": ${y_two}[,}]"
+eq "the member with a file was filed with the album" "$(q "select cast(path as text) from items where title='Y One'")" \
+    "Tidy Band/Tidy Album/01 Y One.opus"
+ms --undo "$(last_log)"
+eq "undo restores them all" "$(state4)" "$before"
+clear_logs
+
+# ---- artist spelling: the release's album artist is written to the files (a case-only difference)
+p4_reset
+tone "Case/C One.opus" "twenty one pilots" "C One" "Case Album" 1
+tone "Case/C Two.opus" "twenty one pilots" "C Two" "Case Album" 2
+beet -c /config/as-album.yaml import /music/Case > /dev/null 2>&1
+eq "fixture: the files carry the lowercase spelling" "$(q "select distinct artist || '|' || albumartist from items")" \
+    "twenty one pilots|twenty one pilots"
+before=$(state4)
+decide pin "release=$CASER" "$(row_of 'C One')" "$(row_of 'C Two')"
+ms --apply
+eq "a pin writes the release's artist spelling on the rows" \
+    "$(q "select distinct artist || '|' || albumartist from items")" "Twenty One Pilots|Twenty One Pilots"
+eq "and on the album row" "$(q "select albumartist from albums")" "Twenty One Pilots"
+eq "and in the file" "$(ffprobe -v error -show_entries format_tags:stream_tags -of default=nw=1 "$LIBD/music/Twenty One Pilots/Case Album/01 C One.opus" | sed -n 's/^TAG:album_artist=//Ip' | head -1)" "Twenty One Pilots"
+eq "the files are filed under it" "$(cd "$LIBD/music" && find . -type f ! -name '*.jpg' | LC_ALL=C sort | tr '\n' ' ')" \
+    "./Twenty One Pilots/Case Album/01 C One.opus ./Twenty One Pilots/Case Album/02 C Two.opus "
+ms --undo "$(last_log)"
+eq "undo restores the old spelling" "$(state4)" "$before"
+clear_logs
+
+# ---------------------------------------------------------------------------------
+section "4b: detection - twins and probable copies, library-wide"
+# ---------------------------------------------------------------------------------
+# The cases of the first real session: the same YouTube video on a matched file and a bare
+# '- Topic' copy, the same video twice with no album anywhere, a CD track against its
+# YouTube single (2 s apart), and two tracks 13 s and 65 s apart that are different versions.
+p4_reset
+vid() { printf 'vid%08d' "$1"; }
+watch() { printf 'https://www.youtube.com/watch?v=%s' "$(vid "$1")"; }
+flac_len() {  # <music-relative path> <artist> <title> <album> <seconds>: a tagged CD-rip stand-in
+    local out="$LIBD/music/$1"
+    mkdir -p "$(dirname "$out")"
+    FREQ=$((FREQ + 7))
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$FREQ:duration=$5" -c:a flac -metadata "artist=$2" \
+        -metadata "title=$3" -metadata "album=$4" -metadata "albumartist=$2" -metadata track=1 "$out"
+}
+match() {  # <row id>...: the release pass matched these rows
+    local r
+    for r in "$@"; do
+        sqlite3 -cmd '.timeout 20000' "$DBF" "update items set mb_albumid='ffffffff-0000-4000-8000-$(printf '%012d' "$r")' where id=$r"
+    done
+}
+twin_of() {  # <row id>: the twin group the row is in, as "<kind> keep=<id> drop=<ids>", or "none"
+    "$PY" - "$CJ" "$1" << 'PYEOF2'
+import json, sys
+d = json.load(open(sys.argv[1]))
+row = int(sys.argv[2])
+for t in d["twins"]:
+    if row == t["keep"] or row in [x["id"] for x in t["drop"]]:
+        print("%s keep=%d drop=%s" % (t["kind"], t["keep"], ",".join(str(x["id"]) for x in t["drop"])))
+        break
+else:
+    print("none")
+PYEOF2
+}
+# Akane: matched + the bare '- Topic' download of the same video
+TONE_COMMENT=$(watch 1) tone "Akane/Color Me Blue/01 Color Me Blue.opus" "Akane" "Color Me Blue" "Color Me Blue" 1 19.07
+TONE_COMMENT=$(watch 1) tone "Akane - Topic/Color Me Blue.opus" "Akane - Topic" "Color Me Blue" "" "" 19.07
+# the same recording with no URL on either side, the '- Topic' row added first
+tone "Solo - Topic/Song.opus" "Solo - Topic" "Song" "" "" 20.4
+tone "Solo/Song.opus" "Solo" "Song" "" "" 20
+# Hemenesy: two artists, two album groups, one video
+TONE_COMMENT=$(watch 2) tone "NNX LXSY - Topic/Hemenesy/01 Hemenesy.opus" "NNX LXSY - Topic" "Hemenesy" "Hemenesy" 1 21
+TONE_COMMENT=$(watch 2) tone "NNX LXSY, Nurkalyi Adinbek/Hemenesy/01 Hemenesy.opus" "NNX LXSY, Nurkalyi Adinbek" "Hemenesy" "Hemenesy" 1 21
+# Bounce Man: the YouTube single against the CD track 2 s shorter
+TONE_COMMENT=$(watch 3) tone "Bounce Band - Topic/Bounce Man.opus" "Bounce Band" "Bounce Man" "" "" 19
+flac_len "Bounce Band/Cd/01 Bounce Man.flac" "Bounce Band" "Bounce Man" "Cd" 17
+# different versions: +13 s (Jenna's version) and -65 s (the album cut)
+TONE_COMMENT=$(watch 4) tone "Crave Band - Topic/The Craving.opus" "Crave Band" "The Craving" "" "" 20
+flac_len "Crave Band/Cd/01 The Craving.flac" "Crave Band" "The Craving" "Cd" 33
+TONE_COMMENT=$(watch 5) tone "Crave Band - Topic/Paladin Strait.opus" "Crave Band" "Paladin Strait" "" "" 30
+flac_len "Crave Band/Cd2/01 Paladin Strait.flac" "Crave Band" "Paladin Strait" "Cd2" 95
+# bare on both sides: no album tag, no release, one video twice
+TONE_COMMENT=$(watch 6) tone "Pair Band - Topic/Tune.opus" "Pair Band - Topic" "Tune" "" "" 18
+TONE_COMMENT=$(watch 6) tone "Pair Band/Tune.opus" "Pair Band" "Tune" "" "" 18
+# one URL on two tracks of different length: a video cut into parts
+TONE_COMMENT=$(watch 7) tone "Mix Band/Part One.opus" "Mix Band" "Part One" "" "" 10
+TONE_COMMENT=$(watch 7) tone "Mix Band/Part Two.opus" "Mix Band" "Part Two" "" "" 25
+# a pair for the queued quarantine, a pair of which one is reviewed
+TONE_COMMENT=$(watch 8) tone "Que Band/Que/01 Que Song.opus" "Que Band" "Que Song" "Que" 1 17
+TONE_COMMENT=$(watch 8) tone "Que Band - Topic/Que Song.opus" "Que Band - Topic" "Que Song" "" "" 17
+TONE_COMMENT=$(watch 9) tone "Rev Band/Rev Song.opus" "Rev Band" "Rev Song" "" "" 16
+TONE_COMMENT=$(watch 9) tone "Rev Band - Topic/Rev Song.opus" "Rev Band - Topic" "Rev Song" "" "" 16
+beet -c /config/as-album.yaml import /music/Akane /music/NNX\ LXSY\ -\ Topic /music/NNX\ LXSY,\ Nurkalyi\ Adinbek \
+    /music/Bounce\ Band/Cd /music/Crave\ Band/Cd /music/Crave\ Band/Cd2 /music/Que\ Band/Que > /dev/null 2>&1
+beet -c /config/adopt.yaml import -s /music/Akane\ -\ Topic /music/Solo /music/Solo\ -\ Topic \
+    /music/Bounce\ Band\ -\ Topic /music/Crave\ Band\ -\ Topic /music/Pair\ Band /music/Pair\ Band\ -\ Topic \
+    /music/Mix\ Band /music/Que\ Band\ -\ Topic /music/Rev\ Band /music/Rev\ Band\ -\ Topic > /dev/null 2>&1
+eq "fixture: 20 rows, ten pairs" "$(q "select count(*) from items")" 20
+akane_m=$(id_of "Color Me Blue" "Akane/Color") akane_b=$(id_of "Color Me Blue" "Akane - Topic/")
+solo_t=$(id_of "Song" "Solo - Topic/") solo_p=$(id_of "Song" "Solo/Song")
+hem_t=$(id_of "Hemenesy" "NNX LXSY - Topic/") hem_c=$(id_of "Hemenesy" "Nurkalyi")
+bounce_y=$(id_of "Bounce Man" "Topic/") bounce_cd=$(id_of "Bounce Man" "Cd/")
+crave_y=$(id_of "The Craving" "Topic/") crave_cd=$(id_of "The Craving" "Cd/")
+pal_y=$(id_of "Paladin Strait" "Topic/") pal_cd=$(id_of "Paladin Strait" "Cd2/")
+pair_t=$(id_of "Tune" "Pair Band - Topic/") pair_p=$(id_of "Tune" "Pair Band/")
+mix_1=$(id_of "Part One" "Mix Band") mix_2=$(id_of "Part Two" "Mix Band")
+que_m=$(id_of "Que Song" "Que Band/") que_b=$(id_of "Que Song" "Que Band - Topic/")
+rev_p=$(id_of "Rev Song" "Rev Band/") rev_t=$(id_of "Rev Song" "Rev Band - Topic/")
+match "$akane_m" "$hem_c" "$bounce_cd" "$crave_cd" "$pal_cd" "$que_m"
+sqlite3 -cmd '.timeout 20000' "$DBF" "insert into item_attributes (entity_id, key, value) values ($rev_p, 'reviewed', '1')"
+eq "fixture: Hemenesy sits in two album groups" "$(q "select count(distinct albumartist) from items where title='Hemenesy'")" 2
+db_before=$(md5sum < "$DBF")
+ms --audit
+eq "--audit exits 0" "$RC" 0
+has "--audit prints the twins it found (rows to drop, by kind)" "$OUT" \
+    "audit: twins to drop: 5 same video, 1 same recording, 1 probable"
+eq "--audit changed nothing in the library" "$(md5sum < "$DBF")" "$db_before"
+eq "the counts are in candidates.json" \
+    "$(jq4 "[d['counts'][k] for k in ('twins_video', 'twins_recording', 'twins_probable')]")" "[5, 1, 1]"
+eq "Akane: the matched file is kept, the bare '- Topic' copy of the same video is dropped" \
+    "$(twin_of "$akane_b")" "video keep=$akane_m drop=$akane_b"
+eq "same artist, title and length, no URL: a recording twin; the '- Topic' row loses though it is older" \
+    "$(twin_of "$solo_p")" "recording keep=$solo_p drop=$solo_t"
+eq "Hemenesy: two artists and two album groups, found by the video" \
+    "$(twin_of "$hem_t")" "video keep=$hem_c drop=$hem_t"
+eq "Bounce Man: the YouTube single (+2 s) is a probable copy of the CD track" \
+    "$(twin_of "$bounce_y")" "probable keep=$bounce_cd drop=$bounce_y"
+eq "and its offset from the keeper is recorded" \
+    "$(jq4 "[t['offsets'] for t in d['twins'] if t['kind'] == 'probable'][0]")" "{'$bounce_cd': 0.0, '$bounce_y': 2.0}"
+has "and the reason says how far off" "$(jq4 "[t['reason'] for t in d['twins'] if t['kind'] == 'probable'][0]")" "\+2 s"
+eq "The Craving (+13 s) and Paladin Strait (-65 s) are different versions: not grouped" \
+    "$(twin_of "$crave_y")/$(twin_of "$crave_cd")/$(twin_of "$pal_y")/$(twin_of "$pal_cd")" "none/none/none/none"
+eq "two bare rows with no album, one video: a twin pair" \
+    "$(twin_of "$pair_t")" "video keep=$pair_p drop=$pair_t"
+eq "one URL on parts of very different length is a cut video, not twins" \
+    "$(twin_of "$mix_1")/$(twin_of "$mix_2")" "none/none"
+eq "a reviewed track is still a twin (and here the keeper)" "$(twin_of "$rev_t")" "video keep=$rev_p drop=$rev_t"
+eq "a drop carries what the screen shows" \
+    "$(jq4 "[(x['id'], x['path'].endswith('/Akane - Topic/Color Me Blue.opus'), x['size'] > 0, x['format'], bool(x['bitrate']), 19 < x['length'] < 19.2, x['release']) for t in d['twins'] if t['keep'] == $akane_m for x in t['drop']]")" \
+    "[($akane_b, True, True, 'Opus', True, True, '')]"
+eq "and the reason names the video" "$(jq4 "[t['reason'] for t in d['twins'] if t['keep'] == $akane_m][0]")" \
+    "the same YouTube video ($(vid 1))"
+
+# a quarantine already waiting on the better row: the other row is the keeper, the queued one is still listed
+decide quarantine "$que_m"
+ms --audit
+eq "a row with a quarantine waiting is never the keeper" "$(twin_of "$que_b")" "video keep=$que_b drop=$que_m"
+decide quarantine "$akane_b"
+ms --apply
+eq "the apply quarantines both rows" "$(q "select count(*) from items where id in ($akane_b, $que_m)")" 0
+ms --audit
+eq "after the quarantines the twins are gone" "$(twin_of "$akane_m")/$(twin_of "$que_b")" "none/none"
+eq "and the counts follow" "$(jq4 "[d['counts'][k] for k in ('twins_video', 'twins_recording', 'twins_probable')]")" "[3, 1, 1]"
+clear_logs
+
+# ---------------------------------------------------------------------------------
+section "4b: menu - suggestions and Enter, twins, the edition table, length-aware matching, the summary"
+# ---------------------------------------------------------------------------------
+# The cases of the first real review, as scripted sessions. Releases the stub serves are written
+# here (the stub reads its fixtures on every request). Each scenario has its own artist, so a
+# query narrows a session to it.
+WIVR=d00d0101-0000-4000-8000-000000000101 TWNR=d00d0102-0000-4000-8000-000000000102
+CLNA=d00d0103-0000-4000-8000-000000000103 CLNB=d00d0104-0000-4000-8000-000000000104
+KIMD=d00d0105-0000-4000-8000-000000000105 KIMC=d00d0106-0000-4000-8000-000000000106
+KIMX=d00d0107-0000-4000-8000-000000000107 OTHR=d00d0108-0000-4000-8000-000000000108
+PARR=d00d0109-0000-4000-8000-000000000109 LIVR=d00d0110-0000-4000-8000-000000000110
+MONR=d00d0111-0000-4000-8000-000000000111 HNDR=d00d0112-0000-4000-8000-000000000112
+RGA=d00d0113-0000-4000-8000-000000000113 RGB=d00d0114-0000-4000-8000-000000000114
+BLUR=d00d0115-0000-4000-8000-000000000115
+mkrel() {  # <id> <title> <credited artist> <date> <format> <disambiguation> "<track>|<seconds>;..."
+    "$PY" - "$P4D/fx" "$@" << 'PYEOF2'
+import json, pathlib, sys
+out, mbid, title, artist, date, fmt, disamb, spec = sys.argv[1:9]
+credit = [{"name": artist, "joinphrase": "",
+           "artist": {"id": "dddddddd-0000-4000-8000-000000000002", "name": artist, "sort-name": artist,
+                      "disambiguation": "", "aliases": []}}]
+tracks = []
+for n, part in enumerate(spec.split(";"), 1):
+    t, secs = part.rsplit("|", 1)
+    ms = int(round(float(secs) * 1000))
+    tracks.append({"id": "%s-t%d" % (mbid[-4:], n), "number": str(n), "position": n, "title": t, "length": ms,
+                   "artist-credit": credit,
+                   "recording": {"id": "%s-r%d" % (mbid[-4:], n), "title": t, "length": ms, "disambiguation": "",
+                                 "video": False, "aliases": [], "artist-credit": credit}})
+r = {"id": mbid, "title": title, "date": date, "country": "XW", "disambiguation": disamb, "status": "Official",
+     "asin": None, "barcode": None, "text-representation": {"language": "eng", "script": "Latn"},
+     "release-group": {"id": "eeeeeeee-0000-4000-8000-%012d" % int(mbid[-3:]), "title": title,
+                       "primary-type": "Album", "secondary-types": [], "first-release-date": date,
+                       "disambiguation": ""},
+     "artist-credit": credit, "label-info": [{"catalog-number": None, "label": {"name": "Stub Records"}}],
+     "media": [{"position": 1, "format": fmt, "title": "", "track-count": len(tracks), "tracks": tracks}]}
+pathlib.Path(out, mbid + ".json").write_text(json.dumps(r))
+PYEOF2
+}
+D="Digital Media"
+mkrel "$WIVR" "wiv album" "wiv" 2020 "$D" "" "i love u.|122.086"
+mkrel "$TWNR" "Twin Album" "Twin Band" 2019 "$D" "" "Tw One|2;Tw Two|2;Tw Three|2"
+mkrel "$CLNA" "Clan Album" "Clan Band" 2018 "$D" "" "Cl One|2;Cl Two|2;Cl Three|2;Cl Bonus|2"
+mkrel "$CLNB" "Clan Album" "Clan Band" 2018 "$D" "Dolby Atmos mix" "Cl One|2;Cl Two|2;Cl Three|2"
+mkrel "$KIMD" "Kimi Album" "Kimi Band" 2016 "$D" "" "Ki One|103;Ki Two|204;Ki Three|305"
+mkrel "$KIMC" "Kimi Album" "Kimi Band" 2016 "CD" "" "Ki One|100;Ki Two|200;Ki Three|300;Ki Extra|10"
+mkrel "$KIMX" "Kimi Album (2017 remaster)" "Kimi Band" 2017 "CD" "" "Ki One|100;Ki Two|200;Ki Three|300"
+mkrel "$OTHR" "Other Album" "Sound Team" 2021 "$D" "" "Ot One|2;Ot Two|2;Ot Three|2"
+mkrel "$PARR" "Part Album" "Part Band" 2012 "$D" "" "Pt One|2;Pt Two|2;Pt Extra|2"
+mkrel "$LIVR" "Live Album" "Live Band" 2015 "$D" "" "Lv One (live)|238.4;Lv Two (live)|485.3;Lv Three|100"
+mkrel "$MONR" "私を喰べたい、ひとでなし" "Monster Band" 2022 "$D" "" "私を喰べたい|31;ひとでなし|42;終わりの歌|53"
+mkrel "$HNDR" "Hand Album" "Hand Band" 2014 "$D" "" "Alpha|60;Beta|70;Gamma|80"
+mkrel "$RGA" "Regional at Best" "Regio Band" 2011 "$D" "" "Rg One|2;Rg Two|2;Rg Three|2;Rg Five|2"
+mkrel "$RGB" "Regional at Best" "Regio Band" 2012 "$D" "" "Rg Four|2;Rg Six|2"
+mkrel "$BLUR" "Blur Album" "Blur Band" 2015 "$D" "" "Bl One|2;Bl Two|2;Bl Three|2"
+
+p4_reset
+vid() { printf 'vid%08d' "$1"; }
+watch() { printf 'https://www.youtube.com/watch?v=%s' "$(vid "$1")"; }
+# files: <artist> <album> <title>... -> <artist>/<album>/NN <title>.opus, tagged as an album
+album_files() {
+    local artist="$1" album="$2" n=0 t
+    shift 2
+    for t in "$@"; do n=$((n + 1)); tone "$artist/$album/0$n $t.opus" "$artist" "$t" "$album" "$n"; done
+}
+album_files "Twin Band" "Twin Album" "Tw One" "Tw Two" "Tw Three"
+TONE_COMMENT=$(watch 11) tone "Twin Band/Twin Album/02 Tw Two.opus" "Twin Band" "Tw Two" "Twin Album" 2
+TONE_COMMENT=$(watch 11) tone "Twin Band - Topic/Twin Album/02 Tw Two.opus" "Twin Band - Topic" "Tw Two" "Twin Album" 2
+album_files "Clan Band" "Clan Album" "Cl One" "Cl Two" "Cl Three"
+album_files "Kimi Band" "Kimi Album" "Ki One" "Ki Two" "Ki Three"
+album_files "Nomatch Band" "Nomatch Album" "Nm One" "Nm Two" "Nm Three"
+album_files "Other Band" "Other Album" "Ot One" "Ot Two" "Ot Three"
+album_files "Part Band" "Part Album" "Pt One" "Pt Two" "Pt Three"
+album_files "Live Band" "Live Album" "Lv One" "Lv Two" "Lv Three"
+album_files "Monster Band" "Monster OST" "Eat One" "Eat Two" "Eat Three"
+album_files "Hand Band" "Hand Album" "Hd One" "Hd Two" "Hd Three"
+album_files "Regio Band" "Regional at Best" "Rg One" "Rg Two"
+tone "Regio Band/B/03 Rg Three.opus" "Regio Band" "Rg Three" "Regional at Best" 3
+tone "Regio Band/C/04 Rg Four.opus" "Regio Band" "Rg Four" "Regional at Best" 4
+album_files "Blur Band" "Blur Album" "Bl One" "Bl Two"
+tone "Blur Band/B/03 Bl Three.opus" "Blur Band" "Bl Three" "Blur Album" 3
+# the matched file and the bare '- Topic' download of one video; two copies of one release track
+TONE_COMMENT=$(watch 12) tone "Akane/Color Me Blue/01 Color Me Blue.opus" "Akane" "Color Me Blue" "Color Me Blue" 1
+TONE_COMMENT=$(watch 12) tone "Akane - Topic/Color Me Blue.opus" "Akane - Topic" "Color Me Blue"
+tone "Wiv/Copy 1/i love u..opus" "wiv" "i love u."
+tone "Wiv/Copy 2/i love u..opus" "wiv" "i love u. b"
+tone "Dup Band/A/Plain Song.opus" "Dup Band" "Plain Song"
+tone "Dup Band/B/Plain Song.opus" "Dup Band" "Plain Song b"
+beet -c /config/as-album.yaml import /music/Twin\ Band/Twin\ Album /music/Twin\ Band\ -\ Topic /music/Clan\ Band \
+    /music/Kimi\ Band /music/Nomatch\ Band /music/Other\ Band /music/Part\ Band /music/Live\ Band /music/Monster\ Band \
+    /music/Hand\ Band /music/Regio\ Band/Regional\ at\ Best /music/Regio\ Band/B /music/Regio\ Band/C \
+    /music/Blur\ Band/Blur\ Album /music/Blur\ Band/B /music/Akane > /dev/null 2>&1
+beet -c /config/adopt.yaml import -s /music/Akane\ -\ Topic /music/Wiv /music/Dup\ Band > /dev/null 2>&1
+# the release pass's work, the lengths the sessions are about (the adopt skips a second file of one
+# title, so the copies get their title here)
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set title='i love u.' where title='i love u. b'; update items set title='Plain Song' where title='Plain Song b';
+    update items set mb_albumid='$WIVR', mb_releasetrackid='0101-t1', length=122.09, bitrate=64000
+        where title='i love u.' and cast(path as text) like '%Copy 1%';
+    update items set mb_albumid='$WIVR', mb_releasetrackid='0101-t1', length=122.79, bitrate=96000
+        where title='i love u.' and cast(path as text) like '%Copy 2%';
+    update items set mb_albumid='cccccccc-0000-4000-8000-0000000000aa', mb_releasetrackid='plain', bitrate=64000
+        where title='Plain Song' and cast(path as text) like '%/A/%';
+    update items set mb_albumid='cccccccc-0000-4000-8000-0000000000aa', mb_releasetrackid='plain', bitrate=96000
+        where title='Plain Song' and cast(path as text) like '%/B/%';
+    update items set mb_albumid='ffffffff-0000-4000-8000-000000000001' where title='Color Me Blue' and album != '';
+    update items set length=100.0 where title='Ki One'; update items set length=200.0 where title='Ki Two';
+    update items set length=300.0 where title='Ki Three';
+    update items set length=238.0 where title='Lv One'; update items set length=486.0 where title='Lv Two';
+    update items set length=100.0 where title='Lv Three';
+    update items set length=31.0 where title='Eat One'; update items set length=42.2 where title='Eat Two';
+    update items set length=53.1 where title='Eat Three';
+    update items set length=60.0 where title='Hd One'; update items set length=70.0 where title='Hd Two';
+    update items set length=80.0 where title='Hd Three';
+    update items set mb_albumid='$RGA' where title in ('Rg One', 'Rg Two', 'Rg Three');
+    update items set mb_albumid='$RGB' where title='Rg Four';
+    update items set mb_albumid='$BLUR' where artist='Blur Band';"
+ms --audit
+eq "fixture: --audit exits 0" "$RC" 0
+jq4x() { "$PY" -c "import json,sys; d=json.load(open(sys.argv[1])); print($1)" "$CJ"; }
+eq "fixture: the audit found the Twin Album pair and the Akane pair as twins" \
+    "$(jq4x "sorted(t['kind'] + ':' + t['keeper']['title'] for t in d['twins'] if 'Tw' in t['keeper']['title'] or 'Color' in t['keeper']['title'])")" \
+    "['video:Color Me Blue', 'video:Tw Two']"
+session() {  # <query> <answer>...: a scripted review, output in $out
+    local query="$1"
+    shift
+    out=$(printf '%s\n' "$@" | media-import --library "$query" 2>&1)
+}
+dsum() { ds4 "[(d['action'], d.get('release', '')[-3:], sorted(t['id'] for t in d['targets']), d.get('map')) for d in ds]"; }
+nrows() { q "select group_concat(id, ', ') from (select id from items where $1 order by id)"; }
+
+# ---- a duplicate: Enter takes the suggested copy
+wiv1=$(id_of 'i love u.' 'Copy 1') wiv2=$(id_of 'i love u.' 'Copy 2')
+session Wiv '' q
+has "the duplicate screen shows each copy's offset from the release's official length" "$out" "122.09 s \(exact\)"
+has "the other copy's offset" "$out" "122.79 s \(\+0.70 s\)"
+has "and the release's own length" "$out" "the release says 122.09 s"
+has "the prompt says what Enter does" "$out" "\[Enter = 1: its length 122.09 s is the closest to the release's 122.09 s\]"
+has "and what n and x do" "$out" "n skip for now \(asked again next time\), x never ask again"
+eq "wiv: Enter keeps the copy of the release's length although the other has the higher bitrate" \
+    "$(dsum)" "[('quarantine', '', [$wiv2], None)]"
+rm -f "$DEC"
+dup1=$(id_of 'Plain Song' '/A/') dup2=$(id_of 'Plain Song' '/B/')
+session "Dup Band" '' q
+has "copies of one length: the shared ranking suggests, with its reason" "$out" "\[Enter = 2: the higher bitrate \(96k\)\]"
+lacks_text "a release MusicBrainz does not have is not mentioned" "$out" "MusicBrainz"
+has "the better copy is starred" "$out" "2\* +$dup2 "
+eq "Enter keeps the higher bitrate" "$(dsum)" "[('quarantine', '', [$dup1], None)]"
+rm -f "$DEC"
+session Wiv x q
+eq "x skips (never again) naming both copies" "$(dsum)" "[('skip', '', [$wiv1, $wiv2], None)]"
+rm -f "$DEC"
+session Wiv n q
+eq "n saves nothing: it is asked again next time" "$(cat "$DEC" 2> /dev/null)" ""
+rm -f "$DEC"
+
+# ---- ? and Enter with no suggestion
+session "Part Band" '' '?' '' q
+eq "Enter on a screen with no suggestion asks again, twice, and never acts" \
+    "$(printf '%s\n' "$out" | grep -c 'no suggestion for this screen')" 2
+eq "and saved nothing" "$(cat "$DEC" 2> /dev/null)" ""
+has "? lists the answers, one line each" "$out" "1-1 +pin that edition"
+has "with the ones every screen has" "$out" "x +never ask again"
+has "and k" "$out" "k +keep as it is"
+session "Part Band" bogus q
+has "an unknown answer is said, with the way to the list" "$out" "not an answer on this screen \(\? lists them\)"
+
+# ---- a twin screen: the same YouTube video, a bare '- Topic' file beside the matched one (Akane)
+akane_m=$(id_of 'Color Me Blue' 'Akane/') akane_b=$(id_of 'Color Me Blue' 'Akane - Topic')
+session Akane '' q
+has "the twin has a screen of its own, after the duplicates" "$out" "\[1/1\] twin       Akane - Color Me Blue \(2 rows, video\)"
+has "it lists the rows with their release or (bare)" "$out" "1\* +$akane_m +Opus .*ffffffff +/music/Akane/Color Me Blue/01 Color Me Blue.opus"
+has "the bare one with its offset" "$out" "2 +$akane_b +Opus .*\(\+0.00 s\) +\(bare\) +/music/Akane - Topic/Color Me Blue.opus"
+has "and says why: the video" "$out" "video twin: the same YouTube video \(vid00000012\)"
+has "Enter is r" "$out" "\[Enter = r: the same YouTube video \(vid00000012\)\]"
+eq "Enter quarantines the bare twin, the matched file stays" "$(dsum)" "[('quarantine', '', [$akane_b], None)]"
+rm -f "$DEC"
+session Akane 1 q
+eq "a number keeps that row: here the first, so the bare one goes" "$(dsum)" "[('quarantine', '', [$akane_b], None)]"
+rm -f "$DEC"
+session Akane 2 q
+eq "keeping the other quarantines the matched file" "$(dsum)" "[('quarantine', '', [$akane_m], None)]"
+rm -f "$DEC"
+session Akane x q
+eq "x names the row to drop; the keeper stays on its album screen" "$(dsum)" "[('skip', '', [$akane_b], None)]"
+rm -f "$DEC"
+decide quarantine "$akane_b"
+session Akane q
+has "a twin whose row has a quarantine waiting is not asked again" "$out" "0 to review matching 'Akane'"
+rm -f "$DEC"
+sqlite3 -cmd '.timeout 20000' "$DBF" "update items set length=20.0 where id=$akane_b"
+session Akane q
+has "twins are shown by the audit's record, but only while the files are as it saw them" "$out" "\[1/1\] twin"
+cp "$LIBD/music/Akane - Topic/Color Me Blue.opus" "$T/akane.opus"
+printf 'x' >> "$LIBD/music/Akane - Topic/Color Me Blue.opus"
+session Akane q
+has "a file that changed since the audit is not offered" "$out" "0 to review matching 'Akane'"
+cp "$T/akane.opus" "$LIBD/music/Akane - Topic/Color Me Blue.opus"
+rm -f "$T/akane.opus"
+sqlite3 -cmd '.timeout 20000' "$DBF" "update items set length=2.0 where id=$akane_b"
+
+# ---- an album screen that holds twins: they first, then the pin, in one screen
+tw_topic=$(id_of 'Tw Two' 'Topic')
+session "Twin" n '' '' q
+has "the twin screen comes first" "$out" "\[1/2\] twin       Twin Band - Tw Two \(2 rows, video\)"
+has "the album screen offers the twins first" "$out" "twins in this album:"
+has "with n worded for here" "$out" "n leave them, go on, x never ask again"
+has "and then the edition, suggested" "$out" "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+eq "Enter, Enter: the bare twin to the quarantine, then the release pinned for the rest" \
+    "$(ds4 "[(d['action'], d.get('release', '')[-3:], sorted(t['id'] for t in d['targets']), d.get('map')) for d in ds]")" \
+    "[('quarantine', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
+rm -f "$DEC"
+session "Twin" n n q
+has "n leaves the twins and goes on to the album question" "$out" "1\) ${TWNR:0:8} +3/4 exact 3 max 0s"
+eq "which saved nothing yet" "$(cat "$DEC" 2> /dev/null)" ""
+rm -f "$DEC"
+
+# ---- the edition table: a flag sinks an edition, exact lengths rank, numbers stay put
+session "Clan Band" q
+has "the table shows the id, what is covered and exact, the label, the track count and the format" "$out" \
+    "1\) ${CLNA:0:8} +3/3 exact 3 max 0s +Clan Album +2018 +XW +Stub Records +4 tr +Digital Media"
+has "the second edition's description is shown" "$out" "2\) ${CLNB:0:8} .*\[Dolby Atmos mix\]"
+eq "the Atmos mix is ranked below the plain edition although its track count is nearer the files'" \
+    "$(printf '%s\n' "$out" | grep -E '^  [12]\) ' | cut -c6-13 | tr '\n' ' ')" "${CLNA:0:8} ${CLNB:0:8} "
+has "the plain edition is suggested" "$out" "\[Enter = 1: edition ${CLNA:0:8} takes all 3 files, 3 of them exact\]"
+session "Clan Band" '' q
+eq "and Enter pins it" "$(dsum)" "[('pin', '103', [$(nrows "artist = 'Clan Band'")], None)]"
+rm -f "$DEC"
+session "Kimi Band" q
+eq "CD against digital: the exact lengths rank first" \
+    "$(printf '%s\n' "$out" | grep -E '^  [12]\) ' | sed -E 's/^  ([12])\) (.{8}) +([0-9]\/[0-9] exact [0-9] max [0-9]+s).*/\1 \2 \3/' | tr '\n' '|')" \
+    "1 ${KIMC:0:8} 3/3 exact 3 max 0s|2 ${KIMD:0:8} 3/3 exact 0 max 5s|"
+session "Kimi Band" 'o 1' o2 q
+has "o prints the MusicBrainz link" "$out" "  https://musicbrainz.org/release/$KIMC(~|$)"
+has "o2 prints the second" "$out" "  https://musicbrainz.org/release/$KIMD(~|$)"
+session "Kimi Band" v1 v2 q
+has "v prints exact where a length matches" "$out" "-> 1-1 +Ki One +1:40 +exact"
+has "and the offset where it does not" "$out" "-> 1-1 +Ki One +1:43 +\(file -3.0 s\)"
+has "v shows the release id in full" "$out" "Kimi Album  2016 XW  \[$KIMC\]"
+session "Kimi Band" e "https://musicbrainz.org/release/$KIMX" q
+has "an entered id is appended with the next number, marked new" "$out" "3\) ${KIMX:0:8} +3/3 exact 3 max 0s .* new$"
+lacks_text "and the numbers of the others did not move" "$out" "1\) ${KIMX:0:8}"
+session "Kimi Band" e "$KIMX" R q
+has "R ranks the table again: the new edition (the nearest track count) moves up, no longer new" "$out" \
+    "1\) ${KIMX:0:8} +3/3 exact 3 max 0s .*by Kimi Band$"
+session "Kimi Band" 2 q
+eq "pinning the digital edition by its number" "$(dsum)" "[('pin', '105', [$(nrows "artist = 'Kimi Band'")], None)]"
+rm -f "$DEC"
+
+# ---- keep: nothing on MusicBrainz covers the files, or the editions are another artist's
+session "Nomatch Band" '' q
+has "no edition: k is suggested, with why" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$(nrows "artist = 'Nomatch Band'")], None)]"
+rm -f "$DEC"
+session "Other Band" '' q
+has "an edition credited to another artist is marked" "$out" "1\) ${OTHR:0:8} .* by Sound Team  !artist"
+has "and k is suggested" "$out" "\[Enter = k: the editions covering them are credited to another artist\]"
+eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$(nrows "artist = 'Other Band'")], None)]"
+rm -f "$DEC"
+
+# ---- scattered: folded when the album also sits on a second edition, a plain merge otherwise
+session "Regio" q
+has "a release in several rows that also sits on a second edition is not asked about" "$out" \
+    "Regional at Best: also on Regional at Best \(${RGB:0:8}\); decided on the album screen"
+lacks_text "there is no scattered screen for it" "$out" "\] scattered"
+has "the album screen shows both editions" "$out" "2\) ${RGB:0:8} "
+eq "and saved nothing" "$(cat "$DEC" 2> /dev/null)" ""
+session "Blur" '?' '' q
+has "one edition: the scattered screen is shown" "$out" "\[1/1\] scattered  Blur Band - Blur Album \(2 album rows\)"
+has "? lists m, one line" "$out" " m +merge into one album row$"
+has "Enter is m, with why" "$out" "\[Enter = m: one edition holds all 3 tracks, in 2 album rows\]"
+eq "Enter merges them" "$(dsum)" "[('merge', '115', [$(nrows "artist = 'Blur Band'")], None)]"
+rm -f "$DEC"
+
+# ---- the end of a session: what is queued, the command to run, and --force when it is over the limit
+session "Blur" '' q
+has "the summary counts the decisions and the files, by action" "$out" \
+    "1 decision\(s\) saved, 3 file\(s\) queued \(merge 3\); next: media-sync --apply --dry-run$"
+lacks_text "no --force below the limit" "$out" "needs --force"
+has "and says when the apply runs by itself" "$out" "the apply runs by itself Sundays 04:00 \(it refuses more than 200 files without --force\)"
+has "the shell passes the limit on" "$(cat "$STACK/scripts/media-import.sh")" "--max-files 200"
+sed 's/--max-files 200/--max-files 2/' "$STACK/scripts/media-import.sh" > "$STACK/scripts/media-import-low.sh"
+chmod +x "$STACK/scripts/media-import-low.sh"
+rm -f "$DEC"
+out=$(printf '%s\n' '' q | "$STACK/scripts/media-import-low.sh" --library Blur 2>&1)
+has "over the limit the summary says --force is needed" "$out" \
+    "3 file\(s\) queued \(merge 3\); next: media-sync --apply --dry-run - over the limit of 2 files, so the apply needs --force"
+rm -f "$DEC" "$STACK/scripts/media-import-low.sh"
+out=$(printf 'q\n' | media-import --library Blur 2>&1)
+has "with nothing waiting there is only the first line" "$out" "0 decision\(s\) saved this session, 1 left to review$"
+lacks_text "and no second" "$out" "file\(s\) queued"
+
+# ---- length-aware matching, L and a: pins that carry a map, and the strict apply doing what the screen showed
+sqlite3 -cmd '.timeout 20000' "$DBF" "update items set length=238.4 where title='Lv One'; update items set length=485.3 where title='Lv Two'"
+lv1=$(id_of 'Lv One' 'Live Band') lv2=$(id_of 'Lv Two' 'Live Band') lv3=$(id_of 'Lv Three' 'Live Band')
+session "Live Band" v1 '' q
+has "a (live) the files lack still pairs, by length" "$out" "Lv One +-> 1-1 +Lv One \(live\) +3:58 +exact"
+has "and the screen says those pairs are saved with a map" "$out" "Lv One .* exact  \(title differs: saved with a map\)"
+lacks_text "while the pair the strict rule makes needs none" "$out" "Lv Three .* map"
+has "the edition takes all three files and is suggested" "$out" "\[Enter = 1: edition ${LIVR:0:8} takes all 3 files, 3 of them exact\]"
+eq "Enter saves a pin with a map for the two titles that differ" \
+    "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
+    "[('pin', '110', [$lv1, $lv2, $lv3], {'$lv1': '0110-t1', '$lv2': '0110-t2'})]"
+live_dec=$(cat "$DEC")
+rm -f "$DEC"
+# L: an English-titled set against a Japanese-titled release, paired by length
+eat1=$(id_of 'Eat One' 'Monster Band') eat2=$(id_of 'Eat Two' 'Monster Band') eat3=$(id_of 'Eat Three' 'Monster Band')
+session "Monster" q
+has "no edition is known before an id is entered: k is suggested" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+session "Monster" e "$MONR" L y
+has "an entered Japanese edition covers none of the English-titled files" "$out" "1\) ${MONR:0:8} +0/3 exact 0 max 0s +私を喰べたい、ひとでなし"
+has "L proposes the pairs by length" "$out" "$eat1 +Eat One .* -> 1-1 +私を喰べたい"
+has "all three" "$out" "$eat3 +Eat Three .* -> 1-3 +終わりの歌"
+has "asks before it pins" "$out" "pair these 3 file\(s\) and pin edition 1\? \[y/N\]"
+eq "y saves a pin with a map for every pair" \
+    "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
+    "[('pin', '111', [$eat1, $eat2, $eat3], {'$eat1': '0111-t1', '$eat2': '0111-t2', '$eat3': '0111-t3'})]"
+monster_dec=$(cat "$DEC")
+rm -f "$DEC"
+session "Monster" e "$MONR" L n q
+has "L shows the pairs" "$out" "$eat2 +Eat Two .* -> 1-2 +ひとでなし"
+has "and answering n saves nothing" "$out" "0 decision\(s\) saved this session"
+eq "no decision" "$(cat "$DEC" 2> /dev/null)" ""
+session "Clan Band" L q
+has "L with nothing unmatched says so" "$out" "no unmatched file has exactly one free track of its length \(within 1.5 s\)"
+# a: pairs by hand, validated, accumulating
+hd1=$(id_of 'Hd One' 'Hand Band') hd2=$(id_of 'Hd Two' 'Hand Band') hd3=$(id_of 'Hd Three' 'Hand Band')
+session "Hand Band" a "a 99999=1" "a $hd1=9" "a $hd1=3 $hd2=3" "a $hd1=3" "a $hd2=1-1 $hd3=2" 1
+has "a alone lists the unpaired files" "$out" "files not paired on edition 1:"
+has "and the tracks nobody has" "$out" "tracks nobody has:"
+has "a file that is not on the screen is refused" "$out" "99999 is not a file of this screen"
+has "a track the edition lacks is refused" "$out" "edition 1 has no track '9'"
+has "two files for one track are refused" "$out" "two files for one track"
+has "a pairing shows the mapping" "$out" "Hd One +-> 1-3 +Gamma .*\(title differs: saved with a map\)"
+has "and says what to enter" "$out" "enter 1 to pin it, or pair more"
+has "a second answer adds to the first" "$out" "Hd Two .* -> 1-1 +Alpha"
+eq "the number pins with the map of everything paired by hand" \
+    "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
+    "[('pin', '112', [$hd1, $hd2, $hd3], {'$hd1': '0112-t3', '$hd2': '0112-t1', '$hd3': '0112-t2'})]"
+hand_dec=$(cat "$DEC")
+rm -f "$DEC"
+# the three decisions, as the menu wrote them, through the apply: dry run first, then the real thing
+printf '%s\n' "$live_dec" "$monster_dec" "$hand_dec" > "$DEC"
+ms --apply --dry-run
+has "the dry run lists the three pins" "$OUT" "apply: 3 decision\(s\) to apply, 9 file\(s\)"
+ms --apply
+eq "the strict apply pinned them all" "$(printf '%s\n' "$OUT" | grep -c 'applied: 3 of 3 file(s) pinned')" 3
+eq "the (live) titles took the release's, the strict pair too" \
+    "$(q "select group_concat(title || '|' || mb_releasetrackid, ' ') from (select * from items where mb_albumid='$LIVR' order by track)")" \
+    "Lv One (live)|0110-t1 Lv Two (live)|0110-t2 Lv Three|0110-t3"
+eq "the English titles took the Japanese ones, by length" \
+    "$(q "select group_concat(title || '|' || mb_releasetrackid, ' ') from (select * from items where mb_albumid='$MONR' order by track)")" \
+    "私を喰べたい|0111-t1 ひとでなし|0111-t2 終わりの歌|0111-t3"
+eq "and the hand pairs crossed the titles as told" \
+    "$(q "select group_concat(title || '|' || mb_releasetrackid, ' ') from (select * from items where mb_albumid='$HNDR' order by track)")" \
+    "Alpha|0112-t1 Beta|0112-t2 Gamma|0112-t3"
+clear_logs
+
+# ---------------------------------------------------------------------------------
+section "4b: review fixes - search errors, exact lengths, folded releases, twins on two releases, probable twins"
+# ---------------------------------------------------------------------------------
+# ---- x on a twin screen skips the rows to drop, not the keeper (its album screen still offers it)
+tw_topic=$(id_of 'Tw Two' 'Topic')
+session "Twin" x q
+eq "x on a twin screen names the row to drop only" "$(dsum)" "[('skip', '', [$tw_topic], None)]"
+session "Twin" '' q
+has "the keeper is still on the album screen, which takes all three files" "$out" \
+    "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+has "with only the bare twin counted as decided" "$out" "\(1 of its rows are decided already; these are the rest\)"
+eq "Enter pins the keeper with the others" "$(dsum)" \
+    "[('skip', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
+rm -f "$DEC"
+session "Twin" n x '' q
+has "x on the twin inside the album screen does not hide the keeper from it" "$out" \
+    "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+has "and again only the bare twin is decided" "$out" "\(1 of its rows are decided already; these are the rest\)"
+eq "so the skip is the bare twin and the pin has all three" "$(dsum)" \
+    "[('skip', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
+rm -f "$DEC"
+
+# ---- a release in several album rows that also sits on a second edition on the album screen is folded
+session "Regio" q
+has "a second edition that is on the album screen still folds the release into it" "$out" \
+    "Regional at Best: also on Regional at Best \(${RGB:0:8}\); decided on the album screen"
+has "and the folded release is not counted: the album is the only screen" "$out" \
+    "0 decision\(s\) saved this session, 1 left to review"
+
+# ---- fixtures of their own: every case below has an artist, so a query narrows a session to it
+FARR=d00d0301-0000-4000-8000-000000000301 NEARR=d00d0302-0000-4000-8000-000000000302
+RVA=d00d0303-0000-4000-8000-000000000303 RVB=d00d0304-0000-4000-8000-000000000304
+SKA=d00d0305-0000-4000-8000-000000000305 SKB=d00d0306-0000-4000-8000-000000000306
+DNR=d00d0307-0000-4000-8000-000000000307
+mkrel "$FARR" "Far Album" "Far Band" 2010 "$D" "" "Far One|60;Far Two|60;Far Three|60"
+mkrel "$NEARR" "Near Album" "Near Band" 2010 "$D" "" "Nr One|6;Nr Two|6;Nr Three|6"
+mkrel "$RVA" "Rv Album" "Rv Band" 2011 "$D" "" "Rv One|2;Rv Two|2;Rv Three|2"
+mkrel "$RVB" "Rv Album" "Rv Band" 2012 "$D" "" "Rv Four|2;Rv Five|2"
+mkrel "$SKA" "Sk Album" "Sk Band" 2011 "$D" "" "Sk One|2;Sk Two|2;Sk Three|2"
+mkrel "$SKB" "Sk Album" "Sk Band" 2012 "$D" "" "Sk Four|2;Sk Five|2"
+printf '{"_status": 503}' > "$P4D/fx/$DNR.json"
+p4_reset
+flac_len() {  # <music-relative path> <artist> <title> <seconds>
+    mkdir -p "$(dirname "$LIBD/music/$1")"
+    FREQ=$((FREQ + 7))
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$FREQ:duration=$4" -c:a flac -metadata "artist=$2" \
+        -metadata "title=$3" "$LIBD/music/$1"
+}
+album_files "Far Band" "Far Album" "Far One" "Far Two" "Far Three"
+album_files "Near Band" "Near Album" "Nr One" "Nr Two" "Nr Three"
+album_files "Lost Band" "Lost Album" "Ls One" "Ls Two" "Ls Three"
+album_files "Down Band" "Down Album" "Dn One" "Dn Two" "Dn Three"
+for b in Rv Sk; do
+    album_files "$b Band" "$b Album" "$b One" "$b Two"
+    tone "$b Band/B/03 $b Three.opus" "$b Band" "$b Three" "$b Album" 3
+    tone "$b Band/C/04 $b Four.opus" "$b Band" "$b Four" "$b Album" 4
+done
+# the same song on an album and on a compilation, two releases
+tone "Duo Man/Studio/01 Duo Song.opus" "Duo Man" "Duo Song" "Studio Album" 1
+tone "Duo Man/Hits/01 Duo Song.opus" "Duo Man" "Duo Song" "Greatest Hits" 1
+# probable twins: a YouTube Opus against the FLAC of the same song, 2 s longer, 2 s shorter, 2.4 s longer
+TONE_COMMENT=$(watch 31) tone "Bounce Man - Topic/Bounce Man.opus" "Bounce Man - Topic" "Bounce Man"
+flac_len "Bounce Man/Bounce Man.flac" "Bounce Man" "Bounce Man" 2
+TONE_COMMENT=$(watch 32) tone "Negative Man - Topic/Negative Man.opus" "Negative Man - Topic" "Negative Man"
+flac_len "Negative Man/Negative Man.flac" "Negative Man" "Negative Man" 2
+TONE_COMMENT=$(watch 33) tone "Fractional Man - Topic/Fractional Man.opus" "Fractional Man - Topic" "Fractional Man"
+flac_len "Fractional Man/Fractional Man.flac" "Fractional Man" "Fractional Man" 2
+beet -c /config/as-album.yaml import /music/Far\ Band /music/Near\ Band /music/Lost\ Band /music/Down\ Band \
+    /music/Rv\ Band/Rv\ Album /music/Rv\ Band/B /music/Rv\ Band/C /music/Sk\ Band/Sk\ Album /music/Sk\ Band/B \
+    /music/Sk\ Band/C /music/Duo\ Man/Studio /music/Duo\ Man/Hits > /dev/null 2>&1
+beet -c /config/adopt.yaml import -s /music/Bounce\ Man\ -\ Topic /music/Bounce\ Man /music/Negative\ Man\ -\ Topic \
+    /music/Negative\ Man /music/Fractional\ Man\ -\ Topic /music/Fractional\ Man > /dev/null 2>&1
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set mb_albumid='$DNR' where title in ('Dn One', 'Dn Two');
+    update items set mb_albumid='$RVA' where title in ('Rv One', 'Rv Two', 'Rv Three');
+    update items set mb_albumid='$RVB' where title='Rv Four';
+    update items set mb_albumid='$SKA' where title in ('Sk One', 'Sk Two', 'Sk Three');
+    update items set mb_albumid='$SKB' where title='Sk Four';
+    update items set mb_albumid='ffffffff-0000-4000-8000-000000000031' where title='Duo Song' and album='Studio Album';
+    update items set mb_albumid='ffffffff-0000-4000-8000-000000000032' where title='Duo Song' and album='Greatest Hits';
+    update items set length=200.0 where title='Duo Song' and album='Studio Album';
+    update items set length=200.3 where title='Duo Song' and album='Greatest Hits';
+    update items set length=19.0 where title='Bounce Man' and format='Opus';
+    update items set length=17.0 where title='Bounce Man' and format='FLAC';
+    update items set length=17.0 where title='Negative Man' and format='Opus';
+    update items set length=19.0 where title='Negative Man' and format='FLAC';
+    update items set length=187.4 where title='Fractional Man' and format='Opus';
+    update items set length=185.0 where title='Fractional Man' and format='FLAC';
+    update items set mb_albumid='ffffffff-0000-4000-8000-0000000' || printf('%05d', id), mb_releasetrackid='t-' || id
+        where format='FLAC' and title like '%Man';
+    update albums set mb_albumid=(select max(mb_albumid) from items where album_id = albums.id)
+        where id in (select album_id from items where artist in ('Rv Band', 'Sk Band', 'Duo Man', 'Down Band'));
+    insert into item_attributes (entity_id, key, value) select id, 'reviewed', '1' from items where title='Rv Four';"
+sk_four=$(row_of 'Sk Four')
+ms --audit
+eq "fixture: --audit exits 0" "$RC" 0
+
+# ---- an empty edition table is "nothing found" only after a search that went through
+eq "the audit records, per album, the errors its lookups hit: none for a search that found nothing" \
+    "$(jq4x "[g['errors'] for g in d['groups'] if g['album'] == 'Lost Album']")" "[0]"
+eq "and one for the carried release MusicBrainz could not be asked for" \
+    "$(jq4x "[g['errors'] > 0 for g in d['groups'] if g['album'] == 'Down Album']")" "[True]"
+lost=$(nrows "artist = 'Lost Band'")
+session "Lost Band" '' q
+has "after a search that found nothing, k is suggested and says what is known" "$out" \
+    "\[Enter = k: the MusicBrainz search found no edition\]"
+eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$lost], None)]"
+rm -f "$DEC"
+cp "$CJ" "$T/candidates.keep"
+"$PY" - "$CJ" << 'PYEOF2'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for g in d["groups"]:
+    if g["album"] == "Lost Album":
+        g["errors"] = 1
+json.dump(d, open(sys.argv[1], "w"))
+PYEOF2
+session "Lost Band" '' q
+lacks_text "an audit whose search for the album failed suggests nothing" "$out" "Enter = k"
+has "Enter then asks again" "$out" "no suggestion for this screen"
+eq "and saves nothing" "$(cat "$DEC" 2> /dev/null)" ""
+rm -f "$CJ"
+session "Lost Band" '' q
+has "with no audit the review says so" "$out" "no audit yet"
+lacks_text "and does not claim MusicBrainz has nothing" "$out" "Enter = k"
+eq "a stray Enter saves nothing" "$(cat "$DEC" 2> /dev/null)" ""
+cp "$T/candidates.keep" "$CJ"
+rm -f "$T/candidates.keep" "$DEC"
+
+# ---- the pin is suggested for lengths that fit, not for the same titles at another length
+session "Far Band" '' q
+has "titles that all match with lengths 58 s off are shown" "$out" "1\) ${FARR:0:8} +3/3 exact 0 max 58s"
+lacks_text "but not suggested" "$out" "Enter = 1"
+has "Enter asks again" "$out" "no suggestion for this screen"
+eq "and saves nothing" "$(cat "$DEC" 2> /dev/null)" ""
+session "Far Band" 1 q
+eq "the pin is one number away" "$(dsum)" "[('pin', '301', [$(nrows "artist = 'Far Band'")], None)]"
+rm -f "$DEC"
+session "Near Band" '' q
+has "lengths 4 s off (a digital release) are still suggested, with how many are exact" "$out" \
+    "\[Enter = 1: edition ${NEARR:0:8} takes all 3 files, 0 of them exact\]"
+rm -f "$DEC"
+
+# ---- a release in several album rows that also sits on a second edition: folded only when that
+# edition's rows are on the album screen
+session "Rv Band" '' q
+has "a second edition whose row is reviewed is not on the album screen: the release is a plain merge" "$out" \
+    "\[1/1\] scattered  Rv Band - Rv Album \(2 album rows\)"
+lacks_text "so it is not folded" "$out" "decided on the album screen"
+has "Enter is m" "$out" "\[Enter = m: one edition holds all 3 tracks, in 2 album rows\]"
+eq "Enter merges the release's rows" "$(dsum)" "[('merge', '303', [$(nrows "title in ('Rv One', 'Rv Two', 'Rv Three')")], None)]"
+has "and nothing is left to review" "$out" "1 decision\(s\) saved this session, 0 left to review"
+rm -f "$DEC"
+decide skip "$sk_four"
+session "Sk Band" '' q
+has "a second edition whose row is skipped is not on the album screen either: the merge comes first" "$out" \
+    "\[1/2\] scattered  Sk Band - Sk Album \(2 album rows\)"
+lacks_text "so it is not folded" "$out" "decided on the album screen"
+eq "Enter merges the release's rows" "$(ds4 "[(d['action'], d.get('release', '')[-3:]) for d in ds][1:]")" "[('merge', '305')]"
+rm -f "$DEC"
+
+# ---- the same recording on an album and on a compilation is two wanted tracks
+eq "the audit lists no twin for a song on two releases" \
+    "$(jq4x "[t['kind'] for t in d['twins'] if 'Duo' in t['keeper']['artist']]")" "[]"
+session "Duo Man" q
+has "and the review has no twin screen for it" "$out" "0 to review matching 'Duo Man'"
+
+# ---- probable twins: the offset column, the suggestion, which row stays
+b_flac=$(q "select id from items where artist='Bounce Man' and format='FLAC'")
+b_opus=$(q "select id from items where artist='Bounce Man - Topic'")
+session "Bounce Man" '' q
+has "the probable twin has a screen, the FLAC starred" "$out" "\[1/1\] twin       Bounce Man - Bounce Man \(2 rows, probable\)"
+has "the FLAC (the release's file) is the one that stays" "$out" "1\* +$b_flac +FLAC .* 17.00 s +ffffffff +/music/Bounce Man/Bounce Man.flac"
+has "the YouTube Opus shows its offset" "$out" "2 +$b_opus +Opus .* 19.00 s \(\+2.00 s\) +\(bare\) +/music/Bounce Man - Topic/"
+has "the screen says what kind of twin it is" "$out" "probable twin: the same title, \+2 s: probably the same recording from another source"
+has "Enter is r, with the offset in its reason" "$out" \
+    "\[Enter = r: the same title, \+2 s: probably the same recording from another source\]"
+eq "Enter quarantines the YouTube row, not the FLAC" "$(dsum)" "[('quarantine', '', [$b_opus], None)]"
+rm -f "$DEC"
+session "Negative Man" '' q
+has "a copy shorter than the keeper shows a negative offset" "$out" "2 +[0-9]+ +Opus .* 17.00 s \(-2.00 s\)"
+has "and the reason says so" "$out" "\[Enter = r: the same title, -2 s: probably"
+eq "Enter still quarantines the YouTube row" "$(dsum)" \
+    "[('quarantine', '', [$(q "select id from items where artist='Negative Man - Topic'")], None)]"
+rm -f "$DEC"
+session "Fractional Man" '' q
+has "a fractional gap shows hundredths" "$out" "2 +[0-9]+ +Opus .* 187.40 s \(\+2.40 s\)"
+has "and the reason rounds it" "$out" "\[Enter = r: the same title, \+2 s: probably"
+rm -f "$DEC"
+session "Bounce Man" 2 q
+eq "a number keeps that row instead: the FLAC goes" "$(dsum)" "[('quarantine', '', [$b_flac], None)]"
+rm -f "$DEC"
+
+# ---------------------------------------------------------------------------------
+section "4b: loose files - a copy needs the same length, the rest are given a row"
+# ---------------------------------------------------------------------------------
+p4_reset
+tone "Loose Band/Reg/01 Same Song.opus" "Loose Band" "Same Song" "Reg Album" 1 10
+beet -c /config/adopt.yaml import -s /music/Loose\ Band/Reg > /dev/null 2>&1
+# loose beside it: an exact copy, another cut (+4 s), another recording (+30 s) and a track the library never had
+tone "Loose Band/Same Song.opus" "Loose Band" "Same Song" "" "" 10
+tone "Loose Band/Same Song.1.opus" "Loose Band" "Same Song" "" "" 14
+tone "Loose Band/Same Song.2.opus" "Loose Band" "Same Song" "" "" 40
+tone "Loose Band/Never Had.opus" "Loose Band" "Never Had" "" "" 5
+ms --audit
+eq "--audit exits 0" "$RC" 0
+eq "only the file of the same length is a copy of the registered row" \
+    "$(jq4 "sorted((f['path'].rsplit('/', 1)[1], len(f['copy_of'])) for f in d['unregistered'])")" \
+    "[('Never Had.opus', 0), ('Same Song.1.opus', 0), ('Same Song.2.opus', 0), ('Same Song.opus', 1)]"
+eq "a same-titled file 4 s off is listed as another cut, with its offset" \
+    "$(jq4 "[f['other_cut'][0]['offset'] for f in d['unregistered'] if f['path'].endswith('.1.opus')]")" "[4.0]"
+eq "one 30 s off is listed as neither" \
+    "$(jq4 "[(f['copy_of'], f['other_cut']) for f in d['unregistered'] if f['path'].endswith('.2.opus')]")" "[([], [])]"
+session "Loose Band" n '' q
+has "the exact copy keeps its copy screen" "$out" "copy       Loose Band - Same Song"
+has "the other three are one loose screen, not copies" "$out" "loose      /music/Loose Band - \(no album tag\) \(3 files not in the library\)"
+has "it shows the other cut against its row" "$out" "another cut of row [0-9]+ \(\+4\.0 s\)"
+has "Enter on it registers: nothing is quarantined" "$out" "\[Enter = b: they are not copies, so nothing is quarantined"
+eq "the decision is one register of the three files" \
+    "$(ds4 "[(d['action'], sorted(t['path'].rsplit('/', 1)[1] for t in d['targets'])) for d in ds]")" \
+    "[('register', ['Never Had.opus', 'Same Song.1.opus', 'Same Song.2.opus'])]"
+ms --apply
+has "the apply registers them" "$OUT" "applied: 3 file\(s\) registered"
+eq "so the library has four rows" "$(q "select count(*) from items")" 4
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "and undo takes the rows away again" "$(q "select count(*) from items")" 1
+rm -f "$DEC"
+
+# ---------------------------------------------------------------------------------
+section "4b: replay of the first session"
+# ---------------------------------------------------------------------------------
+# The acceptance test of the phase: one library built from the cases of the first real review (98
+# screens, ~3 hours), reviewed in ONE scripted session where every answer is a bare Enter except
+# the one place a person has to choose (an English-titled set against a Japanese-titled release:
+# enter the id, L, y), then applied, compared with the library it should be, and undone. Releases
+# come from the stub only; the containers get a DNS server that answers nothing, so a lookup
+# anywhere else would fail rather than pass quietly.
+RW=d00d0201-0000-4000-8000-000000000201 RGX=d00d0202-0000-4000-8000-000000000202
+RGY=d00d0203-0000-4000-8000-000000000203 RBL=d00d0204-0000-4000-8000-000000000204
+RCA=d00d0205-0000-4000-8000-000000000205 RCB=d00d0206-0000-4000-8000-000000000206
+RKD=d00d0207-0000-4000-8000-000000000207 RKC=d00d0208-0000-4000-8000-000000000208
+RLV=d00d0209-0000-4000-8000-000000000209 RMN=d00d0210-0000-4000-8000-000000000210
+RVS=d00d0211-0000-4000-8000-000000000211
+mkrel "$RW" "Rp Wiv Album" "Rp Wiv" 2020 "$D" "" "rp i love u.|122.086"
+mkrel "$RGX" "Rp Regional" "Rp Regio" 2011 "$D" "" "Rg One|2;Rg Two|2;Rg Three|2;Rg Four|2;Rg Five|2"
+mkrel "$RGY" "Rp Regional" "Rp Regio" 2012 "$D" "" "Rg Four|2;Rg Six|2"
+mkrel "$RBL" "Rp Blur Album" "Rp Blur" 2015 "$D" "" "Bl One|2;Bl Two|2;Bl Three|2"
+mkrel "$RCA" "Rp Clan Album" "Rp Clan" 2018 "$D" "" "Cl One|2;Cl Two|2;Cl Three|2;Cl Bonus|2"
+mkrel "$RCB" "Rp Clan Album" "Rp Clan" 2018 "$D" "Dolby Atmos mix" "Cl One|2;Cl Two|2;Cl Three|2"
+mkrel "$RKD" "Rp Kimi Album" "Rp Kimi" 2016 "$D" "" "Ki One|103;Ki Two|204;Ki Three|305"
+mkrel "$RKC" "Rp Kimi Album" "Rp Kimi" 2016 "CD" "" "Ki One|100;Ki Two|200;Ki Three|300;Ki Extra|10"
+mkrel "$RLV" "Rp Live Album" "Rp Live" 2015 "$D" "" "Lv One (live)|238.4;Lv Two (live)|485.3;Lv Three|100"
+mkrel "$RMN" "私を喰べたい、ひとでなし" "Rp Yokai" 2022 "$D" "" "私を喰べたい|31;ひとでなし|42;終わりの歌|53"
+mkrel "$RVS" "Rp Vessel Album" "Rp Vessel" 2013 "$D" "" "Ve One|2;Ve Two|2;Ve Three|2"
+
+p4_reset
+# a FLAC with an album tag, as the CD rip of a track the library also holds as Opus
+flac_album() {  # <music-relative path> <artist> <title> <album> <track>
+    local out="$LIBD/music/$1"
+    mkdir -p "$(dirname "$out")"
+    FREQ=$((FREQ + 7))
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$FREQ:duration=2" -c:a flac -metadata "artist=$2" \
+        -metadata "title=$3" -metadata "album=$4" -metadata "albumartist=$2" -metadata "track=$5" "$out"
+}
+# wiv: one release track in two rows, 122.09 s against 122.79 s (the official length is 122.086)
+tone "Rp Wiv/Copy 1/i love u..opus" "Rp Wiv" "rp i love u."
+tone "Rp Wiv/Copy 2/i love u..opus" "Rp Wiv" "rp i love u. b"
+# Akane: the matched file and the bare '- Topic' download of one video
+TONE_COMMENT=$(watch 21) tone "Rp Akane/Color Me Blue/01 Color Me Blue.opus" "Rp Akane" "Rp Color Me Blue" "Rp Color Me Blue" 1
+TONE_COMMENT=$(watch 21) tone "Rp Akane - Topic/Rp Color Me Blue.opus" "Rp Akane - Topic" "Rp Color Me Blue"
+# a twin that spans two album groups: the album's track and the single it was also downloaded as
+tone "Rp Span/Span Album/01 Sp One.opus" "Rp Span" "Sp One" "Span Album" 1
+TONE_COMMENT=$(watch 22) tone "Rp Span/Span Album/02 Sp Two.opus" "Rp Span" "Sp Two" "Span Album" 2
+TONE_COMMENT=$(watch 22) tone "Rp Span - Topic/Span Single/01 Sp Two.opus" "Rp Span - Topic" "Sp Two" "Span Single" 1
+# Regional at Best: one release in two album rows (A) that also sits on a second edition (B)
+album_files "Rp Regio" "Rp Regional" "Rg One" "Rg Two"
+tone "Rp Regio/B/03 Rg Three.opus" "Rp Regio" "Rg Three" "Rp Regional" 3
+tone "Rp Regio/C/04 Rg Four.opus" "Rp Regio" "Rg Four" "Rp Regional" 4
+# Blurryface: one edition in two album rows, and bare copies of two of its tracks
+album_files "Rp Blur" "Rp Blur Album" "Bl One" "Bl Two"
+tone "Rp Blur/B/03 Bl Three.opus" "Rp Blur" "Bl Three" "Rp Blur Album" 3
+tone "Rp Blur - Topic/Bl One.opus" "Rp Blur - Topic" "Bl One"
+tone "Rp Blur - Topic/Bl Two.opus" "Rp Blur - Topic" "Bl Two"
+# Clancy: a plain edition beside a Dolby Atmos mix; Kimi: a digital edition 3 s off against the CD
+album_files "Rp Clan" "Rp Clan Album" "Cl One" "Cl Two" "Cl Three"
+album_files "Rp Kimi" "Rp Kimi Album" "Ki One" "Ki Two" "Ki Three"
+# the release has (live) in two titles; a Japanese-titled release against English-titled files; no release at all
+album_files "Rp Live" "Rp Live Album" "Lv One" "Lv Two" "Lv Three"
+album_files "Rp Yokai" "Yokai OST" "Eat One" "Eat Two" "Eat Three"
+album_files "Rp Nomatch" "Rp Nomatch Album" "Nm One" "Nm Two" "Nm Three"
+# Vessel: an Opus album and the FLAC of one of its tracks, the two tied on length
+album_files "Rp Vessel" "Rp Vessel Album" "Ve One" "Ve Two" "Ve Three"
+flac_album "Rp Vessel/Flac/02 Ve Two.flac" "Rp Vessel" "Ve Two" "Rp Vessel Album" 2
+beet -c /config/as-album.yaml import /music/Rp\ Akane/Color\ Me\ Blue /music/Rp\ Span /music/Rp\ Span\ -\ Topic \
+    /music/Rp\ Regio/Rp\ Regional /music/Rp\ Regio/B /music/Rp\ Regio/C /music/Rp\ Blur/Rp\ Blur\ Album /music/Rp\ Blur/B \
+    /music/Rp\ Clan /music/Rp\ Kimi /music/Rp\ Live /music/Rp\ Yokai /music/Rp\ Nomatch /music/Rp\ Vessel > /dev/null 2>&1
+beet -c /config/adopt.yaml import -s /music/Rp\ Wiv /music/Rp\ Akane\ -\ Topic /music/Rp\ Blur\ -\ Topic > /dev/null 2>&1
+# the release pass's work: the matched rows and the lengths the screens are about
+sqlite3 -cmd '.timeout 20000' "$DBF" "
+    update items set title='rp i love u.' where title='rp i love u. b';
+    update items set mb_albumid='$RW', mb_releasetrackid='0201-t1', length=122.09, bitrate=64000
+        where title='rp i love u.' and cast(path as text) like '%Copy 1%';
+    update items set mb_albumid='$RW', mb_releasetrackid='0201-t1', length=122.79, bitrate=96000
+        where title='rp i love u.' and cast(path as text) like '%Copy 2%';
+    update items set mb_albumid='ffffffff-0000-4000-8000-000000000021' where artist = 'Rp Akane';
+    update items set mb_albumid='ffffffff-0000-4000-8000-000000000022' where artist = 'Rp Span';
+    update items set mb_albumid='$RGX', mb_releasetrackid='0202-t' || track where title in ('Rg One', 'Rg Two', 'Rg Three');
+    update items set mb_albumid='$RGY', mb_releasetrackid='0203-t1' where title = 'Rg Four';
+    update items set mb_albumid='$RBL', mb_releasetrackid='0204-t' || track where artist = 'Rp Blur';
+    update items set length=100.0 where title='Ki One'; update items set length=200.0 where title='Ki Two';
+    update items set length=300.0 where title='Ki Three';
+    update items set length=238.4 where title='Lv One'; update items set length=485.3 where title='Lv Two';
+    update items set length=100.0 where title='Lv Three';
+    update items set length=31.0 where title='Eat One'; update items set length=42.2 where title='Eat Two';
+    update items set length=53.1 where title='Eat Three';"
+for t in 'Rp Akane' 'Rp Span' 'Rp Regio' 'Rp Blur'; do
+    sqlite3 -cmd '.timeout 20000' "$DBF" "
+        update albums set mb_albumid=(select max(mb_albumid) from items where album_id = albums.id)
+            where id in (select album_id from items where artist = '$t')"
+done
+eq "fixture: the cases are in the library" "$(q "select count(*) from items")" 35
+ms --audit
+eq "the audit exits 0" "$RC" 0
+has "it found the twins the session will meet: two videos, four recordings" "$OUT" \
+    "audit: twins to drop: 2 same video, 4 same recording, 0 probable"
+has "and the two releases in several album rows" "$OUT" "audit: 2 release\(s\) in several album rows \(4 rows\)"
+before=$(state4)
+
+# Names resolve nowhere from here on. The proof that this bites is a lookup that has to fail.
+export TEST_DNS=192.0.2.1
+if docker compose -f "$STACK/docker-compose.yml" run --rm -T --entrypoint /lsiopy/bin/python beets \
+        -c 'import socket; socket.gethostbyname("musicbrainz.org")' > /dev/null 2>&1 < /dev/null; then
+    bad "the containers cannot resolve a name, so only the stub (an address) can answer"
+else
+    ok "the containers cannot resolve a name, so only the stub (an address) can answer"
+fi
+
+# Enter for the duplicate, the five twins, the scattered release and the six albums with a
+# suggestion; the Japanese-titled release is the one screen with none to take: its id, L, y.
+answers=()
+for _ in $(seq 13); do answers+=(''); done
+answers+=(e "$RMN" L y)
+out=$(printf '%s\n' "${answers[@]}" | media-import --library 2>&1)
+eq "the screens, by kind" \
+    "$(printf '%s\n' "$out" | sed -nE 's/^\[[0-9]+\/[0-9]+\] ([a-z]+) .*/\1/p' | sort | uniq -c | tr -s ' \n' ' ')" \
+    " 7 album 1 duplicate 1 scattered 5 twin "
+lacks_text "no Enter met a screen without a suggestion" "$out" "no suggestion for this screen"
+has "Regional at Best-style: the scattered release on two editions is left to its album screen" "$out" \
+    "Rp Regional: also on Rp Regional \(${RGY:0:8}\); decided on the album screen"
+has "wiv: the copy of the release's length is the one Enter keeps" "$out" \
+    "\[Enter = 1: its length 122.09 s is the closest to the release's 122.09 s\]"
+has "Clancy: the plain edition is suggested over the Atmos mix" "$out" \
+    "\[Enter = 1: edition ${RCA:0:8} takes all 3 files, 3 of them exact\]"
+has "the CD edition with exact lengths is the one suggested over the digital one" "$out" \
+    "\[Enter = 1: edition ${RKC:0:8} takes all 3 files, 3 of them exact\]"
+has "Vessel: the FLAC is the twin kept, the Opus tied with it goes" "$out" "1\* +[0-9]+ +FLAC .*\(bare\) +/music/Rp Vessel/Flac/"
+has "the Nomatch album is kept as it is, by Enter" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+has "English files against the Japanese release: the pairs by length, then the question" "$out" \
+    "pair these 3 file\(s\) and pin edition 1\? \[y/N\] saved: pin 3 file\(s\) to 私を喰べたい、ひとでなし"
+has "the session ends with nothing left to review" "$out" "14 decision\(s\) saved this session, 0 left to review"
+has "and says what is queued and what to run" "$out" \
+    "14 decision\(s\) saved, 31 file\(s\) queued \(quarantine 6, merge 3, pin 19, keep 3\); next: media-sync --apply --dry-run"
+eq "the decisions: action, release, files, pairs by map" \
+    "$(ds4 "[(d['action'], d.get('release', '')[-3:], len(d['targets']), len(d.get('map') or {})) for d in ds]")" \
+    "[('quarantine', '', 1, 0), ('quarantine', '', 1, 0), ('quarantine', '', 1, 0), ('quarantine', '', 1, 0), \
+('quarantine', '', 1, 0), ('quarantine', '', 1, 0), ('merge', '204', 3, 0), ('pin', '205', 3, 0), \
+('pin', '208', 3, 0), ('pin', '209', 3, 2), ('keep', '', 3, 0), ('pin', '202', 4, 0), ('pin', '211', 3, 0), \
+('pin', '210', 3, 3)]"
+eq "the session itself changed nothing" "$(state4)" "$before"
+
+ms --apply --dry-run
+has "the dry run counts the decisions and the files" "$OUT" "apply: 14 decision\(s\) to apply, 31 file\(s\); 0 not applied"
+has "and changes nothing" "$OUT" "apply: dry run, nothing changed"
+eq "state after the dry run" "$(state4)" "$before"
+ms --apply
+eq "--apply exits 0" "$RC" 0
+has "every decision applied, none stale or superseded" "$OUT" \
+    "apply: 14 of 14 decision\(s\) applied, 29 file\(s\) changed; 0 not applied"
+has "the pin to Regional at Best joined the rows of both editions" "$OUT" \
+    "pin +applied: 2 of 4 file\(s\) pinned, 2 emptied album row\(s\) removed"
+eq "the library as it should be: every album on its edition, in one folder each" \
+    "$(q "select artist || '|' || title || '|' || substr(mb_albumid, -3) || '|' || cast(path as text) from items order by id")" \
+    "$(cat << 'EXPECTED'
+Rp Akane|Rp Color Me Blue|021|Rp Akane/Color Me Blue/01 Color Me Blue.opus
+Rp Span|Sp One|022|Rp Span/Span Album/01 Sp One.opus
+Rp Span|Sp Two|022|Rp Span/Span Album/02 Sp Two.opus
+Rp Regio|Rg One|202|Rp Regio/Rp Regional/01 Rg One.opus
+Rp Regio|Rg Two|202|Rp Regio/Rp Regional/02 Rg Two.opus
+Rp Regio|Rg Three|202|Rp Regio/Rp Regional/03 Rg Three.opus
+Rp Regio|Rg Four|202|Rp Regio/Rp Regional/04 Rg Four.opus
+Rp Blur|Bl One|204|Rp Blur/Rp Blur Album/01 Bl One.opus
+Rp Blur|Bl Two|204|Rp Blur/Rp Blur Album/02 Bl Two.opus
+Rp Blur|Bl Three|204|Rp Blur/Rp Blur Album/03 Bl Three.opus
+Rp Clan|Cl One|205|Rp Clan/Rp Clan Album/01 Cl One.opus
+Rp Clan|Cl Two|205|Rp Clan/Rp Clan Album/02 Cl Two.opus
+Rp Clan|Cl Three|205|Rp Clan/Rp Clan Album/03 Cl Three.opus
+Rp Kimi|Ki One|208|Rp Kimi/Rp Kimi Album/01 Ki One.opus
+Rp Kimi|Ki Two|208|Rp Kimi/Rp Kimi Album/02 Ki Two.opus
+Rp Kimi|Ki Three|208|Rp Kimi/Rp Kimi Album/03 Ki Three.opus
+Rp Live|Lv One (live)|209|Rp Live/Rp Live Album/01 Lv One (live).opus
+Rp Live|Lv Two (live)|209|Rp Live/Rp Live Album/02 Lv Two (live).opus
+Rp Live|Lv Three|209|Rp Live/Rp Live Album/03 Lv Three.opus
+Rp Yokai|私を喰べたい|210|Rp Yokai/私を喰べたい、ひとでなし/01 私を喰べたい.opus
+Rp Yokai|ひとでなし|210|Rp Yokai/私を喰べたい、ひとでなし/02 ひとでなし.opus
+Rp Yokai|終わりの歌|210|Rp Yokai/私を喰べたい、ひとでなし/03 終わりの歌.opus
+Rp Nomatch|Nm One||Rp Nomatch/Rp Nomatch Album/01 Nm One.opus
+Rp Nomatch|Nm Two||Rp Nomatch/Rp Nomatch Album/02 Nm Two.opus
+Rp Nomatch|Nm Three||Rp Nomatch/Rp Nomatch Album/03 Nm Three.opus
+Rp Vessel|Ve Two|211|Rp Vessel/Rp Vessel Album/02 Ve Two.flac
+Rp Vessel|Ve One|211|Rp Vessel/Rp Vessel Album/01 Ve One.opus
+Rp Vessel|Ve Three|211|Rp Vessel/Rp Vessel Album/03 Ve Three.opus
+Rp Wiv|rp i love u.|201|Rp Wiv/Copy 1/i love u..opus
+EXPECTED
+)"
+eq "the six copies went to the quarantine, nothing was deleted" \
+    "$(cd "$LIBD" && find removed -type f | LC_ALL=C sort)" \
+    "$(printf "removed/$DAY/music/%s\n" "Rp Akane - Topic/Rp Color Me Blue.opus" "Rp Blur - Topic/Bl One.opus" \
+        "Rp Blur - Topic/Bl Two.opus" "Rp Span - Topic/Span Single/01 Sp Two.opus" \
+        "Rp Vessel/Rp Vessel Album/02 Ve Two.opus" "Rp Wiv/Copy 2/i love u..opus")"
+eq "one album row per album, none empty (ten for ten albums)" \
+    "$(q "select count(*) from albums") / $(q "select count(*) from albums where id not in
+        (select album_id from items where album_id is not null)")" \
+    "10 / 0"
+eq "the Nomatch album is marked reviewed, nothing else is" "$(q "select group_concat(entity_id) from item_attributes where key='reviewed'")" \
+    "$(q "select group_concat(id) from items where artist = 'Rp Nomatch'")"
+out=$(printf 'q\n' | media-import --library 2>&1)
+has "and a new session finds nothing left to review" "$out" "; 0 to review"
+# the releases a test asks for on purpose to see MusicBrainz say "no such release": the adopt-unknown case (ff,
+# which must have been asked) and the Plain Song duplicate whose release the stub does not hold (aa)
+python3 - "$P4D/requests" "$P4D/fx" "cccccccc-0000-4000-8000-0000000000ff" "cccccccc-0000-4000-8000-0000000000aa" << 'PYEOF2'
+import pathlib, re, sys
+log, fx = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+deliberately_unknown, also_unknown = sys.argv[3], sys.argv[4]
+asked = [line.split("\t")[0] for line in log.read_text().splitlines()]
+ids = {m.group(1) for p in asked if (m := re.fullmatch(r"/ws/2/release/([0-9a-f-]{36})(\?.*)?", p))}
+missing = sorted(i for i in ids - {deliberately_unknown, also_unknown} if not (fx / (i + ".json")).exists())
+sys.exit(1 if missing or deliberately_unknown not in ids else 0)
+PYEOF2
+eq "every release anyone asked the stub for is one it holds" "$?" 0
+ms --undo "$(last_log)"
+eq "--undo restores every row, album row, file and tag exactly" "$(state4)" "$before"
+unset TEST_DNS
+clear_logs
 
 kill "$STUB4" 2> /dev/null
 wait "$STUB4" 2> /dev/null

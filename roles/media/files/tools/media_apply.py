@@ -27,7 +27,18 @@ Whichever action leaves an album row with no track (a pin or quarantine of its l
 tracks) removes that row in the same decision; the log holds it first, so undo
 re-inserts it under its own id.
 
-A later decision about a file replaces an earlier one (the earlier is "superseded").
+A pin may carry "map": {"<row id>": "<release track id>"}: those files take exactly
+that track, whatever their title (the review menu writes it when a title differs).
+
+A later decision about a file replaces an earlier one. A keep, skip, quarantine or
+pin that still has a target nobody else names runs on those alone ("narrowed"); any
+other decision, or one with no target left, is "superseded".
+
+The decisions run by kind, not by line: quarantine and replace first (a pin must not
+tie a track to a copy about to go), then merge, pin and adopt, then keep, register and
+skip; within a kind in file order. After the last decision every album row that holds
+no track is removed.
+
 Every target is checked first: the row still has that id and path, the file that
 size. If not, the library moved on since the person looked, and the whole decision
 is skipped as stale. Each change is logged before it is made (the row as it was) and
@@ -64,15 +75,32 @@ def target_key(t):
     return ("id", t["id"]) if t.get("id") is not None else ("path", t["path"])
 
 
+# What a later decision about one of the targets leaves of a decision: these run on the
+# targets still unclaimed; merge, replace and adopt only make sense whole.
+NARROWS = {"pin", "keep", "quarantine", "skip"}
+RANK = {"quarantine": 0, "replace": 0, "merge": 1, "pin": 1, "adopt": 1, "keep": 2, "register": 2, "skip": 2}
+
+
+def narrowed(d, targets):
+    """The decision with only `targets` left (a pin's map loses the rows that went)."""
+    out = dict(d, targets=targets)
+    if d.get("map"):
+        rows = {str(t["id"]) for t in targets}
+        out["map"] = {row: track for row, track in d["map"].items() if row in rows}
+    return out
+
+
 def read_decisions(path):
-    """[{n, d, result}] in file order: unreadable lines carry their result already, an
-    earlier decision about a file a later one names again is "superseded"."""
+    """[{n, d, run, narrowed, result}] in file order: unreadable lines carry their result
+    already. `run` is the decision to carry out: `d`, or `d` narrowed to the targets no
+    later line names (`narrowed` is then (left, of)). One whose targets are all named
+    again later, or that cannot be narrowed, is "superseded"."""
     out = []
     with open(path, encoding="utf-8") as f:
         for n, line in enumerate(f, 1):
             if not line.strip():
                 continue
-            entry = {"n": n, "d": None, "result": None}
+            entry = {"n": n, "d": None, "run": None, "narrowed": None, "result": None}
             try:
                 entry["d"] = json.loads(line)
             except ValueError as err:
@@ -88,8 +116,16 @@ def read_decisions(path):
             for t in entry["d"]["targets"]:
                 last[target_key(t)] = i
     for i, entry in enumerate(out):
-        if entry["result"] is None and any(last[target_key(t)] != i for t in entry["d"]["targets"]):
-            later = max(last[target_key(t)] for t in entry["d"]["targets"])
+        if entry["result"] is not None:
+            continue
+        d = entry["d"]
+        free = [t for t in d["targets"] if last[target_key(t)] == i]
+        if len(free) == len(d["targets"]):
+            entry["run"] = d
+        elif free and d["action"] in NARROWS:
+            entry["run"], entry["narrowed"] = narrowed(d, free), (len(free), len(d["targets"]))
+        else:
+            later = max(last[target_key(t)] for t in d["targets"])
             entry["result"] = "superseded by line %d" % out[later]["n"]
     return out
 
@@ -209,32 +245,66 @@ def release_info(releases, release):
     return releases[release]
 
 
-def pin_items(lib, log, n, release, info, items):
-    """Give `items` the release (the pin's rules), logging every row and file move, and
-    drop the album rows that leaves empty. Returns (report, files changed, shell lines)."""
-    album, mapping, skipped = mc.plan_pin(lib, info, items)
+def movable(item, hold):
+    """Whether a row no decision named may be filed again with its album: not one that a
+    decision still to run names (that one checks the path it was written with, and a move
+    now would make it stale), and not an orphan whose file is gone (moving it would stop the
+    whole apply; the prune drops it). `hold` is the set of those row ids."""
+    return item.id not in hold and os.path.exists(item.path)
+
+
+def tidy_folders(lib, log, n, album, seqs, hold):
+    """Move every track of `album` to where the library files it now. A pin moves its files
+    while the album rows it is about to empty still exist, and the path format's aunique
+    then files them under "Album [id]"; with those rows gone the same destination loses the
+    suffix. `seqs` maps the row ids already logged (a track is logged once) to their seq;
+    a track outside it that is not `movable` stays where it is."""
+    from beets import util
+
+    # beets memoizes each album's aunique suffix per library object: the pin's own moves
+    # cached "[id]" for this album, and without a reset the destination would not change
+    getattr(lib, "_memotable", {}).clear()
+    for item in album.items():
+        dest = item.destination()
+        if dest == item.path or (item.id not in seqs and not movable(item, hold)):
+            continue
+        if item.id not in seqs:
+            seqs[item.id] = log.begin(n, "item", id=item.id, before=mc.snapshot(item))
+        # the name move() will pick: a taken one is made unique (see do_adopt)
+        log.write(seq=seqs[item.id], phase="moving", to=mc.to_json(util.unique_path(dest)))
+        item.move()
+        item.store()
+
+
+def pin_items(lib, log, n, release, info, items, hold, forced=None):
+    """Give `items` the release (the pin's rules; `forced` names tracks by hand), logging
+    every row and file move, drop the album rows that leaves empty and file the album's
+    tracks again. Returns (report, files changed, shell lines)."""
+    album, mapping, skipped = mc.plan_pin(lib, info, items, forced)
     if not mapping:
         return "none of %d file(s) fit the release (%s)" % (
-            len(items), "; ".join(why for _, why in skipped)), 0, []
+            len(items), "; ".join(sorted({why for _, why in skipped}))), 0, []
     old_albums = {item.album_id for item in mapping}
     seqs = {item.id: log.begin(n, "item", id=item.id, before=mc.snapshot(item)) for item in mapping}
     created = mc.apply_pin(lib, info, album, mapping,
                            moving=lambda item, dest: log.write(seq=seqs[item.id], phase="moving", to=mc.to_json(dest)),
                            created_row=lambda row: log.done(log.begin(n, "album_created", id=row.id)))
-    for item in mapping:
-        log.done(seqs[item.id], after=mc.snapshot(item))
     removed = drop_emptied(lib, log, n, old_albums)
+    tidy_folders(lib, log, n, album if created is None else created, seqs, hold)
+    for row, seq in seqs.items():
+        log.done(seq, after=mc.snapshot(lib.get_item(row)))
     note = "" if not skipped else ", %d left alone (%s)" % (len(skipped), "; ".join(sorted({w for _, w in skipped})))
     # a new album row has no cover yet: the shell fetches it and embeds it in these files
     art = ["@art %s %s" % (release, " ".join(str(i.id) for i in mapping))] if created is not None else []
     return "%d of %d file(s) pinned%s%s" % (len(mapping), len(items), note, emptied_note(removed)), len(mapping), art
 
 
-def do_pin(lib, log, n, d, rows, releases):
+def do_pin(lib, log, n, d, rows, releases, hold):
     info = release_info(releases, d["release"])
     if info is None:
         return "failed: MusicBrainz has no release %s (or is unreachable); nothing changed" % d["release"], 0, []
-    report, k, art = pin_items(lib, log, n, d["release"], info, [rows[t["id"]] for t in d["targets"]])
+    forced = {int(row): track for row, track in (d.get("map") or {}).items()}
+    report, k, art = pin_items(lib, log, n, d["release"], info, [rows[t["id"]] for t in d["targets"]], hold, forced)
     return "applied: " + report, k, art
 
 
@@ -323,7 +393,7 @@ def do_replace(lib, log, n, d, rows, day):
         gone.id, loose["path"], QUARANTINE, day, emptied_note(removed)), 2, []
 
 
-def do_adopt(lib, log, n, d, releases):
+def do_adopt(lib, log, n, d, releases, hold):
     """Register files from /downloads as reviewed and file them in the library; with a
     release, pin them to it afterwards (a file whose title is not on it stays as adopted)."""
     from beets import util
@@ -348,11 +418,11 @@ def do_adopt(lib, log, n, d, releases):
     report = "applied: %d file(s) adopted" % len(adopted)
     if not d.get("release"):
         return report, len(adopted), []
-    pinned, k, art = pin_items(lib, log, n, d["release"], info, adopted)
+    pinned, k, art = pin_items(lib, log, n, d["release"], info, adopted, hold)
     return "%s; %s" % (report, pinned), len(adopted), art
 
 
-def do_merge(lib, log, n, d, rows):
+def do_merge(lib, log, n, d, rows, hold):
     items = [rows[t["id"]] for t in d["targets"]]
     held = collections.Counter(i.album_id for i in items if i.album_id is not None)
     keep = lib.get_album(min(held, key=lambda a: (-held[a], a))) if held else None
@@ -367,7 +437,10 @@ def do_merge(lib, log, n, d, rows):
             item.album_id = keep.id
             item.store()
     removed = drop_emptied(lib, log, n, left)
+    named = {i.id for i in items}
     for item in keep.items():
+        if item.id not in named and not movable(item, hold):
+            continue
         if item.id not in seqs:
             seqs[item.id] = log.begin(n, "item", id=item.id, before=mc.snapshot(item))
         log.write(seq=seqs[item.id], phase="moving", to=mc.to_json(item.destination()))
@@ -412,13 +485,14 @@ def cmd_apply(args):
     by_path = {mc.path_of(i): i.id for i in rows.values()}
     for entry in entries:
         if entry["result"] is None:
-            entry["result"] = stale(entry["d"], rows, by_path)
+            entry["result"] = stale(entry["run"], rows, by_path)
     todo = [e for e in entries if e["result"] is None]
-    files = sum(len(e["d"]["targets"]) for e in todo if e["d"]["action"] != "skip")
+    files = sum(len(e["run"]["targets"]) for e in todo if e["run"]["action"] != "skip")
     for entry in entries:
-        d = entry["d"] or {}
+        d = entry["run"] or entry["d"] or {}
+        left = " (narrowed: %d of %d target(s) left)" % entry["narrowed"] if entry["narrowed"] else ""
         print("  line %-4d %-10s %3d target(s)  %s" % (
-            entry["n"], d.get("action", "?"), len(d.get("targets") or []), entry["result"] or "to apply"))
+            entry["n"], d.get("action", "?"), len(d.get("targets") or []), entry["result"] or "to apply" + left))
     print("apply: %d decision(s) to apply, %d file(s); %d not applied" % (len(todo), files, len(entries) - len(todo)))
     if files > args.max_files and not args.force:
         print("apply: refused - %d files is over the limit of %d per run (--force to go ahead)"
@@ -439,10 +513,13 @@ def cmd_apply(args):
     print("apply: logging to %s (media-sync --undo %s takes it back)" % (log.path, os.path.basename(log.path)),
           flush=True)
     day = ts[:8]
-    releases, changed, lines, again = {}, 0, [], []
+    releases, changed, lines, again, dropped = {}, 0, [], [], []
     try:
-        for entry in todo:
-            d, n = entry["d"], entry["n"]
+        order = sorted(todo, key=lambda e: (RANK[e["run"]["action"]], e["n"]))
+        for pos, entry in enumerate(order):
+            d, n = entry["run"], entry["n"]
+            # rows the decisions still to run name: a tidy-up of an album leaves them where they are
+            hold = {t["id"] for e in order[pos + 1:] for t in e["run"]["targets"] if t["id"] is not None}
             # Checked again just before: an earlier decision of this run (a merge moving
             # a whole album's files) may have changed what this one names.
             now = {t["id"]: lib.get_item(t["id"]) for t in d["targets"] if t["id"] is not None}
@@ -454,7 +531,7 @@ def cmd_apply(args):
             entry["result"] = "failed: interrupted here"
             action = d["action"]
             if action == "pin":
-                entry["result"], k, extra = do_pin(lib, log, n, d, now, releases)
+                entry["result"], k, extra = do_pin(lib, log, n, d, now, releases, hold)
             elif action == "keep":
                 entry["result"], k, extra = do_keep(lib, log, n, d, now)
             elif action == "register":
@@ -462,22 +539,27 @@ def cmd_apply(args):
             elif action == "quarantine":
                 entry["result"], k, extra = do_quarantine(lib, log, n, d, now, day)
             elif action == "merge":
-                entry["result"], k, extra = do_merge(lib, log, n, d, now)
+                entry["result"], k, extra = do_merge(lib, log, n, d, now, hold)
             elif action == "replace":
                 entry["result"], k, extra = do_replace(lib, log, n, d, now, day)
             elif action == "adopt":
-                entry["result"], k, extra = do_adopt(lib, log, n, d, releases)
+                entry["result"], k, extra = do_adopt(lib, log, n, d, releases, hold)
             else:
                 entry["result"], k, extra = "applied: nothing to change (skip)", 0, []
+            if entry["narrowed"] and entry["result"].startswith("applied:"):
+                entry["result"] = "applied (narrowed: %d of %d target(s) left):%s" % (
+                    entry["narrowed"] + (entry["result"][len("applied:"):],))
             changed += k
             lines += extra
+        # rows an earlier apply, a prune or a person's removal left empty go too, logged like the rest
+        dropped = drop_emptied(lib, log, None, mc.empty_album_ids(lib))
     finally:
         log.close()
         for entry in todo:
             # what never started, or failed before changing anything, is for the next run
             if entry["result"] is None or entry["result"].endswith("nothing changed"):
                 entry["result"] = (entry["result"] or "not reached") + " - queued again"
-                again.append(json.dumps(entry["d"], ensure_ascii=False))
+                again.append(json.dumps(entry["run"], ensure_ascii=False))
         with open(pending, encoding="utf-8") as f:
             grown = f.read()
         # a line written by hand (no lock) between the read and the move
@@ -493,6 +575,8 @@ def cmd_apply(args):
         print("  line %-4d %-10s %s" % (entry["n"], entry["d"]["action"], entry["result"]))
     for line in lines:
         print(line)
+    if dropped:
+        print("apply: %d album row(s) with no track removed (logged; undo restores them)" % len(dropped))
     applied = sum(1 for e in todo if e["result"].startswith("applied"))
     print("apply: %d of %d decision(s) applied, %d file(s) changed; %d not applied; log %s" % (
         applied, len(entries), changed, len(entries) - applied, log.path))
@@ -529,7 +613,12 @@ def read_log(path):
                 print("undo: the log's last line is cut short; it is skipped")
                 continue
             raise
-        steps.setdefault(r["seq"], {}).setdefault(r["phase"], r)
+        step = steps.setdefault(r["seq"], {})
+        # a file can move twice in one step (a pin, then the tidy-up): the last move is where it is
+        if r["phase"] == "moving":
+            step["moving"] = r
+        else:
+            step.setdefault(r["phase"], r)
     return steps
 
 

@@ -8,7 +8,7 @@ Deployed to /config/tools/ and run with beets' own python:
 Commands:
     overlay <release|keep|pinned>   write /config/.run.yaml from an overlay
     reachable --mb-url URL          can this container reach MusicBrainz?
-    prune [--dry-run]               drop rows whose file is gone
+    prune [--dry-run]               drop rows whose file is gone, and album rows with no track
     regroup                         album rows for tracks that carry a release id
     plan --mb-url URL --cache DIR   the albums --complete would finish (stdout)
     pin <release id>                give the files on stdin that release
@@ -49,22 +49,27 @@ def cmd_reachable(args):
 # ------------------------------------------------------------------------ prune
 
 def cmd_prune(args):
-    """Drop rows whose file is gone (a track removed on purpose). Rows only: delete=False
-    never touches a file, and with_album (the default) removes an album row with its
-    last item."""
+    """Drop rows whose file is gone (a track removed on purpose), and the album rows that
+    hold no track. Rows only: delete=False never touches a file, and with_album (the
+    default) removes an album row with its last item - the empty ones counted here are
+    the ones that predate that (an emptied row an older pin or merge left behind)."""
     lib = mc.open_library()
     items = list(lib.items())
     gone = [i for i in items if not os.path.exists(i.path)]
+    empty = mc.empty_album_ids(lib)
     print("orphan rows:", len(gone), "of", len(items))
     for item in gone[:5]:
         print("  e.g.", item.path)
+    print("empty album rows:", len(empty))
     if args.dry_run:
         print("dry run: nothing removed.")
         return 0
     with lib.transaction():
         for item in gone:
             item.remove(False)
-    print("pruned", len(gone), "row(s); beets now tracks", len(list(lib.items())))
+        dropped = mc.drop_emptied_albums(lib, mc.empty_album_ids(lib))
+    print("pruned", len(gone), "row(s) and", len(dropped), "empty album row(s); beets now tracks",
+          len(list(lib.items())))
     return 0
 
 

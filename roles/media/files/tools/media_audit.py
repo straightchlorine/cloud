@@ -15,10 +15,12 @@ row (stdin, one container path per line) are listed with the registered tracks
 they are copies of, and so are releases spread over several album rows and release
 tracks held twice (with a suggested copy to keep). A loose file that copies a
 registered track also says which of the two to keep ("suggest": loose or registered,
-the duplicates' ranking). The audio files left in /downloads are listed with their
-tags. Tracks marked `reviewed` are a person's decision and are left out of the album
-groups. The result goes to
-<review>/candidates.json, MusicBrainz answers to <review>/mb-cache/; the library is
+the duplicates' ranking). Twins - the same YouTube video on two rows, the same
+recording, a probable copy from another source - are found over every row, with or
+without an album tag (media_common.twins), each with the row to keep. The audio files
+left in /downloads are listed with their tags. Tracks marked `reviewed` are a person's
+decision and are left out of the album groups. The result goes to <review>/candidates.json,
+MusicBrainz answers to <review>/mb-cache/; the library is
 opened and never stored to.
 """
 
@@ -113,9 +115,11 @@ def read_tags(path):
 
 def unregistered(paths, items):
     """Files on disk without a row, with the registered tracks they are copies of: same
-    artist, same title (media_common.same_title). Reviewed tracks count: a loose copy
-    of a track a person kept is still a copy. A copy also gets `suggest`, which of the
-    two the duplicates' ranking keeps, and the release tags the menu shows."""
+    artist, same title (media_common.same_title) AND the same length (media_common.
+    loose_copies); a same-titled track a few seconds off is listed as `other_cut`, a
+    different recording is not listed at all. Reviewed tracks count: a loose copy of a
+    track a person kept is still a copy. A copy also gets `suggest`, which of the two the
+    duplicates' ranking keeps, and the release tags the menu shows."""
     by_artist = {}
     for item in items:
         by_artist.setdefault(mc.artist_key(item), []).append(item)
@@ -128,8 +132,9 @@ def unregistered(paths, items):
             continue
         entry.update(mb_albumid=f.mb_albumid or "", mb_releasetrackid=f.mb_releasetrackid or "")
         tags = types.SimpleNamespace(albumartist=f.albumartist, artist=f.artist)
-        copies = [i for i in by_artist.get(mc.artist_key(tags), []) if mc.same_title(f.title, i.title)]
+        copies, cuts = mc.loose_copies(f.title, f.length, by_artist.get(mc.artist_key(tags), []))
         entry["copy_of"] = [i.id for i in copies]
+        entry["other_cut"] = [{"id": r.id, "offset": round(off, 1)} for r, off in cuts]
         if copies:
             loose = types.SimpleNamespace(id=None, album_id=None, format=f.format, bitrate=f.bitrate)
             entry["suggest"] = mc.suggest_copy(loose, copies, sizes)
@@ -162,6 +167,8 @@ def main(argv=None):
         if not kinds:
             continue
         members.sort(key=lambda i: (i.mb_albumid or "~", i.disc or 0, i.track or 0, mc.path_of(i)))
+        errors_before = len(errors)
+        candidates = candidates_for(mb, members, errors)
         groups.append({
             "kinds": kinds,
             "key": [who, album],
@@ -169,7 +176,9 @@ def main(argv=None):
             "album": mc.album_base(members[0].album),
             "albums": sorted({i.album for i in members}),
             "tracks": [track_info(i) for i in members],
-            "candidates": candidates_for(mb, members, errors),
+            "candidates": candidates,
+            # the menu suggests "keep: nothing found" only for a group whose lookups all went through
+            "errors": len(errors) - errors_before,
         })
         print("audit: %-8s %s - %s (%d tracks)" % (
             "+".join(kinds), groups[-1]["artist"], groups[-1]["album"], len(members)), file=sys.stderr)
@@ -192,6 +201,14 @@ def main(argv=None):
         "keep": keep.id,
         "copies": [track_info(i) for i in members],
     } for track, members, keep in mc.duplicates(everything)]
+    pairs = [{
+        "kind": g["kind"],
+        "keep": g["keep"].id,
+        "keeper": track_info(g["keep"]),
+        "drop": [track_info(i) for i in g["drop"]],
+        "offsets": {str(k): v for k, v in g["offsets"].items()},
+        "reason": g["reason"],
+    } for g in mc.twins(everything, mc.queued_quarantines(args.review))]
 
     def kind(k):
         return [g for g in groups if k in g["kinds"]]
@@ -209,6 +226,7 @@ def main(argv=None):
         "scattered_rows": sum(len(r["album_rows"]) for r in spread),
         "duplicates": len(copies),
         "duplicate_rows": sum(len(c["copies"]) for c in copies),
+        **{"twins_" + k: sum(len(t["drop"]) for t in pairs if t["kind"] == k) for k in mc.TWIN_KINDS},
     }
     path = os.path.join(args.review, "candidates.json")
     mc.write_json(path, {
@@ -223,6 +241,7 @@ def main(argv=None):
         "downloads": leftovers,
         "scattered": spread,
         "duplicates": copies,
+        "twins": pairs,
     })
     print("audit: %(split)d split, %(partial)d partial (%(partial_bare)d bare), "
           "%(whole)d whole (%(whole_tracks)d tracks), %(unregistered)d unregistered "
@@ -230,6 +249,8 @@ def main(argv=None):
     print("audit: %(scattered)d release(s) in several album rows (%(scattered_rows)d rows), "
           "%(duplicates)d track(s) held more than once (%(duplicate_rows)d rows), "
           "%(downloads)d audio file(s) left in downloads" % counts)
+    print("audit: twins to drop: %(twins_video)d same video, %(twins_recording)d same recording, "
+          "%(twins_probable)d probable" % counts)
     print("audit: %d MusicBrainz request(s), %d answered from the cache, %d error(s); wrote %s"
           % (mb.requests, mb.cached, len(errors), path))
     return 0

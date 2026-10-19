@@ -39,7 +39,9 @@ case "${1:-}" in
         [ "$1" = --library ] || cmd=quarantine
         shift
         review_args=(--review "$LIB/state/review" --db "$DB" --music "$LIB/music")
-        [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL" --downloads "$LIB/downloads")
+        # the apply's file limit, so the end-of-session summary can say when --force is needed
+        [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL" --downloads "$LIB/downloads"
+            --max-files {{ media_apply_max_files }})
         exec python3 "$LIB/beets/tools/media_review.py" "$cmd" "${review_args[@]}" "$@" ;;
 esac
 

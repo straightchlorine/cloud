@@ -303,7 +303,7 @@
           - "'def cmd_pin(' in media_tools_py"
           - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_common_py"
           - "'the album already holds that track (a copy)' in media_common_py"
-          - "'assign(todo, info.tracks, held)' in media_common_py"
+          - "'claims, left = assign(' in media_common_py"
           # the pin and the apply share one implementation
           - "'mc.plan_pin(' in media_tools_py"
           - "'mc.apply_pin(' in media_tools_py"
@@ -361,6 +361,38 @@
           - "'def download(self, key)' in media_review_py"
           - "'UPG_DROPPED' in media_sync"
           - "'a MusicBrainz release id (a UUID)' in media_sync"
+          # phase 4b: twins are found by the audit over every row, offered by a screen of their own,
+          # and a queued quarantine is never the row to keep
+          - "'def twins(' in media_common_py"
+          - "'mc.twins(' in media_audit_py"
+          - "'mc.queued_quarantines(' in media_audit_py"
+          - "'def twin_dialog(' in media_review_py"
+          - "'self.twin_groups()' in media_review_py"
+          # Enter takes the screen's suggestion and never acts without one; the summary reads the
+          # queue the way the apply does, against the limit the wrapper passes
+          - "'no suggestion for this screen' in media_review_py"
+          - "'ma.read_decisions(' in media_review_py"
+          - "'--max-files 200' in media_import"
+          - "'required=True, help=\"the apply' in media_review_py"
+          # the menu pairs titles by length (lenient), the nightly pin and the apply never do, and a
+          # pin the menu saves carries the pairs the strict rule would not make as a map
+          - "'def same_title_lenient(' in media_common_py"
+          - "'lenient=True' in media_review_py"
+          - "'lenient' not in media_apply_py"
+          - "'lenient' not in media_tools_py"
+          - "'def pin_map(' in media_review_py"
+          - "'def force_tracks(' in media_common_py"
+          - "'forced=' in media_apply_py"
+          - "'map is for pin decisions only' in media_common_py"
+          # the apply runs by kind (quarantine first), narrows a superseded decision, drops every
+          # empty album row at the end and files the tracks of a pinned album again
+          - "'RANK = {' in media_apply_py"
+          - "'narrowed' in media_apply_py"
+          - "'def tidy_folders(' in media_apply_py"
+          - "'_memotable' in media_apply_py"
+          - "'mc.empty_album_ids(' in media_apply_py"
+          - "'def empty_album_ids(' in media_common_py"
+          - "'mc.empty_album_ids(' in media_tools_py"
           # the dashboard stays read-only: no container, no lock
           - "'compose run' not in media_status"
           - "'flock -n' in media_status"
