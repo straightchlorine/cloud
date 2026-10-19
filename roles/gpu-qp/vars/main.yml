@@ -1,0 +1,20 @@
+---
+# Fixed by the role, not host settings (hence vars, not defaults).
+
+# Where the bench helpers are installed. Run trees under gpu_qp_bench_path are data only.
+gpu_qp_lib_path: /usr/local/lib/gpu-qp
+
+# The helpers copied from files/bench/. bench.env and override.yml are templates and not listed.
+# The install loop, the stale-file purge, the dispatcher's manifest and molecule read this.
+gpu_qp_bench_files:
+  - cli.sh
+  - env.sh
+  - eta.py
+  - extract.py
+  - lane.sh
+  - lanes.py
+  - lanes.tsv
+  - phase.sh
+  - sample.sh
+  - status.sh
+  - supervise.sh

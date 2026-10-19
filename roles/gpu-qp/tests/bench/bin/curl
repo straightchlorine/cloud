@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake curl for tests/bench: connection refused, so the live ports on the workstation are never reached.
+echo "curl $*" >> "${FAKE_LOG:-/dev/null}"
+exit 7

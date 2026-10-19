@@ -10,6 +10,7 @@
         path: "{{ item }}"
       loop:
         - /usr/local/bin/gpu-qp
+        - /usr/local/lib/gpu-qp
         - /etc/systemd/system/stack.service
         - "{{ gpu_qp_home }}"
       register: gpu_qp_teardown_stats
@@ -22,3 +23,39 @@
       loop: "{{ gpu_qp_teardown_stats.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Create a run tree fixture
+      ansible.builtin.file:
+        path: "{{ gpu_qp_home }}/bench/x/A"
+        state: directory
+        mode: "0755"
+
+    - name: Add its state file
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ gpu_qp_home }}/bench/x/A/state.tsv"
+        mode: "0644"
+
+    - name: The bench gate refuses to delete run trees
+      block:
+        - name: Run the gate without the discard flag
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: teardown_bench_gate
+
+        - name: Fail the test - the gate should have refused
+          ansible.builtin.fail:
+            msg: "teardown_bench_gate.yml let a run tree through"
+      rescue:
+        - name: Assert the gate asked for a copy first
+          ansible.builtin.assert:
+            that: "'copy them off first' in ansible_failed_result.msg"
+            fail_msg: "gate failed for another reason: {{ ansible_failed_result.msg | default('') }}"
+            success_msg: "[OK] the bench gate refuses while run trees exist"
+
+    - name: The bench gate passes with the discard flag
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: teardown_bench_gate
+      vars:
+        gpu_qp_teardown_discard_bench: true

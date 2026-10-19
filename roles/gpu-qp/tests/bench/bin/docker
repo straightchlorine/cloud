@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Fake docker for tests/bench. Every call is appended to $FAKE_LOG as one space-joined line:
+# the argument after the second -f is @OVERRIDE@, then $FAKE_RUN is @RUN@, $FAKE_SRC is
+# @SRC@ and uid:gid is @U@. Behaviour per FAKE_MODE (compose run), FAKE_INFO, FAKE_PS, FAKE_STACK.
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+args=("$@")
+line="docker $*"
+nf=0
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [ "${args[i]}" = -f ]; then
+    nf=$((nf + 1))
+    [ "$nf" -eq 2 ] && line=${line/ -f "${args[i + 1]}"/ -f @OVERRIDE@}
+  fi
+done
+line=${line//"${FAKE_RUN:-@none@}"/@RUN@}
+line=${line//"${FAKE_SRC:-@none@}"/@SRC@}
+line=${line//"$(id -u):$(id -g)"/@U@}
+echo "$line" >> "${FAKE_LOG:-/dev/null}"
+
+[ "${FAKE_INFO:-ok}" = hang ] && sleep 60
+
+cell_run() {
+  local mol='' seed='' gen='' cfg='' a prev=''
+  for a in "${args[@]}"; do
+    case "$prev" in
+      --molecule-index) mol=$a ;;
+      --seed) seed=$a ;;
+    esac
+    case "$a" in
+      *:/usr/src/quantum_pipeline/gen) gen=${a%%:*} ;;
+      *:/usr/src/quantum_pipeline/run_configs) cfg=${a%%:*} ;;
+    esac
+    prev=$a
+  done
+  # a missing compose file or env file fails the call the way compose does
+  prev=''
+  for a in "${args[@]}"; do
+    case "$prev" in
+      -f | --env-file) [ -e "$a" ] || { echo "MISSING $a" >> "${FAKE_LOG:-/dev/null}"; exit 14; } ;;
+    esac
+    prev=$a
+  done
+  ok() {
+    cat "$HERE/fixtures/cell.txt"
+    [ -n "$cfg" ] && sed "s/\"molecule_index\": [0-9]*/\"molecule_index\": $mol/" \
+      "$HERE/fixtures/run_config.json" > "$cfg/run_config.json"
+    exit 0
+  }
+  if [ -n "${FAKE_FAIL_CELL:-}" ] && [ "$FAKE_FAIL_CELL" = "${mol}_${seed}" ]; then
+    echo "Traceback: boom"; exit 1
+  fi
+  case "${FAKE_MODE:-ok}" in
+    ok) ok ;;
+    argv) echo "Total energy (electronic + nuclear repulsion): -1.1 Ha"; exit 0 ;;
+    spool)
+      echo "Total energy (electronic + nuclear repulsion): -1.1 Ha"
+      mkdir -p "$gen/undelivered"; echo '{}' > "$gen/undelivered/molecule_0.json"; exit 1 ;;
+    nospool) echo "Traceback: boom"; exit 1 ;;
+    fail) exit 1 ;;
+    wait)
+      echo "WAITING ${mol}_${seed}" >> "${FAKE_LOG:-/dev/null}"
+      until [ -e "${FAKE_RELEASE:-/nonexistent}" ]; do sleep 0.2; done
+      ok ;;
+  esac
+}
+
+case "${1:-}" in
+  compose)
+    for a in "${args[@]}"; do
+      [ "$a" = run ] && cell_run
+    done
+    exit 0 ;;
+  info)
+    case "${FAKE_INFO:-ok}" in
+      fail) exit 1 ;;
+      *) case "$*" in *DockerRootDir*) echo "${T:-/}" ;; esac; exit 0 ;;
+    esac ;;
+  image)
+    # image inspect --format ... IMG
+    echo "sha256:fake-${args[-1]##*:} 2026-10-18T00:00:00Z"; exit 0 ;;
+  ps)
+    case "$*" in
+      *" -q"*) [ -n "${FAKE_PS:-}" ] && printf '%s\n' "$FAKE_PS" ;;
+      *--format*)
+        if [ -n "${FAKE_STACK+x}" ]; then printf '%s\n' "$FAKE_STACK"
+        else
+          for s in kafka schema-registry redpanda-connect; do
+            printf '%s\trunning\tUp 2 hours (healthy)\n' "$s"
+          done
+        fi ;;
+    esac
+    exit 0 ;;
+  stop | builder) exit 0 ;;
+esac
+exit 0

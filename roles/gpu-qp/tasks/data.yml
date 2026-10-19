@@ -14,6 +14,20 @@
     - "{{ gpu_qp_data_path }}"
     - "{{ gpu_qp_gen_path }}"
     - "{{ gpu_qp_log_path }}"
+    - "{{ gpu_qp_bench_path }}"
+
+- name: Create the benchmark lock
+  # Every opener of the lock is read-only, so root never creates it. preserve keeps the touch
+  # from reporting a change on every run.
+  ansible.builtin.file:
+    path: "{{ gpu_qp_bench_path }}/.lock"
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  become: true
 
 - name: Render the molecules input file
   ansible.builtin.template:
@@ -23,7 +37,62 @@
     group: "{{ ansible_user }}"
     mode: "0644"
 
+- name: Create the bench helper directory
+  ansible.builtin.file:
+    path: "{{ gpu_qp_lib_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install the bench helpers
+  ansible.builtin.copy:
+    src: "bench/{{ item }}"
+    dest: "{{ gpu_qp_lib_path }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop: "{{ gpu_qp_bench_files }}"
+
+- name: Render the bench settings and the compose override
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ gpu_qp_lib_path }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop:
+    - {src: bench.env.j2, dest: bench.env}
+    - {src: ml-stack-override.yml.j2, dest: override.yml}
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Find helper-directory entries the role does not install
+  # Pycache and files of earlier role versions: the directory must equal the manifest the
+  # dispatcher checks. Reports a change only when something is removed.
+  ansible.builtin.find:
+    paths: "{{ gpu_qp_lib_path }}"
+    file_type: any
+    hidden: true
+    excludes: "{{ gpu_qp_bench_files + ['bench.env', 'override.yml'] }}"
+  become: true
+  register: gpu_qp_stale_lib
+
+- name: Remove them
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  become: true
+  loop: "{{ gpu_qp_stale_lib.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Install the gpu-qp host tool
+  # After the helpers: a half-finished deploy never leaves a new dispatcher (and manifest)
+  # over an old lib.
   ansible.builtin.template:
     src: gpu-qp.sh.j2
     dest: /usr/local/bin/gpu-qp

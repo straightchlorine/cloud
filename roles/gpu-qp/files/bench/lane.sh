@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gpu-qp-lane.sh <phase> <lane>
+# lane.sh <phase> <lane>
 #
 # Runs one lane of one phase of the thesis-benchmark rerun. Resumable: a cell whose row in
 # <phase>/state.tsv is already `done` or `done-unstreamed` is skipped. A cell that fails is
@@ -7,8 +7,9 @@
 #
 # Phases (brief 5.2): A = sto3g, 6 molecules x seeds 1,2,3, 1000 evals.
 #                     B = sto3g, 6 molecules x seed 1, 200 evals.
-#                     C = cc-pvdz, H2 x seed 1, 100 evals.
+#                     C = cc-pvdz, H2 x seed 1, 1000 evals.
 #                     S = smoke: sto3g, H2 x seed 1, 20 evals (launcher test).
+#                     A2, H = convergence runs (see below).
 # Lanes: cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
 #
 # state.tsv columns: lane  molecule  seed  status  exit  started  ended
@@ -19,12 +20,21 @@
 #           failed           anything else, after one retry
 # Every cell mounts its own <phase>/<lane>/<molecule>_seed<S>.gen/ as gen/ (and its run_configs/
 # subdirectory as run_configs/), so no cell can overwrite another cell's spool or metrics.
+#
+# Runs under `gpu-qp start` (fd 9 is the bench lock). A stop.request in the run dir ends the lane
+# before its next cell (LANE_STOPPED, rc 0). Otherwise it prints LANE_DONE with the lane's cell
+# counts and exits 1 when any cell is failed.
 set -u
 set -o pipefail
 
-ROOT=${GPU_QP_ROOT:-{{ gpu_qp_source_path }}}
-BENCH=${GPU_QP_BENCH:-{{ gpu_qp_home }}/bench}
-OVERRIDE=$BENCH/override.yml
+HERE=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=env.sh
+. "$HERE/env.sh"
+need_run_dir
+[ /proc/self/fd/9 -ef "$GPU_QP_BENCH_ROOT/.lock" ] || die "lane.sh runs under gpu-qp start: the bench lock is not held"
+ROOT=$GPU_QP_SOURCE
+BENCH=$GPU_QP_RUN_DIR
+OVERRIDE=$HERE/override.yml
 
 PHASE=${1:-}
 LANE=${2:-}
@@ -111,7 +121,7 @@ run_cell() {
       "${EXTRA[@]}" 2>&1 | tee "$log"
     rc=${PIPESTATUS[0]}
     ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    if [ "$rc" -eq 0 ]; then status=done; break; fi
+    if [ "$rc" -eq 0 ]; then status="done"; break; fi
     # VQE finished but Kafka refused the record (MessageSizeTooLargeError): the CLI spooled it
     # and exited 1. Rerunning would only spool again, so record it and move on.
     if grep -q 'Total energy' "$log" && [ -n "$(ls -A "$genroot/undelivered" 2>/dev/null)" ]; then
@@ -137,7 +147,13 @@ for mol in $MOLS; do
       echo "[skip] $LANE ${MOLNAME[$mol]} seed=$seed (done)"
       continue
     fi
+    if [ -e "$BENCH/stop.request" ]; then
+      echo "LANE_STOPPED $PHASE $LANE"
+      exit 0
+    fi
     run_cell "$mol" "$seed"
   done
 done
-echo "LANE_DONE $PHASE $LANE"
+read -r n_done n_unstreamed n_failed < <(state_counts "$STATE" "$LANE")
+echo "LANE_DONE $PHASE $LANE done=$n_done unstreamed=$n_unstreamed failed=$n_failed"
+[ "$n_failed" -eq 0 ]

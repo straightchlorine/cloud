@@ -1,0 +1,142 @@
+ Container ml-quantum-pipeline-cpu-run-4ef25eeb2f9e Creating
+ Container ml-quantum-pipeline-cpu-run-4ef25eeb2f9e Created
+2026-10-16 11:32:25,416 - ConfigurationManager - INFO - Initializing performance monitoring from command line arguments
+2026-10-16 11:32:25,416 - PerformanceMonitor - INFO - Performance monitoring initialized - Container: CPU
+2026-10-16 11:32:25,416 - PerformanceMonitor - INFO - Metrics directory: gen/performance_metrics
+2026-10-16 11:32:25,416 - PerformanceMonitor - INFO - Push gateway url: http://localhost:9091
+2026-10-16 11:32:25,416 - PerformanceMonitor - INFO - Collection interval: 30s
+2026-10-16 11:32:25,416 - ConfigurationManager - DEBUG - Dumping configuration into the file...
+2026-10-16 11:32:25,417 - ConfigurationManager - INFO - Configuration saved to:
+
+molecules.thesis-sto3g-L-BFGS-B-local-20261016.json
+
+2026-10-16 11:32:25,417 - ConfigurationManager - DEBUG - Arguments:
+
+{'file': 'data/molecules.thesis.json', 'molecule_index': 0, 'basis': 'sto3g', 'ansatz_reps': 2, 'ansatz_type': 'EfficientSU2', 'ibm': False, 'min_qubits': None, 'max_iterations': 100, 'convergence': True, 'threshold': 1e-06, 'optimizer': 'L-BFGS-B', 'seed': 1, 'init_strategy': 'random', 'output_dir': 'gen', 'log_level': 'DEBUG', 'shots': None, 'exact': False, 'no_analytic': False, 'optimization_level': 3, 'kafka': True, 'servers': 'localhost:9092', 'topic': 'experiment.vqe', 'retries': 3, 'retry_delay': 2, 'internal_retries': 0, 'acks': 'all', 'timeout': 10, 'report': False, 'dump': True, 'load': None, 'gpu': False, 'simulation_method': 'statevector', 'noise': None, 'enable_performance_monitoring': True, 'performance_interval': 30, 'performance_pushgateway': None, 'performance_export_format': 'json', 'ssl': False, 'disable_ssl_check_hostname': True, 'sasl_ssl': False, 'ssl_password': '***', 'ssl_dir': './secrets/', 'ssl_cafile': None, 'ssl_certfile': None, 'ssl_keyfile': '***', 'ssl_crlfile': None, 'ssl_ciphers': None, 'sasl_mechanism': None, 'sasl_plain_username': '***', 'sasl_plain_password': '***', 'sasl_kerberos_service_name': 'kafka', 'sasl_kerberos_domain_name': None}
+
+2026-10-16 11:32:25,417 - ConfigurationManager - DEBUG - Configurations:
+
+{'file': 'data/molecules.thesis.json', 'molecule_index': 0, 'basis': 'sto3g', 'ansatz_reps': 2, 'ansatz_type': 'EfficientSU2', 'ibm': False, 'min_qubits': None, 'max_iterations': 100, 'convergence': True, 'threshold': 1e-06, 'optimizer': 'L-BFGS-B', 'seed': 1, 'init_strategy': 'random', 'output_dir': 'gen', 'log_level': 'DEBUG', 'shots': None, 'exact': False, 'no_analytic': False, 'kafka': True, 'internal_retries': 0, 'report': False, 'dump': True, 'load': None, 'enable_performance_monitoring': True, 'performance_interval': 30, 'performance_pushgateway': None, 'performance_export_format': 'json', 'ssl': False, 'disable_ssl_check_hostname': True, 'sasl_ssl': False, 'ssl_password': '***', 'ssl_dir': './secrets/', 'ssl_cafile': None, 'ssl_certfile': None, 'ssl_keyfile': '***', 'ssl_crlfile': None, 'ssl_ciphers': None, 'sasl_mechanism': None, 'sasl_plain_username': '***', 'sasl_plain_password': '***', 'sasl_kerberos_service_name': 'kafka', 'sasl_kerberos_domain_name': None, 'kafka_config': {'servers': 'localhost:9092', 'topic': 'experiment.vqe', 'security': {'ssl': False, 'sasl_ssl': False, 'ssl_check_hostname': True, 'cert_config': {'ssl_dir': './secrets/', 'ssl_cafile': 'ca.crt', 'ssl_certfile': 'client.crt', 'ssl_keyfile': '***', 'ssl_password': '***', 'ssl_crlfile': None, 'ssl_ciphers': None}, 'sasl_opts': {'sasl_mechanism': None, 'sasl_plain_username': '***', 'sasl_plain_password': '***', 'sasl_kerberos_service_name': 'kafka', 'sasl_kerberos_domain_name': None}}, 'retries': 3, 'retry_delay': 2, 'kafka_retries': 0, 'acks': 'all', 'timeout': 10}, 'backend_config': {'local': True, 'gpu': False, 'optimization_level': 3, 'min_num_qubits': None, 'filters': None, 'simulation_method': 'statevector', 'gpu_opts': {'device': 'GPU', 'cuStateVec_enable': False, 'blocking_enable': False, 'batched_shots_gpu': True, 'shot_branching_enable': True, 'max_memory_mb': 5500}, 'noise': None}}
+
+2026-10-16 11:32:25,418 - QuantumPipeline - INFO - Applying convergence threshold 1e-06 during minimization
+2026-10-16 11:32:25,418 - VQERunner - INFO - Loading molecule data from data/molecules.thesis.json
+2026-10-16 11:32:25,418 - PerformanceMonitor - INFO - Starting performance monitoring thread
+2026-10-16 11:32:25,418 - PerformanceMonitor - INFO - System monitoring loop started (interval: 30s) - VQE metrics handled separately
+2026-10-16 11:32:25,418 - VQERunner - INFO - Processing molecule 1:
+
+Molecule:
+	Multiplicity: 1
+	Charge: 0
+	Unit: Angstrom
+	Geometry:
+		H	[0.0, 0.0, 0.0]
+		H	[0.0, 0.0, 0.7414]
+	Masses:
+		H	1.008
+		H	1.008
+
+2026-10-16 11:32:25,419 - PerformanceMonitor - DEBUG - Updated experiment context: {'molecule_id': 0, 'molecule_symbols': 'H2', 'basis_set': 'sto3g', 'optimizer': 'L-BFGS-B', 'max_iterations': None, 'backend_type': 'CPU'}
+2026-10-16 11:32:26,420 - VQERunner - INFO - Generating hamiltonian based on the molecule...
+2026-10-16 11:32:26,673 - VQERunner - DEBUG - Nuclear repulsion energy: 0.71375399 Ha
+2026-10-16 11:32:26,673 - VQERunner - DEBUG - ElectronicEnergy constants: {'nuclear_repulsion_energy': np.float64(0.7137539936876182)}
+2026-10-16 11:32:26,673 - VQERunner - INFO - Hamiltonian generated in 0.252525 seconds.
+2026-10-16 11:32:26,673 - VQERunner - INFO - HF reference energy: -1.116684 Ha
+2026-10-16 11:32:26,673 - VQERunner - INFO - Mapping fermionic operator to qubits
+2026-10-16 11:32:26,697 - VQERunner - INFO - Problem mapped to qubits in 0.023564 seconds.
+2026-10-16 11:32:26,697 - VQERunner - INFO - Running VQE procedure...
+2026-10-16 11:32:26,700 - VQESolver - INFO - Using seed 1 for parameter initialization
+2026-10-16 11:32:26,700 - VQESolver - INFO - Analytic-gradient statevector path: 4 qubits, 24 parameters, optimizer L-BFGS-B.
+2026-10-16 11:32:26,700 - VQESolver - DEBUG - Optimization params: {'maxiter': 15000, 'ftol': 1e-06, 'gtol': 1e-06}
+2026-10-16 11:32:26,700 - VQESolver - INFO - Starting VQE optimization with convergence threshold 1e-06
+2026-10-16 11:32:26,740 - VQESolver - DEBUG - Iters. done: 0001 [Current cost: -1.0594715275028548]
+2026-10-16 11:32:26,778 - VQESolver - DEBUG - Iters. done: 0002 [Current cost: -1.1861419082290332]
+2026-10-16 11:32:26,811 - VQESolver - DEBUG - Iters. done: 0003 [Current cost: -1.2529417650643737]
+2026-10-16 11:32:26,851 - VQESolver - DEBUG - Iters. done: 0004 [Current cost: -1.305596104669889]
+2026-10-16 11:32:26,885 - VQESolver - DEBUG - Iters. done: 0005 [Current cost: -1.4078672232937075]
+2026-10-16 11:32:26,989 - VQESolver - DEBUG - Iters. done: 0006 [Current cost: -0.6821155730112437]
+2026-10-16 11:32:27,021 - VQESolver - DEBUG - Iters. done: 0007 [Current cost: -1.347945759176173]
+2026-10-16 11:32:27,053 - VQESolver - DEBUG - Iters. done: 0008 [Current cost: -1.477445698934823]
+2026-10-16 11:32:27,146 - VQESolver - DEBUG - Iters. done: 0009 [Current cost: -1.5682294544667574]
+2026-10-16 11:32:27,238 - VQESolver - DEBUG - Iters. done: 0010 [Current cost: -1.5696257466916648]
+2026-10-16 11:32:27,286 - VQESolver - DEBUG - Iters. done: 0011 [Current cost: -1.6423061152590992]
+2026-10-16 11:32:27,369 - VQESolver - DEBUG - Iters. done: 0012 [Current cost: -1.7280515093961057]
+2026-10-16 11:32:27,473 - VQESolver - DEBUG - Iters. done: 0013 [Current cost: -1.7981273697606526]
+2026-10-16 11:32:27,564 - VQESolver - DEBUG - Iters. done: 0014 [Current cost: -1.8192734900560652]
+2026-10-16 11:32:27,697 - VQESolver - DEBUG - Iters. done: 0015 [Current cost: -1.8261172803917285]
+2026-10-16 11:32:27,800 - VQESolver - DEBUG - Iters. done: 0016 [Current cost: -1.8280622416586185]
+2026-10-16 11:32:27,902 - VQESolver - DEBUG - Iters. done: 0017 [Current cost: -1.8287659546288495]
+2026-10-16 11:32:28,019 - VQESolver - DEBUG - Iters. done: 0018 [Current cost: -1.8292871054115938]
+2026-10-16 11:32:28,171 - VQESolver - DEBUG - Iters. done: 0019 [Current cost: -1.829791298804678]
+2026-10-16 11:32:28,287 - VQESolver - DEBUG - Iters. done: 0020 [Current cost: -1.8299726621028567]
+2026-10-16 11:32:28,352 - VQESolver - DEBUG - Iters. done: 0021 [Current cost: -1.830131715122876]
+2026-10-16 11:32:28,419 - VQESolver - DEBUG - Iters. done: 0022 [Current cost: -1.830283139872433]
+2026-10-16 11:32:28,513 - VQESolver - DEBUG - Iters. done: 0023 [Current cost: -1.8303465670648544]
+2026-10-16 11:32:28,631 - VQESolver - DEBUG - Iters. done: 0024 [Current cost: -1.8303930754977744]
+2026-10-16 11:32:28,746 - VQESolver - DEBUG - Iters. done: 0025 [Current cost: -1.8304117059362641]
+2026-10-16 11:32:28,855 - VQESolver - DEBUG - Iters. done: 0026 [Current cost: -1.830429064228678]
+2026-10-16 11:32:28,977 - VQESolver - DEBUG - Iters. done: 0027 [Current cost: -1.8304348590645347]
+2026-10-16 11:32:29,084 - VQESolver - DEBUG - Iters. done: 0028 [Current cost: -1.8304366703489308]
+2026-10-16 11:32:29,085 - VQESolver - INFO - VQE converged after 28 iterations (threshold: 1e-06). Best energy: -1.83043667 Ha
+2026-10-16 11:32:29,085 - VQESolver - INFO - Total energy (electronic + nuclear repulsion): -1.11668268 Ha (nuclear repulsion: 0.71375399 Ha)
+2026-10-16 11:32:29,086 - VQESolver - INFO - Analytic path completed in 2.384832 seconds and 28 iterations.
+2026-10-16 11:32:29,086 - VQERunner - INFO - VQE procedure completed in 2.389032 seconds
+2026-10-16 11:32:30,089 - VQERunner - INFO - Result provided in 2.665121 seconds.
+2026-10-16 11:32:30,089 - PerformanceMonitor - DEBUG - Updated experiment context: {'total_time': 2.665120724996086, 'minimum_energy': -1.1166826766613127, 'hamiltonian_time': 0.252524559997255, 'mapping_time': 0.023563772992929444, 'vqe_time': 2.389032392005902, 'iterations_count': 28, 'optimal_parameters_count': 24}
+2026-10-16 11:32:30,089 - VQERunner - INFO - HF-deviation assessment for H2:
+2026-10-16 11:32:30,089 - VQERunner - INFO -   VQE Total Energy: -1.116683 Ha
+2026-10-16 11:32:30,090 - VQERunner - INFO -   HF Reference:     -1.116684 Ha
+2026-10-16 11:32:30,090 - VQERunner - INFO -   Deviation:        0.002 mHa
+2026-10-16 11:32:30,090 - VQERunner - INFO -   HF-deviation score: 100.0/100
+2026-10-16 11:32:30,090 - VQERunner - DEBUG - Appended run information to the result.
+2026-10-16 11:32:30,197 - VQEKafkaProducer - INFO - Sending the result to the Kafka topic experiment.vqe...
+2026-10-16 11:32:30,198 - VQEKafkaProducer - INFO - Serializing the result experiment.vqe...
+2026-10-16 11:32:30,198 - VQEDecoratedResultInterface - DEBUG - Serializing object with schema experiment.vqe.
+2026-10-16 11:32:30,198 - SchemaRegistry - INFO - Validating the "vqe_initial" schema...
+2026-10-16 11:32:30,199 - SchemaRegistry - DEBUG - vqe_initial structure:
+
+{'type': 'record', 'name': 'VQEInitialData', 'fields': [{'name': 'backend', 'type': 'string'}, {'name': 'num_qubits', 'type': 'int'}, {'name': 'hamiltonian', 'type': {'type': 'array', 'items': {'type': 'record', 'name': 'HamiltonianTerm', 'fields': [{'name': 'label', 'type': 'string'}, {'name': 'coefficients', 'type': {'type': 'record', 'name': 'ComplexNumber', 'fields': [{'name': 'real', 'type': 'double'}, {'name': 'imaginary', 'type': 'double'}]}}]}}}, {'name': 'num_parameters', 'type': 'int'}, {'name': 'initial_parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'optimizer', 'type': 'string'}, {'name': 'ansatz', 'type': 'string'}, {'name': 'noise_backend', 'type': 'string'}, {'name': 'default_shots', 'type': ['int', 'null']}, {'name': 'ansatz_reps', 'type': 'int'}, {'name': 'init_strategy', 'type': ['string', 'null'], 'default': 'random'}, {'name': 'seed', 'type': ['null', 'int'], 'default': None}, {'name': 'ansatz_name', 'type': ['null', 'string'], 'default': None}, {'name': 'exact_estimator', 'type': 'boolean', 'default': False}]}
+
+
+2026-10-16 11:32:30,199 - SchemaRegistry - DEBUG - Attempting to publish the schema to the registry...
+2026-10-16 11:32:30,214 - SchemaRegistry - INFO - Schema published successfully.
+2026-10-16 11:32:30,215 - SchemaRegistry - INFO - Validating the "vqe_process" schema...
+2026-10-16 11:32:30,215 - SchemaRegistry - DEBUG - vqe_process structure:
+
+{'type': 'record', 'name': 'VQEProcess', 'fields': [{'name': 'iteration', 'type': 'int'}, {'name': 'parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'result', 'type': 'double'}, {'name': 'std', 'type': 'double'}, {'name': 'energy_delta', 'type': ['null', 'double'], 'default': None}, {'name': 'parameter_delta_norm', 'type': ['null', 'double'], 'default': None}, {'name': 'cumulative_min_energy', 'type': ['null', 'double'], 'default': None}]}
+
+
+2026-10-16 11:32:30,215 - SchemaRegistry - DEBUG - Attempting to publish the schema to the registry...
+2026-10-16 11:32:30,219 - SchemaRegistry - INFO - Schema published successfully.
+2026-10-16 11:32:30,220 - SchemaRegistry - INFO - Validating the "vqe_result" schema...
+2026-10-16 11:32:30,220 - SchemaRegistry - DEBUG - vqe_result structure:
+
+{'type': 'record', 'name': 'VQEResult', 'fields': [{'name': 'initial_data', 'type': {'type': 'record', 'name': 'VQEInitialData', 'fields': [{'name': 'backend', 'type': 'string'}, {'name': 'num_qubits', 'type': 'int'}, {'name': 'hamiltonian', 'type': {'type': 'array', 'items': {'type': 'record', 'name': 'HamiltonianTerm', 'fields': [{'name': 'label', 'type': 'string'}, {'name': 'coefficients', 'type': {'type': 'record', 'name': 'ComplexNumber', 'fields': [{'name': 'real', 'type': 'double'}, {'name': 'imaginary', 'type': 'double'}]}}]}}}, {'name': 'num_parameters', 'type': 'int'}, {'name': 'initial_parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'optimizer', 'type': 'string'}, {'name': 'ansatz', 'type': 'string'}, {'name': 'noise_backend', 'type': 'string'}, {'name': 'default_shots', 'type': ['int', 'null']}, {'name': 'ansatz_reps', 'type': 'int'}, {'name': 'init_strategy', 'type': ['string', 'null'], 'default': 'random'}, {'name': 'seed', 'type': ['null', 'int'], 'default': None}, {'name': 'ansatz_name', 'type': ['null', 'string'], 'default': None}, {'name': 'exact_estimator', 'type': 'boolean', 'default': False}]}}, {'name': 'iteration_list', 'type': {'type': 'array', 'items': {'type': 'record', 'name': 'VQEProcess', 'fields': [{'name': 'iteration', 'type': 'int'}, {'name': 'parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'result', 'type': 'double'}, {'name': 'std', 'type': 'double'}, {'name': 'energy_delta', 'type': ['null', 'double'], 'default': None}, {'name': 'parameter_delta_norm', 'type': ['null', 'double'], 'default': None}, {'name': 'cumulative_min_energy', 'type': ['null', 'double'], 'default': None}]}}}, {'name': 'minimum', 'type': 'double'}, {'name': 'optimal_parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'maxcv', 'type': ['null', 'double'], 'default': None}, {'name': 'minimization_time', 'type': 'double'}, {'name': 'nuclear_repulsion_energy', 'type': ['null', 'double'], 'default': None}, {'name': 'success', 'type': ['null', 'boolean'], 'default': None}, {'name': 'nfev', 'type': ['null', 'int'], 'default': None}, {'name': 'nit', 'type': ['null', 'int'], 'default': None}]}
+
+
+2026-10-16 11:32:30,220 - SchemaRegistry - DEBUG - Attempting to publish the schema to the registry...
+2026-10-16 11:32:30,226 - SchemaRegistry - INFO - Schema published successfully.
+2026-10-16 11:32:30,226 - SchemaRegistry - INFO - Validating the "vqe_molecule" schema...
+2026-10-16 11:32:30,226 - SchemaRegistry - DEBUG - vqe_molecule structure:
+
+{'type': 'record', 'name': 'MoleculeInfo', 'namespace': 'quantum_pipeline', 'fields': [{'name': 'molecule_data', 'type': {'type': 'record', 'name': 'MoleculeData', 'fields': [{'name': 'symbols', 'type': {'type': 'array', 'items': 'string'}}, {'name': 'coords', 'type': {'type': 'array', 'items': {'type': 'array', 'items': 'double'}}}, {'name': 'multiplicity', 'type': 'int'}, {'name': 'charge', 'type': 'int'}, {'name': 'units', 'type': 'string'}, {'name': 'masses', 'type': ['null', {'type': 'array', 'items': 'double'}], 'default': None}]}}]}
+
+
+2026-10-16 11:32:30,226 - SchemaRegistry - DEBUG - Attempting to publish the schema to the registry...
+2026-10-16 11:32:30,231 - SchemaRegistry - INFO - Schema published successfully.
+2026-10-16 11:32:30,232 - SchemaRegistry - INFO - Validating the "experiment.vqe" schema...
+2026-10-16 11:32:30,232 - SchemaRegistry - DEBUG - experiment.vqe structure:
+
+{'type': 'record', 'name': 'VQEDecoratedResult', 'fields': [{'name': 'vqe_result', 'type': {'type': 'record', 'name': 'VQEResult', 'fields': [{'name': 'initial_data', 'type': {'type': 'record', 'name': 'VQEInitialData', 'fields': [{'name': 'backend', 'type': 'string'}, {'name': 'num_qubits', 'type': 'int'}, {'name': 'hamiltonian', 'type': {'type': 'array', 'items': {'type': 'record', 'name': 'HamiltonianTerm', 'fields': [{'name': 'label', 'type': 'string'}, {'name': 'coefficients', 'type': {'type': 'record', 'name': 'ComplexNumber', 'fields': [{'name': 'real', 'type': 'double'}, {'name': 'imaginary', 'type': 'double'}]}}]}}}, {'name': 'num_parameters', 'type': 'int'}, {'name': 'initial_parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'optimizer', 'type': 'string'}, {'name': 'ansatz', 'type': 'string'}, {'name': 'noise_backend', 'type': 'string'}, {'name': 'default_shots', 'type': ['int', 'null']}, {'name': 'ansatz_reps', 'type': 'int'}, {'name': 'init_strategy', 'type': ['string', 'null'], 'default': 'random'}, {'name': 'seed', 'type': ['null', 'int'], 'default': None}, {'name': 'ansatz_name', 'type': ['null', 'string'], 'default': None}, {'name': 'exact_estimator', 'type': 'boolean', 'default': False}]}}, {'name': 'iteration_list', 'type': {'type': 'array', 'items': {'type': 'record', 'name': 'VQEProcess', 'fields': [{'name': 'iteration', 'type': 'int'}, {'name': 'parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'result', 'type': 'double'}, {'name': 'std', 'type': 'double'}, {'name': 'energy_delta', 'type': ['null', 'double'], 'default': None}, {'name': 'parameter_delta_norm', 'type': ['null', 'double'], 'default': None}, {'name': 'cumulative_min_energy', 'type': ['null', 'double'], 'default': None}]}}}, {'name': 'minimum', 'type': 'double'}, {'name': 'optimal_parameters', 'type': {'type': 'array', 'items': 'double'}}, {'name': 'maxcv', 'type': ['null', 'double'], 'default': None}, {'name': 'minimization_time', 'type': 'double'}, {'name': 'nuclear_repulsion_energy', 'type': ['null', 'double'], 'default': None}, {'name': 'success', 'type': ['null', 'boolean'], 'default': None}, {'name': 'nfev', 'type': ['null', 'int'], 'default': None}, {'name': 'nit', 'type': ['null', 'int'], 'default': None}]}}, {'name': 'molecule', 'type': {'type': 'record', 'name': 'MoleculeInfo', 'namespace': 'quantum_pipeline', 'fields': [{'name': 'molecule_data', 'type': {'type': 'record', 'name': 'MoleculeData', 'fields': [{'name': 'symbols', 'type': {'type': 'array', 'items': 'string'}}, {'name': 'coords', 'type': {'type': 'array', 'items': {'type': 'array', 'items': 'double'}}}, {'name': 'multiplicity', 'type': 'int'}, {'name': 'charge', 'type': 'int'}, {'name': 'units', 'type': 'string'}, {'name': 'masses', 'type': ['null', {'type': 'array', 'items': 'double'}], 'default': None}]}}]}}, {'name': 'basis_set', 'type': 'string'}, {'name': 'hamiltonian_time', 'type': 'double'}, {'name': 'mapping_time', 'type': 'double'}, {'name': 'vqe_time', 'type': 'double'}, {'name': 'total_time', 'type': 'double'}, {'name': 'molecule_id', 'type': 'int'}, {'name': 'performance_start', 'type': ['null', 'string'], 'default': None}, {'name': 'performance_end', 'type': ['null', 'string'], 'default': None}]}
+
+
+2026-10-16 11:32:30,232 - SchemaRegistry - DEBUG - Attempting to publish the schema to the registry...
+2026-10-16 11:32:30,238 - SchemaRegistry - INFO - Schema published successfully.
+2026-10-16 11:32:30,239 - SchemaRegistry - DEBUG - Parsed dict schema: {"type": "record", "name": "VQEDecoratedResult", "fields": [{"type": {"type": "record", "name": "VQEResult", "fields": [{"type": {"type": "record", "name": "VQEInitialData", "fields": [{"type": "string", "name": "backend"}, {"type": "int", "name": "num_qubits"}, {"type": {"type": "array", "items": {"type": "record", "name": "HamiltonianTerm", "fields": [{"type": "string", "name": "label"}, {"type": {"type": "record", "name": "ComplexNumber", "fields": [{"type": "double", "name": "real"}, {"type": "double", "name": "imaginary"}]}, "name": "coefficients"}]}}, "name": "hamiltonian"}, {"type": "int", "name": "num_parameters"}, {"type": {"type": "array", "items": "double"}, "name": "initial_parameters"}, {"type": "string", "name": "optimizer"}, {"type": "string", "name": "ansatz"}, {"type": "string", "name": "noise_backend"}, {"type": ["int", "null"], "name": "default_shots"}, {"type": "int", "name": "ansatz_reps"}, {"type": ["string", "null"], "name": "init_strategy", "default": "random"}, {"type": ["null", "int"], "name": "seed", "default": null}, {"type": ["null", "string"], "name": "ansatz_name", "default": null}, {"type": "boolean", "name": "exact_estimator", "default": false}]}, "name": "initial_data"}, {"type": {"type": "array", "items": {"type": "record", "name": "VQEProcess", "fields": [{"type": "int", "name": "iteration"}, {"type": {"type": "array", "items": "double"}, "name": "parameters"}, {"type": "double", "name": "result"}, {"type": "double", "name": "std"}, {"type": ["null", "double"], "name": "energy_delta", "default": null}, {"type": ["null", "double"], "name": "parameter_delta_norm", "default": null}, {"type": ["null", "double"], "name": "cumulative_min_energy", "default": null}]}}, "name": "iteration_list"}, {"type": "double", "name": "minimum"}, {"type": {"type": "array", "items": "double"}, "name": "optimal_parameters"}, {"type": ["null", "double"], "name": "maxcv", "default": null}, {"type": "double", "name": "minimization_time"}, {"type": ["null", "double"], "name": "nuclear_repulsion_energy", "default": null}, {"type": ["null", "boolean"], "name": "success", "default": null}, {"type": ["null", "int"], "name": "nfev", "default": null}, {"type": ["null", "int"], "name": "nit", "default": null}]}, "name": "vqe_result"}, {"type": {"type": "record", "name": "MoleculeInfo", "namespace": "quantum_pipeline", "fields": [{"type": {"type": "record", "name": "MoleculeData", "namespace": "quantum_pipeline", "fields": [{"type": {"type": "array", "items": "string"}, "name": "symbols"}, {"type": {"type": "array", "items": {"type": "array", "items": "double"}}, "name": "coords"}, {"type": "int", "name": "multiplicity"}, {"type": "int", "name": "charge"}, {"type": "string", "name": "units"}, {"type": ["null", {"type": "array", "items": "double"}], "name": "masses", "default": null}]}, "name": "molecule_data"}]}, "name": "molecule"}, {"type": "string", "name": "basis_set"}, {"type": "double", "name": "hamiltonian_time"}, {"type": "double", "name": "mapping_time"}, {"type": "double", "name": "vqe_time"}, {"type": "double", "name": "total_time"}, {"type": "int", "name": "molecule_id"}, {"type": ["null", "string"], "name": "performance_start", "default": null}, {"type": ["null", "string"], "name": "performance_end", "default": null}]}
+2026-10-16 11:32:30,239 - VQEDecoratedResultInterface - DEBUG - Writing Confluent Schema Registry header for schema experiment.vqe.
+2026-10-16 11:32:30,251 - VQEKafkaProducer - INFO - Message sent successfully to experiment.vqe-0 at offset 129.
+2026-10-16 11:32:30,251 - PerformanceMonitor - INFO - Stopping performance monitoring thread
+2026-10-16 11:32:30,251 - PerformanceMonitor - DEBUG - Waiting up to 40s for monitoring thread to stop
+2026-10-16 11:32:30,251 - PerformanceMonitor - INFO - System monitoring loop stopped
+2026-10-16 11:32:30,252 - PerformanceMonitor - INFO - Monitoring thread stopped successfully
+2026-10-16 11:32:30,252 - VQEKafkaProducer - INFO - Kafka producer closed successfully.
+2026-10-16 11:32:30,253 - VQERunner - INFO - All molecules processed.

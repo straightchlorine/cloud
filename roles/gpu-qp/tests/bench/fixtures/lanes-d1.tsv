@@ -1,0 +1,40 @@
+# gpu-qp benchmark run matrix: one row per phase/lane/cell group. lane.sh expands a row into
+# cells (molecules outer, seeds inner) and lanes.py reads this file; state lives in
+# <run>/<phase>/state.tsv.
+#
+# phase	lane	service	extra_args	basis	seeds	molecules	budget	init	step
+#
+#   extra_args  space-separated solver tokens, `-` for none
+#   seeds       comma list; molecules: comma list of indices 0-5 (H2 HeH+ LiH BeH2 H2O NH3)
+#   budget      N = --max-iterations N; conv:N = --convergence --threshold 1e-6 --max-evaluations N
+#   init        random or hf
+#   step        lanes sharing a step run concurrently; steps run ascending
+#
+# A (phase, lane) may have several rows; its cells are the rows' cells in row order. Exceptions
+# are rows: NH3 to convergence costs 5-8 h per cell on the Aer lanes, so A2 runs it with one seed.
+# The Aer lanes estimate gradients by finite differences (one optimiser step costs n_params+1
+# evaluations), so a fixed evaluation budget starves them; only the conv: phases converge.
+# The columns are frozen: later changes add rows and code, not columns.
+A	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1,2,3	0,1,2,3,4,5	1000	random	1
+A	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1,2,3	0,1,2,3,4,5	1000	random	1
+A	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1,2,3	0,1,2,3,4,5	1000	random	1
+A	analytic	quantum-pipeline-cpu	-	sto3g	1,2,3	0,1,2,3,4,5	1000	random	2
+A2	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1,2,3	0,1,2,3,4	conv:18000	random	1
+A2	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	5	conv:18000	random	1
+A2	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1,2,3	0,1,2,3,4	conv:18000	random	1
+A2	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	5	conv:18000	random	1
+A2	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1,2,3	0,1,2,3,4	conv:18000	random	1
+A2	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	5	conv:18000	random	1
+A2	analytic	quantum-pipeline-cpu	-	sto3g	1,2,3	0,1,2,3,4,5	conv:18000	random	2
+B	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	0,1,2,3,4,5	200	random	4
+B	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	0,1,2,3,4,5	200	random	2
+B	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	0,1,2,3,4,5	200	random	3
+B	analytic	quantum-pipeline-cpu	-	sto3g	1	0,1,2,3,4,5	200	random	1
+C	cpu-aer	quantum-pipeline-cpu	--no-analytic	cc-pvdz	1	0	1000	random	1
+C	gpu1	quantum-pipeline-gpu1	--gpu	cc-pvdz	1	0	1000	random	1
+C	gpu2	quantum-pipeline-gpu2	--gpu	cc-pvdz	1	0	1000	random	1
+H	analytic	quantum-pipeline-cpu	-	sto3g	1,2,3	0,1,2,3,4,5	conv:18000	hf	1
+S	cpu-aer	quantum-pipeline-cpu	--no-analytic	sto3g	1	0	20	random	2
+S	gpu1	quantum-pipeline-gpu1	--gpu	sto3g	1	0	20	random	3
+S	gpu2	quantum-pipeline-gpu2	--gpu	sto3g	1	0	20	random	4
+S	analytic	quantum-pipeline-cpu	-	sto3g	1	0	20	random	1

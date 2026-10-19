@@ -1,0 +1,14 @@
+A	1	cpu-aer gpu1 gpu2
+A	2	analytic
+A2	1	cpu-aer gpu1 gpu2
+A2	2	analytic
+B	1	analytic
+B	2	gpu1
+B	3	gpu2
+B	4	cpu-aer
+C	1	cpu-aer gpu1 gpu2
+H	1	analytic
+S	1	analytic
+S	2	cpu-aer
+S	3	gpu1
+S	4	gpu2

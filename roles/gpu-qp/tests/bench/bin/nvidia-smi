@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fake nvidia-smi for tests/bench: two GPUs. -L lists them, --query-gpu=F1,F2,... prints one row
+# per GPU (index 0/1, name Fake, every other field 5). FAKE_NVSMI=hang sleeps a minute, =N N seconds.
+echo "nvidia-smi $*" >> "${FAKE_LOG:-/dev/null}"
+case "${FAKE_NVSMI:-ok}" in hang) sleep 60 ;; [0-9]*) sleep "$FAKE_NVSMI" ;; esac
+case "${1:-}" in
+  -L)
+    echo "GPU 0: Fake (UUID: GPU-0)"
+    echo "GPU 1: Fake (UUID: GPU-1)" ;;
+  --query-gpu=*)
+    IFS=, read -ra fields <<< "${1#--query-gpu=}"
+    for gpu in 0 1; do
+      row=
+      for f in "${fields[@]}"; do
+        case "$f" in
+          index) v=$gpu ;;
+          name) v=Fake ;;
+          *) v=5 ;;
+        esac
+        row="${row:+$row, }$v"
+      done
+      echo "$row"
+    done ;;
+esac
+exit 0

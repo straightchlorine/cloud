@@ -15,6 +15,12 @@
   ansible.builtin.include_tasks: validate.yml
   tags: [validation]
 
+- name: Refuse to deploy over a running benchmark
+  # Static import: the tags apply to the tasks inside, and `always` makes it run under every
+  # --tags. The escape is --skip-tags bench-guard.
+  ansible.builtin.import_tasks: guard.yml
+  tags: [always, bench-guard]
+
 - name: Include common package management
   ansible.builtin.include_role:
     name: common
@@ -57,7 +63,8 @@
   tags: [gpu-qp, common, base]
 
 - name: Prepare the data directories and the run wrapper
-  ansible.builtin.include_tasks: data.yml
+  # Static import (unlike include_tasks, the tag reaches the tasks inside): --tags data runs them.
+  ansible.builtin.import_tasks: data.yml
   tags: [data]
 
 - name: Prepare the GPU image

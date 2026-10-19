@@ -1,10 +1,11 @@
 # Managed by Ansible - Do not edit manually
 #
 # Compose override for the ML stack on a userns-remap daemon. Pass it as a second -f on every
-# compose command for the `ml` project:
+# compose command for the `ml` project; a benchmark run snapshots it into <run>/lib/override.yml
+# and its cells use that copy:
 #
 #   docker compose -p ml --env-file .env \
-#     -f compose/docker-compose.ml.yaml -f {{ gpu_qp_home }}/bench/override.yml up -d
+#     -f compose/docker-compose.ml.yaml -f {{ gpu_qp_lib_path }}/override.yml up -d
 #
 # Why each key:
 #   userns_mode: "host"   the remapped daemon refuses `runtime: nvidia` inside a remapped user
@@ -28,7 +29,7 @@
 #             capabilities: [gpu]
 #
 # Two workers, one card each: the role's `gpu_qp_workers` list is the intended source of one
-# service block per device (see notes/BENCH-NEXT.md, to-do 3).
+# service block per device (open, see the README).
 services:
   nvidia-gpu-exporter:
     profiles:

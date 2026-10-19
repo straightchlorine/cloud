@@ -1,0 +1,40 @@
+---
+# Refuses to deploy over a benchmark run: a copy or template under a running cell changes
+# what the next start snapshots, and the dispatcher swap races a command in flight. Imported
+# first by main.yml under the `always` tag, so every --tags run meets it;
+# --skip-tags bench-guard skips it. Fails closed: any result but "free" aborts.
+
+- name: Look for the benchmark lock file
+  # flock PATH opens with O_CREAT, which would leave a root-owned .lock on a host without one.
+  ansible.builtin.stat:
+    path: "{{ gpu_qp_bench_path }}/.lock"
+  register: gpu_qp_guard_lock_stat
+
+- name: Probe the benchmark lock
+  ansible.builtin.command: "flock -n -s {{ gpu_qp_bench_path }}/.lock true"
+  register: gpu_qp_guard_lock
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when: gpu_qp_guard_lock_stat.stat.exists
+
+- name: Look for bench processes
+  # Also catches a .lock replaced under a live run. Matches the legacy gpu-qp-lane.sh, the
+  # bash -c wrapper around gpu-qp-supervise.sh and the new <run>/lib/lane.sh; not editors,
+  # tail or ansible.
+  ansible.builtin.command:
+    argv: [pgrep, -af, '^bash .*/(gpu-qp-)?(supervise|phase|lane)\.sh']
+  register: gpu_qp_guard_procs
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Refuse to deploy while a benchmark run is live
+  ansible.builtin.fail:
+    msg: >-
+      benchmark run in progress
+      ({{ gpu_qp_guard_procs.stdout_lines | first | default('lock held, see ' ~ gpu_qp_bench_path ~ '/.active') }});
+      deploy after it ends or pass --skip-tags bench-guard
+  when: >-
+    gpu_qp_guard_procs.rc != 1
+    or (gpu_qp_guard_lock_stat.stat.exists and gpu_qp_guard_lock.rc != 0)

@@ -2,11 +2,13 @@
 """Extract the thesis benchmark tables from the lane logs (brief section 7).
 
 One log file = one run, at <bench>/<phase>/<lane>/<molecule>_seed<S>.log, as written by
-gpu-qp-lane.sh. Emits:
+lane.sh. Emits:
   <out>/runs.csv
   <out>/iterations/iterations_run<id>_<lane>_<symbols>.csv
 
-Usage: extract.py <bench-root> <out-dir>
+Usage: extract.py <run-dir> <out-dir>
+
+Phases are the directories of the run holding a state.tsv. Exits 1 when one of them has no cell log.
 
 Notes:
   * backend_type comes from the log/dump: 'statevector_analytic' when the analytic line is
@@ -182,11 +184,17 @@ def main(argv: list[str]) -> int:
     bench = Path(argv[1]).expanduser().resolve()
     out = Path(argv[2]).expanduser().resolve()
     (out / 'iterations').mkdir(parents=True, exist_ok=True)
+    # run_id shifts when a later phase adds logs; files of an earlier extraction would be stale
+    for old in (out / 'iterations').glob('iterations_run*.csv'):
+        old.unlink()
 
+    # run_id is the ordinal in the sorted glob, counted before the filter (plot.py and the verify
+    # scripts join on it through the iteration file names).
+    phases = {d.name for d in bench.iterdir() if (d / 'state.tsv').is_file()}
     runs: list[dict] = []
     for run_id, log in enumerate(sorted(bench.glob('*/*/*_seed*.log')), start=1):
         rel = log.relative_to(bench)
-        if len(rel.parts) != 3 or rel.parts[0] not in {'A', 'A2', 'B', 'C', 'S'}:
+        if len(rel.parts) != 3 or rel.parts[0] not in phases:
             continue
         run, iters = build_run(log, bench, run_id)
         runs.append(run)
@@ -206,6 +214,10 @@ def main(argv: list[str]) -> int:
         w.writerows(runs)
 
     print(f'{len(runs)} runs -> {out / "runs.csv"}')
+    empty = sorted(phases - {r['phase'] for r in runs})
+    if empty:
+        print(f'no cell logs for phase(s) with a state.tsv: {" ".join(empty)}', file=sys.stderr)
+        return 1
     return 0
 
 

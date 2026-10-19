@@ -20,6 +20,18 @@
         path: "{{ gpu_qp_home | dirname }}"
         state: directory
         mode: "0755"
+
+    - name: Look for pgrep
+      # The deploy guard and the installed test suite need it; the default image has it.
+      ansible.builtin.stat:
+        path: /usr/bin/pgrep
+      register: gpu_qp_pgrep
+
+    - name: Install procps when pgrep is missing
+      ansible.builtin.package:
+        name: procps
+        state: present
+      when: not gpu_qp_pgrep.stat.exists
   tasks:
     # Deliberately not run here:
     #   - packages.yml / docker.yml (apt installs; no docker-in-docker)
@@ -38,6 +50,11 @@
       ansible.builtin.include_role:
         name: gpu-qp
         tasks_from: validate
+
+    - name: Refuse to deploy over a running benchmark
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: guard
 
     - name: Prepare the data directories and the run wrapper
       ansible.builtin.include_role:

@@ -1,0 +1,55 @@
+---
+# Included by verify.yml once per item: a stub bench process (item.script sleeps, item.cmd
+# starts it) must fail the deploy guard even though it holds no lock.
+- name: Run the guard over a stub bench process
+  block:
+    - name: Create the stub directory
+      ansible.builtin.file:
+        path: "{{ item.script | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write the stub script
+      ansible.builtin.copy:
+        content: "sleep 120\n"
+        dest: "{{ item.script }}"
+        mode: "0755"
+
+    - name: Start it
+      ansible.builtin.command:
+        argv: [bash, -c, "{{ item.cmd }}"]
+      async: 120
+      poll: 0
+      changed_when: false
+
+    - name: Wait for it to show up
+      ansible.builtin.command:
+        argv: [pgrep, -f, "{{ gpu_qp_bench_proc_re }}"]
+      register: gpu_qp_stub
+      until: gpu_qp_stub.rc == 0
+      retries: 20
+      delay: 1
+      changed_when: false
+
+    - name: Guard refuses
+      block:
+        - name: Run the deploy guard
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: guard
+
+        - name: Fail the test - the guard should have refused
+          ansible.builtin.fail:
+            msg: "guard.yml let {{ item.script }} through"
+      rescue:
+        - name: Assert the guard named the benchmark run
+          ansible.builtin.assert:
+            that: "'benchmark run in progress' in ansible_failed_result.msg"
+            fail_msg: "guard failed for another reason: {{ ansible_failed_result.msg | default('') }}"
+            success_msg: "[OK] guard refuses {{ item.script }}"
+  always:
+    - name: Kill the stub
+      ansible.builtin.command:
+        argv: [pkill, -f, "sleep 120"]
+      changed_when: false
+      failed_when: false

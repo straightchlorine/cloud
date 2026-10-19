@@ -11,6 +11,10 @@ gpu_qp_data_path: "{{ gpu_qp_home }}/data"
 gpu_qp_gen_path: "{{ gpu_qp_home }}/gen"
 # `gpu-qp build` writes one log per build here.
 gpu_qp_log_path: "{{ gpu_qp_home }}/logs"
+# Benchmark run trees (data only): one directory per `gpu-qp start --run NAME`, plus the lock.
+gpu_qp_bench_path: "{{ gpu_qp_home }}/bench"
+# Disk floor in GB for the `start` preflight and before each phase (below it: blocked:disk).
+gpu_qp_bench_min_free_gb: 10
 
 # pciutils: lspci, for inspecting the GPU and passthrough by hand.
 gpu_qp_specific_packages:
@@ -123,6 +127,9 @@ gpu_qp_smoke_test_max_iterations: 2
 # state). Set true to keep the image across a teardown/redeploy cycle - rebuilding
 # it compiles qiskit-aer from source (~40 min).
 gpu_qp_teardown_keep_image: false
+# teardown refuses while run trees exist under gpu_qp_bench_path (copy them off first:
+# gpu-qp fetch --run NAME --full). Set true to delete them with the rest.
+gpu_qp_teardown_discard_bench: false
 
 gpu_qp_supported_cuda_arches:
   - "6.0"

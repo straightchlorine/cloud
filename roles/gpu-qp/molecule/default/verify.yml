@@ -2,8 +2,13 @@
 - name: Verify the gpu-qp role's deployed state
   hosts: all
   become: true
+  vars_files:
+    - ../../vars/main.yml
   vars:
     gpu_qp_home: /home/gpu/gpu-qp
+    gpu_qp_bench: /home/gpu/gpu-qp/bench
+    # Matches the bench processes the way the deploy guard and the dispatcher do.
+    gpu_qp_bench_proc_re: '^bash .*/(gpu-qp-)?(supervise|phase|lane)\.sh'
   tasks:
     - name: Read the deployed files
       ansible.builtin.slurp:
@@ -118,8 +123,13 @@
           - gpu_qp_help.stdout is search('(?m)^  check$')
           - gpu_qp_help.stdout is search('(?m)^  run ')
           - gpu_qp_help.stdout is search('(?m)^  scan ')
+          - gpu_qp_help.stdout is search('(?m)^  status ')
+          - gpu_qp_help.stdout is search('(?m)^  start ')
+          - gpu_qp_help.stdout is search('(?m)^  stop ')
+          - gpu_qp_help.stdout is search('(?m)^  runs$')
+          - gpu_qp_help.stdout is search('(?m)^  fetch ')
         fail_msg: "gpu-qp help wrong:\n{{ gpu_qp_help.stdout }}"
-        success_msg: "[OK] gpu-qp help lists pull, build, check, run and scan; unknown commands exit 2"
+        success_msg: "[OK] gpu-qp help lists the commands, benchmark runs included; unknown commands exit 2"
 
     - name: Assert the rendered systemd unit
       ansible.builtin.assert:
@@ -128,3 +138,235 @@
           - "'ExecStart=/usr/bin/docker compose -f /home/gpu/gpu-qp/docker-compose.yml up -d' in unit"
         fail_msg: "unit render wrong:\n{{ unit }}"
         success_msg: "[OK] stack systemd unit renders with the explicit compose file"
+
+    # --- bench helpers ---------------------------------------------------------------------
+
+    - name: List the installed bench helpers
+      ansible.builtin.find:
+        paths: "{{ gpu_qp_lib_path }}"
+        file_type: any
+        hidden: true
+      register: gpu_qp_lib
+
+    - name: Stat the helper directory and the lock
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ gpu_qp_lib_path }}"
+        - "{{ gpu_qp_bench }}/.lock"
+      register: gpu_qp_bench_stats
+
+    - name: Assert the helpers, the directory and the lock
+      ansible.builtin.assert:
+        that:
+          # Exactly the role's files: nothing stale, no __pycache__.
+          - (gpu_qp_lib.files | map(attribute='path') | map('basename') | sort | list)
+            == ((gpu_qp_bench_files + ['bench.env', 'override.yml']) | sort | list)
+          - gpu_qp_lib.files | map(attribute='pw_name') | unique | list == ['root']
+          - gpu_qp_lib.files | map(attribute='mode') | unique | list == ['0644']
+          - gpu_qp_bench_stats.results[0].stat.mode == '0755'
+          - gpu_qp_bench_stats.results[0].stat.pw_name == 'root'
+          # The lock belongs to ansible_user (root in this scenario), not to whoever probes it.
+          - gpu_qp_bench_stats.results[1].stat.pw_name == 'root'
+          - gpu_qp_bench_stats.results[1].stat.mode == '0644'
+        fail_msg: "bench helpers wrong:\n{{ gpu_qp_lib.files | map(attribute='path') | list }}"
+        success_msg: "[OK] bench helpers installed root 0644 in a 0755 directory, lock in place"
+
+    - name: Syntax-check the shell helpers
+      ansible.builtin.command: "bash -n {{ gpu_qp_lib_path }}/{{ item }}"
+      loop: "{{ gpu_qp_bench_files | select('match', '.*[.]sh$') | list }}"
+      changed_when: false
+
+    - name: Parse the Python helpers
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "import ast,sys; ast.parse(open(sys.argv[1]).read())"
+          - "{{ gpu_qp_lib_path }}/{{ item }}"
+      loop: "{{ gpu_qp_bench_files | select('match', '.*[.]py$') | list }}"
+      changed_when: false
+
+    - name: Read the rendered override and settings
+      ansible.builtin.slurp:
+        src: "{{ gpu_qp_lib_path }}/{{ item }}"
+      loop: [override.yml, bench.env]
+      register: gpu_qp_lib_files
+
+    - name: Assert the override and the settings
+      vars:
+        override: "{{ gpu_qp_lib_files.results[0].content | b64decode | from_yaml }}"
+        settings: "{{ gpu_qp_lib_files.results[1].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            ['quantum-pipeline-cpu', 'quantum-pipeline-gpu1', 'quantum-pipeline-gpu2']
+            is subset(override.services | list)
+          - settings is search('(?m)^GPU_QP_HOME=/home/gpu/gpu-qp$')
+          - settings is search('(?m)^GPU_QP_SOURCE=/home/gpu/gpu-qp/src/quantum-pipeline$')
+          - settings is search('(?m)^GPU_QP_BENCH_ROOT=/home/gpu/gpu-qp/bench$')
+          - settings is search('(?m)^GPU_QP_MIN_FREE_GB=10$')
+        fail_msg: "override or bench.env wrong:\n{{ override }}\n{{ settings }}"
+        success_msg: "[OK] override.yml defines the three workers; bench.env carries the role values"
+
+    - name: Run gpu-qp runs
+      # Proves the manifest: lookup('file', rstrip=False) and lookup('template') hash what copy
+      # and template wrote. A mismatch would print the lib warning on stderr.
+      ansible.builtin.command: /usr/local/bin/gpu-qp runs
+      register: gpu_qp_runs
+      changed_when: false
+
+    - name: Run gpu-qp status with no runs
+      ansible.builtin.command: /usr/local/bin/gpu-qp status
+      register: gpu_qp_status
+      changed_when: false
+
+    - name: Run gpu-qp status for an unknown run
+      ansible.builtin.command: /usr/local/bin/gpu-qp status --run nope
+      register: gpu_qp_status_nope
+      changed_when: false
+      failed_when: gpu_qp_status_nope.rc != 2
+
+    - name: Run gpu-qp fetch without a run
+      ansible.builtin.command: /usr/local/bin/gpu-qp fetch
+      register: gpu_qp_fetch
+      changed_when: false
+      failed_when: gpu_qp_fetch.rc != 2
+
+    - name: Assert the benchmark commands
+      ansible.builtin.assert:
+        that:
+          - gpu_qp_runs.stderr == ''
+          - gpu_qp_runs.stdout is search('^NAME\tSTATE\t')
+          - (gpu_qp_status.stdout ~ gpu_qp_status.stderr) is search('no runs')
+          - "gpu_qp_status_nope.stderr is search('unknown run: nope')"
+          - "gpu_qp_fetch.stderr is search('gpu-qp fetch  --run NAME')"
+        fail_msg: "benchmark commands wrong:\n{{ [gpu_qp_runs, gpu_qp_status, gpu_qp_status_nope, gpu_qp_fetch] }}"
+        success_msg: "[OK] runs matches the manifest; status says no runs; bad arguments exit 2"
+
+    # --- the lock and the dispatcher guard -------------------------------------------------
+
+    - name: Dispatcher and guard under a held benchmark lock
+      block:
+        - name: Hold the lock with no .active
+          ansible.builtin.command: "flock {{ gpu_qp_bench }}/.lock sleep 120"
+          async: 120
+          poll: 0
+          changed_when: false
+
+        - name: Wait for the lock to be held
+          ansible.builtin.command: "flock -n -s {{ gpu_qp_bench }}/.lock true"
+          register: gpu_qp_held
+          until: gpu_qp_held.rc == 1
+          retries: 20
+          delay: 1
+          failed_when: false
+          changed_when: false
+
+        - name: Run build, matrix --list, build --help and build --bogus under the lock
+          ansible.builtin.command: "/usr/local/bin/gpu-qp {{ item.args }}"
+          environment: "{{ item.env }}"
+          register: gpu_qp_locked
+          changed_when: false
+          failed_when: false
+          loop:
+            - {args: build, env: {}}
+            - {args: matrix --list, env: {}}
+            - {args: build --help, env: {}}
+            - {args: build --bogus, env: {GPU_QP_IGNORE_RUN: "1"}}
+          loop_control:
+            label: "{{ item.args }}"
+
+        - name: Assert the dispatcher guard
+          ansible.builtin.assert:
+            that:
+              - gpu_qp_locked.results[0].rc == 1
+              - gpu_qp_locked.results[0].stderr is search('in progress [(]unknown run[)]')
+              - gpu_qp_locked.results[1].rc == 0
+              - gpu_qp_locked.results[2].rc == 0
+              - gpu_qp_locked.results[3].rc == 2
+              - gpu_qp_locked.results[3].stderr is search('unknown run')
+            fail_msg: "dispatcher guard wrong:\n{{ gpu_qp_locked.results }}"
+            success_msg: "[OK] build is refused under the lock, --help and matrix --list are not, IGNORE_RUN goes on"
+
+        - name: Guard (a) refuses a held lock
+          block:
+            - name: Run the deploy guard
+              ansible.builtin.include_role:
+                name: gpu-qp
+                tasks_from: guard
+
+            - name: Fail the test - the guard should have refused
+              ansible.builtin.fail:
+                msg: "guard.yml let a held lock through"
+          rescue:
+            - name: Assert the guard named the benchmark run
+              ansible.builtin.assert:
+                that: "'benchmark run in progress' in ansible_failed_result.msg"
+                fail_msg: "guard failed for another reason: {{ ansible_failed_result.msg | default('') }}"
+                success_msg: "[OK] guard refuses while the lock is held"
+      always:
+        - name: Release the lock
+          ansible.builtin.command:
+            argv: [pkill, -f, "sleep 120"]
+          changed_when: false
+          failed_when: false
+
+    - name: Guard against bench processes without the lock
+      ansible.builtin.include_tasks: guard_stub.yml
+      loop:
+        # (b) the old bash -c wrapper around gpu-qp-supervise.sh, (c) a lane of the new layout
+        - {script: /tmp/x/gpu-qp-supervise.sh, cmd: "X=1 bash /tmp/x/gpu-qp-supervise.sh > /tmp/x/out 2>&1"}
+        - {script: /tmp/x/run/lib/lane.sh, cmd: "bash /tmp/x/run/lib/lane.sh"}
+      loop_control:
+        label: "{{ item.script }}"
+
+    - name: Guard (d) passes with nothing running
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: guard
+
+    # --- the helpers against the installed lib ---------------------------------------------
+
+    - name: Copy the bench tests into the container
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../tests/bench/"
+        dest: /tmp/qp-bench-tests
+        mode: preserve
+
+    - name: Run the bench tests against the installed helpers
+      ansible.builtin.command: bash /tmp/qp-bench-tests/run.sh
+      environment:
+        GPU_QP_TEST_LIB: "{{ gpu_qp_lib_path }}"
+      register: gpu_qp_suite
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the suite passed
+      ansible.builtin.assert:
+        that: gpu_qp_suite.rc == 0 and gpu_qp_suite.stdout == 'ALL PASSED'
+        fail_msg: "bench tests failed:\n{{ gpu_qp_suite.stdout }}\n{{ gpu_qp_suite.stderr }}"
+        success_msg: "[OK] the bench tests pass against /usr/local/lib/gpu-qp"
+
+    # --- last: a helper that no longer matches the manifest --------------------------------
+
+    - name: Append a byte to an installed helper
+      ansible.builtin.shell: echo >> {{ gpu_qp_lib_path }}/lane.sh
+      changed_when: true
+
+    - name: Run start and runs against the changed helper
+      ansible.builtin.command: "/usr/local/bin/gpu-qp {{ item }}"
+      register: gpu_qp_drift
+      changed_when: false
+      failed_when: false
+      loop: ["start --run m S", runs]
+
+    - name: Assert start refuses and runs warns
+      ansible.builtin.assert:
+        that:
+          - gpu_qp_drift.results[0].rc == 1
+          - gpu_qp_drift.results[0].stderr is search('lib incomplete, redeploy')
+          - gpu_qp_drift.results[1].rc == 0
+          - gpu_qp_drift.results[1].stderr is search('lib incomplete, redeploy')
+        fail_msg: "manifest check wrong:\n{{ gpu_qp_drift.results }}"
+        success_msg: "[OK] a changed helper stops start and only warns on runs"
