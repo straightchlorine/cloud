@@ -410,9 +410,15 @@ offsets from the keeper in seconds, reason) with the counts `twins_video`,
 ### Reviewing it: `media-import --library`
 
 ```bash
-media-import --library [<query>]   # on the media host; or from a workstation:
-scripts/media/pick.sh fix media [<query>]
+media-import --library [<query>]            # on the media host
+pick fix [<query>]                          # the same, as `pick` on the host
+scripts/media/pick.sh fix media [<query>]   # from a workstation, over ssh
 ```
+
+`pick` (fzf helpers: `pick remove`, `pick album`, `pick fix`) is the same script on both sides. On the
+media host the role installs it as `/usr/local/bin/pick`, a wrapper that sets `PICK_LOCAL=1` so it runs
+everything locally and takes no host argument (`pick remove 'title:Song'`); from a workstation it
+takes the ssh alias first (`pick remove media 'title:Song'`).
 
 A menu over what the audit found, run with the host's python (sqlite on the library, no beets
 container per prompt), so each answer is instant. The queue goes duplicates first, then copies of
@@ -476,7 +482,7 @@ reads it: `3 decision(s) saved, 14 file(s) queued (quarantine 2, pin 12); next: 
 --dry-run`, with `over the limit of 200 files, so the apply needs --force` when the total passes the
 limit (`media_apply_max_files`, which the wrapper passes as `--max-files`). Plain `media-import` (no
 arguments) keeps the beets prompts for new downloads. Every answer is saved at once as a decision;
-nothing changes until the apply. `pick remove` (workstation) saves a quarantine decision the same way.
+nothing changes until the apply. `pick remove` saves a quarantine decision the same way.
 
 ### Applying review decisions (apply, undo)
 

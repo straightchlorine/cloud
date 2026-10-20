@@ -200,9 +200,11 @@ adopt_library() {
     # in library.db, but the comments prefix travelled with the files. `beet
     # modify` raises "No matching objects to modify." when its query matches
     # nothing - and a library that has never had a "use as-is" decision has none -
-    # so restore only if there is something to restore.
+    # so restore only if there is something to restore. -M -W: the field lives in
+    # library.db alone; a plain modify would refile every newly marked track by the
+    # singleton path format ($artist/$title), flattening a folder adopted as it is.
     if [ "$(count 'comments::^reviewed')" -gt 0 ]; then
-        "${BEET[@]}" modify -y reviewed=1 'comments::^reviewed'
+        "${BEET[@]}" modify -y -M -W reviewed=1 'comments::^reviewed'
     fi
 }
 
