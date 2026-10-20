@@ -363,6 +363,16 @@ c, cut = mc.loose_copies("Ride", 215.4, reg[:1])
 check("loose_copies: under a second is still a copy", [r.id for r in c], [1])
 check("loose_copies: a title that is not there matches nothing", mc.loose_copies("Nope", 214.5, reg), ([], []))
 
+# ---- the batch list's selection grammar (media_review.parse_selection)
+import media_review as mr  # noqa: E402
+
+for text, n, want in [("", 5, [0, 1, 2, 3, 4]), ("all", 3, [0, 1, 2]), ("ALL", 2, [0, 1]), ("none", 4, []),
+                      ("1,3-4", 5, [0, 2, 3]), (" 2 ", 3, [1]), ("except 2", 3, [0, 2]),
+                      ("except 1,3-4", 5, [1, 4]), ("except 1-3", 3, []), ("5-5", 5, [4]),
+                      ("0", 3, None), ("4", 3, None), ("3-1", 5, None), ("2-", 5, None), ("a,b", 5, None),
+                      ("except", 5, None), ("1,,2", 5, None), ("-3", 5, None)]:
+    check("parse_selection(%r, %d)" % (text, n), mr.parse_selection(text, n), want)
+
 # ---- rank: the order a person sees the candidate releases in
 def cand(title, covers, n):
     return {"title": title, "covers": covers, "track_count": n}

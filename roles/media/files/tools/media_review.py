@@ -146,6 +146,29 @@ def already_decided(review):
 
 # ------------------------------------------------------------------ terminal
 
+def parse_selection(text, n):
+    """The 0-based indexes a person picked out of n numbered lines, or None when the text is not
+    an answer: "" and "all" (everything), "none", "except 3,7-9" (everything but) or "1,3-5"."""
+    text = text.strip().lower()
+    if text in ("", "all"):
+        return list(range(n))
+    if text == "none":
+        return []
+    invert = text.startswith("except")
+    if invert:
+        text = text[len("except"):].strip()
+    picked = set()
+    for part in text.replace(" ", "").split(","):
+        lo, _dash, hi = part.partition("-")
+        if not lo.isdigit() or (_dash and not hi.isdigit()):
+            return None
+        a, b = int(lo), int(hi or lo)
+        if a < 1 or b > n or a > b:
+            return None
+        picked.update(range(a - 1, b))
+    return [i for i in range(n) if (i in picked) != invert]
+
+
 class Session:
     """Prompts and output. Input ends (EOF) like `q`: what was chosen is saved."""
 
@@ -177,6 +200,29 @@ class Session:
             self.say("  %3d  %s" % (i, ln))
         answer = self.ask("%s [1-%d, enter: back] " % (prompt, len(lines))) or ""
         return int(answer) - 1 if answer.isdigit() and 1 <= int(answer) <= len(lines) else None
+
+    def choose_many(self, lines, prompt):
+        """The indexes picked out of lines, everything selected to begin with, or None when the
+        person backs out. fzf on a terminal (TAB toggles, Enter confirms); numbered otherwise."""
+        if self.use_fzf:
+            proc = subprocess.run(["fzf", "--multi", "--prompt", prompt + "> ", "--with-nth", "2..",
+                                   "--delimiter", "\t", "--bind", "start:select-all", "--header",
+                                   "TAB toggles a line, Enter confirms, Esc backs out"],
+                                  input="\n".join("%d\t%s" % (i, ln) for i, ln in enumerate(lines)),
+                                  capture_output=True, text=True)
+            if proc.returncode not in (0, 1):
+                return None
+            return [int(row.split("\t", 1)[0]) for row in proc.stdout.splitlines() if row.strip()]
+        for i, ln in enumerate(lines, 1):
+            self.say("  %3d  %s" % (i, ln))
+        while True:
+            answer = self.ask("which? [Enter = all, none, except 3,7-9, or 1,3-5] ")
+            if answer is None:
+                return None
+            picked = parse_selection(answer, len(lines))
+            if picked is not None:
+                return picked
+            self.say("not a selection: all, none, except 3,7-9, or numbers like 1,3-5")
 
 
 def guess_search(files):
@@ -596,7 +642,7 @@ class Review:
                 if suggest:
                     self.s.say("  %-18s %s: %s" % ("Enter", suggest[0], suggest[1]))
                 continue
-            if keep_case and a[:1] in ("L", "R"):
+            if keep_case and a[:1] in ("L", "R", "T"):
                 return a
             return {"n": "next", "q": "quit", "l": "list", "x": "skip"}.get(a.lower(), a.lower())
 
@@ -629,7 +675,13 @@ class Review:
             self.s.say("  the release says %.2f s" % official)
         suggest = ("%d" % (copies.index(best) + 1), reason)
         while True:
-            a = self.ask([("1-%d" % len(copies), "keep that copy (the others go to the quarantine)")], suggest)
+            a = self.ask([("1-%d" % len(copies), "keep that copy (the others go to the quarantine)"),
+                          ("T", "one list of the duplicates of the same length: confirm them at once")],
+                         suggest, keep_case=True)
+            if a == "T":
+                if self.batch("duplicate"):
+                    return "next"
+                continue
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
@@ -658,7 +710,13 @@ class Review:
         more = "" if len(rows) == 1 else " (it replaces row %d; the other %d stay)" % (rows[0].id, len(rows) - 1)
         while True:
             a = self.ask([("1", "keep the registered one (the loose file goes to the quarantine)"),
-                          ("2", "use the loose one%s" % more), ("b", "keep both")], suggest)
+                          ("2", "use the loose one%s" % more), ("b", "keep both"),
+                          ("T", "one list of the copies where the registered file is better: confirm at once")],
+                         suggest, keep_case=True)
+            if a == "T":
+                if self.batch("copy"):
+                    return "next"
+                continue
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
@@ -721,8 +779,13 @@ class Review:
         suggest = None if far and rec["kind"] == "probable" else ("r", rec["reason"])
         while True:
             a = self.ask([("r", "quarantine the other %d (the starred one stays)" % (len(rows) - 1)),
-                          ("1-%d" % len(rows), "keep that one instead, the rest go to the quarantine")], suggest,
-                         later="leave them, go on" if in_album else None)
+                          ("1-%d" % len(rows), "keep that one instead, the rest go to the quarantine")]
+                         + ([] if in_album else [("T", "one list of all the certain twins: confirm them at once")]),
+                         suggest, later="leave them, go on" if in_album else None, keep_case=True)
+            if a == "T" and not in_album:
+                if self.batch("twin"):
+                    return "saved"
+                continue
             if a in ("quit", "list", "next"):
                 return a
             if a == "skip":
@@ -740,6 +803,69 @@ class Review:
                           "keep row %d; %d twin(s) to the quarantine" % (kept.id, len(gone)))
                 return "saved"
             self.unknown()
+
+    def batch_groups(self, kind):
+        """[(line for the list, files to quarantine, note)] for the groups of one screen kind where
+        the answer is the suggestion AND it is certain: twins of the same video or recording,
+        duplicates of the same length, copies where the registered file is the better one. The
+        rest (probable twins, copies that differ, a loose file that would replace a row) keep their
+        screens."""
+        out = []
+        if kind == "twin":
+            for rec, rows in self.twin_groups():
+                if rec["kind"] == "probable" or not self.matches(rows):
+                    continue
+                keeper = rows[0]
+                out.append(("%-9s keep %-34.34s %-5s | drop %s" % (
+                    rec["kind"], os.path.basename(keeper.path), keeper.format, "; ".join(
+                        "%.34s %s (%+.1f s)" % (os.path.basename(r.path), r.format,
+                                               (r.length or 0) - (keeper.length or 0)) for r in rows[1:])),
+                    rows[1:], "twin of row %d (%s)" % (keeper.id, rec["kind"])))
+        elif kind == "duplicate":
+            for track, copies, keep in mc.duplicates(self.items):
+                lengths = [c.length or 0 for c in copies]
+                if len(self.open_rows(copies)) != len(copies) or not self.matches(copies) \
+                        or max(lengths) - min(lengths) > EXACT_SECONDS:
+                    continue
+                gone = [c for c in copies if c is not keep]
+                out.append(("duplicate keep %-34.34s %-5s %4dk | drop %s" % (
+                    os.path.basename(keep.path), keep.format, (keep.bitrate or 0) // 1000, "; ".join(
+                        "%.34s %s %dk" % (os.path.basename(c.path), c.format, (c.bitrate or 0) // 1000)
+                        for c in gone)), gone, "duplicate of row %d" % keep.id))
+        else:
+            for f, rows in self.copies():
+                if mc.suggest_copy(f, rows, self.sizes) != "registered" or not self.matches([f] + rows):
+                    continue
+                out.append(("copy      keep %-34.34s %-5s | drop loose %s %s" % (
+                    os.path.basename(rows[0].path), rows[0].format, os.path.basename(f.path), f.format),
+                    [f], "copy of row %d" % rows[0].id))
+        return out
+
+    def batch(self, kind):
+        """One list for many screens of a kind (T): everything the suggestion is certain for, all
+        selected, a person toggles off what they do not want and confirms once. Saves one
+        quarantine decision per group - one stale file then skips its own group only. Returns how
+        many groups it saved."""
+        groups = self.batch_groups(kind)
+        if not groups:
+            self.s.say("nothing certain enough to list here: the rest keep their own screens")
+            return 0
+        picked = self.s.choose_many([line for line, _t, _n in groups], "%s> " % kind)
+        if not picked:
+            self.s.say("nothing selected")
+            return 0
+        files = [t for i in picked for t in groups[i][1]]
+        size = sum(os.path.getsize(t.host) for t in files if os.path.exists(t.host))
+        answer = self.s.ask("quarantine %d file(s), %.1f MB, from %d group(s)? [y/N] " % (
+            len(files), size / 1e6, len(picked)))
+        if (answer or "").lower() not in ("y", "yes"):
+            self.s.say("nothing saved")
+            return 0
+        before = self.saved
+        for i in picked:
+            _line, targets, note = groups[i]
+            self.save("quarantine", targets, note, "%d file(s) to the quarantine (%s)" % (len(targets), note))
+        return self.saved - before
 
     def download(self, key):
         files = sorted(self.download_screens()[key], key=lambda f: f.path)

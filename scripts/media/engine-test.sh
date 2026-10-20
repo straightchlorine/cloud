@@ -2734,6 +2734,76 @@ eq "and undo takes the rows away again" "$(q "select count(*) from items")" 1
 rm -f "$DEC"
 
 # ---------------------------------------------------------------------------------
+section "4b: T - one list for many screens"
+# ---------------------------------------------------------------------------------
+p4_reset
+# five twin pairs (the same video twice, the bare copy under "- Topic"), one probable pair (a CD
+# track and its YouTube single 3 s apart: a suggestion only) and a stale file
+for n in 1 2 3 4 5; do
+    TONE_COMMENT=$(watch 50$n) tone "Batch Band/Album/0$n Song $n.opus" "Batch Band" "Song $n" "Batch Album" "$n" 6
+    TONE_COMMENT=$(watch 50$n) tone "Batch Band - Topic/Song $n.opus" "Batch Band - Topic" "Song $n" "" "" 6
+done
+tone_flac "Prob Band/Album/01 Prob Song.flac" "Prob Band" "Prob Song"
+TONE_COMMENT=$(watch 560) tone "Prob Band - Topic/Prob Song.opus" "Prob Band - Topic" "Prob Song" "" "" 5
+beet -c /config/adopt.yaml import -s /music/Batch\ Band /music/Batch\ Band\ -\ Topic /music/Prob\ Band /music/Prob\ Band\ -\ Topic > /dev/null 2>&1
+ms --audit
+eq "fixture: five twin groups and one probable" \
+    "$(jq4 "sorted(t['kind'] for t in d['twins'])")" "['probable', 'video', 'video', 'video', 'video', 'video']"
+session "Batch Band" T q
+has "T lists the certain twins, numbered" "$out" "  1  video +keep .*Song [0-9].opus +Opus +\\| drop .*Song [0-9].opus Opus \\(\\+0.0 s\\)"
+has "all five of them" "$out" "  5  video +keep"
+lacks_text "the probable pair is not in the list" "$out" "Prob"
+rm -f "$DEC"
+
+# numbered, no terminal: everything is the default
+out=$(printf '%s\n' T '' y q | media-import --library 'Batch Band' 2>&1)
+has "the prompt says what a selection can be" "$out" "which\? \[Enter = all, none, except 3,7-9, or 1,3-5\]"
+has "it asks once for all of it, with the size" "$out" "quarantine 5 file\(s\), [0-9.]+ MB, from 5 group\(s\)\? \[y/N\]"
+eq "and saves one quarantine decision per group" "$(ds4 "len(ds), sorted({d['action'] for d in ds})")" "5 ['quarantine']"
+eq "each naming the bare '- Topic' copy only" \
+    "$(ds4 "sorted(t['id'] for d in ds for t in d['targets'])" | tr -d '[] ')" "$(q "select group_concat(id) from (select id from items where artist = 'Batch Band - Topic' order by id)" | tr -d ' ')"
+rm -f "$DEC"
+
+# except: leave two out; they keep their own screens
+out=$(printf '%s\n' T 'except 2,4' y q | media-import --library 'Batch Band' 2>&1)
+eq "except leaves the named lines out: three decisions" "$(ds4 "len(ds)")" 3
+has "and the session says two are left to review" "$out" "3 decision\(s\) saved this session, [0-9]+ left to review"
+rm -f "$DEC"
+
+# a wrong selection is asked again; none saves nothing; no to the size question saves nothing
+out=$(printf '%s\n' T 'nonsense' 'none' q | media-import --library 'Batch Band' 2>&1)
+has "a selection that is none of the forms is said, and asked again" "$out" "not a selection: all, none, except 3,7-9, or numbers"
+eq "none saves nothing" "$(cat "$DEC" 2> /dev/null)" ""
+out=$(printf '%s\n' T '' n q | media-import --library 'Batch Band' 2>&1)
+has "answering no to the size question says so" "$out" "nothing saved"
+eq "and saves nothing" "$(cat "$DEC" 2> /dev/null)" ""
+
+# EOF in the middle of the list is a quit that keeps what was saved before
+out=$(printf '%s\n' T | media-import --library 'Batch Band' 2>&1)
+has "input ending at the selection prompt saves nothing and ends" "$out" "0 decision\(s\) saved this session"
+
+# the batch decisions go through the apply like the single ones: undo restores them
+before=$(state4)
+printf '%s\n' T '' y q | media-import --library 'Batch Band' > /dev/null 2>&1
+ms --apply
+has "the apply takes the five decisions" "$OUT" "apply: 5 of 5 decision\(s\) applied"
+eq "the five bare copies are in the quarantine" "$(find "$LIBD/removed" -type f | wc -l)" 5
+ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
+eq "and undo puts every one back" "$(state4)" "$before"
+rm -f "$DEC"
+
+# a file changed after the answers were saved skips its own group only
+printf '%s\n' T '' y q | media-import --library 'Batch Band' > /dev/null 2>&1
+printf 'x' >> "$LIBD/music/Batch Band - Topic/Song 3.opus"
+ms --apply
+has "one stale file skips its own group, the others apply" "$OUT" "apply: 4 of 5 decision\(s\) applied"
+rm -f "$DEC"
+# one changed before the menu opens is not in the list at all
+printf 'x' >> "$LIBD/music/Batch Band - Topic/Song 1.opus"
+out=$(printf '%s\n' T '' q | media-import --library 'Batch Band' 2>&1)
+lacks_text "a file that changed since the audit is left out of the list" "$out" "  5  video"
+
+# ---------------------------------------------------------------------------------
 section "4b: replay of the first session"
 # ---------------------------------------------------------------------------------
 # The acceptance test of the phase: one library built from the cases of the first real review (98
