@@ -9,6 +9,8 @@
     domain_name: example.test
     media_home: /home/music/stack
     media_library_path: /mnt/music
+    # the media host's board: its hardware profile sizes the navidrome container
+    device_type: rpi3b
     restic_enabled: false
     restic_repository: /tmp/test-restic
     restic_password: molecule-test-restic-password
@@ -74,6 +76,10 @@
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
+
+    - name: Detect hardware for resource allocation
+      ansible.builtin.include_role:
+        name: hardware
 
     - name: Run the pre-deployment validation
       ansible.builtin.include_role:

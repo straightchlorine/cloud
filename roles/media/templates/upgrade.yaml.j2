@@ -1,16 +1,12 @@
-{# The UPGRADE overlay - the album overlay plus one line.
+{# The upgrade overlay: the album overlay plus one line.
 
-   `upgrade_releases` re-imports every bare track through the album overlay, and
-   that path is used by `media-sync --upgrade`, `--retag` (the weekly cron) and
-   the maintenance flow. config.yaml sets lastgenre.force: yes, so without this
-   override each of those runs re-derives genres from Last.fm and REPLACES them -
-   in library.db and, because write: yes, in the files - for every track it
-   re-imports. A re-match must not rewrite metadata it was not asked to change.
+   `upgrade_releases` re-imports bare tracks through it for `media-sync --upgrade`,
+   `--retag` and the maintenance flow. config.yaml sets lastgenre.force: yes, which
+   would replace genres in library.db and in the files; a re-match must not rewrite
+   metadata it was not asked to change.
 
-   It is its own overlay rather than a line in album.yaml on purpose: album.yaml
-   is also the nightly release pass's overlay, where new downloads SHOULD get
-   Last.fm genres. Keeping them apart is what stops one run's needs from
-   silently changing the other's behaviour.
+   It is its own overlay because album.yaml also serves the nightly release pass,
+   where new downloads should get Last.fm genres.
 #}
 {% include "album.yaml.j2" %}
 lastgenre:

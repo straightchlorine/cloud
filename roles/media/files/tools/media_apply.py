@@ -7,7 +7,7 @@ take a batch back. Run inside the beets container with beets' own python:
 A decision is one JSON object per line of <review>/decisions.jsonl, written by the
 review menu or by hand (container paths; "id" null for a file with no row):
 
-    {"v": 1, "ts": "2026-10-18T12:00:00Z", "action": "pin", "release": "<release id>",
+    {"v": 1, "ts": "<ISO time>", "action": "pin", "release": "<release id>",
      "targets": [{"id": 12, "path": "/music/a/b.opus", "size": 3131907}], "note": "..."}
 
     pin         give the files a release (the pin's rules: title match, copies left alone)
@@ -23,28 +23,12 @@ review menu or by hand (container paths; "id" null for a file with no row):
                 in the library; with a "release", then pin them to it
     skip        nothing changes; recorded so the review does not ask again
 
-Whichever action leaves an album row with no track (a pin or quarantine of its last
-tracks) removes that row in the same decision; the log holds it first, so undo
-re-inserts it under its own id.
-
-A pin may carry "map": {"<row id>": "<release track id>"}: those files take exactly
-that track, whatever their title (the review menu writes it when a title differs).
-
-A later decision about a file replaces an earlier one. A keep, skip, quarantine or
-pin that still has a target nobody else names runs on those alone ("narrowed"); any
-other decision, or one with no target left, is "superseded".
-
-The decisions run by kind, not by line: quarantine and replace first (a pin must not
-tie a track to a copy about to go), then merge, pin and adopt, then keep, register and
-skip; within a kind in file order. After the last decision every album row that holds
-no track is removed.
-
-Every target is checked first: the row still has that id and path, the file that
-size. If not, the library moved on since the person looked, and the whole decision
-is skipped as stale. Each change is logged before it is made (the row as it was) and
-after (as it became), flushed to disk, in <review>/apply-log/<stamp>.jsonl, so undo
-can put it back even after an apply that died halfway. The decisions go to
-<review>/applied/<stamp>.jsonl, each with its result.
+Any action that leaves an album row with no track removes that row too; the log holds
+it first, so undo re-inserts it under its own id. A pin may carry "map":
+{"<row id>": "<release track id>"}: those files take exactly that track, whatever
+their title. The README ("Applying review decisions") owns the rules for narrowing,
+superseding, run order and stale targets; each change is logged before and after it
+is made, so undo works even after an apply that died halfway.
 """
 
 import argparse
@@ -254,7 +238,7 @@ def movable(item, hold):
 
 
 def tidy_folders(lib, log, n, album, seqs, hold):
-    """Move every track of `album` to where the library files it now. A pin moves its files
+    """Move every track of `album` to the folder the path format gives it. A pin moves its files
     while the album rows it is about to empty still exist, and the path format's aunique
     then files them under "Album [id]"; with those rows gone the same destination loses the
     suffix. `seqs` maps the row ids already logged (a track is logged once) to their seq;

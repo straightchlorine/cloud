@@ -9,20 +9,17 @@ import:
     write: yes
     # YouTube tracks are single songs, never whole releases.
     singletons: yes
-    # Unmatched tracks are SKIPPED and left in downloads/ so the nightly
-    # unattended run imports only clean MusicBrainz matches; run `media-import`
-    # (interactive) to resolve whatever is left.
+    # Unmatched tracks are skipped and left in downloads/, so the unattended run
+    # imports only clean matches; `media-import` resolves the rest.
     quiet_fallback: skip
     duplicate_action: keep
     resume: no
     log: /config/import.log
 
-# Match tuning: a freshly-imported item has no data source, so it always
-# "differs" from the MusicBrainz candidate and picks up a fixed ~0.11 penalty -
-# enough to push even a perfect match above strong_rec_thresh (0.04) and get it
-# skipped in quiet mode. Ignore the data_source component (the weight key is
-# literally `data_source`, not `source`); a correct match then scores ~100% and
-# is applied, while ambiguous candidates stay below the bar.
+# A new item has no data source, so it always differs from the MusicBrainz candidate
+# and takes a fixed ~0.11 penalty, enough to push a perfect match past
+# `strong_rec_thresh` (0.04) and get it skipped in quiet mode. Zero the `data_source`
+# weight (the key is `data_source`, not `source`); ambiguous candidates stay below the bar.
 match:
     distance_weights:
         data_source: 0
@@ -34,9 +31,8 @@ paths:
     comp: Compilations/$album%aunique{}/%if{$track,$track }$title
 
 plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed
-# reviewed.py records a reviewer's "use as-is" answer as a `reviewed` field plus
-# a `reviewed | ` comments prefix (see the file in /config/plugins). It is only
-# active when an overlay sets `reviewed.mark: yes`, i.e. the interactive runs.
+# reviewed.py marks a "use as-is" answer; it only runs when an overlay sets
+# `reviewed.mark: yes`.
 pluginpath: /config/plugins
 
 lyrics:

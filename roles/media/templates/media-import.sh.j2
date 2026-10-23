@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# media-import - the INTERACTIVE half of the pipeline. A wrapper: every pass,
+# media-import - the interactive half of the pipeline. A wrapper: every pass,
 # overlay and beets invocation lives in media-sync (see its header), so there is
 # nothing to keep in sync here. Needs a terminal.
 #
@@ -15,17 +15,16 @@
 #   media-import --interactive [<dir>]  the nightly pairing (quiet release pass,
 #                                   then the singleton pass) but asking per track
 #   media-import --library [<query>]
-#                                   the existing library: decide, album by album,
-#                                   what `media-sync --audit` found (media_review.py):
-#                                   duplicates, copies of registered tracks, split
-#                                   releases, albums, and the files left in downloads/;
-#                                   choices are saved for `media-sync --apply`
+#                                   the existing library: decide, one screen at a
+#                                   time, what `media-sync --audit` found
+#                                   (media_review.py); choices are saved for
+#                                   `media-sync --apply`
 #   media-import --quarantine <row id>...
-#                                   queue files for the quarantine (pick remove)
+#                                   queue files to be moved aside (pick remove)
 #
 # Answering "use as-is" marks the track reviewed (see reviewed.py), so no later
 # `--upgrade`/`--retag` re-matches something you chose to keep as it is.
-# Ctrl-C stops it cleanly and says so; nothing is half-applied.
+# Ctrl-C stops it cleanly; nothing is half-applied.
 set -euo pipefail
 
 # The library review runs on the host's python, not in a beets container: it reads

@@ -9,11 +9,8 @@
 # YouTube Music ("- Topic" channels) supplies track/artist/album; prefer them.
 --parse-metadata "%(track,title)s:%(title)s"
 --parse-metadata "%(artist,uploader)s:%(artist)s"
-# Typographic dashes: uploaders write a separator as a hyphen, an en dash or an em
-# dash, while every rule below only knows about '-'. Normalise the dash class once,
-# here, rather than teaching each rule about it: the "- Topic" channel cleanup and
-# the "Artist - Title" repost split then both work (order matters - the rules below
-# see what this one wrote).
+# Uploaders separate with a hyphen, en dash or em dash, while the rules below only
+# know '-'; normalise once here so the "- Topic" cleanup and the repost split work.
 --replace-in-metadata "artist,title" "[–—]" "-"
 # Reposts: a non-YouTube-Music title "Artist - Title" names the real artist.
 --parse-metadata "%(track&YTM|)s%(title)s:^(?!YTM)(?P<artist>[^-]+?) - (?P<title>.+)$"
@@ -35,8 +32,8 @@
 --convert-thumbnails jpg
 
 # Flat and transient: beets renames on import. The B limits are BYTES: ext4 caps a
-# name at 255 and a title in 4-byte "bold" letters passes that at ~60 characters
-# (it failed every night); the tags keep the full text.
+# name at 255 and a title in 4-byte "bold" letters passes that at ~60 characters;
+# the tags keep the full text.
 --output "{{ media_library_path }}/downloads/%(artist).60B - %(title).120B [%(id)s].%(ext)s"
 --download-archive "{{ media_library_path }}/state/youtube-archive.txt"
 --cache-dir "{{ media_library_path }}/cache"

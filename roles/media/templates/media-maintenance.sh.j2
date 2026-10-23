@@ -3,21 +3,21 @@
 # `media-sync --maintenance`. Sourced by media-sync, which holds the writer lock
 # for the whole run; every operation it uses lives in media-lib or media-sync.
 #
-# It exists for a library that was never matched: a migrated one, or years of
-# as-is imports. Run about once a year, takes hours to days, and is the one thing
-# in this role that can lose data when it is wrong, hence the checkpoint, the
-# resume point and the preflight.
+# It exists for a library that was never matched: a migrated one, or one built from
+# as-is imports. It takes hours to days and is the one thing in this role that can
+# lose data when it is wrong, hence the checkpoint, the resume point and the preflight.
 #
 #   1 adopt     register files that have no row
 #   2 prune     drop rows whose file is gone (after a checkpoint of library.db)
-#   3 upgrade   re-match every bare track against MusicBrainz as part of its
-#               release. It removes the bare rows FIRST and re-imports the files,
-#               so the library is collapsed until step 4 - the point of no return
+#   3 upgrade   re-match every bare track (no release id) against MusicBrainz as
+#               part of its release. It removes the bare rows first and re-imports
+#               the files, so the library is collapsed until step 4 - the point
+#               of no return
 #   4 adopt     re-register what step 3 found no release for
 #   5 regroup   album rows for tracks that carry a release id
 #   6 complete  pin the bare tracks of partly matched albums to their release
-#   7 settle    stamp the library as older than the 4-week "recent" window, so the
-#               weekly --retag does not mistake a rebuilt library for new downloads
+#   7 settle    stamp the library as older than the 4-week "recent" window (see
+#               settle_library in media-lib)
 #   8 backfill  lyrics + ReplayGain
 #
 # A failed or interrupted run says where to resume: `--from N`. Resume from 4 or
@@ -95,7 +95,7 @@ maintenance() {
     trap 'notify failed "Step $CURRENT_STEP/$MAINT_STEPS (line $LINENO). See $MAINT_LOG. Resume with: media-sync --maintenance --from $CURRENT_STEP" high rotating_light,error' ERR
 
     maint_log "maintenance run start from step $FROM/$MAINT_STEPS (log: $MAINT_LOG)"
-    notify started "steps $FROM..$MAINT_STEPS of adopt, prune, upgrade, adopt, regroup, complete, settle, backfill. Hours to days; one more ntfy when it is done."
+    notify started "Steps $FROM-$MAINT_STEPS of $MAINT_STEPS. This takes hours to days; you get one more message when it ends."
     # Only step 3 and the backfill need MusicBrainz or lrclib, but a collapsed
     # library is the wrong place to find out it is unreachable.
     if [ "$FROM" -le 3 ] && ! musicbrainz_reachable; then

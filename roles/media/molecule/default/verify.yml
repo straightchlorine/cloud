@@ -93,6 +93,8 @@
         that:
           - compose.services | list | sort == ['beets', 'cadvisor', 'navidrome', 'watchtower']
           - navidrome.image == 'deluan/navidrome:latest'
+          - navidrome.deploy.resources.limits.memory == '512M'
+          - navidrome.deploy.resources.limits.cpus | string == '2.0'
           - "'com.centurylinklabs.watchtower.enable=true' in navidrome.labels"
           - "'ND_BACKUP_PATH=/data/backups' in navidrome.environment"
           - "'ND_BACKUP_SCHEDULE=45 1 * * *' in navidrome.environment"

@@ -203,33 +203,56 @@ def album_sizes(items):
     return collections.Counter(i.album_id for i in items if i.album_id is not None)
 
 
+def path_text(copy):
+    """A copy's path as text: beets rows hold bytes, the menu's loose files text, a bare
+    record none."""
+    path = getattr(copy, "path", None) or ""
+    return path.decode("utf-8", "surrogateescape") if isinstance(path, bytes) else path
+
+
 def in_topic_folder(copy):
     """Whether a file sits under a YouTube auto-channel folder ('Akane - Topic/'): the
     bare download, not where an import files a matched track."""
-    path = getattr(copy, "path", None) or ""
-    if isinstance(path, bytes):
-        path = path.decode("utf-8", "surrogateescape")
+    path = path_text(copy)
     return any(re.search(r"\s-\s*topic$", part, re.IGNORECASE) for part in path.split("/")[:-1])
 
 
-def copy_rank(copy, sizes, twin=False):
-    """How good a copy of a track is, higher better: the format (lossless first), the
-    bitrate, the album row holding most of its release, then the older row. Works on
-    items and on the audit's loose-file records (id and album_id None: no row, so no
-    album and, on a tie, the newest). `sizes` is album_sizes(...).
+# "Song.1.opus": the name a second download of "Song.opus" gets
+COPY_SUFFIX = re.compile(r"(\.\d+)\.[^./]+$")
+# The copy criteria, in the order copy_rank compares them.
+COPY_CRITERIA = ("format", "release", "bitrate", "album", "name", "age")
 
-    `twin` is the ranking of twins() - copies that need not be matched at all: a row
-    with a release id comes first (it carries the album identity the library is
-    organised by, which a better bare file would lose), and on a tie a file in a
-    '- Topic' folder loses before the age decides. The bitrate is compared in steps of
-    16 kbit/s: it is computed from the file size, so a cover or longer tags in one copy
-    of the same download move it by a percent, which must not decide the keeper."""
+
+def copy_rank(copy, sizes, twin=False):
+    """How good a copy of a track is, higher better. Works on items and on the audit's loose-file
+    records (id and album_id None: no row, so no album and, on a tie, the newest). `sizes` is
+    album_sizes(...).
+
+    Copies, in order (COPY_CRITERIA): lossless format; a release id; bitrate in 16 kbit/s steps;
+    the album row holding most of its release; a file name without a ".N" copy suffix (the
+    original download); the older row. The steps are floors of the kbit/s a screen shows, so two
+    copies that show the same bitrate never differ on it; the bitrate is computed from the file
+    size, so a cover or longer tags move it by a percent, which must not decide the keeper.
+
+    `twin` is the ranking of twins(), whose copies need not be matched at all: the release id
+    comes before the format (it carries the album identity the library is organised by, which a
+    better bare file would lose), and on a tie a file in a '- Topic' folder loses before the age
+    decides."""
     held = sizes.get(copy.album_id, 0) if copy.album_id is not None else 0
     age = -(copy.id if copy.id is not None else float("inf"))
     fmt, bitrate = FORMAT_RANK.get((copy.format or "").upper(), 1), copy.bitrate or 0
-    if not twin:
-        return (fmt, bitrate, held, age)
-    return (bool(getattr(copy, "mb_albumid", "")), fmt, round(bitrate / 16000), held, not in_topic_folder(copy), age)
+    release = bool(getattr(copy, "mb_albumid", ""))
+    if twin:
+        return (release, fmt, round(bitrate / 16000), held, not in_topic_folder(copy), age)
+    original = not COPY_SUFFIX.search(os.path.basename(path_text(copy)))
+    return (fmt, release, bitrate // 16000, held, original, age)
+
+
+def copy_criterion(best, other, sizes):
+    """The first of COPY_CRITERIA on which `best` outranks `other` (the one copy_rank put
+    ahead), or "age" when only the row order tells them apart."""
+    a, b = copy_rank(best, sizes), copy_rank(other, sizes)
+    return next((name for name, x, y in zip(COPY_CRITERIA, a, b) if x != y), "age")
 
 
 def best_copy(copies, sizes, twin=False):

@@ -1,34 +1,20 @@
-"""media-import --library: decide, album by album, what the audit found. Host side.
+"""media-import --library: decide, one screen at a time, what the audit found. Host side.
 
-Runs with the host's own python (no beets container per prompt): it reads the
-library read-only with sqlite, the audit's candidates.json, MusicBrainz through the
-shared cache, and appends each choice to decisions.jsonl the moment it is made.
-`media-sync --apply` (Sundays 04:00, or by hand) carries them out.
+Runs with the host's python, so each answer is instant: it reads the library read-only with
+sqlite, the audit's candidates.json and MusicBrainz through the shared cache, and appends each
+choice to decisions.jsonl the moment it is made. `media-sync --apply` carries them out.
 
     media_review.py review --review DIR --db FILE --music DIR --downloads DIR --mb-url URL --max-files N [query]
     media_review.py quarantine --review DIR --db FILE --music DIR <row id>...
 
-The queue, in this order (a copy has to go before its release can be one row):
-  duplicate   a release track held by two or more rows: keep one, quarantine the rest
-  copy        a file with no row that copies a registered track: keep the registered
-              one, use the loose one instead, or keep both
-  twin        rows that are the same recording (the audit's "twins": one YouTube video
-              twice, the same title and length, a probable copy from another source):
-              quarantine the other(s), or keep a different one
-  scattered   one release in several album rows: merge them (only when one edition
-              holds them all; with a second edition in the group the album screen decides)
-  album       what the audit classified (split, partial, whole): pick an edition,
-              enter an id, search, or keep as it is
-  download    the files the nightly passes left in downloads/, one screen per folder:
-              adopt as they are or with a release, search, or quarantine
-Each is re-read from the library when its turn comes, so what was fixed meanwhile,
-or has a decision waiting, or was skipped, is not asked again. A file the audit could
-not read is not offered (candidates.json lists it with its error).
+The queue, in this order (a copy has to go before its release can be one row): duplicate, copy,
+loose, twin, scattered, album, download. Each screen is re-read from the library when its turn
+comes, so what was fixed meanwhile, has a decision waiting or was skipped is not asked again.
+A file the audit could not read is not offered.
 
-Every screen works out a suggested answer and says why: Enter takes it, Enter on a
-screen with none asks again, `?` lists the answers. Plain numbered prompts on stdin, so
-a session can be scripted; fzf only for the long list (`l`) when there is a terminal,
-with a numbered fallback.
+Every screen says what it is about, suggests an answer and why; Enter takes the suggestion, `?`
+explains the screen. Plain prompts on stdin, so a session can be scripted; colour only on a
+terminal; fzf only for the long lists when there is a terminal, with a numbered fallback.
 """
 
 import argparse
@@ -40,8 +26,10 @@ import os
 import re
 import shutil
 import sqlite3
+import shlex
 import subprocess
 import sys
+import tempfile
 import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -61,10 +49,52 @@ PAIR_SECONDS = 1.5
 FLAGGED = re.compile(r"atmos|clean|24.?bit|hi-?res|bonus|deluxe|instrumental", re.IGNORECASE)
 # kana, kanji and hangul: the scripts of the library's original-language titles
 CJK = re.compile("[\u1100-\u11ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]")
-# what every screen's prompt ends with
-EVERY_SCREEN = [("n", "skip for now (asked again next time)"), ("x", "never ask again"), ("l", "list the queue"),
-                ("q", "quit")]
+# the keys every screen has, (key, label); `n` is reworded where it only leaves a question
+EVERY_SCREEN = [("n", "skip"), ("x", "never ask"), ("l", "list"), ("q", "quit"), ("?", "help")]
+NO_RELEASE = "no release tag"
+# ANSI SGR codes of the colour roles; "bold+green" combines them
+SGR = {"bold": "1", "dim": "2", "red": "31", "green": "32", "yellow": "33", "cyan": "36"}
 ANY_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+# The sentence under each screen's header, and what `?` adds to it.
+INTRO = {
+    "duplicate": "The same track of one release is in your library twice. Keep one.",
+    "copy": "This file is a second copy of a track already in your library. Keep one.",
+    "loose": "These files are not in your library yet.",
+    "twin": "These rows look like one recording held more than once. Keep one.",
+    "scattered": "One release is spread over several album rows in your library.",
+    "album": "These tracks are one album, but they are not all matched to one release. "
+             "Pick the release they come from.",
+    "download": "These files are still in downloads/ and not in your library.",
+}
+MEANING = {
+    "duplicate": "Two or more rows are matched to the same track of the same release, so the album would show it "
+                 "twice. Keeping one queues the others to be moved aside.",
+    "copy": "A file with no row in the library has the same artist, title and length as a track that has one. "
+            "Either file can stay; the other is queued to be moved aside, or you keep both.",
+    "loose": "The audit found these music files on disk with no row in the library. None of them matches a library "
+             "track by title and length, so adding them duplicates nothing; a file marked as another cut is the "
+             "same title a few seconds off, which may be a second version of a track you have.",
+    "twin": "The audit found rows for one recording: one YouTube video downloaded twice (video), the same artist, "
+            "title and length (recording), or the same title a few seconds apart from another source (probable). "
+            "Keeping one queues the others to be moved aside.",
+    "scattered": "Every track of one release sits in the library, but in more than one album row, so players show "
+                 "several albums. Merging puts them in one album row.",
+    "album": "The audit found tracks of one album that are tagged with several releases (split), only partly "
+             "matched to one (partial), or not matched at all (whole). Matching them to a release re-tags the "
+             "files and files them under it; keeping them leaves them as they are.",
+    "download": "The nightly passes left these files in downloads/ because no release matched them. Adding them "
+                "puts them in the library, with a release when you pick one.",
+}
+KEY_HELP = {
+    "n": "skip for now; not saved, the screen comes back next session",
+    "x": "never ask about these again; saved as a skip, no file changes",
+    "l": "list the whole queue and jump to a screen; not saved",
+    "q": "quit; everything you chose is already saved (the end of input does the same)",
+    "?": "show this help",
+}
+APPLY_NOTE = ("Nothing moves until the apply (`media-sync --apply`, also weekly from cron); "
+              "`media-sync --undo <log>` takes an apply back.")
 
 
 # ------------------------------------------------------------------ library
@@ -169,11 +199,25 @@ def parse_selection(text, n):
     return [i for i in range(n) if (i in picked) != invert]
 
 
+def colour_wanted(out, env=None):
+    """Colour only on a terminal, and not when NO_COLOR is set or the terminal is dumb."""
+    env = os.environ if env is None else env
+    return bool(getattr(out, "isatty", lambda: False)()) and not env.get("NO_COLOR") and env.get("TERM") != "dumb"
+
+
 class Session:
     """Prompts and output. Input ends (EOF) like `q`: what was chosen is saved."""
 
-    def __init__(self, inp, out, use_fzf):
+    def __init__(self, inp, out, use_fzf, colour=None):
         self.inp, self.out, self.use_fzf = inp, out, use_fzf
+        self.colour = colour_wanted(out) if colour is None else colour
+
+    def paint(self, role, text):
+        """`text` in a colour role ("bold", "dim", "green", "cyan", "yellow", "red", or two
+        joined by "+"). Words and markers carry the meaning; colour only helps the eye."""
+        if not self.colour or not text:
+            return text
+        return "\033[%sm%s\033[0m" % (";".join(SGR[r] for r in role.split("+")), text)
 
     def say(self, text=""):
         print(text, file=self.out, flush=True)
@@ -201,20 +245,27 @@ class Session:
         answer = self.ask("%s [1-%d, enter: back] " % (prompt, len(lines))) or ""
         return int(answer) - 1 if answer.isdigit() and 1 <= int(answer) <= len(lines) else None
 
-    def choose_many(self, lines, prompt):
+    def choose_many(self, lines, prompt, details=None):
         """The indexes picked out of lines, everything selected to begin with, or None when the
-        person backs out. fzf on a terminal (TAB toggles, Enter confirms); numbered otherwise."""
+        person backs out. fzf on a terminal (TAB toggles, Enter confirms); numbered otherwise.
+        `details` is a text per line: fzf previews it, the numbered list prints it under the
+        line when it is short."""
         if self.use_fzf:
-            proc = subprocess.run(["fzf", "--multi", "--prompt", prompt + "> ", "--with-nth", "2..",
-                                   "--delimiter", "\t", "--bind", "start:select-all", "--header",
-                                   "TAB toggles a line, Enter confirms, Esc backs out"],
-                                  input="\n".join("%d\t%s" % (i, ln) for i, ln in enumerate(lines)),
-                                  capture_output=True, text=True)
+            with tempfile.TemporaryDirectory() as folder:
+                for i, text in enumerate(details or []):
+                    with open(os.path.join(folder, str(i)), "w") as fh:
+                        fh.write(text + "\n")
+                proc = subprocess.run(["fzf"] + fzf_multi_args(prompt + "> ", folder, self.colour),
+                                      input="\n".join("%d\t%s" % (i, ln) for i, ln in enumerate(lines)),
+                                      capture_output=True, text=True)
             if proc.returncode not in (0, 1):
                 return None
             return [int(row.split("\t", 1)[0]) for row in proc.stdout.splitlines() if row.strip()]
         for i, ln in enumerate(lines, 1):
             self.say("  %3d  %s" % (i, ln))
+            if details and len(details[i - 1].splitlines()) <= 6:
+                for row in details[i - 1].splitlines():
+                    self.say("        " + row)
         while True:
             answer = self.ask("which? [Enter = all, none, except 3,7-9, or 1,3-5] ")
             if answer is None:
@@ -223,6 +274,18 @@ class Session:
             if picked is not None:
                 return picked
             self.say("not a selection: all, none, except 3,7-9, or numbers like 1,3-5")
+
+
+def fzf_multi_args(prompt, preview_dir, colour):
+    """The fzf options of the T list. Input lines are 'index TAB text'; the preview shows the
+    file `preview_dir/<index>`. Only options fzf 0.60 has."""
+    args = ["--multi", "--layout=reverse", "--info=inline-right", "--prompt", prompt, "--with-nth", "2..",
+            "--delimiter", "\t", "--marker=+ ", "--bind", "start:select-all,ctrl-a:select-all,ctrl-d:deselect-all",
+            "--header", "selected lines are saved: TAB leaves one out, ctrl-a all, ctrl-d none, Enter saves, "
+                        "Esc cancels\nkeep stays in the library; drop moves aside (nothing deleted)",
+            "--preview", "cat %s/{1}" % shlex.quote(preview_dir),
+            "--preview-window", "right,50%,wrap,<130(down,45%,wrap)"]
+    return args + ["--ansi"] if colour else args
 
 
 def guess_search(files):
@@ -262,17 +325,56 @@ def official_length(mb, release_id, track_id):
     return next((t.length for t in mc.release_tracks(release) if t.id == track_id), None)
 
 
+def release_name(item):
+    """The release id a row or file carries, shortened, or None."""
+    return (getattr(item, "mb_albumid", "") or "")[:8] or None
+
+
 def why_keep(best, others, sizes):
-    """In a few words, why the shared ranking (mc.copy_rank) puts `best` ahead of the runner-up."""
-    rank_best = mc.copy_rank(best, sizes)
-    rank_next = mc.copy_rank(max(others, key=lambda c: mc.copy_rank(c, sizes)), sizes)
-    if rank_best[0] != rank_next[0]:
-        return "the better format (%s)" % best.format
-    if rank_best[1] != rank_next[1]:
-        return "the higher bitrate (%dk)" % ((best.bitrate or 0) // 1000)
-    if rank_best[2] != rank_next[2]:
-        return "it sits in the fuller album row"
-    return "the older row"
+    """Why the shared ranking (mc.copy_rank) puts `best` ahead of the runner-up among `others`,
+    naming the criterion that decided and the values the screen shows for it."""
+    other = max(others, key=lambda c: mc.copy_rank(c, sizes))
+    criterion = mc.copy_criterion(best, other, sizes)
+    if criterion == "format":
+        return "it is lossless (%s), the other is %s" % (best.format, other.format)
+    if criterion == "release":
+        return "it has release %s, the other has no release tag" % release_name(best)
+    if criterion == "bitrate":
+        return "the higher bitrate (%dk against %dk)" % ((best.bitrate or 0) // 1000, (other.bitrate or 0) // 1000)
+    if criterion == "album":
+        return "its album row holds more of the release (%s against %d)" % (
+            tracks_text(sizes.get(best.album_id, 0)), sizes.get(other.album_id, 0))
+    if criterion == "name":
+        suffix = mc.COPY_SUFFIX.search(os.path.basename(mc.path_text(other)))
+        return "same audio and tags; keeps the file without the %s suffix" % suffix.group(1)
+    if other.id is None:
+        return "same audio and tags; keeps the one already in the library"
+    return "same audio and tags; keeps the older row"
+
+
+# what each criterion of mc.COPY_CRITERIA is called in a list line
+CRITERION_WORDS = {"format": "lossless", "release": "has a release tag", "bitrate": "higher bitrate",
+                   "album": "fuller album row", "name": "name without .N", "age": "already in the library"}
+
+
+def short_path(item):
+    """The folder and file name of a row or file, cut to 40 characters."""
+    return "%.40s" % os.path.join(os.path.basename(os.path.dirname(item.path)), os.path.basename(item.path))
+
+
+def tracks_text(n):
+    return "%d track%s" % (n, "" if n == 1 else "s")
+
+
+def in_range(answer, n):
+    """Whether the answer is a number from 1 to n."""
+    return answer.isdigit() and 1 <= int(answer) <= n
+
+
+def view_key(answer, n):
+    """Whether the answer is v<n> or o<n> for an edition of a table of n."""
+    m = re.fullmatch(r"[vo]\s*(\d+)", answer)
+    return bool(m) and 1 <= int(m.group(1)) <= n
 
 
 def is_original_language(titles):
@@ -315,6 +417,36 @@ def find_track(tracks, text):
 
 # ------------------------------------------------------------------ the queue
 
+class BatchGroup(collections.namedtuple("BatchGroup", "line action targets aside note detail")):
+    """One line of a T list: what the line says, the decision it saves (action, its targets, the
+    note), the files of it that go aside and the text the preview shows for the group."""
+
+
+def batch_line(paint, label, keep, drop, criterion=None):
+    """A T list line: the kind dim, 'keep ...' green, 'drop ...' red, the criterion cyan. Without
+    colour the same words read the same."""
+    parts = [paint("dim", "%-9s" % label), paint("green", "keep " + keep), paint("red", "drop " + drop)]
+    if criterion:
+        parts.append(paint("cyan", criterion))
+    return " ".join(parts[:1]) + " " + " | ".join(parts[1:])
+
+
+def batch_detail(paint, keeper, others, sizes, why):
+    """What decides a group, one block per file (the keeper first) and then why and what happens."""
+    rows = []
+    for kept, f in [(True, keeper)] + [(False, o) for o in others]:
+        album = sizes.get(f.album_id) if f.album_id is not None else None
+        rows += [
+            "%s  %s" % (paint("green", "keep") if kept else paint("red", "move aside"),
+                        "in library (row %d)" % f.id if f.id is not None else "new file"),
+            "  %s  %dk  %s  %s%s" % (f.format, (f.bitrate or 0) // 1000, minutes(f.length),
+                                     "release " + release_name(f) if release_name(f) else "no release tag",
+                                     "  album row: %s" % tracks_text(album) if album else ""),
+            "  " + mc.path_text(f), ""]
+    rows += ["why: " + why, "Nothing is deleted. Files move aside at the next apply; media-sync --undo takes it back."]
+    return "\n".join(rows)
+
+
 class Review:
     def __init__(self, args, session):
         self.args, self.s = args, session
@@ -354,8 +486,9 @@ class Review:
         self.staying = [i for i in self.items if self.waiting.get(i.id) != "quarantine"]
         self.twins_now = None
 
-    def save(self, action, items, note, what, release=None, mapping=None):
-        """Save a decision now. A file gone since the audit is said, not saved."""
+    def save(self, action, items, note, what, release=None, mapping=None, quiet=False):
+        """Save a decision now and say so in one line (`quiet`: the caller sums up). A file gone
+        since the audit is said, not saved."""
         try:
             d = decision(action, items, "media-import --library: " + note, release, mapping)
         except OSError as err:
@@ -363,7 +496,9 @@ class Review:
             return
         mc.save_decision(self.args.review, d)
         self.saved += 1
-        self.s.say("saved: %s" % what)
+        if not quiet:
+            line = "saved: %s (nothing moves until the apply)" % what
+            self.s.say(self.s.paint("red", line) if action in ("quarantine", "replace") else line)
 
     def matches(self, items):
         q = (self.args.query or "").casefold()
@@ -402,7 +537,8 @@ class Review:
     def loose_screens(self):
         """{screen key: [(file, the audit's record)]}: loose files that copy no registered row, one
         screen per folder and album tag. Not copies - the other half of an album, another cut, a
-        track the library never had - so the answer is to give them a row, not to quarantine."""
+        track the library never had - so they are added to the library, or moved aside when
+        they are not wanted."""
         out = {}
         for rec in self.alone:
             f = self.present(rec)
@@ -492,7 +628,7 @@ class Review:
                                                         copies[0].title, len(copies))
         if kind == "copy":
             f, rows = next(c for c in self.copies() if c[0].path == key)
-            return "copy       %s - %s (%d registered row%s)" % (
+            return "copy       %s - %s (%d row%s in the library)" % (
                 f.artist, f.title, len(rows), "" if len(rows) == 1 else "s")
         if kind == "loose":
             files = self.loose_screens()[key]
@@ -545,7 +681,7 @@ class Review:
             waiting, total, kinds or "no file changes",
             " - over the limit of %d files, so the apply needs --force" % self.args.max_files
             if total > self.args.max_files else ""))
-        self.s.say("the apply runs by itself Sundays 04:00 (it refuses more than %d files without --force)"
+        self.s.say("the apply also runs weekly from cron; it refuses more than %d files without --force"
                    % self.args.max_files)
 
     def run(self):
@@ -555,7 +691,8 @@ class Review:
             self.s.say("audit of %s; %d to review%s" % (self.made, len(todo),
                                                        " matching %r" % self.args.query if self.args.query else ""))
         else:
-            self.s.say("no audit yet (media-sync --audit): only duplicates and scattered releases can be reviewed")
+            self.s.say("no audit yet: run `media-sync --audit`. Until then only duplicates and split albums "
+                       "can be reviewed.")
         for mbid, other in self.folded():
             self.s.say("%s: also on %s; decided on the album screen" % (
                 next(i for i in self.staying if i.mb_albumid == mbid).album,
@@ -593,7 +730,8 @@ class Review:
     def screen(self, entry, n, total):
         kind, key = entry
         self.s.say()
-        self.s.say("[%d/%d] %s" % (n, total, self.label(entry)))
+        self.s.say(self.s.paint("bold", "[%d/%d] %s" % (n, total, self.label(entry))))
+        self.s.say(INTRO[kind])
         if kind == "duplicate":
             return self.duplicate(key)
         if kind == "copy":
@@ -618,38 +756,87 @@ class Review:
 
     # ---------------------------------------------------------------- prompts
 
-    def ask(self, choices, suggest=None, keep_case=False, later=None):
-        """The answer to a screen's question. `choices` is [(answer, what it does)], the
-        answers every screen has are added. Enter takes `suggest` (answer, reason) and,
-        with none, asks again - it never acts on its own; `?` lists the answers. n, q, l
-        and x come back as 'next', 'quit', 'list' and 'skip'; `later` words n differently
-        where it only leaves a question. With keep_case an L or R stays (they differ from l, r)."""
-        every = [(k, later if k == "n" and later else t) for k, t in EVERY_SCREEN]
-        options = ", ".join("%s %s" % (k, t) for k, t in choices + every)
-        tail = " [Enter = %s: %s]" % suggest if suggest else ""
+    def ask(self, choices, suggest=None, help=None, valid=None, keep_case=False, later=None, why_not=None):
+        """The answer to a screen's question. `choices` is [(key, short label)] or with a role as
+        a third item; the keys every screen has follow in a dim row. Enter takes `suggest`
+        (answer, reason[, label]) and says what it took; with none it asks again, so it never
+        acts on its own. `?` prints `help` = (screen kind, [(key, what it does)], what the
+        suggestion rests on). `valid` says which other answers the screen takes: any other is
+        refused here, in one line. n, q, l and x come back as 'next', 'quit', 'list' and
+        'skip'; `later` words n differently where it only leaves a question. With keep_case an
+        L, R or T stays (they differ from l, r, t)."""
+        paint = self.s.paint
+        if suggest:
+            label = suggest[2] if len(suggest) > 2 else self.label_of(choices, suggest[0])
+            self.s.say(paint("green", "suggest %s - %s: %s" % (suggest[0], label, suggest[1])))
+        elif why_not:
+            self.s.say(paint("yellow", "no suggestion: %s" % why_not))
+        if choices:
+            self.s.say("  " + "   ".join(
+                paint("bold", c[0]) + " " + (paint(c[2], c[1]) if len(c) > 2 else c[1]) for c in choices))
+        self.s.say(paint("dim", "  " + "   ".join(
+            "%s %s" % (k, later if k == "n" and later else t) for k, t in EVERY_SCREEN)))
+        prompt = paint("bold", "Enter = %s >" % suggest[0] if suggest else ">") + " "
         while True:
-            a = self.s.ask("%s%s > " % (options, tail))
+            a = self.s.ask(prompt)
             if a is None:
                 return "quit"
             if a == "":
                 if not suggest:
-                    self.s.say("no suggestion for this screen: choose an answer (? lists them)")
+                    self.s.say("no suggestion for this screen: choose an answer (? for help)")
                     continue
                 a = suggest[0]
+                self.s.say(paint("dim", "  Enter took %s - %s" % (a, label)))
             if a == "?":
-                for k, t in choices + every:
-                    self.s.say("  %-18s %s" % (k, t))
-                if suggest:
-                    self.s.say("  %-18s %s: %s" % ("Enter", suggest[0], suggest[1]))
+                self.show_help(help, choices, suggest, later)
                 continue
             if keep_case and a[:1] in ("L", "R", "T"):
-                return a
-            return {"n": "next", "q": "quit", "l": "list", "x": "skip"}.get(a.lower(), a.lower())
+                answer = a
+            else:
+                answer = {"n": "next", "q": "quit", "l": "list", "x": "skip"}.get(a.lower(), a.lower())
+            if answer in ("next", "quit", "list", "skip") or valid is None or valid(answer):
+                return answer
+            self.unknown(a)
 
-    def unknown(self):
-        self.s.say("not an answer on this screen (? lists them)")
+    @staticmethod
+    def label_of(choices, answer):
+        """The label of the choice an answer belongs to (a number belongs to a range like 1-3)."""
+        for key, label, *_role in choices:
+            lo, _dash, hi = key.partition("-")
+            if key == answer or (_dash and lo.isdigit() and hi.isdigit() and answer.isdigit()
+                                 and int(lo) <= int(answer) <= int(hi)):
+                return label
+        return answer
+
+    def show_help(self, help, choices, suggest, later):
+        """The screen's `?`: what it is, every key and what it does to files, what the suggestion
+        rests on."""
+        paint, say = self.s.paint, self.s.say
+        kind, keys, basis = help
+        say(paint("dim", "  This screen: " + MEANING[kind]))
+        say(paint("dim", "  Keys:"))
+        every = [("n", "leave these and go on; not saved, they are asked about next session" if later
+                  else KEY_HELP["n"])] + [(k, KEY_HELP[k]) for k in "xlq?"]
+        for key, text in keys + every:
+            say("    %s %s" % (paint("bold", "%-6s" % key), paint("dim", text)))
+        if suggest:
+            say(paint("dim", "  The suggestion rests on: " + basis))
+        else:
+            say(paint("dim", "  No suggestion here: " + (basis or "the tool cannot tell, so you decide")))
+        say(paint("dim", "  " + APPLY_NOTE))
+
+    def unknown(self, answer):
+        self.s.say("'%s' is not an answer here (? for help)" % answer)
 
     # ---------------------------------------------------------------- screens
+
+    def tag(self, item):
+        """The release column of a row or file: the release id in cyan, or why it has none."""
+        rel = release_name(item)
+        return self.s.paint("cyan" if rel else "yellow", "%-14s" % (rel or NO_RELEASE))
+
+    def mark(self, starred):
+        return self.s.paint("green", "*") if starred else " "
 
     def duplicate(self, track):
         _t, copies, keep = next(d for d in mc.duplicates(self.items) if d[0] == track)
@@ -660,24 +847,30 @@ class Review:
         official = official_length(self.mb, copies[0].mb_albumid, track)
         lengths = [c.length or 0 for c in copies]
         best, reason = keep, why_keep(keep, [c for c in copies if c is not keep], self.sizes)
+        basis = ("lossless format, then a release tag, then bitrate in 16 kbit/s steps, then the fuller album row, "
+                 "then a file name without a .N suffix, then the older row")
         if official and max(lengths) - min(lengths) > EXACT_SECONDS:
             # the copies are not the same recording: the one the release lasts as long as is
             # the right one, whatever its bitrate. A tie goes to the shared ranking.
             ranked = sorted(copies, key=lambda c: mc.copy_rank(c, self.sizes), reverse=True)
             best = min(ranked, key=lambda c: round(abs((c.length or 0) - official), 2))
             reason = "its length %.2f s is the closest to the release's %.2f s" % (best.length or 0, official)
+            basis = "the copies differ in length, so the one closest to the length the release gives wins"
         for n, c in enumerate(copies, 1):
-            self.s.say("  %d%s %6d  %-5s %4dk %s  %s  album row %s (%d tracks)  %s" % (
-                n, "*" if c is best else " ", c.id, c.format, (c.bitrate or 0) // 1000, minutes(c.length),
+            self.s.say("  %d%s %s  %-5s %4dk %s  %s  %s  album row %s (%s)  %s" % (
+                n, self.mark(c is best), self.s.paint("dim", "%6d" % c.id), c.format, (c.bitrate or 0) // 1000,
+                minutes(c.length),
                 "%.2f s (%s)" % (c.length or 0, offset_text(c.length, official)) if official else "-",
-                c.album_id, rows.get(c.album_id, 0), c.path))
+                self.tag(c), c.album_id, tracks_text(rows.get(c.album_id, 0)), self.s.paint("dim", c.path)))
         if official:
             self.s.say("  the release says %.2f s" % official)
-        suggest = ("%d" % (copies.index(best) + 1), reason)
+        suggest = ("%d" % (copies.index(best) + 1), reason, "keep copy %d" % (copies.index(best) + 1))
+        info = ("duplicate", [("1-%d" % len(copies), "keep that copy; the others are queued to be moved aside (saved)"),
+                              ("T", "list the duplicates whose copies have the same length, untick any you "
+                                    "disagree with, confirm once (saved)")], basis)
         while True:
-            a = self.ask([("1-%d" % len(copies), "keep that copy (the others go to the quarantine)"),
-                          ("T", "one list of the duplicates of the same length: confirm them at once")],
-                         suggest, keep_case=True)
+            a = self.ask([("1-%d" % len(copies), "keep that one"), ("T", "list sure ones")], suggest, info,
+                         lambda a: a == "T" or in_range(a, len(copies)), keep_case=True)
             if a == "T":
                 if self.batch("duplicate"):
                     return "next"
@@ -687,32 +880,45 @@ class Review:
             if a == "skip":
                 self.save("skip", copies, "duplicate %s" % track, "won't ask about these %d copies again" % len(copies))
                 return "next"
-            if a.isdigit() and 1 <= int(a) <= len(copies):
+            if in_range(a, len(copies)):
                 kept = copies[int(a) - 1]
                 gone = [c for c in copies if c is not kept]
                 self.save("quarantine", gone, "duplicate of row %d" % kept.id,
-                          "keep row %d; %d copy(ies) to the quarantine" % (kept.id, len(gone)))
+                          "keep row %d; the others go aside" % kept.id)
                 return "next"
-            self.unknown()
+            self.unknown(a)
+
+    def copy_rows(self, f, rows, keep):
+        """The lines of a copy screen: each row in the library, then the new file."""
+        for r in rows:
+            self.s.say("  %s in library      %s  %-5s %4dk %s  %s  album row %-18s %s" % (
+                self.mark(keep == "registered" and r is rows[0]), self.s.paint("dim", "%6d" % r.id), r.format,
+                (r.bitrate or 0) // 1000, minutes(r.length), self.tag(r),
+                "%s (%s)" % (r.album_id, tracks_text(self.sizes.get(r.album_id, 0))), self.s.paint("dim", r.path)))
+        self.s.say("  %s not in library  %s  %-5s %4dk %s  %s  album row %-18s %s" % (
+            self.mark(keep == "loose"), self.s.paint("dim", "%6s" % "-"), f.format, (f.bitrate or 0) // 1000,
+            minutes(f.length), self.tag(f), "-", self.s.paint("dim", f.path)))
 
     def copy(self, path):
         f, rows = next(c for c in self.copies() if c[0].path == path)
         keep = mc.suggest_copy(f, rows, self.sizes)
-        for n, r in enumerate(rows):
-            self.s.say("  %s registered %6d  %-5s %4dk %s  %-16s %s" % (
-                "*" if keep == "registered" and n == 0 else " ", r.id, r.format, (r.bitrate or 0) // 1000,
-                minutes(r.length), r.mb_albumid[:8] if r.mb_albumid else "(bare)", r.path))
-        self.s.say("  %s loose      %6s  %-5s %4dk %s  %-16s %s" % (
-            "*" if keep == "loose" else " ", "-", f.format, (f.bitrate or 0) // 1000, minutes(f.length),
-            f.mb_albumid[:8] if f.mb_albumid else "(bare)", f.path))
+        self.copy_rows(f, rows, keep)
         winner, others = (rows[0], rows[1:] + [f]) if keep == "registered" else (f, rows)
-        suggest = ("1" if keep == "registered" else "2", why_keep(winner, others, self.sizes))
-        more = "" if len(rows) == 1 else " (it replaces row %d; the other %d stay)" % (rows[0].id, len(rows) - 1)
+        suggest = ("1" if keep == "registered" else "2", why_keep(winner, others, self.sizes),
+                   "keep library one" if keep == "registered" else "use the new one")
+        more = "" if len(rows) == 1 else " (it takes the place of row %d; the other %d stay)" % (
+            rows[0].id, len(rows) - 1)
+        info = ("copy", [("1", "keep the file in the library; the new file is queued to be moved aside (saved)"),
+                         ("2", "use the new file: it takes the place of the library file%s and the old one is "
+                               "queued to be moved aside (saved)" % more),
+                         ("b", "keep both: the new file is queued to be added to the library (saved)"),
+                         ("T", "list every copy with the suggestion for it, untick any you disagree with, "
+                               "confirm once (saved)")],
+                "lossless format, then a release tag, then bitrate in 16 kbit/s steps, then the fuller album row, "
+                "then a file name without a .N suffix; on a tie the file already in the library stays")
         while True:
-            a = self.ask([("1", "keep the registered one (the loose file goes to the quarantine)"),
-                          ("2", "use the loose one%s" % more), ("b", "keep both"),
-                          ("T", "one list of the copies where the registered file is better: confirm at once")],
-                         suggest, keep_case=True)
+            a = self.ask([("1", "keep library one"), ("2", "use the new one"), ("b", "keep both"),
+                          ("T", "list all")], suggest, info, lambda a: a in ("1", "2", "b", "T"), keep_case=True)
             if a == "T":
                 if self.batch("copy"):
                     return "next"
@@ -723,29 +929,56 @@ class Review:
                 self.save("skip", [f] + rows, "copy %s" % path, "won't ask about this file and its copies again")
                 return "next"
             if a == "1":
-                self.save("quarantine", [f], "copy of row %d" % rows[0].id, "the loose file to the quarantine")
+                self.save("quarantine", [f], "copy of row %d" % rows[0].id, "the new file goes aside")
                 return "next"
             if a == "2":
                 self.save("replace", [f, rows[0]], "replaces row %d" % rows[0].id,
-                          "the loose file replaces row %d (that file goes to the quarantine)" % rows[0].id)
+                          "the new file takes the place of row %d; that file goes aside" % rows[0].id)
                 return "next"
             if a == "b":
-                self.save("register", [f], "copy of row %d, kept as well" % rows[0].id, "the loose file registered")
+                self.save("register", [f], "copy of row %d, kept as well" % rows[0].id,
+                          "the new file is added to the library as well")
                 return "next"
-            self.unknown()
+            self.unknown(a)
+
+    def cut_note(self, rec):
+        """What the audit saw about a file that shares a title with a library track but not its
+        length: another version of that track, not a copy."""
+        parts = []
+        for cut in rec.get("other_cut") or []:
+            row = self.by_id.get(cut["id"])
+            parts.append("row %d%s, %.1f s %s" % (cut["id"], " " + row.title if row and row.title else "",
+                                                  abs(cut["offset"]), "longer" if cut["offset"] > 0 else "shorter"))
+        return "looks like another cut of a track you have: " + "; ".join(parts) if parts else ""
 
     def loose_dialog(self, key):
         files = self.loose_screens()[key]
+        cuts = False
         for f, rec in files:
-            cut = "; another cut of row %d (%+.1f s)" % (rec["other_cut"][0]["id"], rec["other_cut"][0]["offset"]) \
-                if rec.get("other_cut") else ""
-            self.s.say("  %-34.34s %s %-5s %4dk  %-14.14s %s%s" % (
-                f.title, minutes(f.length), f.format, (f.bitrate or 0) // 1000,
-                f.mb_albumid[:8] if f.mb_albumid else "(bare)", os.path.basename(f.path), cut))
-        self.s.say("  none of these copies a registered track (same title and length): they are not in the library yet")
-        suggest = ("b", "they are not copies, so nothing is quarantined: they just get a row")
+            self.s.say("  %-34.34s %s %-5s %4dk  %s  %s" % (
+                f.title, minutes(f.length), f.format, (f.bitrate or 0) // 1000, self.tag(f),
+                self.s.paint("dim", os.path.basename(f.path))))
+            note = self.cut_note(rec)
+            if note:
+                cuts = True
+                self.s.say(self.s.paint("yellow", "    ! " + note))
+        if cuts:
+            self.s.say(self.s.paint("yellow", "  A file marked ! may be a second version of a track you have; "
+                                              "decide for the whole screen."))
+        else:
+            self.s.say("  None of them matches a track in your library by title and length.")
+        suggest = None if cuts else ("b", "none matches a library track, so adding them duplicates nothing",
+                                     "add to library")
+        info = ("loose", [("b", "add the files to the library as they are; they join their album next session "
+                                "(saved)"),
+                          ("r", "move all the files on this screen aside, into removed/, nothing is deleted (saved)")],
+                "one file looks like another cut of a track you have: only you can tell whether it is a "
+                "second version to keep or a file to move aside" if cuts else
+                "title and length against your library: no file here matches a library track")
         while True:
-            a = self.ask([("b", "register them (a row each; they join their album on the next session)")], suggest)
+            a = self.ask([("b", "add to library"), ("r", "move aside", "red")], suggest, info,
+                         lambda a: a in ("b", "r"),
+                         why_not="one file looks like another cut of a track you have, so you decide" if cuts else None)
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
@@ -754,9 +987,13 @@ class Review:
                 return "next"
             if a == "b":
                 self.save("register", [f for f, _rec in files], "loose, no registered copy",
-                          "%d file(s) registered as they are" % len(files))
+                          "%d file(s) will be added to the library as they are" % len(files))
                 return "next"
-            self.unknown()
+            if a == "r":
+                self.save("quarantine", [f for f, _rec in files], "loose, moved aside",
+                          "%d file(s) go aside" % len(files))
+                return "next"
+            self.unknown(a)
 
     def twin(self, keep_id):
         rec, rows = next(t for t in self.twin_groups() if t[0]["keep"] == keep_id)
@@ -768,20 +1005,29 @@ class Review:
         person asked for ('next' is also 'leave these' inside an album screen)."""
         keeper = rows[0]
         for n, r in enumerate(rows, 1):
-            self.s.say("  %d%s %6d  %-5s %4dk %6.2f s %-11s %-16s %s" % (
-                n, "*" if r is keeper else " ", r.id, r.format, (r.bitrate or 0) // 1000, r.length or 0,
-                "" if r is keeper else "(%+.2f s)" % ((r.length or 0) - (keeper.length or 0)),
-                r.mb_albumid[:8] if r.mb_albumid else "(bare)", r.path))
+            self.s.say("  %d%s %s  %-5s %4dk %6.2f s %-11s %s  %s" % (
+                n, self.mark(r is keeper), self.s.paint("dim", "%6d" % r.id), r.format, (r.bitrate or 0) // 1000,
+                r.length or 0, "" if r is keeper else "(%+.2f s)" % ((r.length or 0) - (keeper.length or 0)),
+                self.tag(r), self.s.paint("dim", r.path)))
         self.s.say("  %s twin: %s" % (rec["kind"], rec["reason"]))
         far = max(abs((r.length or 0) - (keeper.length or 0)) for r in rows) > mc.PROBABLE_SECONDS
         if far:
-            self.s.say("  more than %d s apart: a different version, not a copy" % mc.PROBABLE_SECONDS)
-        suggest = None if far and rec["kind"] == "probable" else ("r", rec["reason"])
+            self.s.say(self.s.paint("yellow", "  more than %d s apart: a different version, not a copy"
+                                    % mc.PROBABLE_SECONDS))
+        suggest = None if far and rec["kind"] == "probable" else ("r", rec["reason"],
+                                                                  "move the others aside")
+        info = ("twin", [("r", "keep the starred row; the others are queued to be moved aside (saved)"),
+                         ("1-%d" % len(rows), "keep that row instead; the rest are queued to be moved aside (saved)")]
+                + ([] if in_album else [("T", "list the certain twins, untick any you disagree with, confirm "
+                                              "once (saved)")]),
+                "what the audit found for this group (the line above); the starred row has the best format, "
+                "release tag, bitrate and album row")
         while True:
-            a = self.ask([("r", "quarantine the other %d (the starred one stays)" % (len(rows) - 1)),
-                          ("1-%d" % len(rows), "keep that one instead, the rest go to the quarantine")]
-                         + ([] if in_album else [("T", "one list of all the certain twins: confirm them at once")]),
-                         suggest, later="leave them, go on" if in_album else None, keep_case=True)
+            a = self.ask([("r", "move others aside", "red"), ("1-%d" % len(rows), "keep that one")]
+                         + ([] if in_album else [("T", "list sure ones")]), suggest, info,
+                         lambda a: a == "r" or in_range(a, len(rows)) or (a == "T" and not in_album),
+                         keep_case=True, later="leave them" if in_album else None,
+                         why_not="the files are far apart in length" if far else None)
             if a == "T" and not in_album:
                 if self.batch("twin"):
                     return "saved"
@@ -796,31 +1042,34 @@ class Review:
                           "won't ask about the %d twin row(s) again (row %d stays on its album)" % (
                               len(drop), keeper.id))
                 return "saved"
-            if a == "r" or (a.isdigit() and 1 <= int(a) <= len(rows)):
+            if a == "r" or in_range(a, len(rows)):
                 kept = keeper if a == "r" else rows[int(a) - 1]
                 gone = [r for r in rows if r is not kept]
                 self.save("quarantine", gone, "twin of row %d (%s)" % (kept.id, rec["kind"]),
-                          "keep row %d; %d twin(s) to the quarantine" % (kept.id, len(gone)))
+                          "keep row %d; the others go aside" % kept.id)
                 return "saved"
-            self.unknown()
+            self.unknown(a)
 
     def batch_groups(self, kind):
-        """[(line for the list, files to quarantine, note)] for the groups of one screen kind where
-        the answer is the suggestion AND it is certain: twins of the same video or recording,
-        duplicates of the same length, copies where the registered file is the better one. The
-        rest (probable twins, copies that differ, a loose file that would replace a row) keep their
-        screens."""
+        """[BatchGroup] for the groups of one screen kind that the list offers, each with the
+        answer the suggestion would save. Twins of the same video or recording and duplicates of
+        the same length are listed only when certain (the rest keep their screens); every copy is
+        listed, a loose file that wins is saved as a replace."""
         out = []
+        paint = self.s.paint
         if kind == "twin":
             for rec, rows in self.twin_groups():
                 if rec["kind"] == "probable" or not self.matches(rows):
                     continue
                 keeper = rows[0]
-                out.append(("%-9s keep %-34.34s %-5s | drop %s" % (
-                    rec["kind"], os.path.basename(keeper.path), keeper.format, "; ".join(
+                offsets = ", ".join("%+.1f s" % ((r.length or 0) - (keeper.length or 0)) for r in rows[1:])
+                out.append(BatchGroup(batch_line(paint, rec["kind"], "%-34.34s %-5s" % (
+                    os.path.basename(keeper.path), keeper.format), "; ".join(
                         "%.34s %s (%+.1f s)" % (os.path.basename(r.path), r.format,
                                                (r.length or 0) - (keeper.length or 0)) for r in rows[1:])),
-                    rows[1:], "twin of row %d (%s)" % (keeper.id, rec["kind"])))
+                    "quarantine", rows[1:], rows[1:], "twin of row %d (%s)" % (keeper.id, rec["kind"]),
+                    batch_detail(paint, keeper, rows[1:], self.sizes, "%s; length against the keeper: %s" % (
+                        rec["reason"], offsets))))
         elif kind == "duplicate":
             for track, copies, keep in mc.duplicates(self.items):
                 lengths = [c.length or 0 for c in copies]
@@ -828,43 +1077,59 @@ class Review:
                         or max(lengths) - min(lengths) > EXACT_SECONDS:
                     continue
                 gone = [c for c in copies if c is not keep]
-                out.append(("duplicate keep %-34.34s %-5s %4dk | drop %s" % (
-                    os.path.basename(keep.path), keep.format, (keep.bitrate or 0) // 1000, "; ".join(
+                out.append(BatchGroup(batch_line(paint, "duplicate", "%-34.34s %-5s %4dk" % (
+                    os.path.basename(keep.path), keep.format, (keep.bitrate or 0) // 1000), "; ".join(
                         "%.34s %s %dk" % (os.path.basename(c.path), c.format, (c.bitrate or 0) // 1000)
-                        for c in gone)), gone, "duplicate of row %d" % keep.id))
+                        for c in gone)), "quarantine", gone, gone, "duplicate of row %d" % keep.id,
+                    batch_detail(paint, keep, gone, self.sizes, why_keep(keep, gone, self.sizes))))
         else:
             for f, rows in self.copies():
-                if mc.suggest_copy(f, rows, self.sizes) != "registered" or not self.matches([f] + rows):
+                if not self.matches([f] + rows):
                     continue
-                out.append(("copy      keep %-34.34s %-5s | drop loose %s %s" % (
-                    os.path.basename(rows[0].path), rows[0].format, os.path.basename(f.path), f.format),
-                    [f], "copy of row %d" % rows[0].id))
+                keep = mc.suggest_copy(f, rows, self.sizes)
+                winner, others = (rows[0], rows[1:] + [f]) if keep == "registered" else (f, rows)
+                criterion = mc.copy_criterion(winner, max(others, key=lambda c: mc.copy_rank(c, self.sizes)),
+                                              self.sizes)
+                line = batch_line(paint, "copy", "%-40s" % (short_path(winner) + (" (new)" if winner is f else "")),
+                                  "%-40s" % (short_path(rows[0] if winner is f else f) + ("" if winner is f else " (new)")),
+                                  CRITERION_WORDS[criterion])
+                detail = batch_detail(paint, winner, others, self.sizes, why_keep(winner, others, self.sizes))
+                if keep == "registered":
+                    out.append(BatchGroup(line, "quarantine", [f], [f], "copy of row %d" % rows[0].id, detail))
+                else:
+                    out.append(BatchGroup(line, "replace", [f, rows[0]], [rows[0]], "replaces row %d" % rows[0].id,
+                                          detail))
         return out
 
     def batch(self, kind):
         """One list for many screens of a kind (T): everything the suggestion is certain for, all
         selected, a person toggles off what they do not want and confirms once. Saves one
-        quarantine decision per group - one stale file then skips its own group only. Returns how
-        many groups it saved."""
+        decision per group - one stale file then skips its own group only. Returns how many
+        groups it saved."""
         groups = self.batch_groups(kind)
         if not groups:
-            self.s.say("nothing certain enough to list here: the rest keep their own screens")
+            self.s.say("nothing sure enough to list here: the rest keep their own screens")
             return 0
-        picked = self.s.choose_many([line for line, _t, _n in groups], "%s> " % kind)
+        picked = self.s.choose_many([g.line for g in groups], kind, details=[g.detail for g in groups])
         if not picked:
             self.s.say("nothing selected")
             return 0
-        files = [t for i in picked for t in groups[i][1]]
-        size = sum(os.path.getsize(t.host) for t in files if os.path.exists(t.host))
-        answer = self.s.ask("quarantine %d file(s), %.1f MB, from %d group(s)? [y/N] " % (
-            len(files), size / 1e6, len(picked)))
+        aside = [t for i in picked for t in groups[i].aside]
+        size = sum(os.path.getsize(t.host) for t in aside if os.path.exists(t.host))
+        replaced = sum(1 for i in picked if groups[i].action == "replace")
+        answer = self.s.ask("save %d decision(s): %d file(s) go aside (%.1f MB)%s, from %d group(s)? "
+                            "Nothing is deleted and nothing moves until the apply. [y/N] " % (
+                                len(picked), len(aside), size / 1e6,
+                                ", %d new file(s) take their place" % replaced if replaced else "", len(picked)))
         if (answer or "").lower() not in ("y", "yes"):
             self.s.say("nothing saved")
             return 0
         before = self.saved
         for i in picked:
-            _line, targets, note = groups[i]
-            self.save("quarantine", targets, note, "%d file(s) to the quarantine (%s)" % (len(targets), note))
+            g = groups[i]
+            self.save(g.action, g.targets, g.note, "", quiet=True)
+        self.s.say(self.s.paint("red", "saved: %d decision(s), %d file(s) go aside (nothing moves until the apply)"
+                                % (self.saved - before, len(aside))))
         return self.saved - before
 
     def download(self, key):
@@ -875,26 +1140,40 @@ class Review:
         for f in files:
             self.s.say("    %-5s %4dk %s  %-28.28s %-24.24s %s" % (
                 f.format, (f.bitrate or 0) // 1000, minutes(f.length), f.title or "(no title)",
-                f.artist or "(no artist)", os.path.relpath(f.path, mc.DOWNLOADS)))
+                f.artist or "(no artist)", self.s.paint("dim", os.path.relpath(f.path, mc.DOWNLOADS))))
         artist = guess_search(files)[0]
         table = []
+        suggest = ("k", "most downloads end as they are; they can be matched to a release later", "add as it is")
         while True:
             if table:
                 self.show_editions(table, len(files), artist)
-            choices = ([("1-%d" % len(table), "adopt with that edition"), ("v<n>", "its tracks"),
-                        ("o<n>", "its MusicBrainz link")] if table else [])
-            a = self.ask(choices + [("k", "adopt as it is"), ("e", "adopt with a release id"), ("s", "search"),
-                                    ("r", "quarantine")])
+            choices = ([("1-%d" % len(table), "add with edition"), ("v<n>", "its tracks"),
+                        ("o<n>", "its link")] if table else [])
+            keys = ([("1-%d" % len(table), "add the files to the library and match them to that edition: re-tagged "
+                                           "and filed under it (saved)"),
+                     ("v<n>", "show which file takes which track; not saved"),
+                     ("o<n>", "show its MusicBrainz link; not saved")] if table else [])
+            info = ("download", keys + [("k", "add the files to the library as they are, tags unchanged (saved)"),
+                                        ("e", "add them with a release id you enter, after showing the match (saved)"),
+                                        ("s", "search MusicBrainz and add what it finds to the table; not saved"),
+                                        ("r", "move the files aside, into removed/downloads/, nothing is deleted "
+                                              "(saved)")],
+                    "none: nothing confirms an edition here, and most downloads end as they are")
+            a = self.ask(choices + [("k", "add as it is"), ("e", "add with release id"), ("s", "search"),
+                                    ("r", "move aside", "red")], suggest, info,
+                         lambda a: a in ("k", "e", "s", "r") or (bool(table) and (
+                             in_range(a, len(table)) or view_key(a, len(table)))))
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
                 self.save("skip", files, key, "won't ask about these %d file(s) again" % len(files))
                 return "next"
             if a == "k":
-                self.save("adopt", files, "%s as it is" % key, "%d file(s) to be adopted as they are" % len(files))
+                self.save("adopt", files, "%s as it is" % key, "%d file(s) will be added to the library as they are"
+                          % len(files))
                 return "next"
             if a == "r":
-                self.save("quarantine", files, "downloads: %s" % key, "%d file(s) to the quarantine" % len(files))
+                self.save("quarantine", files, "downloads: %s" % key, "%d file(s) go aside" % len(files))
                 return "next"
             m = re.fullmatch(r"([vo])\s*(\d+)", a)
             if m and 1 <= int(m.group(2)) <= len(table):
@@ -915,7 +1194,7 @@ class Review:
                 if chosen is None:
                     continue
                 self.show_mapping(chosen, members)
-                answer = self.s.ask("adopt the files with that release? [y/N] ")
+                answer = self.s.ask("add the files with that release? [y/N] ")
                 if answer is None:
                     return "quit"
                 if answer.lower() == "y":
@@ -927,13 +1206,14 @@ class Review:
                     return "quit"
                 self.add_editions(table, found, members, {}, lenient=False)
                 continue
-            if a.isdigit() and 1 <= int(a) <= len(table):
+            if in_range(a, len(table)):
                 return self.adopt_with(files, table[int(a) - 1])
-            self.unknown()
+            self.unknown(a)
 
     def adopt_with(self, files, e):
         self.save("adopt", files, "-> %s %s" % (e["title"], e["date"]),
-                  "adopt %d file(s) with %s (%s %s)" % (len(files), e["title"], e["date"], e["country"]), e["id"])
+                  "%d file(s) will be added to the library with %s (%s %s)" % (
+                      len(files), e["title"], e["date"], e["country"]), e["id"])
         return "next"
 
     def search(self, artist, album):
@@ -961,19 +1241,24 @@ class Review:
             rows.setdefault(i.album_id, []).append(i)
         for aid, its in sorted(rows.items(), key=lambda r: (-len(r[1]), r[0] or 0)):
             self.s.say("  album row %-6s %2d track(s)  %s" % (aid if aid is not None else "-", len(its),
-                                                            os.path.dirname(its[0].path)))
+                                                            self.s.paint("dim", os.path.dirname(its[0].path))))
         held = {}
         for i in members:
             if i.mb_releasetrackid:
                 held.setdefault(i.mb_releasetrackid, []).append(i)
         twice = [t for t, its in held.items() if len(its) > 1]
         if twice:
-            self.s.say("  %d track(s) of it are held twice: decide those first (they come earlier in the queue)"
-                       % len(twice))
+            self.s.say(self.s.paint("yellow", "  %d track(s) of it are held twice: decide those first (they come "
+                                              "earlier in the queue)" % len(twice)))
         suggest = None if twice else ("m", "one edition holds all %d tracks, in %d album rows" % (len(members),
-                                                                                                 len(rows)))
+                                                                                                 len(rows)),
+                                      "merge into one album")
+        info = ("scattered", [("m", "put the tracks in one album row (saved)")],
+                "the release's tracks are in one edition, spread over several album rows")
         while True:
-            a = self.ask([] if twice else [("m", "merge into one album row")], suggest)
+            a = self.ask([] if twice else [("m", "merge into one album")], suggest, info,
+                         lambda a: a == "m" and not twice,
+                         why_not="decide the tracks held twice first" if twice else None)
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
@@ -981,9 +1266,9 @@ class Review:
                 return "next"
             if a == "m" and not twice:
                 self.save("merge", members, members[0].album,
-                          "merge %d track(s) of %s into one album row" % (len(members), members[0].album), mbid)
+                          "%d track(s) of %s go into one album row" % (len(members), members[0].album), mbid)
                 return "next"
-            self.unknown()
+            self.unknown(a)
 
     def album(self, key):
         # Twins in the group come first: a pin or keep over a row that is about to go would
@@ -1003,8 +1288,8 @@ class Review:
         if decided:
             self.s.say("    (%d of its rows are decided already; these are the rest)" % decided)
         for i in members:
-            self.s.say("    %6d  %-40.40s %s  %s" % (i.id, i.title, minutes(i.length),
-                                                     i.mb_albumid[:8] if i.mb_albumid else "(bare)  "))
+            self.s.say("    %s  %-40.40s %s  %s" % (self.s.paint("dim", "%6d" % i.id), i.title, minutes(i.length),
+                                                     self.tag(i)))
         ids = []
         for i in members:
             if i.mb_albumid and i.mb_albumid not in ids:
@@ -1013,19 +1298,40 @@ class Review:
         artist = mc.album_artist(members[0])
         hand = {}
         table = self.first_table(ids, members, hand)
-        # the edition L and a work on without a number: the one last looked at, at first the suggested
+        # `L` and `a` without a number use the edition last viewed, at first the suggested one
         first = self.album_suggest(table, members, artist)
         cur = int(first[0]) - 1 if first and first[0].isdigit() else 0
         while True:
             self.show_editions(table, len(members), artist)
             suggest = self.album_suggest(table, members, artist)
-            choices = ([("1-%d" % len(table), "pin that edition"), ("v<n>", "its tracks"),
-                        ("o<n>", "its MusicBrainz link"), ("R", "rank the table again"),
-                        ("L [n]", "pair the unmatched files with the tracks of the same length"),
-                        ("a [n] <file id>=<track>", "pair a file with a track by hand (a alone lists both)")]
-                       if table else [])
-            a = self.ask(choices + [("e", "enter a release id"), ("s", "search"), ("k", "keep as it is")],
-                         suggest, keep_case=True)
+            choices = ([("1-%d" % len(table), "match to edition"), ("v<n>", "its tracks"), ("o<n>", "its link"),
+                        ("R", "re-rank"), ("L", "pair by length"), ("a", "pair by hand")] if table else [])
+            keys = ([("1-%d" % len(table), "match the files that edition takes to its release: they are re-tagged "
+                                           "and filed under it (saved)"),
+                     ("v<n>", "show which file takes which track; not saved"),
+                     ("o<n>", "show its MusicBrainz link; not saved"),
+                     ("R", "sort the table again (the numbers move); not saved"),
+                     ("L [n]", "pair the files an edition leaves out with its free tracks of the same length, then "
+                               "ask before saving"),
+                     ("a [n] <file id>=<track>", "pair a file with a track by hand; `a` alone lists both; not saved")]
+                    if table else [])
+            info = ("album", keys + [("e", "add a release to the table by its id or link; not saved"),
+                                     ("s", "search MusicBrainz and add what it finds to the table; not saved"),
+                                     ("k", "keep the tracks as they are and mark them reviewed (saved)")],
+                    "an edition that takes every file with lengths within %d s and is the files' artist's plain "
+                    "edition; k when the audit's search found nothing that fits" % FAR_SECONDS)
+            if suggest:
+                suggest = (suggest[0], suggest[1], "match to edition %s" % suggest[0] if suggest[0].isdigit()
+                           else "keep as it is")
+
+            def valid(a):
+                return a in ("e", "s", "k") or (bool(table) and (
+                    in_range(a, len(table)) or view_key(a, len(table)) or a == "R"
+                    or re.fullmatch(r"L\s*\d*", a) is not None or re.fullmatch(r"a\s*(.*)", a) is not None))
+
+            a = self.ask(choices + [("e", "add release id"), ("s", "search"), ("k", "keep as it is")],
+                         suggest, info, valid, keep_case=True,
+                         why_not="no edition clearly fits all the files, or a lookup is missing; you decide")
             if a in ("next", "quit", "list"):
                 return a
             if a == "skip":
@@ -1033,7 +1339,7 @@ class Review:
                 return "next"
             if a == "k":
                 self.save("keep", members, "%s as it is" % members[0].album,
-                          "%d track(s) kept as they are (marked reviewed)" % len(members))
+                          "%d track(s) are kept as they are and marked reviewed" % len(members))
                 return "next"
             m = re.fullmatch(r"([vo])\s*(\d+)", a)
             if m and 1 <= int(m.group(2)) <= len(table):
@@ -1080,7 +1386,7 @@ class Review:
                 if self.pin_edition(table[int(a) - 1], members):
                     return "next"
                 continue
-            self.unknown()
+            self.unknown(a)
 
     def album_suggest(self, table, members, artist):
         """(answer, reason) or None. A pin when the best edition takes every file, none of
@@ -1120,7 +1426,7 @@ class Review:
             self.s.say("every file it takes is on that edition already")
             return False
         self.save("pin", todo, "%s -> %s %s" % (members[0].album, e["title"], e["date"]),
-                  "pin %d file(s) to %s (%s %s)%s" % (
+                  "%d file(s) will be matched to %s (%s %s)%s" % (
                       len(todo), e["title"], e["date"], e["country"],
                       ", %d of them paired by a map" % len(e["map"]) if e["map"] else ""), e["id"], e["map"])
         return True
@@ -1146,7 +1452,7 @@ class Review:
         for m, t in sorted(pairs, key=lambda p: p[0].id):
             self.s.say("    %6d  %-34.34s %s  -> %-6s %-34.34s %s  (%+.1f s)" % (
                 m.id, m.title, minutes(m.length), t.position, t.title, minutes(t.length), m.length - t.length))
-        answer = self.s.ask("pair these %d file(s) and pin edition %d? [y/N] " % (len(pairs), n + 1))
+        answer = self.s.ask("pair these %d file(s) and match them to edition %d? [y/N] " % (len(pairs), n + 1))
         if answer is None or answer.lower() != "y":
             return False
         hand.setdefault(e["id"], {}).update({m.id: t.position for m, t in pairs})
@@ -1170,7 +1476,7 @@ class Review:
             for m in members:
                 if m.id not in e["claims"]:
                     self.s.say("    %6d  %-40.40s %s" % (m.id, m.title, minutes(m.length)))
-            self.s.say("  tracks nobody has:")
+            self.s.say("  tracks no file is matched to:")
             taken = set(e["claims"].values())
             for i, t in enumerate(e["tracks"], 1):
                 if t not in taken:
@@ -1204,7 +1510,7 @@ class Review:
         hand.setdefault(e["id"], {}).update({i: t.position for i, t in new.items()})
         table[n] = self.rebuild(e, members, hand)
         self.show_mapping(table[n], members)
-        self.s.say("  enter %d to pin it, or pair more" % (n + 1))
+        self.s.say("  enter %d to match the files to it, or pair more" % (n + 1))
         return n
 
     # ---------------------------------------------------------------- editions
@@ -1279,13 +1585,16 @@ class Review:
     def show_editions(self, table, files, artist):
         if not table:
             self.s.say("  no edition known: enter an id or search")
+            return
+        self.s.say(self.s.paint("dim", "  editions: files it takes / exact length matches / largest length gap"))
         for n, e in enumerate(table, 1):
             self.s.say("  %d) %s  %d/%d exact %d max %ds  %-28.28s %-10s %-2s %-18.18s %3d tr  %-13.13s%s  "
                        "by %s%s%s" % (
-                n, e["id"][:8], e["covers"], files, e["exact"], round(e["max_offset"]), e["title"], e["date"],
-                e["country"], e["label"], e["track_count"], "+".join(e["formats"]),
+                n, self.s.paint("cyan", e["id"][:8]), e["covers"], files, e["exact"], round(e["max_offset"]),
+                e["title"], e["date"], e["country"], e["label"], e["track_count"], "+".join(e["formats"]),
                 "  [%s]" % e["disambiguation"] if e["disambiguation"] else "", e["artist"],
-                "  !artist" if other_artist(e["artist"], artist) else "", "  new" if e["new"] else ""))
+                self.s.paint("yellow", "  !artist") if other_artist(e["artist"], artist) else "",
+                "  new" if e["new"] else ""))
 
     def view(self, what, e, members):
         """v<n>: the edition's tracks against the files; o<n>: its MusicBrainz page."""
@@ -1351,7 +1660,8 @@ def cmd_quarantine(args):
     mc.save_decision(args.review, d)
     for i in chosen:
         print("queued for the quarantine: %s" % i.path)
-    print("%d file(s) go to the quarantine with the next media-sync --apply (Sundays 04:00)" % len(chosen))
+    print("%d file(s) go to the quarantine with the next media-sync --apply (it also runs weekly from cron)"
+          % len(chosen))
     return 0
 
 

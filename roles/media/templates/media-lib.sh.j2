@@ -36,13 +36,10 @@ MB_URL="{{ media_musicbrainz_url }}"
 ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
 
 notify() {
-    # ntfy-notify reads its API key from /etc/ntfy/notify-api-key, which the
-    # common role deploys root:root 0600 - so when the cron (or a reviewer) runs
-    # this as the unprivileged stack user, it finds no key and exits 0 without
-    # sending anything: every mode's notification was silently dropped. That
-    # user has NOPASSWD sudo, so go through sudo; keep the bare call as a
-    # fallback (correct if the key ever becomes group-readable) and never let a
-    # failed notification abort a mode mid-run.
+    # ntfy-notify reads its API key from /etc/ntfy/notify-api-key (root:root 0600),
+    # so as the unprivileged stack user it exits 0 without sending anything. Go
+    # through sudo (NOPASSWD); the bare call is the fallback if the key becomes
+    # group-readable. A failed notification must never abort a mode mid-run.
     local title
     title="$(hostname): media-sync ${MODE#--} $1"
     sudo -n /usr/local/bin/ntfy-notify "$title" "$2" "${3:-default}" "${4:-musical_note}" ||
@@ -69,9 +66,8 @@ audio_files() {  # [<host dir>]
 # "not in sorted order" as soon as names differ in case or script, and stops with a
 # truncated result.
 #
-# Callers read it into a variable first: inside <( ) a failed beet ls is invisible,
-# the list just comes out empty, and then EVERY file looks unregistered - the audit
-# reports the whole library and register_paths re-imports it (row churn).
+# Callers read it into a variable first: inside <( ) a failed beet ls is invisible
+# and the empty list would make every file look unregistered.
 registered_paths() {
     local out
     out="$("${BEET[@]}" ls -f '$path' < /dev/null)" || { echo "beet ls failed: cannot tell what has a row" >&2; return 1; }
@@ -89,13 +85,11 @@ unregistered_files() {  # <container dir>
         <(printf '%s\n' "$registered")
 }
 
-# Register files as they are, but ONLY the ones with no row. Pointing the importer
-# at a directory instead re-imports files the library already holds, and beets
-# replaces the old row with a new one: a fresh id, no album row (the items come
-# back as singletons) and the flexible fields (reviewed) gone - for the whole
-# library on every pass, taking minutes where this takes seconds. The candidates
+# Register files as they are, but only the ones with no row. Importing a directory
+# re-imports files the library already holds, and beets replaces the old row: a
+# fresh id, no album row and the flexible fields (reviewed) gone. The candidates
 # (container paths, one per line) come on stdin; whatever already has a row is
-# dropped from them here.
+# dropped here.
 register_paths() {  # <beets config>
     local cfg="$1" list registered
     registered="$(registered_paths)" || return 1
@@ -129,13 +123,11 @@ prune_rows() {  # [dry]
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" prune "${flag[@]}"
 }
 
-# Give tracks that carry a release id but no album row their album row back.
-# Importing as a singleton (what the as-is registration does) stores a track
-# without one even when the file names its release, and that is also how rows
-# damaged before register_new existed look. Grouping by release id and letting
-# beets build the album from its items changes no file and no tag. A release
-# that already has an album row takes the orphans into it (one row per release);
-# a folder's cover.jpg becomes the art of a row that has none.
+# Give tracks that carry a release id but no album row their album row back (a
+# singleton import stores a track without one even when the file names its
+# release). Grouping by release id and letting beets build the album from its items
+# changes no file and no tag. A release that already has an album row takes the
+# orphans into it; a folder's cover.jpg becomes the art of a row that has none.
 regroup_albums() {
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" regroup
 }
@@ -158,34 +150,25 @@ musicbrainz_reachable() {
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" reachable --mb-url "$MB_URL"
 }
 
-# Compose an overlay with one extra setting, inside the container, so each
-# overlay stays the single source of truth: beets --config takes a single file
-# and `beet import --quiet` can only ever turn quiet ON, never off. Writes
-# /config/.run.yaml, regenerated on every use.
+# Compose an overlay (a base config plus one extra setting) inside the container:
+# beets --config takes a single file and `beet import --quiet` can only turn quiet
+# on, never off. Writes /config/.run.yaml, regenerated on every use.
 #
 #   release -> album.yaml + import.quiet: no            (prompt with candidates)
 #   keep    -> adopt.yaml + import.move: yes            (register a directory as-is)
 #   pinned  -> album.yaml + match.strong_rec_thresh 0.3 (the release was chosen
-#              with --id: a lone candidate is accepted even when the pressing's
-#              own track list or credits differ from the files. Used by `--albums
-#              <dir> --id` and as the config pin_files reads its settings from)
+#              with --id, so a lone candidate is accepted even when its track list
+#              or credits differ from the files; also the config pin_files reads)
 #
-# The prompting kinds are human-driven runs, so they let reviewed.py turn a
-# "use as-is" answer into a marker.
+# The prompting kinds let reviewed.py turn a "use as-is" answer into a marker.
 overlay() {  # <release|keep|pinned>
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" overlay "$1"
 }
 
-# Make the whole library older than the pipeline's "recent" window.
-#
-# `added` is set when a row is CREATED. Every row a rebuild, an adopt or an upgrade
-# pass creates is therefore "added now", and `media-sync --retag` (weekly) and the
-# default `--upgrade` scope (both `added:-4w..`) then see the entire library as new
-# downloads: a multi-hour re-match of thousands of tracks that already went through
-# it, with the library collapsed for the duration. Stamping the rows added inside
-# the window as 29 days old leaves only what arrives afterwards - the nightly
-# downloads - inside it. Touches the database only, never a file; run it while
-# nothing else writes (media-sync holds the lock).
+# Stamp rows added in the last 4 weeks as 29 days old, so `--retag` and the default
+# `--upgrade` scope (both `added:-4w..`) do not treat a rebuilt library as new
+# downloads. Database only; run it while media-sync holds the lock. The README
+# ("Settling a library") explains when.
 settle_library() {
     sqlite3 -cmd '.timeout 20000' "$DB" "
         update items set added = strftime('%s','now','-29 days') where added > strftime('%s','now','-28 days');
@@ -196,13 +179,11 @@ settle_library() {
 # Register what is on disk and has no row, then restore the reviewed markers.
 adopt_library() {
     register_new /config/adopt.yaml /music
-    # A rebuilt library loses the reviewed markers: the flexible field lives only
-    # in library.db, but the comments prefix travelled with the files. `beet
-    # modify` raises "No matching objects to modify." when its query matches
-    # nothing - and a library that has never had a "use as-is" decision has none -
-    # so restore only if there is something to restore. -M -W: the field lives in
-    # library.db alone; a plain modify would refile every newly marked track by the
-    # singleton path format ($artist/$title), flattening a folder adopted as it is.
+    # The reviewed field lives only in library.db, but the comments prefix travels
+    # with the files. `beet modify` raises "No matching objects" when its query
+    # matches nothing, so restore only if there is something to restore. -M -W: a
+    # plain modify would refile each marked track by the singleton path format
+    # ($artist/$title), flattening a folder adopted as it is.
     if [ "$(count 'comments::^reviewed')" -gt 0 ]; then
         "${BEET[@]}" modify -y -M -W reviewed=1 'comments::^reviewed'
     fi
@@ -225,13 +206,8 @@ files_for_query() {  # <beets query...>
 
 # Give the files on stdin (container paths) the MusicBrainz release <id>.
 #
-# The release is applied to the files directly, not by importing them. An import
-# into an album that already has members re-imports those members too and lets
-# beets re-assign every track to a slot: a second copy of a track (the same song
-# from two sources, both matched) was pushed into the one vacant slot and came out
-# retitled as another song. Here each file is matched to a track of the release by
-# title, and nothing else is touched - rows keep their ids and flags, other members
-# stay exactly as they are.
+# The release is applied to the files directly (see cmd_pin in media_tools.py and
+# the README); each file is matched to a track of the release by title.
 #
 #   - a file whose title is not on the release is left as it is
 #   - a file whose track the album already holds (a copy) is left as it is
@@ -266,20 +242,17 @@ album_art() {  # <release id> <item id>...
     done
 }
 
-# Albums where most tracks found their release and some did not, as the plan
-# `media-sync --complete` acts on: lines of <release id> TAB <album> TAB <path>.
-# An album qualifies with one release id among its matched tracks, at least three
-# of them, and no more bare tracks than matched ones. A bare track is only
-# included if its title is a track of that release - fetched from MusicBrainz -
-# so a bonus track or a different song under the same album tag stays out. A bare
-# track whose title a matched track of the album already has is a second copy of
-# it (another download, the other format): pinning it would put the same track
-# into the album twice, so it is left alone and counted on stderr.
+# The plan `media-sync --complete` acts on: lines of <release id> TAB <album> TAB
+# <path>, for albums where most tracks found their release. An album qualifies with
+# one release id among its matched tracks, at least three of them, and no more
+# unmatched tracks than matched ones. An unmatched track is included only if its
+# title is on that release, and not if a matched track already has that title (a
+# second copy; the count goes to stderr).
 complete_plan() {
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" plan --mb-url "$MB_URL" --cache "$REVIEW/mb-cache"
 }
 
-# What the nightly release pass left half placed (see media_audit.py), written to
+# What the release pass left half placed (see media_audit.py), written to
 # $LIB/state/review/candidates.json; changes nothing in the library. The files with
 # no row come from unregistered_files, so the audit and the adopt agree on them; the
 # audit lists /downloads itself.

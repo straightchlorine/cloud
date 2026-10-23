@@ -1,11 +1,9 @@
-# Merged over config.yaml by `media-import` (via `beet --config`) so that import
-# runs INTERACTIVELY: beets prints the MusicBrainz candidates and asks per track
-# (Apply / as-is / Skip / ...) instead of auto-skipping unmatched files.
+# Merged over config.yaml by `media-import` (via `beet --config`): beets prints the
+# MusicBrainz candidates and asks per track instead of skipping unmatched files.
 import:
     quiet: no
 
-# A reviewer answering "use as-is" is a decision, not a failure to match: let
-# reviewed.py mark those tracks so no later `--upgrade`/`--retag` re-matches
-# them. Only interactive runs opt in; the nightly pass and --adopt never do.
+# "Use as-is" is a decision: reviewed.py marks those tracks so `--upgrade` and
+# `--retag` leave them alone.
 reviewed:
     mark: yes

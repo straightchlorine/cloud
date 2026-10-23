@@ -51,8 +51,7 @@ def cmd_reachable(args):
 def cmd_prune(args):
     """Drop rows whose file is gone (a track removed on purpose), and the album rows that
     hold no track. Rows only: delete=False never touches a file, and with_album (the
-    default) removes an album row with its last item - the empty ones counted here are
-    the ones that predate that (an emptied row an older pin or merge left behind)."""
+    default) removes an album row with its last item; empty album rows are dropped too."""
     lib = mc.open_library()
     items = list(lib.items())
     gone = [i for i in items if not os.path.exists(i.path)]
@@ -152,13 +151,9 @@ def cmd_plan(args):
 def cmd_pin(args):
     """Give the files on stdin (container paths) the MusicBrainz release.
 
-    The release is applied to the files directly, not by importing them. An import into
-    an album that already has members re-imports those members too and lets beets
-    re-assign every track to a slot: a second copy of a track (the same song from two
-    sources, both matched) was pushed into the one vacant slot and came out retitled as
-    another song. Here each file is matched to a track of the release by title, and
-    nothing else is touched - rows keep their ids and flags, other members stay as they
-    are.
+    The release is applied to the files directly; an import would re-assign every
+    existing member of the album to a slot. Each file is matched to a track of the
+    release by title, and rows keep their ids and flags.
 
       - a file whose title is not on the release is left as it is
       - a file whose track the album already holds (a copy) is left as it is

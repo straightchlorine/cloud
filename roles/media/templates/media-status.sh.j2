@@ -2,13 +2,12 @@
 # {{ ansible_managed }}
 # media-status - what the library pass is doing right now.
 #
-# Read-only and cheap by design: it reads the run log and queries sqlite
-# directly, and never invokes beets or docker - each of those costs tens of
-# seconds and would shell out to the very thing being watched. The step markers
-# (`=== <ts>  n/5 ...`) are the contract it parses: media-sync --maintenance
-# writes one per step, so the lines after the last marker are the current step's
-# work. That is also why this is a separate command and not a media-sync mode:
-# it must not take the writer lock.
+# Read-only and cheap by design: it reads the run log and queries sqlite directly,
+# and never invokes beets or docker, which take tens of seconds and would load the
+# very thing being watched. It parses the step markers (`=== <ts>  n/8 ...`) that
+# media-sync --maintenance writes, so the lines after the last marker are the
+# current step's work. It is a separate command, not a media-sync mode, because it
+# must not take the writer lock.
 #
 #   media-status            the dashboard (watch -n 60 media-status)
 #   media-status --sample   append one fd sample to logs/fdwatch.log; the
@@ -23,8 +22,7 @@ set -uo pipefail
 # docker at source time, so this stays a cheap read).
 # shellcheck source=/dev/null
 . "$(dirname "$(readlink -f "$0")")/media-lib.sh"
-# --maintenance logs here; the pre-fold script wrote night.log, so fall back to
-# that while both may exist.
+# --maintenance logs here; night.log is accepted as an alternative name.
 LOG="$LIB/logs/maintenance.log"
 [ -f "$LOG" ] || LOG="$LIB/logs/night.log"
 # A run started by hand with its own redirect (`media-sync --upgrade all > x.log`)
@@ -36,10 +34,9 @@ LOCK="$LIB/logs/.media-sync.lock"
 
 
 sample_fds() {
-    # Docker's per-container SOFT nofile default is 1024 whatever the host
-    # allows, and a whole-library import burns ~2 descriptors per task - that
-    # ceiling is what killed the first passes after ~478 tasks. Recording the
-    # count is how a later reader sees the slope without starting a container.
+    # Docker's per-container soft nofile default is 1024 whatever the host allows,
+    # and a whole-library import uses ~2 descriptors per task. Recording the count
+    # shows the slope without starting a container.
     pid=""
     for p in $(pgrep -f 'lsiopy/bin/' 2>/dev/null); do
         grep -q 'docker-' "/proc/$p/cgroup" 2>/dev/null || continue
@@ -62,10 +59,8 @@ if [ "${1:-}" = "--sample" ]; then
 fi
 
 if [ "${1:-}" = "--report" ]; then
-    # What the last run actually did. A multi-day pass otherwise leaves this
-    # nowhere: the log is the stream, and the numbers that matter (yield, rate,
-    # what is left for a second pass) are only ever derived by hand. Log + DB
-    # only, like the dashboard.
+    # Summary of the last run (yield, rate, what is left for a second pass), read
+    # from the log and the database only, like the dashboard.
     [ -f "$LOG" ] || { echo "no run log at $LOG"; exit 1; }
     start_ln=$(grep -an 'run start' "$LOG" | tail -1 | cut -d: -f1)
     start_ts=$(tail -n +"$start_ln" "$LOG" | grep -aoE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:+-]+' | head -1)
@@ -100,15 +95,13 @@ if [ "${1:-}" = "--report" ]; then
 fi
 
 if [ "${1:-}" = "--preflight" ]; then
-    # What to check BEFORE starting a pass. Every item here is something whose
-    # absence cost real time: an unresolved MusicBrainz makes a pass silently
-    # match nothing, a collapsed library.db means a previous pass died mid-flight,
-    # duplicate paths are the crash that killed three passes, and the fd ceiling
-    # is Docker's per-container default of 1024.
+    # What to check before starting a pass: MusicBrainz must resolve or a pass
+    # matches nothing, a collapsed library.db means a previous pass died
+    # mid-flight, duplicate paths crash an upgrade, and Docker's per-container fd
+    # default is 1024.
     #
-    # Deliberately no docker here (this stays a cheap, lock-free read): the
-    # container-side resolution check belongs in the role's post_deploy_validate,
-    # which is the only place with a daemon to ask.
+    # No docker here, so this stays a cheap, lock-free read; the container-side
+    # resolution check belongs in the role's post_deploy_validate.
     rc=0
     say() { printf '%-20s %s\n' "$1:" "$2"; }
 
@@ -127,9 +120,8 @@ if [ "${1:-}" = "--preflight" ]; then
     files=$(audio_files | wc -l)
     items=$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from items;' 2>/dev/null || echo 0)
     say library "$files files on disk, $items rows in library.db"
-    # Only a warning when nothing is running: mid-pass the DB *is* collapsed on
-    # purpose (the upgrade step removes every bare row before importing), so the
-    # check would otherwise fire on every healthy pass.
+    # Only a warning when nothing is running: mid-pass the database is collapsed
+    # on purpose (the upgrade step removes every bare row before importing).
     if [ "$items" -lt $(( files / 2 )) ] && ! pgrep -f 'night\.sh|media-sync' >/dev/null 2>&1; then
         say 'DB vs disk' "FAR FEWER ROWS THAN FILES - a previous pass died after removing its bare rows. Let --adopt re-register, or restore a checkpoint."
         rc=1
@@ -187,14 +179,14 @@ walked=$(printf '%s\n' "$body" | grep -acE '^(/music/|/downloads/)')
 skipped=$(printf '%s\n' "$body" | grep -c '^Skipping\.')
 mb503=$(printf '%s\n' "$body" | grep -c 'too many 503')
 matched=$(( walked - skipped ))
-# the prune records how many tracks this pass has to get through
+# The size of the pass is the count in the last "beets now tracks N" line of the
+# log (printed by media_tools.py prune and sent by media-sync --adopt), so
+# rewording either breaks this grep.
 target=$(grep -a 'beets now tracks' "$LOG" | tail -1 | grep -oE '[0-9]+$')
 target=${target:-0}
-# --adopt registers files as-is: it prints no "Skipping." line (every path line
-# is a registered row, not a match) and the prune's track count belongs to the
-# upgrade step. Rows registered so far = walked, so the untracked files at the
-# start of the step were (files on disk - rows now + walked). The busy timeout
-# on sqlite3 matters here: adopt holds long write transactions.
+# --adopt prints no "Skipping." line (every path line is a registered row, not a
+# match). The busy timeout on sqlite3 matters here: adopt holds long write
+# transactions.
 case "$marker" in
 *upgrade*)
     # Without a prune record the pass has no stated size: what it must walk is
@@ -217,13 +209,11 @@ esac
 
 printf 'tasks    : %s walked (%s matched, %s skipped, %s MB 503s)\n' \
     "$walked" "$matched" "$skipped" "$mb503"
-# Recent, not cumulative: a step's total only ever grows, so a historic outage
-# would keep the warning lit for days and train us to ignore it. The watcher
-# still compares successive totals (growth is the signal); this line answers
-# "is it failing NOW".
+# Recent, not cumulative: a step's total only grows, so an old outage would keep
+# the warning lit for days. This line answers whether lookups are failing now.
 dns=$(printf '%s\n' "$body" | tail -500 | grep -aciE 'NameResolutionError|Failed to resolve|gaierror')
 printf 'dns      : %s resolution failure(s) in the last 500 lines%s\n' "$dns" \
-    "$( [ "$dns" -gt 0 ] && echo '   <-- lookups are failing now, matches are being lost silently' )"
+    "$( [ "$dns" -gt 0 ] && echo '   <-- DNS lookups are failing; matches are being missed' )"
 if [ "$walked" -gt 0 ] && [ "$target" -gt 0 ]; then
     awk -v w="$walked" -v t="$target" -v e="$el" -v st="$started" 'BEGIN{
         s = e / w

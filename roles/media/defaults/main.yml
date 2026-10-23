@@ -28,10 +28,10 @@ media_youtube_enabled: false
 media_backfill_exclude: ""
 
 # The MusicBrainz web service the review tools (`media-sync --audit`, --complete's
-# plan) ask. The tests point it at a local stub of fixture releases.
+# plan) ask. The tests point it at a local fake serving fixture releases.
 media_musicbrainz_url: "https://musicbrainz.org"
 
-# `media-sync --apply` (the review decisions, Sundays 04:00): a run touching more files
+# `media-sync --apply` (the review decisions, run weekly from cron): a run touching more files
 # than this is refused unless --force, and it waits for a restic backup no older than
 # the age below. The unit is backup-<name>.service, from the common restic_backup task.
 media_apply_max_files: 200
@@ -127,11 +127,11 @@ media_compose_services:
       - "com.centurylinklabs.watchtower.enable=true"
     service_resources:
       limits:
-        memory: 256M
-        cpus: "1.0"
+        memory: "{{ hardware_limits.navidrome.memory }}"
+        cpus: "{{ hardware_limits.navidrome.cpus }}"
       reservations:
-        memory: 128M
-        cpus: "0.5"
+        memory: "{{ hardware_limits.navidrome.memory_reservation }}"
+        cpus: "{{ hardware_limits.navidrome.cpus_reservation }}"
 
   - service_name: beets
     service_image: "linuxserver/beets:latest"
@@ -140,13 +140,11 @@ media_compose_services:
     service_restart: "no"
     service_profiles:
       - tools
-    # userns_mode:host so beets runs as the REAL stack uid (= media_uid), the
-    # same uid yt-dlp writes the host's downloads/ as. Userns-remapped, beets
-    # could read /downloads but not rename out of it, so imports failed with
-    # "Permission denied while moving". The image's s6 /init (the reason the
-    # earlier revision avoided userns_mode:host) is bypassed - media-sync uses
-    # --entrypoint - so no SUID preinit runs. music/, beets/ and downloads/ are
-    # owned by the stack uid to match (see stack.yml).
+    # userns_mode:host so beets runs as the real stack uid (= media_uid), the same
+    # uid yt-dlp writes downloads/ as. Userns-remapped, beets can read /downloads
+    # but not rename out of it ("Permission denied while moving"). The image's s6
+    # /init is bypassed (media-sync uses --entrypoint), so no SUID preinit runs.
+    # music/, beets/ and downloads/ are owned by the stack uid to match (see stack.yml).
     service_userns_mode: "host"
     service_user: "{{ media_uid }}:{{ media_gid }}"
     service_environment:
@@ -159,18 +157,13 @@ media_compose_services:
       - "{{ media_library_path }}/removed:/removed"
     service_networks:
       - stack
-    # Pinned on purpose: inheriting the host's resolver list (a Pi-hole plus a
-    # fallback that is not always reachable, 1s timeout, one attempt) meant a
-    # single hiccup made EVERY lookup fail - while the pass kept logging
-    # "Skipping." and looked healthy. 3913 such failures in one run, zero matches.
-    # media_beets_dns names the resolvers explicitly, so the container no longer
-    # depends on whatever the host's resolv.conf looks like at that moment.
+    # Pinned on purpose: the host's resolver list (1s timeout, one attempt) lets a
+    # single hiccup fail every lookup while the pass keeps logging "Skipping." and
+    # looks healthy. media_beets_dns names the resolvers explicitly.
     service_dns: "{{ media_beets_dns }}"
-    # Docker's per-container SOFT nofile default is 1024 regardless of the
-    # daemon's LimitNOFILE, which only becomes the hard limit - and a
-    # whole-library `beet import` burns ~2 descriptors per task, so the album
-    # pass died with EMFILE (no file descriptors available) after 478 of
-    # ~7000 tasks. 65536 is ~4x what the whole library needs.
+    # Docker's per-container soft nofile default is 1024 regardless of the daemon's
+    # LimitNOFILE (which only becomes the hard limit), and a whole-library
+    # `beet import` uses ~2 descriptors per task, so it would hit EMFILE.
     service_ulimits:
       nofile:
         soft: 65536

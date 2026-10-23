@@ -1,68 +1,64 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # beets format/query strings ('$id', 'mb_albumid::^$',
 # 'reviewed::^$') are literal beets syntax, never shell expansion - hence quoted.
-# media-sync - the whole YouTube -> yt-dlp -> beets -> Navidrome pipeline, one
-# engine for every mode, so the beets invocation, the overlays and the two
-# import passes exist exactly once:
+# media-sync - the whole YouTube -> yt-dlp -> beets -> Navidrome pipeline. One engine
+# for every mode, so the beets invocation, the overlays and the two import passes
+# exist once. The README ("Modes") has the longer description of each.
 #
-#   media-sync                        nightly: pull the playlists, then import
-#                                     whatever landed (release pass, then a
-#                                     singleton pass for the rest)  [cron 01:00]
-#   media-sync --retag                retry MusicBrainz for recent as-is imports
-#                                     and give them their release [cron Sun 4:15]
-#   media-sync --upgrade [all|<q>]    give bare tracks their release (last 4
-#                                     weeks by default)
+#   media-sync                        nightly, from cron: pull the playlists, then
+#                                     import what landed (release pass, then a
+#                                     singleton pass for the rest)
+#   media-sync --retag                weekly, from cron: retry MusicBrainz for recent
+#                                     tracks that found no match, and give them
+#                                     their release
+#   media-sync --upgrade [all|<q>]    give tracks with no release their release
+#                                     (last 4 weeks by default)
 #   media-sync --albums [<dir>] [--id <release>]
-#                                     release pass only, grouped: a ripped CD or
-#                                     a complete album dropped in one directory;
-#                                     --id pins the MusicBrainz release when the
-#                                     pressing differs from the files
-#   media-sync --keep [<dir>]         register a directory as-is (no matching)
-#                                     and mark it reviewed, so nothing re-matches
-#                                     it later
+#                                     release pass only, grouped: a ripped CD or a
+#                                     complete album in one directory; --id names
+#                                     the MusicBrainz release when the pressing
+#                                     differs from the files
+#   media-sync --keep [<dir>]         register a directory as it is, without
+#                                     matching, and mark it reviewed
 #   media-sync --adopt                register the files in music/ that have no
-#                                     row, restore the reviewed markers (rows that
-#                                     exist are never touched)
-#   media-sync --regroup              album rows for tracks that carry a release
-#                                     id but have none (changes no file)
+#                                     row and restore the reviewed markers (rows
+#                                     that exist are not touched)
+#   media-sync --regroup              album rows for tracks that carry a release id
+#                                     but have none (changes no file)
 #   media-sync --pin '<query>' --id <release> [--dry-run]
 #                                     give the files a beets query selects one
-#                                     MusicBrainz release, into one album row
-#   media-sync --complete [--dry-run] finish partly matched albums: pin their
-#                                     bare tracks to the release the rest found
+#                                     MusicBrainz release, in one album row
+#   media-sync --complete [--dry-run] finish partly matched albums: give their
+#                                     remaining tracks the release the rest found
 #   media-sync --settle               stamp the library as older than the 4-week
-#                                     "recent" window (after a rebuild, so --retag
-#                                     does not re-match all of it); DB only
-#   media-sync --audit                what the release pass left half placed (split,
-#                                     partial and whole albums, files with no row),
+#                                     "recent" window (see the README); database only
+#   media-sync --audit                find what the release pass left half placed,
 #                                     for the library review; changes nothing
 #   media-sync --apply [--dry-run] [--force]
-#                                     the saved review decisions in one batch (cron:
-#                                     Sundays 04:00); gated on a fresh restic backup
+#                                     carry out the saved review decisions in one
+#                                     batch (the weekly apply, from cron); needs a
+#                                     fresh restic backup
 #   media-sync --undo <apply log>     take an apply back (state/review/apply-log/)
-#   media-sync --plan                 what --maintenance would face; changes nothing
+#   media-sync --plan                 show what --maintenance would face; changes nothing
 #   media-sync --maintenance [--from <1-8>]
-#                                     the one-time routine for an existing library:
-#                                     adopt, prune, upgrade, adopt, regroup,
-#                                     complete, settle, backfill - with a checkpoint
-#                                     and a resume point (media-maintenance)
-#   media-sync --backfill             one-time: lyrics + ReplayGain for adopted
+#                                     the one-time routine for an existing library,
+#                                     with a checkpoint and a resume point (see
+#                                     media-maintenance)
+#   media-sync --backfill             one-time: lyrics and ReplayGain for adopted
 #                                     tracks (slow - run it under tmux)
 #   media-sync --interactive [<dir>]  both passes, the singleton one asking per
-#                                     track (this is what `media-import` runs)
+#                                     track (what `media-import` runs)
 #   media-sync --review [<dir>]       a full session: the release pass asking per
 #                                     file first (accept a near miss by number, or
 #                                     dismiss it), then the singleton pass
-#   media-sync --singles [<dir>]      just the judging pass - what you want in the
-#                                     morning after a nightly run, instead of
-#                                     waiting through a release pass that would
-#                                     find nothing new
-#   media-sync --release [<dir>]      the RELEASE pass asking per track - for the
+#   media-sync --singles [<dir>]      the singleton pass on its own, for the leftovers
+#                                     after a nightly run
+#   media-sync --release [<dir>]      the release pass asking per track, for the
 #                                     near misses automatic matching refuses
 #
 # The interactive modes need a terminal; run them through `media-import`.
-# Ctrl-C stops any mode cleanly and says so: an unattended run (no terminal) also
-# sends one ntfy, a manual one just prints (see on_interrupt).
+# Ctrl-C stops any mode cleanly; an unattended run (no terminal) also sends one
+# ntfy, a manual one just prints (see on_interrupt).
 set -euo pipefail
 
 MODE="${1:-sync}"
@@ -103,20 +99,14 @@ case "$MODE" in
         [ -n "$ALBUM_ID" ] || { echo "media-sync --pin needs --id <release>" >&2; exit 2; } ;;
 esac
 
-# ALBUM (release) pass, one FILE at a time. downloads/ is a playlist dump, so
-# many files can share one (or the wrong) album tag; a group like that holds
-# tracks the release does not have, which beets scores badly - and rightly so.
-# Judging each file on its own lets the release that actually CONTAINS the track
-# win, so it gets the album year, release ID, track number and Cover Art Archive
-# art (fetchart only runs for releases, so a singleton never gets it). A track
-# whose "album" does not contain it is refused and falls through.
-# WALK THE WHOLE TREE: downloads/ is not necessarily flat. A per-artist or
-# per-playlist subdirectory (older yt-dlp templates, a hand-dropped album) with a
-# top-level glob hands this pass NOTHING, and every nested file then falls to the
-# singleton pass - which by design can never carry a release. find -exec keeps
-# the one-file-at-a-time property, needs no shell loop and survives odd
-# filenames; `! -name ".*"` keeps the old glob's habit of ignoring hidden files
-# (a half-written .part or thumbnail).
+# Release pass, one file at a time. downloads/ is a playlist dump, so one album tag
+# can cover tracks the release does not have, which beets scores badly. Judged on
+# its own, a file can win the release that contains it, and gets the album year,
+# release id, track number and Cover Art Archive art (fetchart only runs for
+# releases). A track whose album does not contain it is refused and falls through.
+# `find` walks the whole tree: downloads/ may hold subdirectories, and a top-level
+# glob would hand them all to the singleton pass, which can never carry a release.
+# `! -name ".*"` skips hidden files (a half-written .part or thumbnail).
 release_pass() {  # [<dir>] [<overlay>] [tty] [<stamp>]
     # `tty` hands beets a terminal so it can ask (used by --review); the default
     # is unattended, where only strong matches are applied and the rest are
@@ -126,13 +116,11 @@ release_pass() {  # [<dir>] [<overlay>] [tty] [<stamp>]
     if [ "${3:-}" = tty ]; then
         run=(-it)
     fi
-    # Stoppable by one ^C, which needs care: `sh -c` with a single command execs
-    # it (so find would be PID 1, and PID 1 has no default signal dispositions -
-    # that is why every ^C used to kill only the current beets child while find
-    # marched on to the next file), and a trap on its own is not enough either,
-    # because a shell defers traps until its foreground child exits. Background
-    # the loop and wait: wait is interruptible, so the trap fires immediately,
-    # kills find and the container goes with PID 1.
+    # Stoppable by one ^C: `sh -c` with a single command execs it, so find would be
+    # PID 1, which has no default signal handling. A trap alone is not enough
+    # either, because a shell defers traps until its foreground child exits.
+    # Backgrounding the loop and waiting lets the trap fire at once, kill find, and
+    # the container goes with PID 1.
     "${COMPOSE[@]}" run "${run[@]}" --rm -e PYTHONUNBUFFERED=1 --entrypoint /bin/sh beets -c '
         trap "kill \$pid 2>/dev/null; exit 130" INT TERM
         find "$1" -type f ! -name ".*" ${3:+-cnewer "$3"} \
@@ -153,25 +141,19 @@ interactive_pass() {  # <beets args...>
     exit "$status"
 }
 
-# Give already-imported bare tracks their release. beets only applies RELEASE
-# metadata during an album import, and `beet import -L` re-imports the library
-# item as whatever it already is - a singleton stays a singleton, so the track
-# match is a no-op (beets' own SingletonImportTask: "a single track that is not
-# associated to an album"). So hand the FILES to the importer instead: drop the
-# rows (no -d, the files stay on disk), then import those paths in album mode.
-# `reviewed::^$` leaves the reviewer's decisions alone: a track they chose to
-# keep as-is is never given a release behind their back (the marker is written
-# by reviewed.py, see interactive.yaml). Anything that finds no release stays
-# untracked but keeps playing; re-register it with `media-sync --adopt`.
+# Give already-imported tracks with no release their release. beets only applies
+# release metadata during an album import, and `beet import -L` re-imports a
+# singleton as a singleton, so the files go to the importer instead: drop the rows
+# (no -d, the files stay on disk), then import those paths in album mode.
+# `reviewed::^$` leaves the reviewer's decisions alone (reviewed.py writes the
+# marker). Anything that finds no release stays out of beets but keeps playing;
+# re-register it with `media-sync --adopt`.
 # Optional beets query as "$@".
 upgrade_releases() {
     local files
-    # sort -u: the library can hold SEVERAL rows for the SAME path (a legacy
-    # import artifact - this one has 1112 such paths, 1909 redundant rows). beets
-    # imports the first copy of a path by MOVING the file, so the next task for
-    # that path then cannot open it: chroma's fingerprint stage raises
-    # FileNotFoundError out of run_parallel and kills the whole session mid-pass
-    # (seen twice, ~900 tasks in). One task per path removes that entirely.
+    # sort -u: a library can hold several rows for one path. beets moves the file on
+    # the first one, and the next task for that path then fails in chroma's
+    # fingerprint stage and kills the session. One task per path avoids it.
     mapfile -t files < <("${BEET[@]}" ls -f '$path' 'mb_albumid::^$' 'reviewed::^$' "$@" | sort -u)
     [ -n "${files[*]:-}" ] || return 0
     "${BEET[@]}" remove -f 'mb_albumid::^$' 'reviewed::^$' "$@"
@@ -181,10 +163,9 @@ upgrade_releases() {
     "${BEET[@]}" --config /config/upgrade.yaml import "${files[@]}"
 }
 
-# upgrade_releases plus the numbers worth reporting. A track that finds no release
-# loses its row (see above), so "bare rows left" is not "tracks that failed" - the
-# ones that failed are gone from the count. Count what gained a release and what
-# vanished instead; sets UPG_BEFORE, UPG_GOT and UPG_DROPPED.
+# upgrade_releases plus the numbers to report. A track that finds no release loses
+# its row, so the rows left over do not count the failures; count what gained a
+# release and what vanished instead. Sets UPG_BEFORE, UPG_GOT and UPG_DROPPED.
 upgrade_report() {  # [<beets query>...]
     local rel_before rel_after bare_after
     UPG_BEFORE="$(count 'mb_albumid::^$' 'reviewed::^$' "$@")"
@@ -197,18 +178,16 @@ upgrade_report() {  # [<beets query>...]
 }
 
 exec 9>"$LIB/logs/.media-sync.lock"
-# One writer at a time, interactive sessions included - an interactive run can
-# hold this for an hour, so a skipped nightly sync says so instead of staying
-# silent (no lock, no beets writes while a reviewer is answering prompts).
+# One writer at a time, interactive sessions included. An interactive run can hold
+# the lock for an hour, so a skipped nightly sync says so instead of staying silent.
 flock -n 9 || {
     echo "media-sync already running; skipping this run"
     notify "needs a look" "another media-sync run is in progress; this run skipped." default warning
     exit 0
 }
 
-# Ctrl-C / SIGTERM: stop and say so. An unattended run interrupted at 02:00 must
-# not just vanish - hence the ntfy when there is no terminal - while a manual one
-# should say plainly that it stopped. Nothing needs unwinding: flock drops the
+# Ctrl-C / SIGTERM: stop and say so. An unattended run must not just vanish, hence
+# the ntfy when there is no terminal. Nothing needs unwinding: flock drops the
 # lock with the process, and yt-dlp's archive file means a re-run skips what was
 # already downloaded. A file interrupted mid-move is either already renamed
 # (downloads/ and music/ are the same filesystem) or still in downloads/, so the
@@ -224,10 +203,8 @@ on_interrupt() {
 trap on_interrupt INT TERM
 trap 'notify failed "Line $LINENO. See $LIB/logs/media-sync.log." high rotating_light,error' ERR
 
-# The interactive modes are for a human at a terminal. Refuse to run without one,
-# before anything else happens: the cron only ever runs `sync` and `--retag`, and
-# while media-import checks this too, the engine is the place that must never sit
-# on a prompt nobody can answer.
+# The interactive modes are for a human at a terminal. Refuse without one before
+# anything else happens: the engine must never sit on a prompt nobody can answer.
 case "$MODE" in
     --interactive | --review | --singles | --release)
         if [ ! -t 0 ] || [ ! -t 1 ]; then
@@ -242,39 +219,35 @@ esac
 
 case "$MODE" in
     --retag)
-        # `reviewed::^$` here too: a track the reviewer kept as-is carries no
-        # MusicBrainz ids, so without it this would re-match it and overwrite the
-        # tags they chose to keep.
+        # `reviewed::^$`: a track kept as it is carries no MusicBrainz ids, so this
+        # would otherwise re-match it and overwrite the tags it was kept with.
         before="$(count 'mb_trackid::^$' 'reviewed::^$' added:-4w..)"
         "${BEET[@]}" import -L 'mb_trackid::^$' 'reviewed::^$' added:-4w..
         after="$(count 'mb_trackid::^$' 'reviewed::^$' added:-4w..)"
-        # A track match can never carry the release (year, release ID, cover
-        # art), so give the recent matches their release too. Same window.
+        # A track match carries no release data (year, release id, cover art), so
+        # the recent matches get their release too, over the same window.
         upgrade_report added:-4w..
-        notify "done" "$((before - after)) of $before recent as-is track(s) matched MusicBrainz; $UPG_GOT of $UPG_BEFORE got a release, $UPG_DROPPED found none and need 'media-sync --adopt'."
+        notify "done" "$((before - after)) of $before recent unmatched track(s) found a MusicBrainz match; $UPG_GOT of $UPG_BEFORE got a release, $UPG_DROPPED found none and are out of beets until 'media-sync --adopt'; they still play."
         exit 0 ;;
     --upgrade)
-        # The release half of --retag, on demand: give tracks that were imported
-        # as bare tracks their release (year, release ID, label, track numbers,
-        # Cover Art Archive art). Narrow it with a beets query, or pass `all`.
+        # The release half of --retag, on demand. Narrow it with a beets query, or
+        # pass `all`.
         case "$DIR" in
             all) scope=() ;;
             '') scope=(added:-4w..) ;;
             *) scope=("$DIR") ;;
         esac
         upgrade_report "${scope[@]}"
-        notify "done" "$UPG_GOT of $UPG_BEFORE track(s) got a release; $UPG_DROPPED found none and lost their row until 'media-sync --adopt' registers them again."
+        notify "done" "$UPG_GOT of $UPG_BEFORE track(s) got a release; $UPG_DROPPED found none and are out of beets until 'media-sync --adopt'; they still play."
         exit 0 ;;
     --albums)
-        # Release pass only, GROUPED: beets sees the directory as album tasks, so
-        # a complete album (or a ripped CD) is matched as a whole. The nightly run
-        # makes the opposite trade-off - every file judged on its own - because a
-        # playlist dump cannot be trusted to group correctly; see release_pass.
+        # Release pass only, grouped: a complete album (or a ripped CD) is matched
+        # as a whole. The nightly run judges every file alone instead, because a
+        # playlist dump cannot be trusted to group; see release_pass.
         #
-        # --id pins the release: a pressing that is on MusicBrainz but whose
-        # track list or credits differ from the files (a ripped compilation, a
-        # reissue) scores below the strong threshold and would be skipped, so the
-        # `pinned` overlay accepts the one candidate a person chose.
+        # --id names the release: a pressing whose track list or credits differ
+        # from the files scores below the strong threshold and would be skipped, so
+        # the `pinned` overlay accepts the one candidate a person chose.
         if [ -n "$ALBUM_ID" ]; then
             overlay pinned
             exec "${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
@@ -285,10 +258,9 @@ case "$MODE" in
             --entrypoint /lsiopy/bin/beet beets \
             --config /config/album.yaml import "${DIR:-/downloads}" ;;
     --keep)
-        # "I know what this is and I want it as it is": register the files with
-        # beets without matching them (adopt.yaml), move them into music/ so the
-        # nightly run stops retrying them, and let reviewed.py mark them - the
-        # marker is what keeps --upgrade and --retag away from them later.
+        # Register the files without matching them (adopt.yaml) and move them into
+        # music/ so the nightly run stops retrying them; reviewed.py marks them,
+        # which keeps --upgrade and --retag away from them later.
         overlay keep
         before="$(count)"
         register_new /config/.run.yaml "${DIR:-/downloads}"
@@ -301,23 +273,21 @@ case "$MODE" in
         exit 0 ;;
     --backfill)
         backfill
-        notify "done" "$(count 'lyrics::.') of $(count) track(s) now carry lyrics; ReplayGain written."
+        notify "done" "$(count 'lyrics::.') of $(count) track(s) have lyrics; ReplayGain is set."
         exit 0 ;;
     --regroup)
-        # Album rows for tracks that carry a release id but no album row: what
-        # as-is registration and older library damage leave behind. Changes no file.
+        # Album rows for tracks that carry a release id but no album row. Changes
+        # no file.
         result="$(regroup_albums)"
         echo "$result"
         notify "done" "$result"
         exit 0 ;;
     --pin)
-        # Give the files a beets query selects a MusicBrainz release, chosen by a
-        # person (--id): for an album the per-file release pass could not place,
-        # a ripped CD whose release is on MusicBrainz, or tracks spread over
-        # several folders (a folder import cannot group those). They end up in one
-        # album row. Rows only are replaced, never files; a file the release does
-        # not fit stays registered as it was. --dry-run lists the files and stops.
-        # Several words make several query terms: --pin 'album:X' 'track:1..5'.
+        # Give the files a beets query selects a MusicBrainz release chosen by a
+        # person (--id): for an album the per-file pass could not place, or tracks
+        # spread over several folders, which a folder import cannot group. They
+        # end up in one album row. --dry-run lists the files and stops. Several
+        # words make several query terms: --pin 'album:X' 'track:1..5'.
         files="$(files_for_query "${ARGS[@]}")"
         [ -n "$files" ] || { echo "no track matches: ${ARGS[*]}" >&2; exit 1; }
         echo "$(printf '%s\n' "$files" | wc -l) file(s) match: ${ARGS[*]}"
@@ -330,14 +300,13 @@ case "$MODE" in
         echo "checkpoint: $(checkpoint)"
         printf '%s\n' "$files" | pin_files "$ALBUM_ID"
         after="$(count "mb_albumid:$ALBUM_ID")"
-        notify "done" "$((after - before)) of $(printf '%s\n' "$files" | wc -l) track(s) pinned to release ${ALBUM_ID%%-*}; the rest stayed registered as they were."
+        notify "done" "$((after - before)) of $(printf '%s\n' "$files" | wc -l) track(s) pinned to release ${ALBUM_ID%%-*}; the rest are unchanged."
         exit 0 ;;
     --complete)
-        # Finish partly matched albums: where most tracks found their release and
-        # a few did not, pin the rest to the same release - but only the tracks
-        # whose title is on that release (complete_plan). --dry-run prints the
-        # plan and stops. Run --regroup first, so the matched tracks already
-        # share one album row for the others to join.
+        # Finish partly matched albums: pin the tracks that did not match to the
+        # release the rest found, if their title is on it (complete_plan).
+        # --dry-run prints the plan and stops. Run --regroup first, so the matched
+        # tracks share one album row for the others to join.
         plan="$(complete_plan)"
         [ -n "$plan" ] || { echo "nothing to complete"; notify "done" "no partly matched album found."; exit 0; }
         printf '%s\n' "$plan" | awk -F'\t' '{k = $2 "  (" $1 ")"; n[k]++} END {for (k in n) print n[k] " track(s) -> " k}'
@@ -354,19 +323,19 @@ case "$MODE" in
         notify "done" "$total track(s) of $(printf '%s\n' "$plan" | cut -f1 | sort -u | wc -l) album(s) given their release."
         exit 0 ;;
     --audit)
-        # Read-only: what the release pass left half placed, for the library review
-        # (see media_audit.py). Writes state/review/candidates.json. Unreachable,
-        # every lookup would fail slowly and replace a good file with an empty one.
-        # Under the lock, like every mode: the library must hold still while read.
+        # Read-only (see media_audit.py); writes state/review/candidates.json.
+        # Refuses when MusicBrainz is unreachable, or every lookup would fail
+        # slowly and replace a good file with an empty one. Runs under the lock so
+        # the library holds still while read.
         musicbrainz_reachable || exit 1
         result="$(audit_library)"
         echo "$result"
         notify "done" "$(printf '%s\n' "$result" | head -1)"
         exit 0 ;;
     --apply)
-        # The review decisions in one batch (media_apply.py): Sundays 04:00 from cron,
-        # before the 04:15 retag. Gated on the restic backup unless --force; a dry run
-        # changes nothing and needs no gate. Nothing saved: quiet, no ntfy every week.
+        # The review decisions in one batch (media_apply.py), weekly from cron, ahead
+        # of the retag. Gated on the restic backup unless --force; a dry run changes
+        # nothing and needs no gate. With nothing saved it stays quiet.
         [ -z "$DIR" ] || { echo "media-sync --apply takes only --dry-run and --force, not: $DIR" >&2; exit 2; }
         if ! grep -qs '[^[:space:]]' "$LIB/state/review/decisions.jsonl"; then
             echo "apply: no decisions to apply"
@@ -377,7 +346,7 @@ case "$MODE" in
         [ "$FORCE" = 0 ] || apply_args+=(--force)
         if [ "$DRY" = 0 ] && [ "$FORCE" = 0 ] && ! why="$(backup_gate)"; then
             echo "apply: skipped - $why"
-            notify "skipped" "$why. Nothing applied; the decisions wait for the next run (or: media-sync --apply --force)." default warning
+            notify "skipped" "$why. Nothing was applied. The decisions wait for the next run, or run 'media-sync --apply --force'." default warning
             exit 0
         fi
         [ "$DRY" = 1 ] || echo "checkpoint: $(checkpoint)"
@@ -395,7 +364,7 @@ case "$MODE" in
             3 | 4) [ "$DRY" = 1 ] || notify "needs a look" "$summary" default warning ;;
             *)
                 log="$(printf '%s\n' "$out" | sed -n 's/^apply: logging to .*(media-sync --undo \([^ ]*\) takes it back)$/\1/p')"
-                notify "failed" "Stopped halfway (exit $rc). ${log:+Take back what it did: media-sync --undo $log. }See $LIB/logs/media-sync.log." high rotating_light,error
+                notify "failed" "Stopped halfway (exit $rc). ${log:+Undo it with: media-sync --undo $log. }See $LIB/logs/media-sync.log." high rotating_light,error
                 exit 1 ;;
         esac
         exit 0 ;;
@@ -421,8 +390,7 @@ case "$MODE" in
         fi
         exit "$rc" ;;
     --settle)
-        # A rebuilt library is "added now" row by row, and the weekly --retag then
-        # re-matches all of it. See settle_library.
+        # See settle_library.
         echo "checkpoint: $(checkpoint)"
         result="$(settle_library)"
         echo "$result"
@@ -438,22 +406,18 @@ case "$MODE" in
         maintenance
         exit 0 ;;
     --review)
-        # A full review session: the release pass WITH prompts, so a near miss the
-        # automatic run refuses can be accepted by number or dismissed, followed by
-        # the singleton pass per track. Releases first on purpose - a release
-        # carries the year, release id, track numbers and Cover Art Archive art
-        # that a track match can never supply, and the singleton pass is the one
-        # that can no longer reach an album afterwards.
+        # A full session: the release pass with prompts, then the singleton pass.
+        # Releases go first because a track match can never supply the year,
+        # release id, track numbers or cover art, and the singleton pass cannot
+        # reach an album afterwards.
         overlay release
         echo "== media-import: album (release) pass, asking =="
         release_pass "${DIR:-/downloads}" /config/.run.yaml tty || true
         echo "== media-import: singleton pass =="
         interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --singles)
-        # The judging half on its own. After a nightly run the release pass has
-        # already had its say and left its leftovers, so `media-import --singles`
-        # goes straight to the per-track decisions instead of waiting through a
-        # release pass that would find nothing new.
+        # The singleton pass on its own: after a nightly run the release pass has
+        # had its say, so this goes straight to the leftovers.
         interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --interactive)
         # Both passes, the singleton one interactive (what `media-import` runs).
@@ -462,9 +426,9 @@ case "$MODE" in
         echo "== media-import: singleton pass =="
         interactive_pass --config /config/interactive.yaml import "${DIR:-/downloads}" ;;
     --release)
-        # The release pass WITH prompts, for the near misses automatic matching
-        # refuses (verified: a correct release can score 0.05 against the 0.04
-        # strong_rec_thresh and be skipped). Answering as-is marks the track.
+        # The release pass with prompts, for near misses automatic matching refuses
+        # (a correct release can score 0.05 against the 0.04 `strong_rec_thresh`).
+        # Answering as-is marks the track.
         overlay release
         if [ -n "$ALBUM_ID" ]; then
             interactive_pass -c /config/.run.yaml import -S "$ALBUM_ID" "${DIR:-/downloads}"
@@ -472,20 +436,24 @@ case "$MODE" in
         interactive_pass -c /config/.run.yaml import "${DIR:-/downloads}" ;;
     sync) ;;
     *)
-        echo "usage: media-sync [--retag|--upgrade [all|<query>]|--albums [<dir>] [--id <release>]|--keep [<dir>]|--adopt|--regroup|--audit|--apply [--dry-run] [--force]|--undo <log>|--settle|--pin '<query>' --id <release> [--dry-run]|--complete [--dry-run]|--backfill|--plan|--maintenance [--from <1-8>]|--interactive [<dir>]|--review [<dir>]|--singles [<dir>]|--release [<dir>] [--id <release>]]"
+        echo "usage: media-sync [mode]"
+        echo "  modes: --retag --upgrade [all|<query>] --albums [<dir>] [--id <release>] --keep [<dir>]"
+        echo "         --adopt --regroup --audit --apply [--dry-run] [--force] --undo <log> --settle"
+        echo "         --pin '<query>' --id <release> [--dry-run] --complete [--dry-run] --backfill"
+        echo "         --plan --maintenance [--from <1-8>] --interactive [<dir>] --review [<dir>]"
+        echo "         --singles [<dir>] --release [<dir>] [--id <release>]"
+        echo "  no mode: the nightly sync. The header of this script describes each mode."
         exit 2 ;;
 esac
 
 mapfile -t playlists < <(grep -v '^\s*$' "{{ media_home }}/config/playlists.txt")
 
 # Only what this run downloads goes through the two passes. A leftover was judged
-# the night it arrived and would be judged the same again: re-running the whole
-# backlog costs about a minute per file (fingerprint and lookups, twice), which
-# for 263 leftovers was a 4.5-hour run through the restic backup and past the
-# Sunday retag. Leftovers wait for media-import. The stamp marks the end of the
-# last run that got through its passes, so what an interrupted night downloaded
-# is taken the next night; it is hidden, so the passes never see it. ctime,
-# because yt-dlp may set mtime to the upload date.
+# the night it arrived and would be judged the same again, at about a minute a file
+# (fingerprint and lookups, twice), so leftovers wait for media-import. The stamp
+# marks the end of the last run that got through its passes, so an interrupted
+# night's downloads are taken the next night; it is hidden so the passes never see
+# it. ctime, because yt-dlp may set mtime to the upload date.
 stamp="$LIB/downloads/.last-sync"
 [ -e "$stamp" ] || touch "$stamp"
 fresh() { find "$LIB/downloads" -type f ! -name '.*' -cnewer "$stamp" -printf '/downloads/%P\n'; }
@@ -506,8 +474,8 @@ if [ "$new" -gt 0 ]; then
     # Release pass, one file at a time (see release_pass), then a singleton pass
     # for whatever is left.
     release_pass /downloads /config/album.yaml "" /downloads/.last-sync
-    # SINGLETON pass: per-track MusicBrainz match for whatever is left. A track
-    # lookup carries no album-level metadata by design, so this is the fallback.
+    # Singleton pass: a per-track MusicBrainz match for what is left. A track
+    # lookup carries no album-level metadata, so this is the fallback.
     mapfile -t rest < <(fresh)
     if [ -n "${rest[*]:-}" ]; then
         "${BEET[@]}" import "${rest[@]}"

@@ -1,27 +1,15 @@
-"""media-sync --audit: what the nightly release pass left half placed. Read-only.
+"""media-sync --audit: find what the release pass left half placed. Read-only.
 
 Run inside the beets container with beets' own python:
 
     <unregistered paths on stdin> | python3 /config/tools/media_audit.py \
         --mb-url https://musicbrainz.org --review /review --downloads /downloads
 
-The release pass judges each file on its own, so an album can end up on two
-releases, partly matched, or not matched at all. This groups the library by album
-(media_common.album_key), classifies each group (media_common.classify: split,
-partial, whole) and looks up the candidate releases a person would choose from:
-the releases the group already carries plus the best MusicBrainz search results,
-each with how many of the group's files it covers. The files on disk that have no
-row (stdin, one container path per line) are listed with the registered tracks
-they are copies of, and so are releases spread over several album rows and release
-tracks held twice (with a suggested copy to keep). A loose file that copies a
-registered track also says which of the two to keep ("suggest": loose or registered,
-the duplicates' ranking). Twins - the same YouTube video on two rows, the same
-recording, a probable copy from another source - are found over every row, with or
-without an album tag (media_common.twins), each with the row to keep. The audio files
-left in /downloads are listed with their tags. Tracks marked `reviewed` are a person's
-decision and are left out of the album groups. The result goes to <review>/candidates.json,
-MusicBrainz answers to <review>/mb-cache/; the library is
-opened and never stored to.
+Groups the library by album, classifies each group (media_common.classify), looks up
+the candidate releases a person would choose from, and lists loose files, duplicates,
+twins and leftover downloads. The README ("Reviewing the library") describes each kind.
+The result goes to <review>/candidates.json and MusicBrainz answers to <review>/mb-cache/;
+the library is opened and never stored to.
 """
 
 import argparse
@@ -115,11 +103,8 @@ def read_tags(path):
 
 def unregistered(paths, items):
     """Files on disk without a row, with the registered tracks they are copies of: same
-    artist, same title (media_common.same_recording_title) AND the same length (media_common.
-    loose_copies); a same-titled track a few seconds off is listed as `other_cut`, a
-    different recording is not listed at all. Reviewed tracks count: a loose copy of a
-    track a person kept is still a copy. A copy also gets `suggest`, which of the two the
-    duplicates' ranking keeps, and the release tags the menu shows."""
+    artist, same recording title and same length (media_common.loose_copies). A same-titled
+    track a few seconds off is listed as `other_cut`. Reviewed tracks count too."""
     by_artist = {}
     for item in items:
         by_artist.setdefault(mc.artist_key(item), []).append(item)
