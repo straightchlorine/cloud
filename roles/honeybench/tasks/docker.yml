@@ -1,0 +1,63 @@
+---
+- name: Add the Docker repository
+  ansible.builtin.yum_repository:
+    name: docker-ce-stable
+    description: Docker CE stable
+    baseurl: "{{ honeybench_docker_repo_baseurl }}"
+    gpgkey: "{{ honeybench_docker_repo_gpgkey }}"
+    gpgcheck: true
+    enabled: true
+  become: true
+  tags: [docker]
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: "{{ honeybench_docker_packages }}"
+    state: present
+  become: true
+  tags: [docker]
+
+- name: Create the Docker configuration directory
+  # The docker-ce package does not ship /etc/docker; dockerd would create it on
+  # first start, which comes after the daemon.json below.
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  tags: [docker]
+
+- name: Configure the Docker daemon
+  # Overwritten, not merged (unlike the honeypot role): nothing else manages
+  # this file on a bench VM, and a stale key from a manual experiment would
+  # silently change what the benchmarks measure.
+  ansible.builtin.copy:
+    content: "{{ honeybench_docker_daemon_options | to_nice_json }}\n"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  become: true
+  notify: Restart docker
+  tags: [docker]
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  become: true
+  tags: [docker]
+
+- name: Let the bench user run docker without sudo
+  # docker group membership is root-equivalent; acceptable on a disposable LAN
+  # bench VM, and bench.sh/measure.py call docker directly.
+  ansible.builtin.user:
+    name: "{{ honeybench_user }}"
+    groups: docker
+    append: true
+  become: true
+  tags: [docker]

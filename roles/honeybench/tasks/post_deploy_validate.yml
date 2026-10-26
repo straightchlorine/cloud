@@ -1,0 +1,92 @@
+---
+- name: Read what the bench reads from the Docker daemon
+  # runuser re-initialises the group list, so this also proves the bench user
+  # can reach the socket through the docker group without a new login.
+  ansible.builtin.command: >-
+    runuser -u {{ honeybench_user }} -- docker info
+    --format '{% raw %}{{.CgroupDriver}} {{.CgroupVersion}} {{.Driver}}{% endraw %}'
+  become: true
+  changed_when: false
+  register: honeybench_docker_info
+  tags: [post_validation]
+
+- name: Assert the cgroup layout measure.py depends on
+  ansible.builtin.assert:
+    that:
+      - honeybench_docker_info.stdout.split()[0] == 'systemd'
+      - honeybench_docker_info.stdout.split()[1] == '2'
+    fail_msg: >-
+      Docker reports '{{ honeybench_docker_info.stdout }}'; measure.py needs the
+      systemd cgroup driver on cgroup v2 (container cgroups under
+      system.slice/docker-<id>.scope) to read cpu_ms.
+    success_msg: "[OK] Docker: {{ honeybench_docker_info.stdout }} (cgroup driver, version, storage driver)"
+  tags: [post_validation]
+
+- name: Read the root cgroup controllers
+  ansible.builtin.slurp:
+    src: /sys/fs/cgroup/cgroup.controllers
+  register: honeybench_cgroup_controllers
+  tags: [post_validation]
+
+- name: Assert the controllers container caps and cpuset pinning need
+  ansible.builtin.assert:
+    that:
+      - item in (honeybench_cgroup_controllers.content | b64decode).split()
+    fail_msg: "cgroup v2 controller '{{ item }}' is not available; --cpus/--memory/--cpuset-cpus would not apply."
+    quiet: true
+  loop: [cpu, memory, io, cpuset]
+  tags: [post_validation]
+
+- name: Read the version each pinned tool reports
+  # Absolute path, no become: sudo's secure_path does not include /usr/local/bin.
+  ansible.builtin.command: "/usr/local/bin/{{ item.binaries[0] }} {{ item.version_args }}"
+  become: false
+  changed_when: false
+  register: honeybench_tool_versions
+  loop: "{{ honeybench_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [post_validation]
+
+- name: Assert every tool is the pinned version
+  ansible.builtin.assert:
+    that:
+      - item.item.version in item.stdout
+    fail_msg: "{{ item.item.name }} reports '{{ item.stdout }}', expected {{ item.item.version }}."
+    quiet: true
+  loop: "{{ honeybench_tool_versions.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags: [post_validation]
+
+- name: Read the transparent hugepage mode
+  # It changes Postgres behaviour and measure.py records it per run, so the
+  # deploy log should carry it too.
+  ansible.builtin.slurp:
+    src: /sys/kernel/mm/transparent_hugepage/enabled
+  register: honeybench_thp
+  tags: [post_validation]
+
+- name: Read the checked-out revision
+  ansible.builtin.command: git rev-parse --short=12 HEAD
+  args:
+    chdir: "{{ honeybench_checkout_dir }}"
+  become: false
+  changed_when: false
+  register: honeybench_head
+  tags: [post_validation]
+
+- name: Report the host fingerprint
+  ansible.builtin.debug:
+    msg: |
+      [OK] honeybench is ready.
+        OS / kernel : {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+                      / {{ ansible_facts['kernel'] }}
+        CPU         : {{ ansible_facts['processor_vcpus'] }} vCPU, {{ ansible_facts['processor'][2] }}
+        Memory      : {{ ansible_facts['memtotal_mb'] }} MB
+        THP         : {{ honeybench_thp.content | b64decode | trim }}
+        Docker      : {{ honeybench_docker_info.stdout }} (cgroup driver, version, storage driver)
+        Repo        : {{ honeybench_checkout_dir }} at {{ honeybench_head.stdout }}
+        Dump        : {{ ('present at ' ~ honeybench_dump_dest) if honeybench_dump_enabled | bool
+                          else 'not deployed (honeybench_dump_enabled: false)' }}
+  tags: [post_validation]

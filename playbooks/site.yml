@@ -3,7 +3,9 @@
   # The honeypot is excluded from every `all` play: it is a CentOS Stream VPS
   # and the fleet base roles below are apt- and ufw-based. It is deployed by
   # its own play at the end of this file (and by playbooks/honeypot.yml).
-  hosts: all:!honeypot
+  # The honeybench VM (group `bench`) is excluded for the same reason and has no play here:
+  # it is deployed on demand by playbooks/honeybench.yml.
+  hosts: all:!honeypot:!bench
   gather_facts: true
   become: false
   tags: [validation, pre_validation]
@@ -54,7 +56,7 @@
           when: "'gpu_qp' in group_names"
 
 - name: Configure all hosts with common setup
-  hosts: all:!honeypot
+  hosts: all:!honeypot:!bench
   become: true
   gather_facts: true
   pre_tasks:

@@ -1,0 +1,172 @@
+---
+- name: Converge - honeybench fail-fast validation
+  hosts: all
+  vars:
+    # A valid baseline; each case breaks exactly one thing, then runs the REAL
+    # roles/honeybench/tasks/validate.yml - no hand-copied guards to keep in sync.
+    # honeybench_user is only defined per case, so Case 1 leaves it undefined.
+    # ansible_user is root (molecule.yml inventory), the container's connection user.
+  tasks:
+    # Case 1: a required variable is missing.
+    - name: "Case 1: validate.yml fails when honeybench_user is undefined"
+      block:
+        - name: Run the real validate.yml with honeybench_user undefined
+          ansible.builtin.include_role:
+            name: honeybench
+            tasks_from: validate
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on the missing honeybench_user"
+      rescue:
+        - name: Assert the failure was for the missing honeybench_user specifically
+          # A looped fail task's top-level msg is the generic "One or more items
+          # failed" - the per-item detail lives in .results.
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list) ==
+                ['honeybench_user']
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason
+              (missing honeybench_user): {{ ansible_failed_result }}
+            success_msg: "[OK] validate.yml correctly failed on the missing honeybench_user"
+
+        - name: Record case 1 as passed for verify.yml
+          # A file, not set_fact: converge and verify are separate
+          # ansible-playbook processes. force: false keeps the idempotence
+          # rerun unchanged.
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case1.passed
+            force: false
+            mode: "0644"
+
+    # Case 2: the bench user differs from the connection user.
+    - name: "Case 2: validate.yml fails when honeybench_user is not the connection user"
+      block:
+        - name: Run the real validate.yml with a different bench user
+          ansible.builtin.include_role:
+            name: honeybench
+            tasks_from: validate
+          vars:
+            honeybench_user: someone-else
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on honeybench_user != ansible_user"
+      rescue:
+        - name: Assert the failure was the user mismatch
+          ansible.builtin.assert:
+            that:
+              - "'must equal ansible_user' in ansible_failed_result.msg"
+            fail_msg: "validate.yml failed, but not on the user mismatch: {{ ansible_failed_result }}"
+            success_msg: "[OK] validate.yml correctly refused a bench user other than ansible_user"
+
+        - name: Record case 2 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case2.passed
+            force: false
+            mode: "0644"
+
+    # Case 3: a pinned tool has a malformed checksum.
+    - name: "Case 3: validate.yml fails on a malformed tool sha256"
+      block:
+        - name: Run the real validate.yml with a truncated sha256 for uv
+          ansible.builtin.include_role:
+            name: honeybench
+            tasks_from: validate
+          vars:
+            honeybench_user: root
+            honeybench_tools:
+              - {name: uv, version: "0.13.5", url: "https://example.test/uv-0.13.5.tar.gz",
+                 sha256: "f68d291c", strip_components: 1, binaries: [uv], version_args: --version}
+              - {name: just, version: "1.59.0", url: "https://example.test/just-1.59.0.tar.gz",
+                 sha256: "409044617b6f06517c1035e55ca38c8c856ff8b650e41bc2aa1ef82d5903a23e",
+                 strip_components: 0, binaries: [just], version_args: --version}
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on the malformed sha256"
+      rescue:
+        - name: Assert only the malformed tool was rejected
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item.name') | list) == ['uv']
+            fail_msg: "validate.yml failed, but not on uv alone: {{ ansible_failed_result }}"
+            success_msg: "[OK] validate.yml rejected only the tool with the malformed sha256"
+
+        - name: Record case 3 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"
+
+    # Case 4: a tool whose version was bumped without its url.
+    - name: "Case 4: validate.yml fails when a tool's version is not in its url"
+      block:
+        - name: Run the real validate.yml with a half-done version bump
+          ansible.builtin.include_role:
+            name: honeybench
+            tasks_from: validate
+          vars:
+            honeybench_user: root
+            honeybench_tools:
+              - {name: k6, version: "2.1.0", url: "https://example.test/k6-v2.0.0-linux-amd64.tar.gz",
+                 sha256: "2ae87d976f6cdba17185bdd980d8819a3a98e9092c6f0638cd58272ecefc8b90",
+                 strip_components: 1, binaries: [k6], version_args: version}
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail fast on the version/url mismatch"
+      rescue:
+        - name: Assert the failure names the tool
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item.name') | list) == ['k6']
+            fail_msg: "validate.yml failed, but not on k6: {{ ansible_failed_result }}"
+            success_msg: "[OK] validate.yml rejected the tool whose version is not in its url"
+
+        - name: Record case 4 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"
+
+    # Case 5: the dump is switched on but not pinned.
+    - name: "Case 5: validate.yml fails when the dump is enabled without a source or checksum"
+      block:
+        - name: Run the real validate.yml with honeybench_dump_enabled passed as a string
+          # `-e honeybench_dump_enabled=true` arrives as the string "true"; the
+          # role must treat it as true, not as an always-truthy or always-falsy string.
+          ansible.builtin.include_role:
+            name: honeybench
+            tasks_from: validate
+          vars:
+            honeybench_user: root
+            honeybench_dump_enabled: "true"
+
+        - name: Fail the test - validate.yml should have refused to run
+          ansible.builtin.fail:
+            msg: "validate.yml did not require the dump variables"
+      rescue:
+        - name: Assert both dump variables were reported
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is defined
+              - (ansible_failed_result.results | selectattr('failed') | map(attribute='item') | list | sort) ==
+                ['honeybench_dump_sha256', 'honeybench_dump_src']
+            fail_msg: "validate.yml failed, but not on the dump variables: {{ ansible_failed_result }}"
+            success_msg: "[OK] validate.yml required honeybench_dump_src and honeybench_dump_sha256"
+
+        - name: Record case 5 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case5.passed
+            force: false
+            mode: "0644"

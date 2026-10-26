@@ -1,0 +1,17 @@
+---
+- name: Install base packages
+  ansible.builtin.dnf:
+    name: "{{ honeybench_packages }}"
+    state: present
+  become: true
+  tags: [packages]
+
+- name: Enable sysstat collection
+  # The 10-minute default is too coarse for a short run; use live `sar 1 N` or
+  # `iostat -x 1` for those. This gives the idle baseline between campaigns.
+  ansible.builtin.systemd_service:
+    name: sysstat
+    enabled: true
+    state: started
+  become: true
+  tags: [packages]

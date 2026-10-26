@@ -1,0 +1,92 @@
+---
+# The mirror of the data-bearing half of the deploy: bench containers, their
+# data, the worktrees and the dump. Packages, Docker and the pinned tools stay
+# (reinstalling them is the slow part of a redeploy and they hold no campaign
+# state). So does the checkout: bench/results and bench/plans are untracked, so
+# deleting it would silently destroy the campaign's only record. Fetch or archive
+# them first if the host itself is going away. Gated by honeybench-teardown.yml.
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.assert:
+    that: teardown_confirmed | default(false) | bool
+    fail_msg: "Run this through playbooks/honeybench-teardown.yml."
+    quiet: true
+  tags: [teardown]
+
+- name: Check whether Docker is installed
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: honeybench_docker_bin
+  tags: [teardown]
+
+- name: List the bench containers
+  ansible.builtin.command: >-
+    docker ps -aq --filter name={{ honeybench_container_prefix }}
+  become: true
+  changed_when: false
+  register: honeybench_bench_containers
+  when: honeybench_docker_bin.stat.exists
+  tags: [teardown]
+
+- name: Remove the bench containers
+  ansible.builtin.command: docker rm -f {{ item }}
+  become: true
+  changed_when: true
+  loop: "{{ honeybench_bench_containers.stdout_lines | default([]) }}"
+  when: honeybench_docker_bin.stat.exists
+  tags: [teardown]
+
+- name: Find the bench data directories
+  ansible.builtin.find:
+    paths: "{{ honeybench_cache_dir }}"
+    patterns: "{{ honeybench_container_prefix }}-*"
+    file_type: directory
+  become: true
+  register: honeybench_data_dirs
+  tags: [teardown]
+
+- name: Remove the bench data, worktrees and dump
+  # Root-owned: the Postgres container writes the data directory as its own uid.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ honeybench_data_dirs.files | map(attribute='path') | list
+       + [honeybench_worktree_dir, honeybench_dump_dest] }}
+  become: true
+  tags: [teardown]
+
+- name: Drop the stale worktree registrations
+  # The directories are gone; git still lists them until pruned.
+  ansible.builtin.command: git worktree prune
+  args:
+    chdir: "{{ honeybench_checkout_dir }}"
+  become: false
+  changed_when: false
+  tags: [teardown]
+
+- name: List what is left
+  ansible.builtin.command: >-
+    docker ps -aq --filter name={{ honeybench_container_prefix }}
+  become: true
+  changed_when: false
+  register: honeybench_left_containers
+  when: honeybench_docker_bin.stat.exists
+  tags: [teardown]
+
+- name: Stat the removed paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ honeybench_worktree_dir }}"
+    - "{{ honeybench_dump_dest }}"
+  register: honeybench_left_paths
+  tags: [teardown]
+
+- name: Assert the teardown left no campaign state behind
+  ansible.builtin.assert:
+    that:
+      - honeybench_left_containers.stdout_lines | default([]) | length == 0
+      - honeybench_left_paths.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: "Teardown left bench containers or directories behind."
+    success_msg: "[OK] No bench containers, worktrees or dump remain."
+  tags: [teardown]

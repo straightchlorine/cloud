@@ -1,0 +1,24 @@
+---
+# Teardown playbook for the honeybench role, following playbooks/dns-teardown.yml.
+# Removes bench containers, their data, the worktrees and the dump; keeps
+# packages, Docker, the pinned tools and the checkout (it holds bench/results).
+#   ansible-playbook playbooks/honeybench-teardown.yml -e honeybench_teardown_confirm=true
+- name: Tear down the honeybench campaign state
+  hosts: bench
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gate the teardown
+      # Refuses any host marked teardown_protected, and sets the shared
+      # teardown_confirmed fact the role's teardown task file checks.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: honeybench
+
+    - name: Run the honeybench teardown
+      ansible.builtin.include_role:
+        name: honeybench
+        tasks_from: teardown
+      when: teardown_confirmed | default(false) | bool

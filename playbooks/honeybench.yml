@@ -1,0 +1,38 @@
+---
+# Standalone deployment for the honeybench performance-bench VM.
+#
+# CentOS Stream 10 on a LAN hypervisor: the fleet-wide common/firewall roles are
+# apt- and ufw-based and are deliberately not applied here (site.yml excludes
+# the bench group from every `all` play).
+#
+#   ansible-playbook playbooks/honeybench.yml
+#   ansible-playbook playbooks/honeybench.yml --tags validation   # checks only
+#
+# Optional: ship the prod data dump (host_vars/honeybench.yml pins its sha256):
+#   ansible-playbook playbooks/honeybench.yml -e honeybench_dump_enabled=true
+
+- name: Deploy the honeybench performance-bench host
+  hosts: bench
+  become: true
+  gather_facts: true
+  tags: [honeybench]
+  roles:
+    - role: honeybench
+      tags: [honeybench]
+
+  post_tasks:
+    - name: Say how to run the bench
+      ansible.builtin.debug:
+        msg: |
+          Running it stays manual, per campaign (bench/README.md has the full flow):
+            ssh {{ honeybench_user }}@{{ ansible_host }}
+            cd {{ honeybench_checkout_dir }}
+            just bench worktree add v0.8.5 0.8.5      # trees live in {{ honeybench_worktree_dir }}
+            just bench up
+            just bench restore
+            BENCH_API_DIR={{ honeybench_worktree_dir }}/0.8.5 just bench prepare
+            just bench measure {{ honeybench_worktree_dir }}/0.8.5 --variant baseline --scenario layout
+
+          The `just bench` module needs the root justfile's `mod bench` line committed.
+          Log in again first if this deploy just added you to the docker group.
+      tags: [info]

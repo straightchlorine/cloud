@@ -1,0 +1,67 @@
+---
+
+- name: Run honeybench host validation
+  ansible.builtin.include_tasks:
+    file: validate.yml
+    apply:
+      tags: [honeybench, validation]
+  tags: [honeybench, validation]
+
+# Before anything is installed: a full disk halfway through a docker-ce install
+# is much harder to diagnose than a refusal here.
+- name: Check the release and that the disk can hold a bench database
+  ansible.builtin.include_tasks:
+    file: preflight.yml
+    apply:
+      tags: [honeybench, preflight]
+  tags: [honeybench, preflight]
+
+- name: Install base packages
+  ansible.builtin.include_tasks:
+    file: packages.yml
+    apply:
+      tags: [honeybench, packages]
+  tags: [honeybench, packages]
+
+# Right after git is installed and before the slow installs: a ref without the
+# bench tooling is the likeliest first-deploy failure, and should not cost a
+# Docker install to find out.
+- name: Check out the honeywatch repository and confirm it carries bench/
+  ansible.builtin.include_tasks:
+    file: repo.yml
+    apply:
+      tags: [honeybench, repo]
+  tags: [honeybench, repo]
+
+- name: Install and configure Docker
+  ansible.builtin.include_tasks:
+    file: docker.yml
+    apply:
+      tags: [honeybench, docker]
+  tags: [honeybench, docker]
+
+- name: Install the pinned bench tools
+  ansible.builtin.include_tasks:
+    file: tools.yml
+    apply:
+      tags: [honeybench, tools]
+  tags: [honeybench, tools]
+
+- name: Place the prod data dump
+  ansible.builtin.include_tasks:
+    file: dump.yml
+    apply:
+      tags: [honeybench, dump]
+  tags: [honeybench, dump]
+
+# Post-deploy assertions must see the daemon restart from a daemon.json change.
+- name: Apply pending handlers before post-deployment validation
+  ansible.builtin.meta: flush_handlers
+  tags: [honeybench, post_validation]
+
+- name: Run post-deployment validation
+  ansible.builtin.include_tasks:
+    file: post_deploy_validate.yml
+    apply:
+      tags: [honeybench, post_validation]
+  tags: [honeybench, post_validation]

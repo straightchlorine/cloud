@@ -1,0 +1,23 @@
+---
+device_type: cloud_vm
+
+# The bench runs as the account Ansible connects as (validate.yml asserts the
+# two match): the checkout, worktrees and bench output must belong to it.
+honeybench_user: "{{ ansible_user }}"
+
+# The honeywatch repo is public; the ref must contain bench/ (tooling is
+# tracked, results/ and plans/ are local-only). Pin a tag or sha for a campaign.
+honeybench_repo_version: master
+
+# Prod data for the bench: a pg_dumpall of production, unredacted, kept out of
+# git. One dump per campaign - the sha256 pins which dataset the numbers belong
+# to, so a re-dump is a deliberate inventory change. Deploy it with
+#   ansible-playbook playbooks/honeybench.yml -e honeybench_dump_enabled=true
+honeybench_dump_src: "{{ lookup('env', 'HOME') }}/code/honeywatch/honeywatch-prod-data.gz"
+honeybench_dump_sha256: "374dda9624b4c795490547e33205e0e3c10c27c44798ad1ffee59ee5e7f28a96"
+
+# A cloud VM is disposable - never block a teardown on it.
+teardown_protected: false
+
+# No monitoring wiring: not a member of `prometheus`, no Alloy. Bench runs read
+# the host's own steal time and cgroup counters instead (bench/measure.py).

@@ -1,0 +1,55 @@
+---
+- name: Create the tool directories
+  ansible.builtin.file:
+    path: "{{ honeybench_tools_dir }}/{{ item.name }}-{{ item.version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: "{{ honeybench_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  tags: [tools]
+
+- name: Download the tool archives
+  # get_url verifies the sha256 before it keeps the file.
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ honeybench_tools_dir }}/{{ item.url | basename }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ honeybench_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  tags: [tools]
+
+- name: Unpack the tool archives
+  ansible.builtin.unarchive:
+    src: "{{ honeybench_tools_dir }}/{{ item.url | basename }}"
+    dest: "{{ honeybench_tools_dir }}/{{ item.name }}-{{ item.version }}"
+    remote_src: true
+    extra_opts:
+      - "--strip-components={{ item.strip_components }}"
+    creates: "{{ honeybench_tools_dir }}/{{ item.name }}-{{ item.version }}/{{ item.binaries[0] }}"
+    owner: root
+    group: root
+  loop: "{{ honeybench_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  tags: [tools]
+
+- name: Link the tool binaries into /usr/local/bin
+  ansible.builtin.file:
+    src: "{{ honeybench_tools_dir }}/{{ item.0.name }}-{{ item.0.version }}/{{ item.1 }}"
+    dest: "/usr/local/bin/{{ item.1 }}"
+    state: link
+  loop: "{{ honeybench_tools | subelements('binaries') }}"
+  loop_control:
+    label: "{{ item.1 }}"
+  become: true
+  tags: [tools]

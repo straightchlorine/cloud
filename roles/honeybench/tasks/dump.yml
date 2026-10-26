@@ -1,0 +1,31 @@
+---
+# Runs as the connection user, after the checkout exists: bench.sh restore
+# reads the dump from the checkout root.
+- name: Copy the prod data dump
+  # Skipped when the file is already there with the same content (copy hashes
+  # it); the 75 MB transfer only happens for a new dump.
+  ansible.builtin.copy:
+    src: "{{ honeybench_dump_src }}"
+    dest: "{{ honeybench_dump_dest }}"
+    mode: '0600'
+  become: false
+  when: honeybench_dump_enabled | bool
+  tags: [dump]
+
+- name: Verify the copied dump
+  ansible.builtin.stat:
+    path: "{{ honeybench_dump_dest }}"
+    checksum_algorithm: sha256
+  become: false
+  register: honeybench_dump_remote
+  when: honeybench_dump_enabled | bool
+  tags: [dump]
+
+- name: Confirm the dump on the host is the pinned one
+  ansible.builtin.assert:
+    that:
+      - honeybench_dump_remote.stat.checksum == honeybench_dump_sha256
+    fail_msg: "{{ honeybench_dump_dest }} does not match honeybench_dump_sha256."
+    quiet: true
+  when: honeybench_dump_enabled | bool
+  tags: [dump]

@@ -1,0 +1,40 @@
+---
+- name: Verify honeybench fail-fast validation
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat the per-case marker files converge wrote
+      # Converge and verify run as separate processes, so each case drops a
+      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp/molecule-case1.passed
+        - /tmp/molecule-case2.passed
+        - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
+        - /tmp/molecule-case5.passed
+      register: honeybench_failfast_markers
+
+    - name: Assert all five fail-fast cases completed
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          {{ item.item }} missing - the corresponding case in converge.yml
+          either did not fail or failed for an unexpected reason.
+        success_msg: "[OK] {{ item.item }} recorded"
+      loop: "{{ honeybench_failfast_markers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Display fail-fast validation summary
+      ansible.builtin.debug:
+        msg: |
+          [OK] Honeybench Fail-Fast Validation Test Complete
+
+          Case 1 - missing required variable (honeybench_user): FAILED as expected
+          Case 2 - bench user other than the connection user: FAILED as expected
+          Case 3 - malformed tool sha256: FAILED as expected
+          Case 4 - tool version not in its url: FAILED as expected
+          Case 5 - dump enabled (as a string) without its source and checksum: FAILED as expected

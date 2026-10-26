@@ -1,0 +1,63 @@
+---
+- name: Confirm the host is CentOS Stream 10 or newer
+  # The Docker repo URL and the package set assume EL10. Gathered facts, not the
+  # os role's variables, so this runs under any tag selection.
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution_major_version'] is version('10', '>=')
+    fail_msg: >-
+      The honeybench role targets CentOS Stream 10 or newer; got
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+    success_msg: >-
+      [OK] Supported release: {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}
+  tags: [preflight]
+
+- name: Look for an earlier deploy
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/docker
+    - "{{ honeybench_checkout_dir }}/bench/bench.sh"
+  register: honeybench_earlier
+  tags: [preflight]
+
+- name: Read the free space on the filesystem holding the bench data
+  ansible.builtin.command: df --output=avail -B1 {{ honeybench_home }}
+  changed_when: false
+  register: honeybench_df
+  tags: [preflight]
+
+- name: Record the free space in bytes
+  ansible.builtin.set_fact:
+    honeybench_free_bytes: "{{ honeybench_df.stdout_lines[-1] | trim | int }}"
+    # Both halves must exist: a first run that died after Docker but before the
+    # checkout still needs the space, so it is still gated.
+    honeybench_first_install: "{{ not (honeybench_earlier.results | selectattr('stat.exists') | list | length == 2) }}"
+  tags: [preflight]
+
+- name: Refuse a first install where one bench database cannot fit
+  # Only on a first install: afterwards the free space is smaller because the
+  # role and the bench itself occupy it, which is not a reason to refuse a rerun.
+  ansible.builtin.assert:
+    that:
+      - honeybench_free_bytes | int >= honeybench_min_free_bytes | int
+    fail_msg: >-
+      Only {{ (honeybench_free_bytes | int / 1073741824) | round(1) }} GiB free under
+      {{ honeybench_home }}; one restored bench database plus the toolchain needs
+      at least {{ (honeybench_min_free_bytes | int / 1073741824) | round(1) }} GiB. Grow the disk first.
+    success_msg: >-
+      [OK] {{ (honeybench_free_bytes | int / 1073741824) | round(1) }} GiB free
+      (minimum {{ (honeybench_min_free_bytes | int / 1073741824) | round(1) }} GiB)
+  when: honeybench_first_install | bool
+  tags: [preflight]
+
+- name: Warn when two releases cannot run side by side
+  ansible.builtin.debug:
+    msg: >-
+      [WARN] {{ (honeybench_free_bytes | int / 1073741824) | round(1) }} GiB free is enough for
+      ONE bench database. The two-release comparison in bench/README.md needs
+      about {{ (honeybench_recommended_free_bytes | int / 1073741824) | round(0) | int }} GiB: run the releases
+      one after the other with `bench.sh down` in between, or grow the disk.
+  when: honeybench_free_bytes | int < honeybench_recommended_free_bytes | int
+  tags: [preflight]

@@ -1,0 +1,124 @@
+---
+# Performance bench host for the honeywatch sessions-list work: the toolchain
+# bench/ needs (Docker with systemd cgroups, uv, just, k6) plus a checkout of
+# the honeywatch repo. Running the bench stays a manual, per-campaign job -
+# see README.md.
+
+# --- Fail-fast validation -----------------------------------------------------
+# Consumed by validate.yml; the dump list is only required when the dump is
+# deployed.
+honeybench_required_variables:
+  - honeybench_user
+  - honeybench_repo_url
+  - honeybench_repo_version
+  - honeybench_tools
+  - honeybench_min_free_bytes
+
+honeybench_dump_required_variables:
+  - honeybench_dump_src
+  - honeybench_dump_sha256
+
+# --- Repository ---------------------------------------------------------------
+honeybench_repo_url: https://github.com/straightchlorine/honeywatch.git
+# Must contain bench/ (tooling is tracked, results/ and plans/ are not). A ref
+# without it fails the deploy rather than leaving an empty bench host.
+honeybench_repo_version: master
+
+# bench.sh derives the repo root from its own location and puts release
+# worktrees in ../honeywatch-wt, so the checkout and the worktree root are
+# siblings under the bench user's home.
+honeybench_home: "/home/{{ honeybench_user }}"
+honeybench_checkout_dir: "{{ honeybench_home }}/honeywatch"
+honeybench_worktree_dir: "{{ honeybench_home }}/honeywatch-wt"
+# bench.sh's default data directories (hw-bench-pg*) live here.
+honeybench_cache_dir: "{{ honeybench_home }}/.cache"
+
+# --- Prod data dump -----------------------------------------------------------
+# The dump holds unredacted attacker data (bench/.gitignore keeps it out of
+# git), so it is opt-in and copied from the controller with a verified checksum.
+honeybench_dump_enabled: false
+honeybench_dump_dest: "{{ honeybench_checkout_dir }}/honeywatch-prod-data.gz"
+
+# --- Disk ---------------------------------------------------------------------
+# One restored copy is about 2.7 GB and the toolchain and images about 1.5 GB,
+# so 6 GiB is the least that can hold one bench database. Two releases side by
+# side (the README's quick start) want the recommended 20 GiB.
+honeybench_min_free_bytes: 6442450944
+honeybench_recommended_free_bytes: 21474836480
+
+# --- Packages -----------------------------------------------------------------
+# All in the stock CentOS Stream 10 repos; no EPEL. There is deliberately no
+# full update and no dnf-automatic: kernel and cgroup version are part of every
+# run's recorded fingerprint, so the host must not change under a campaign.
+honeybench_packages:
+  - git
+  - jq
+  - tmux
+  - rsync
+  - tar
+  - gzip
+  # iostat/sar for judging steal time and I/O wait during a run.
+  - sysstat
+
+# --- Docker -------------------------------------------------------------------
+honeybench_docker_repo_baseurl: "https://download.docker.com/linux/centos/10/$basearch/stable"
+honeybench_docker_repo_gpgkey: "https://download.docker.com/linux/centos/gpg"
+
+honeybench_docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+honeybench_docker_daemon_options:
+  # measure.py reads /sys/fs/cgroup/system.slice/docker-<id>.scope, which only
+  # exists with the systemd cgroup driver on cgroup v2. Pinned, not assumed.
+  exec-opts:
+    - native.cgroupdriver=systemd
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: '3'
+  # A daemon.json change restarts dockerd; this keeps a running bench container
+  # alive across it.
+  live-restore: true
+  # bench.sh publishes Postgres as `-p PORT:5432` with the password `bench` over
+  # an unredacted prod dump. Default publish address is loopback, so nothing
+  # is reachable off-host unless a run asks for it with an explicit -p <ip>:...
+  ip: 127.0.0.1
+  # bench.sh bind-mounts its data directory with :z, which this needs under Enforcing.
+  selinux-enabled: true
+
+# --- Pinned tools -------------------------------------------------------------
+# Verified binary downloads, unpacked under honeybench_tools_dir/<name>-<version>
+# and linked into /usr/local/bin, so a version bump leaves the old tree in place
+# and the link moves. Bump version, url and sha256 together (validate.yml checks
+# the version is in the url and the sha256 is well formed).
+honeybench_tools_dir: /opt/honeybench/tools
+honeybench_tools:
+  - name: uv
+    version: "0.13.5"
+    url: https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz
+    sha256: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
+    strip_components: 1
+    binaries: [uv, uvx]
+    version_args: --version
+  - name: just
+    version: "1.59.0"
+    url: https://github.com/casey/just/releases/download/1.59.0/just-1.59.0-x86_64-unknown-linux-musl.tar.gz
+    sha256: 409044617b6f06517c1035e55ca38c8c856ff8b650e41bc2aa1ef82d5903a23e
+    strip_components: 0
+    binaries: [just]
+    version_args: --version
+  - name: k6
+    version: "2.0.0"
+    url: https://github.com/grafana/k6/releases/download/v2.0.0/k6-v2.0.0-linux-amd64.tar.gz
+    sha256: 2ae87d976f6cdba17185bdd980d8819a3a98e9092c6f0638cd58272ecefc8b90
+    strip_components: 1
+    binaries: [k6]
+    version_args: version
+
+# --- Teardown -----------------------------------------------------------------
+# Container name prefix bench.sh uses (hw-bench-pg, hw-bench-pg-0.8.2, ...).
+honeybench_container_prefix: hw-bench

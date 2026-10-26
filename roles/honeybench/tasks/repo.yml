@@ -1,0 +1,66 @@
+---
+# Runs as the connection user (no become): the checkout, the worktrees and the
+# bench's own files must belong to the account that will run the bench.
+- name: Check out the honeywatch repository
+  # force stays false: a hand-edited tracked file fails the run instead of
+  # being overwritten. Untracked bench output (results/, plans/) is not touched.
+  ansible.builtin.git:
+    repo: "{{ honeybench_repo_url }}"
+    dest: "{{ honeybench_checkout_dir }}"
+    version: "{{ honeybench_repo_version }}"
+    update: true
+    force: false
+  become: false
+  register: honeybench_checkout
+  tags: [repo]
+
+- name: Look for the bench tooling in the checkout
+  ansible.builtin.stat:
+    path: "{{ honeybench_checkout_dir }}/bench/bench.sh"
+  become: false
+  register: honeybench_bench_sh
+  tags: [repo]
+
+- name: Look for the just module the bench is driven through
+  ansible.builtin.stat:
+    path: "{{ honeybench_checkout_dir }}/bench.just"
+  become: false
+  register: honeybench_bench_just
+  tags: [repo]
+
+- name: Look for the `mod bench` line in the root justfile
+  ansible.builtin.command: grep -Eq '^mod bench' justfile
+  args:
+    chdir: "{{ honeybench_checkout_dir }}"
+  become: false
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  register: honeybench_mod_bench
+  tags: [repo]
+
+- name: Confirm the checked-out ref carries the bench tooling
+  ansible.builtin.assert:
+    that:
+      - honeybench_bench_sh.stat.exists
+      - honeybench_bench_sh.stat.executable
+      - honeybench_bench_just.stat.exists
+      - honeybench_mod_bench.rc == 0
+    fail_msg: >-
+      {{ honeybench_repo_url }} at '{{ honeybench_repo_version }}' is missing
+      part of the bench tooling (bench/bench.sh, bench.just, or the `mod bench`
+      line in justfile). Commit and push it first, or point
+      honeybench_repo_version at a ref that has it.
+    success_msg: "[OK] bench/ present at {{ honeybench_checkout.after[:12] }}"
+  tags: [repo]
+
+- name: Create the worktree root and the cache directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ honeybench_worktree_dir }}"
+    - "{{ honeybench_cache_dir }}"
+  become: false
+  tags: [repo]

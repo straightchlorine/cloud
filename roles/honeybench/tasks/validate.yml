@@ -1,0 +1,84 @@
+---
+# Also runnable standalone (--tags validation) and from the molecule scenario,
+# so it re-runs os discovery itself - cheap and idempotent.
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run honeybench host comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "honeybench host"
+    validation_type: "full"
+    validation_role: "honeybench"
+    required_variables: >-
+      {{ honeybench_required_variables
+         + (honeybench_dump_required_variables if honeybench_dump_enabled | bool else []) }}
+  tags: [validation]
+
+- name: Confirm the host OS family is supported
+  # The release is checked in preflight.yml, so this file stays runnable on the
+  # RedHat-family image molecule uses.
+  ansible.builtin.assert:
+    that:
+      - os_family == "RedHat"
+    fail_msg: >-
+      The honeybench role targets a RedHat-family host (CentOS Stream); got
+      {{ os_family }} ({{ os_name }} {{ os_version }}).
+    success_msg: "[OK] Supported OS family: {{ os_name }} {{ os_version }} ({{ os_family }})"
+  tags: [validation]
+
+- name: Confirm the bench runs as the connection user
+  # git and the post-deploy checks run as the connection user without become,
+  # so a different bench user would own a checkout Ansible cannot write.
+  ansible.builtin.assert:
+    that:
+      - honeybench_user == ansible_user
+    fail_msg: >-
+      honeybench_user ('{{ honeybench_user }}') must equal ansible_user
+      ('{{ ansible_user }}'): the repository is checked out without become.
+    quiet: true
+  tags: [validation]
+
+- name: Validate every pinned tool is well formed
+  # A malformed checksum would only surface at download time, after Docker has
+  # already been installed. The version-in-url check catches a half-done bump.
+  ansible.builtin.assert:
+    that:
+      - item.sha256 is match('^[0-9a-f]{64}$')
+      - item.version in item.url
+      - item.binaries | length > 0
+    fail_msg: >-
+      Tool '{{ item.name }}' needs a 64-hex sha256, a url containing its
+      version ('{{ item.version }}') and at least one binary.
+    quiet: true
+  loop: "{{ honeybench_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [validation]
+
+- name: Stat the prod data dump on the controller
+  ansible.builtin.stat:
+    path: "{{ honeybench_dump_src }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: honeybench_dump_local
+  when: honeybench_dump_enabled | bool
+  tags: [validation]
+
+- name: Confirm the dump on the controller is the one the inventory pins
+  ansible.builtin.assert:
+    that:
+      - honeybench_dump_local.stat.exists
+      - honeybench_dump_local.stat.checksum == honeybench_dump_sha256
+    fail_msg: >-
+      {{ honeybench_dump_src }} is missing or does not match
+      honeybench_dump_sha256. One dump per campaign: a different file means a
+      different dataset, and the runs would not be comparable.
+    quiet: true
+  when: honeybench_dump_enabled | bool
+  tags: [validation]

@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: honeybench
+  namespace: homelab
+  author: Ansible Admin
+  description: CentOS Stream performance bench VM for the honeywatch sessions-list work
+  company: Local
+  license: MIT
+  min_ansible_version: '2.17'
+
+  platforms:
+    - name: EL
+      versions:
+        - '10'
+
+  galaxy_tags:
+    - benchmark
+    - docker
+    - centos
+
+# No dependencies: the common role's package and firewall tasks are apt- and
+# ufw-based, and this host is a standalone CentOS VM. validate.yml invokes the
+# os and common roles by name, as the honeypot role does.
+dependencies: []
