@@ -31,3 +31,15 @@
     - alloy_metrics_enabled
     - not alloy_prometheus_url.endswith('/api/v1/write')
   tags: [validation]
+
+- name: Validate the textfile collector directory is an absolute path
+  # A relative path would resolve against Alloy's working directory and
+  # silently scrape nothing.
+  ansible.builtin.fail:
+    msg: >-
+      alloy_textfile_directory must be empty or an absolute path,
+      got '{{ alloy_textfile_directory }}'.
+  when:
+    - alloy_textfile_directory | length > 0
+    - not alloy_textfile_directory.startswith('/')
+  tags: [validation]

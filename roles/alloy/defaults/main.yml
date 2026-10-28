@@ -58,6 +58,11 @@ alloy_node_exporter_collectors:
   - systemd
   - uname
 
+# Absolute directory of *.prom files for the node exporter textfile collector
+# (needs alloy_metrics_enabled); empty leaves the collector off. The alloy user
+# must be able to read it.
+alloy_textfile_directory: ""
+
 alloy_required_variables:
   - alloy_loki_url
 

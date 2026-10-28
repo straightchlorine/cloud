@@ -48,6 +48,41 @@
   become: true
   changed_when: false
 
+- name: Register the ingestor metrics directory as container_file_t
+  # The compose bind mount deliberately carries no :z/:Z, so the label has to
+  # exist on the host path for the container to write into it under Enforcing.
+  community.general.sefcontext:
+    target: "{{ honeypot_metrics_dir }}(/.*)?"
+    setype: container_file_t
+    state: present
+  become: true
+
+- name: Create the honeywatch state parent directory
+  ansible.builtin.file:
+    path: "{{ honeypot_metrics_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Create the ingestor metrics directory
+  # Must exist before the honeywatch release mounts it; otherwise Docker
+  # creates it root-owned and the ingestor cannot write.
+  ansible.builtin.file:
+    path: "{{ honeypot_metrics_dir }}"
+    state: directory
+    owner: "{{ honeypot_ingestor_uid }}"
+    group: "{{ honeypot_ingestor_uid }}"
+    mode: '0755'
+  become: true
+
+- name: Apply the file context to the metrics directory
+  # Same unconditional no-op restorecon as the config directory above.
+  ansible.builtin.command: "restorecon -R {{ honeypot_metrics_dir }}"
+  become: true
+  changed_when: false
+
 - name: Install the local SELinux policy source
   ansible.builtin.copy:
     src: honeywatch-nnp.te

@@ -93,3 +93,29 @@
   register: alloy_sink_ready
   until: alloy_sink_ready is succeeded
   tags: [post_validation]
+
+- name: Read the textfile collector status from the exporter
+  # The collector's own error gauge is the only place an unreadable directory
+  # shows up; Alloy stays ready and the pipeline just goes quiet. An empty
+  # directory scrapes clean, so this passes before the first .prom file exists.
+  ansible.builtin.uri:
+    url: "http://{{ alloy_listen_address }}/api/v0/component/prometheus.exporter.unix.host/metrics"
+    return_content: true
+    status_code: 200
+  when: alloy_metrics_enabled and alloy_textfile_directory | length > 0
+  retries: 6
+  delay: 5
+  register: alloy_textfile_metrics
+  until: alloy_textfile_metrics is succeeded
+  tags: [post_validation]
+
+- name: Confirm the textfile collector reads its directory without error
+  ansible.builtin.assert:
+    that:
+      - "'node_textfile_scrape_error 0' in alloy_textfile_metrics.content"
+    fail_msg: >-
+      The textfile collector reports an error reading {{ alloy_textfile_directory }}
+      (node_textfile_scrape_error is not 0): check the directory exists and the
+      {{ alloy_user }} user can read it and the .prom files in it.
+  when: alloy_metrics_enabled and alloy_textfile_directory | length > 0
+  tags: [post_validation]

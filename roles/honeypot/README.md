@@ -160,6 +160,18 @@ same path the OCI node uses). Neither sink authenticates: the Headscale ACL
 role's post-validation hits both sinks' readiness endpoints from this host and
 fails the deploy if the tunnel path is broken.
 
+### Ingestor metrics
+
+The honeywatch ingestor writes `ingestor.prom` into `honeypot_metrics_dir`
+(`/var/lib/honeywatch/metrics`), and Alloy's node-exporter textfile collector
+(`alloy_textfile_directory`) ships it with the host metrics; series arrive as
+`job="integrations/unix"`. `selinux.yml` creates the directory owned by
+`honeypot_ingestor_uid` and registers `container_file_t` for it persistently,
+because the compose bind mount has no `:z`/`:Z`. That uid must match the one
+pinned in the honeywatch repo's `ingestor/Dockerfile`. Deploy order: run this
+role before the honeywatch release that mounts the directory; otherwise Docker
+creates it root-owned and the ingestor cannot write.
+
 ## Automatic updates
 
 `dnf-automatic` applies every available update daily. The packaged timer fires

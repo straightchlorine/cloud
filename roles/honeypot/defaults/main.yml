@@ -201,6 +201,12 @@ honeypot_ntfy_url: "{{ ntfy_server_url }}/{{ honeypot_ntfy_topic }}"
 # --- Observability ------------------------------------------------------------
 # Grafana Alloy ships this host's journal to the fleet Loki; see roles/alloy.
 honeypot_alloy_enabled: true
+# The ingestor container writes ingestor.prom here; Alloy's textfile collector
+# reads it. Created by selinux.yml, before the honeywatch release mounts it.
+honeypot_metrics_dir: /var/lib/honeywatch/metrics
+# Must match the uid:gid pinned in the honeywatch repo's ingestor/Dockerfile;
+# the bind mount has no userns remap, so the host dir must be owned by it.
+honeypot_ingestor_uid: 1000
 
 # --- Encrypted Postgres backup ------------------------------------------------
 honeypot_backup_enabled: true

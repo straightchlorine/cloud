@@ -53,7 +53,14 @@ loki.write "fleet" {
 
 {% if alloy_metrics_enabled %}
 prometheus.exporter.unix "host" {
-  enable_collectors = [{% for c in alloy_node_exporter_collectors %}"{{ c }}"{{ ", " if not loop.last }}{% endfor %}]
+{% set collectors = alloy_node_exporter_collectors + (['textfile'] if alloy_textfile_directory else []) %}
+  enable_collectors = [{% for c in collectors %}"{{ c }}"{{ ", " if not loop.last }}{% endfor %}]
+{% if alloy_textfile_directory %}
+
+  textfile {
+    directory = "{{ alloy_textfile_directory }}"
+  }
+{% endif %}
 }
 
 prometheus.scrape "host" {

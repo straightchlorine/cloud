@@ -118,6 +118,8 @@
     name: alloy
     apply:
       tags: [honeypot, monitoring, observability]
+  vars:
+    alloy_textfile_directory: "{{ honeypot_metrics_dir }}"
   when: honeypot_alloy_enabled
   tags: [honeypot, monitoring, observability]
 
