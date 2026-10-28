@@ -6,6 +6,8 @@
     state: started
   become: true
 
+# Do not add docker0/br-* to trusted: Docker 27+ manages its own docker zone and
+# a manual move raises ZONE_CONFLICT.
 - name: Install the tailnet zone definition
   # The zone is declared as XML rather than assembled with --new-zone/--add-port:
   # --new-zone NAME_CONFLICTs against this file. If tailscale0 is absent the zone
@@ -39,7 +41,3 @@
     state: disabled
   become: true
   loop: "{{ honeypot_public_zone_removed_services }}"
-
-# Docker Engine 27+ creates and manages its own `docker` firewalld zone and
-# binds docker0 / br-* into it. Moving those interfaces into `trusted` by hand
-# raises ZONE_CONFLICT and the docker daemon then refuses to start.

@@ -21,6 +21,9 @@
       - "'port ' ~ honeypot_ssh_port in honeypot_sshd_effective.stdout"
       - "'passwordauthentication no' in honeypot_sshd_effective.stdout"
       - "'permitrootlogin no' in honeypot_sshd_effective.stdout"
+      - "'x11forwarding no' in honeypot_sshd_effective.stdout"
+      - "'gssapiauthentication no' in honeypot_sshd_effective.stdout"
+      - "'listenaddress ' ~ honeypot_ssh_listen_address in honeypot_sshd_effective.stdout"
     fail_msg: "The running sshd does not match the hardening drop-in."
     success_msg: "[OK] sshd enforces key-only auth on {{ honeypot_ssh_port }}"
   tags: [post_validation]
@@ -52,7 +55,22 @@
   become: true
   changed_when: false
   register: honeypot_public_ports
-  failed_when: honeypot_cowrie_public_port ~ '/tcp' not in honeypot_public_ports.stdout
+  failed_when: honeypot_public_ports.stdout.split() != [honeypot_cowrie_public_port ~ '/tcp']
+  tags: [post_validation]
+
+- name: Read the services open on the public zone
+  ansible.builtin.command: firewall-cmd --zone=public --list-services
+  become: true
+  changed_when: false
+  register: honeypot_public_services
+  tags: [post_validation]
+
+- name: Assert no service is open on the public zone
+  ansible.builtin.assert:
+    that:
+      - honeypot_public_services.stdout | trim == ''
+    fail_msg: "The public zone exposes services: {{ honeypot_public_services.stdout | trim }}"
+    success_msg: "[OK] public zone exposes only the cowrie port"
   tags: [post_validation]
 
 - name: Read the cowrie ingress network configuration
@@ -82,12 +100,6 @@
       egress. Observed: '{{ honeypot_cowrie_ingress_network.stdout | trim }}'.
     success_msg: "[OK] cowrie ingress bridge {{ honeypot_cowrie_ingress_bridge }} has masquerade disabled"
   when: honeypot_cowrie_ingress_network.rc == 0
-  tags: [post_validation]
-
-- name: Confirm the fail2ban jail for the administrative sshd is running
-  ansible.builtin.command: fail2ban-client status sshd-{{ honeypot_ssh_port }}
-  become: true
-  changed_when: false
   tags: [post_validation]
 
 - name: Read the loaded audit rules
@@ -121,7 +133,8 @@
 - name: Read the effective Docker daemon settings
   ansible.builtin.command: >-
     docker info --format
-    '{{ '{{' }}.LiveRestoreEnabled{{ '}}' }} {{ '{{' }}.SecurityOptions{{ '}}' }}'
+    '{{ '{{' }}.LiveRestoreEnabled{{ '}}' }} {{ '{{' }}.SecurityOptions{{ '}}' }}
+    {{ '{{' }}.LoggingDriver{{ '}}' }}'
   become: true
   changed_when: false
   register: honeypot_docker_info
@@ -133,7 +146,10 @@
     that:
       - "'true' in honeypot_docker_info.stdout"
       - "'selinux' in honeypot_docker_info.stdout"
-    fail_msg: "Docker is running without live-restore or SELinux confinement: {{ honeypot_docker_info.stdout }}"
+      - honeypot_docker_info.stdout.split()[-1] == 'json-file'
+    fail_msg: >-
+      Docker is running without live-restore, SELinux confinement or json-file
+      logging: {{ honeypot_docker_info.stdout }}
     success_msg: "[OK] Docker daemon hardening active"
   tags: [post_validation]
 
@@ -146,6 +162,37 @@
   loop: "{{ ['dnf-automatic.timer']
             + (['honeywatch-backup.timer'] if honeypot_backup_enabled else [])
             + (['honeywatch-mmdb-refresh.timer'] if honeypot_mmdb_enabled else []) }}"
+  tags: [post_validation]
+
+- name: Read whether the dnf-automatic timer is enabled
+  ansible.builtin.command: systemctl is-enabled dnf-automatic.timer
+  changed_when: false
+  register: honeypot_dnf_timer_enabled
+  failed_when: honeypot_dnf_timer_enabled.stdout | trim != 'enabled'
+  tags: [post_validation]
+
+- name: Read the dnf-automatic OnFailure handler
+  # Depends on the flush_handlers in main.yml so the drop-in is loaded.
+  ansible.builtin.command: systemctl show dnf-automatic.service -p OnFailure --value
+  changed_when: false
+  register: honeypot_dnf_onfailure
+  failed_when: "'honeywatch-notify@dnf-automatic.service' not in honeypot_dnf_onfailure.stdout"
+  tags: [post_validation]
+
+- name: Dry-run dnf-automatic against the live repositories
+  # Proves automatic.conf parses and the enabled repos resolve; unreachable vendor
+  # repos are skipped by design (skip_if_unavailable).
+  ansible.builtin.command: dnf-automatic --no-installupdates --no-downloadupdates /etc/dnf/automatic.conf
+  become: true
+  changed_when: false
+  tags: [post_validation]
+
+- name: Confirm the kernel meta-package is installed for the when-needed reboot trigger
+  # dnf-automatic's reboot=when-needed matches the package name `kernel`; an image
+  # with only kernel-core would install kernels and never reboot into them.
+  ansible.builtin.command: rpm -q kernel
+  changed_when: false
+  when: honeypot_auto_updates_reboot == 'when-needed'
   tags: [post_validation]
 
 - name: Confirm the age recipient is installed and public

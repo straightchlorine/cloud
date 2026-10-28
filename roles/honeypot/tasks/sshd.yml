@@ -2,10 +2,19 @@
 - name: Install the sshd hardening drop-in
   ansible.builtin.template:
     src: sshd-hardening.conf.j2
-    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    dest: /etc/ssh/sshd_config.d/45-honeypot-hardening.conf
     owner: root
     group: root
     mode: '0644'
+  become: true
+  notify: Reload sshd
+
+- name: Remove the stale 99-hardening.conf drop-in
+  # The role owns exactly one drop-in, so a stale copy cannot show a config that
+  # differs from what applies.
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/99-hardening.conf
+    state: absent
   become: true
   notify: Reload sshd
 

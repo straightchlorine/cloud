@@ -22,11 +22,13 @@ firewalld and SELinux. `playbooks/site.yml` scopes its `all` plays to
 
 ## Threat model
 
-- **Cowrie owns the public 22/tcp.** It is the attack surface: not jailed by
-  fail2ban, not firewalled, deliberately reachable.
+- **Cowrie owns the public 22/tcp.** It is the attack surface: not firewalled,
+  deliberately reachable.
 - **The real sshd is on 2022/tcp**, exposed only through the firewalld
   `tailnet` zone bound to `tailscale0`. If Tailscale is down the zone goes
-  inactive and the port is unreachable from anywhere - fail-closed.
+  inactive and the port is unreachable from anywhere - fail-closed. The admin
+  sshd is protected by key-only auth, the tailnet-only bind and the Headscale
+  ACL.
 - **Backups are asymmetrically encrypted.** Only the age *public* recipient
   lives on the host, so a compromise allows uploading new backups but never
   decrypting anything already in R2.
@@ -49,18 +51,30 @@ variable, or a retention window that would delete the backup it just uploaded.
 
 ## First bootstrap
 
-On a fresh VPS sshd is still on 22 (cowrie is not up yet), so the first run
-needs the port override; afterwards the inventory's `ansible_port: 2022`
-applies:
+The inventory points `centos-honeypot` at the tailnet (`ansible_host: 100.64.0.1`,
+`ansible_port: 2022`), none of which exists on a fresh VPS. The first run
+overrides the address, port and bind:
 
 ```sh
-# sshd is still on 22 and there is no tailnet address to bind yet
-ansible-playbook playbooks/honeypot.yml -e ansible_port=22 \
-  -e honeypot_ssh_listen_address=0.0.0.0
-# bring the tailnet up on the host, then re-run without the overrides -
-# sshd moves to 2022 bound to the tailnet address only
-ansible-playbook playbooks/honeypot.yml
+ansible-playbook playbooks/honeypot.yml -e ansible_host=<public-ip> \
+  -e ansible_port=22 -e honeypot_ssh_listen_address=0.0.0.0
 ```
+
+This run moves sshd to 2022, which is not reachable publicly afterwards (the
+public zone opens only the cowrie port); the sshd/firewalld reload does not drop
+the already-established bootstrap session. The run ends red by design: post-validation
+fails at the alloy role's sink-readiness check / the tailnet-zone assertion
+because the tailnet is not up yet.
+
+From the still-open bootstrap session (or the provider console if it was lost),
+bring the tailnet up with a Headscale preauth key tagged `tag:honeypot`
+(headplane -> Keys):
+
+```sh
+tailscale up --login-server=https://vpn.codextechnologies.org
+```
+
+Later runs use the unmodified inventory: `ansible-playbook playbooks/honeypot.yml`.
 
 The sshd drop-in is validated with `sshd -t` in a task that runs *before*
 handlers flush, so a broken config aborts the play with the old, working sshd
@@ -71,7 +85,9 @@ by default (`honeypot_ssh_manage_crypto_directives: false`). On EL,
 `/etc/crypto-policies` is included ahead of `sshd_config.d` and first value
 wins, so those directives sit in the file looking authoritative while
 `sshd -T` reports the system policy. Change the crypto policy
-(`update-crypto-policies`) instead.
+(`update-crypto-policies`) instead. The role's own drop-in is
+`45-honeypot-hardening.conf`, which loads before `50-redhat.conf`; that file
+would otherwise win for `X11Forwarding` and `GSSAPIAuthentication`.
 
 ## Restore
 
@@ -91,17 +107,21 @@ docker compose -f /opt/honeywatch/docker-compose.prod.yml exec postgres \
 Both timers report to ntfy: failures through
 `OnFailure=honeywatch-notify@%n.service`, successes from the scripts
 themselves. A backup or refresh that quietly stops running is otherwise
-indistinguishable from one that had nothing to do. Notifications are
-best-effort - a broken ntfy never turns a good backup into a failed unit.
+indistinguishable from one that had nothing to do. `dnf-automatic.service`
+carries the same `OnFailure=` (drop-in `10-notify.conf`), so a failed unattended
+update run reports too. Notifications are best-effort (the notifier exits 0) - a
+broken ntfy never turns a good backup into a failed unit. A missing or silent
+timer is not alerted on.
 
 ## Tests
 
-Only the `fail-fast-validation` scenario exists. A `default` scenario would
-have to converge firewalld, sshd, auditd, SELinux policy modules and the Docker
-daemon inside an unprivileged container, which cannot prove anything the real
-host does not already prove through `post_deploy_validate.yml`. The role is not
-in the `.woodpecker/test.yaml` matrix for the same reason; `ansible-lint`,
-`yamllint` and `shellcheck` do cover it.
+Only the `fail-fast-validation` scenario exists. CI runs it for honeypot on a
+Rocky 9 systemd image (a RedHat-family stand-in, because `validate.yml` asserts
+`os_family`). There is deliberately no `default` scenario: firewalld, sshd,
+auditd, SELinux and Docker cannot converge in an unprivileged container, and
+nothing it could prove is not already proven on the real host by
+`post_deploy_validate.yml`. `ansible-lint`, `yamllint` and `shellcheck` also
+cover the role.
 
 ```sh
 just test honeypot fail-fast-validation
@@ -121,18 +141,47 @@ diff the running host against this role after a manual change.
 ## Fleet observability
 
 `honeypot_alloy_enabled` pulls in `roles/alloy`, which ships this host's
-journal (sshd, fail2ban, firewalld, docker, auditd, dnf-automatic and the
-honeywatch timers) to the fleet Loki over an authenticated ingress. Container
+journal (sshd, firewalld, docker, auditd, dnf-automatic and the
+honeywatch timers) to the fleet Loki over the tailnet. Container
 logs are not collected: the honeywatch stack already persists its own telemetry
 to Postgres, and collecting them would mean handing an internet-facing agent
 the docker socket.
 
 Host metrics (`alloy_metrics_enabled`) go to the fleet Prometheus by
-remote-write - the honeypot cannot be scraped, being outside the cluster and
-behind a tailnet. Container metrics are out for the same reason as container
-logs.
+remote-write - the honeypot is outside the cluster, so it pushes rather than
+being scraped. Container metrics are out for the same reason as container logs.
 
-The fleet side is `fleet/clusters/hetzner/observability/`: `ingress-loki.yaml`
-and `ingress-prometheus.yaml` expose only the push paths, each behind a Traefik
-basic-auth middleware. Both secrets are created out of band - the `kubeseal`
-commands are in `middleware.yaml`.
+Both pushes go to NodePorts on the Hetzner node's tailnet address
+(`fleet/clusters/hetzner/observability/nodeport-{loki,prometheus}.yaml`, the
+same path the OCI node uses). Neither sink authenticates: the Headscale ACL
+(`tag:honeypot -> tag:cluster-hetzner:{30090,30310}`) and the fleet's
+`100.64.0.0/10` NetworkPolicies are the gate, and the cowrie egress proxy drops
+`100.64.0.0/10`, so the attacker-facing container cannot reach them. The alloy
+role's post-validation hits both sinks' readiness endpoints from this host and
+fails the deploy if the tunnel path is broken.
+
+## Automatic updates
+
+`dnf-automatic` applies every available update daily. The packaged timer fires
+06:00 **host-local** time (not UTC, unlike the backup and mmdb timers, which are
+pinned to UTC) plus up to 60 minutes of jitter, `Persistent=true`. If the run
+touched a reboot-trigger package, `shutdown -r +5` follows, so the reboot lands
+by about 07:05 host time. The role does not set the host timezone.
+
+`honeypot_auto_updates_reboot: when-needed` reboots only when that run's
+transaction installed or removed kernel, kernel-rt, glibc, linux-firmware,
+systemd, dbus, dbus-broker or dbus-daemon; openssl and microcode_ctl do not
+trigger it. The trigger matches the package name `kernel` (not `kernel-core`),
+so post-deploy validation requires `rpm -q kernel` to succeed; an image with
+only `kernel-core` would update kernels without ever rebooting. A kernel installed by `honeypot_dnf_full_update` or a manual
+`dnf update` is not rebooted into by dnf-automatic and needs a manual reboot.
+
+Updates that do not trigger a reboot leave running daemons (sshd,
+tailscaled, dockerd, alloy) on their old libraries and binaries until the next
+reboot. `honeypot_auto_updates_reboot: when-changed` is the lever, and it is
+attacker-visible downtime.
+
+It is not security-only on purpose: CentOS Stream publishes no errata
+metadata, so `upgrade_type = security` silently applies nothing, and
+`validate.yml` refuses it. Packages in `honeypot_dnf_pinned_packages` are
+excluded from both this and `honeypot_dnf_full_update`.

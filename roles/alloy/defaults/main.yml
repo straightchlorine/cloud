@@ -1,25 +1,30 @@
 ---
 # Grafana Alloy: ships the systemd journal to the fleet Loki, and host metrics to
-# the fleet Prometheus when alloy_metrics_enabled is set.
+# the fleet Prometheus when alloy_metrics_enabled is set, both over the tailnet.
 
 alloy_version: "1.5.1"
 alloy_repo_baseurl: "https://rpm.grafana.com"
 alloy_repo_gpgkey: "https://rpm.grafana.com/gpg.key"
 
 alloy_config_dir: /etc/alloy
-alloy_config_file: /etc/alloy/config.alloy
+alloy_config_file: "{{ alloy_config_dir }}/config.alloy"
 alloy_env_file: /etc/sysconfig/alloy
 
 # The packaged unit runs as this user; it needs systemd-journal membership to
-# read the journal and read access to its own credentials file.
+# read the journal.
 alloy_user: alloy
 alloy_group: alloy
 
 alloy_listen_address: "127.0.0.1:12345"
 
-# Push target; must be the full push path (validate.yml enforces it). Credentials
-# come from vault_alloy_loki_username/_password - the ingress rejects anonymous pushes.
-alloy_loki_url: "https://logs.codextechnologies.org/loki/api/v1/push"
+# The Hetzner node's tailnet address; the sinks are NodePorts there that exist
+# only for the tunnel (fleet clusters/hetzner/observability/nodeport-*.yaml).
+# Plain HTTP: WireGuard encrypts the hop, and neither sink takes credentials -
+# the Headscale ACL and the fleet's 100.64.0.0/10 NetworkPolicies are the gate.
+alloy_fleet_address: "100.64.0.25"
+
+# Must be the full push path (validate.yml enforces it).
+alloy_loki_url: "http://{{ alloy_fleet_address }}:30310/loki/api/v1/push"
 
 # Static labels attached to every stream. `job` is what Grafana queries on.
 alloy_job_label: "systemd-journal"
@@ -28,20 +33,18 @@ alloy_job_label: "systemd-journal"
 # already captured by the application's own pipeline.
 alloy_journal_units:
   - sshd.service
-  - fail2ban.service
   - firewalld.service
   - docker.service
   - auditd.service
   - dnf-automatic.service
   - honeywatch-backup.service
   - honeywatch-mmdb-refresh.service
-  - "honeywatch-notify@.service"
 
 # --- Metrics -------------------------------------------------------------
 # Requires a remote-write endpoint; with none, the scrape only fills the
 # agent's WAL and fails every push.
 alloy_metrics_enabled: false
-alloy_prometheus_url: "https://metrics.codextechnologies.org/api/v1/write"
+alloy_prometheus_url: "http://{{ alloy_fleet_address }}:30090/api/v1/write"
 alloy_scrape_interval: "60s"
 # Container metrics would need the docker socket or cgroup access; the node
 # exporter alone covers host health.
@@ -57,10 +60,6 @@ alloy_node_exporter_collectors:
 
 alloy_required_variables:
   - alloy_loki_url
-  - vault_alloy_loki_username
-  - vault_alloy_loki_password
 
 alloy_metrics_required_variables:
   - alloy_prometheus_url
-  - vault_alloy_prometheus_username
-  - vault_alloy_prometheus_password

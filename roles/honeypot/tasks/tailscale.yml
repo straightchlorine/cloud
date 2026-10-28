@@ -16,13 +16,11 @@
     state: present
   become: true
 
+# `tailscale up` stays manual: it needs a Headscale auth key, and re-running it
+# against the interface this play is connected over can drop the session.
 - name: Enable and start tailscaled
   ansible.builtin.systemd_service:
     name: tailscaled
     enabled: true
     state: started
   become: true
-
-# `tailscale up` stays manual: it needs a Headscale auth key, and re-running it
-# against the interface this play is connected over can drop the session.
-# The post-deploy check asserts the tailnet interface is present.

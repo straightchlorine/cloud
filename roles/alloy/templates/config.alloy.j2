@@ -1,7 +1,7 @@
 // {{ ansible_managed }}
 //
 // Ships the systemd journal to the fleet Loki, and host metrics to the fleet
-// Prometheus when one exists. Container logs and container metrics are
+// Prometheus when one exists, over the tailnet. Container logs and container metrics are
 // deliberately not collected: both would require the docker socket or
 // root-owned paths, and the honeywatch stack already persists its own
 // telemetry to Postgres.
@@ -48,11 +48,6 @@ loki.process "host" {
 loki.write "fleet" {
   endpoint {
     url = "{{ alloy_loki_url }}"
-
-    basic_auth {
-      username = sys.env("LOKI_USERNAME")
-      password = sys.env("LOKI_PASSWORD")
-    }
   }
 }
 
@@ -70,11 +65,6 @@ prometheus.scrape "host" {
 prometheus.remote_write "fleet" {
   endpoint {
     url = "{{ alloy_prometheus_url }}"
-
-    basic_auth {
-      username = sys.env("PROMETHEUS_USERNAME")
-      password = sys.env("PROMETHEUS_PASSWORD")
-    }
   }
 }
 {% endif %}

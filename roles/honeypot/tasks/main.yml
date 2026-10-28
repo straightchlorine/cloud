@@ -1,30 +1,40 @@
 ---
 
-- name: Discover the device OS and architecture
-  ansible.builtin.include_role:
-    name: os
-  tags: [honeypot, validation, facts]
-
 - name: Run honeypot host validation
-  ansible.builtin.include_tasks: validate.yml
+  ansible.builtin.include_tasks:
+    file: validate.yml
+    apply:
+      tags: [honeypot, validation]
   tags: [honeypot, validation]
 
 - name: Install base packages and repositories
-  ansible.builtin.include_tasks: packages.yml
+  ansible.builtin.include_tasks:
+    file: packages.yml
+    apply:
+      tags: [honeypot, packages]
   tags: [honeypot, packages]
 
 # Before sshd: the default policy only labels 22/tcp as ssh_port_t, so a
 # reload after the port drop-in lands would fail to bind 2022 under Enforcing.
 - name: Configure SELinux labels and the local policy module
-  ansible.builtin.include_tasks: selinux.yml
+  ansible.builtin.include_tasks:
+    file: selinux.yml
+    apply:
+      tags: [honeypot, selinux, security]
   tags: [honeypot, selinux, security]
 
 - name: Harden the administrative sshd
-  ansible.builtin.include_tasks: sshd.yml
+  ansible.builtin.include_tasks:
+    file: sshd.yml
+    apply:
+      tags: [honeypot, sshd, security]
   tags: [honeypot, sshd, security]
 
 - name: Configure firewalld zones
-  ansible.builtin.include_tasks: firewalld.yml
+  ansible.builtin.include_tasks:
+    file: firewalld.yml
+    apply:
+      tags: [honeypot, firewall, security]
   tags: [honeypot, firewall, security]
 
 # Deliberate, not incidental: applies the sshd/firewalld templates now, in the
@@ -36,56 +46,90 @@
   ansible.builtin.meta: flush_handlers
   tags: [honeypot, sshd, firewall, security]
 
-- name: Configure fail2ban for the administrative sshd
-  ansible.builtin.include_tasks: fail2ban.yml
-  tags: [honeypot, fail2ban, security]
-
-- name: Configure security-only automatic updates
-  ansible.builtin.include_tasks: auto_updates.yml
+- name: Configure unattended dnf-automatic updates (all updates, timed reboot)
+  ansible.builtin.include_tasks:
+    file: auto_updates.yml
+    apply:
+      tags: [honeypot, updates]
   tags: [honeypot, updates]
 
 - name: Apply kernel hardening
-  ansible.builtin.include_tasks: sysctl.yml
+  ansible.builtin.include_tasks:
+    file: sysctl.yml
+    apply:
+      tags: [honeypot, sysctl, security]
   tags: [honeypot, sysctl, security]
 
 - name: Configure audit rules
-  ansible.builtin.include_tasks: auditd.yml
+  ansible.builtin.include_tasks:
+    file: auditd.yml
+    apply:
+      tags: [honeypot, auditd, security]
   tags: [honeypot, auditd, security]
 
 - name: Install the Tailscale client
-  ansible.builtin.include_tasks: tailscale.yml
+  ansible.builtin.include_tasks:
+    file: tailscale.yml
+    apply:
+      tags: [honeypot, tailscale, network]
   tags: [honeypot, tailscale, network]
 
 - name: Configure the Docker daemon
-  ansible.builtin.include_tasks: docker.yml
+  ansible.builtin.include_tasks:
+    file: docker.yml
+    apply:
+      tags: [honeypot, docker]
   tags: [honeypot, docker]
 
 - name: Install the cowrie download-volume cleanup job
-  ansible.builtin.include_tasks: cowrie_cleanup.yml
+  ansible.builtin.include_tasks:
+    file: cowrie_cleanup.yml
+    apply:
+      tags: [honeypot, cowrie]
   tags: [honeypot, cowrie]
 
 # Before backup/mmdb: both units reference honeywatch-notify@ as their
 # OnFailure handler and read its env file for success notifications.
 - name: Install the ntfy failure-notification handler
-  ansible.builtin.include_tasks: notify.yml
+  ansible.builtin.include_tasks:
+    file: notify.yml
+    apply:
+      tags: [honeypot, notifications]
   tags: [honeypot, notifications]
 
 - name: Configure the encrypted Postgres backup timer
-  ansible.builtin.include_tasks: backup.yml
+  ansible.builtin.include_tasks:
+    file: backup.yml
+    apply:
+      tags: [honeypot, backup]
   when: honeypot_backup_enabled
   tags: [honeypot, backup]
 
 - name: Configure the MaxMind GeoLite2 refresh timer
-  ansible.builtin.include_tasks: mmdb_refresh.yml
+  ansible.builtin.include_tasks:
+    file: mmdb_refresh.yml
+    apply:
+      tags: [honeypot, mmdb, geoip]
   when: honeypot_mmdb_enabled
   tags: [honeypot, mmdb, geoip]
 
 - name: Ship host logs and metrics to the fleet observability stack
   ansible.builtin.include_role:
     name: alloy
+    apply:
+      tags: [honeypot, monitoring, observability]
   when: honeypot_alloy_enabled
   tags: [honeypot, monitoring, observability]
 
+# Post-deploy assertions must see the daemon-reload (dnf-automatic OnFailure
+# drop-in) and the docker restart.
+- name: Apply pending handlers before post-deployment validation
+  ansible.builtin.meta: flush_handlers
+  tags: [honeypot, post_validation]
+
 - name: Run post-deployment validation
-  ansible.builtin.include_tasks: post_deploy_validate.yml
+  ansible.builtin.include_tasks:
+    file: post_deploy_validate.yml
+    apply:
+      tags: [honeypot, post_validation]
   tags: [honeypot, post_validation]

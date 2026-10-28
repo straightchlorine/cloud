@@ -148,3 +148,38 @@
             dest: /tmp/molecule-case4.passed
             force: false
             mode: "0644"
+
+    # Case 5: the security-only update guard on CentOS Stream.
+    - name: "Case 5: validate.yml fails when upgrade_type is security on CentOS Stream"
+      block:
+        - name: Run the real validate.yml with upgrade_type security on a Stream host
+          # os_codename is overridden because the Rocky 9 container never
+          # reports Stream; the include_role var outranks the os role's set_fact.
+          ansible.builtin.include_role:
+            name: honeypot
+            tasks_from: validate
+          vars:
+            vault_honeypot_r2_bucket: "molecule-bucket"
+            honeypot_auto_updates_upgrade_type: security
+            os_codename: Stream
+
+        - name: Fail the test - the Stream guard should have refused security
+          ansible.builtin.fail:
+            msg: "validate.yml did not fail on upgrade_type security with os_codename Stream"
+      rescue:
+        - name: Assert the failure was the Stream security-errata guard, for the right reason
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.results is not defined
+              - ansible_failed_result.msg is search('publishes no security errata')
+            fail_msg: >-
+              validate.yml failed, but not for the expected reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: "[OK] validate.yml's Stream guard correctly refused upgrade_type security"
+
+        - name: Record case 5 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case5.passed
+            force: false
+            mode: "0644"

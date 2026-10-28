@@ -33,14 +33,8 @@ honeypot_mmdb_required_variables:
   - vault_honeypot_maxmind_license_key
 
 # --- Packages -----------------------------------------------------------------
-# dnf-automatic already applies security errata; a full update can also pull a
-# kernel mid-play, so it stays opt-in.
-honeypot_dnf_full_update: false
-
 honeypot_base_packages:
   - firewalld
-  - fail2ban
-  - fail2ban-systemd
   - audit
   - dnf-automatic
   - dnf-utils
@@ -79,6 +73,8 @@ honeypot_ssh_allow_users:
 # have brought the address up first; 0.0.0.0 leaves firewalld as the only ACL.
 honeypot_ssh_listen_address: "{{ ansible_facts[honeypot_tailnet_interface]['ipv4']['address'] }}"
 
+# The drop-in is 45-honeypot-hardening.conf so it loads before 50-redhat.conf,
+# which would otherwise win (first value wins) for X11Forwarding/GSSAPIAuthentication.
 # Ciphers/MACs/KexAlgorithms/HostKeyAlgorithms are NOT set by the drop-in:
 # /etc/crypto-policies wins on EL, being included ahead of sshd_config.d. Change
 # the system crypto policy instead of adding dead directives here.
@@ -98,16 +94,22 @@ honeypot_public_zone_removed_services:
   # would silently reopen whatever a future firewalld ships in that definition.
   - ssh
 
-# --- fail2ban -----------------------------------------------------------------
-# Deliberately scoped to the admin sshd only. Cowrie's 22/tcp is the attack
-# surface and must never be banned.
-honeypot_fail2ban_bantime: 7200
-honeypot_fail2ban_findtime: 300
-honeypot_fail2ban_maxretry: 3
-
-# --- dnf-automatic ------------------------------------------------------------
-honeypot_auto_updates_upgrade_type: security
+# --- Updates (dnf-automatic + opt-in full update) -----------------------------
+# Not `security`: CentOS Stream publishes no updateinfo (errata) metadata, so a
+# security-only run matches nothing and applies no updates at all. Stream is
+# all-or-nothing; validate.yml refuses `security` there.
+honeypot_auto_updates_upgrade_type: default
+# Timer schedule and the when-needed trigger list: README "Automatic updates".
 honeypot_auto_updates_reboot: when-needed
+# dnf-automatic already applies every update daily; a full update here can
+# also pull a kernel mid-play, so it stays opt-in. A kernel installed by that path
+# or by a manual `dnf update` is NOT rebooted into by dnf-automatic (its next run
+# has nothing to install) and needs a manual reboot.
+honeypot_dnf_full_update: false
+# Packages a role pins to an exact version. Both update paths skip them, so they
+# move only when the pin is bumped (alloy_version).
+honeypot_dnf_pinned_packages:
+  - alloy
 
 # --- Kernel hardening ---------------------------------------------------------
 # user.max_user_namespaces = 0 blocks rootless/userns containers. Safe because
@@ -158,7 +160,6 @@ honeypot_audit_watches:
   - {path: /etc/sudoers.d/, perms: wa, key: sudoers}
   - {path: /etc/firewalld/, perms: wa, key: firewall}
   - {path: /etc/sysctl.d/, perms: wa, key: sysctl}
-  - {path: /etc/fail2ban/, perms: wa, key: fail2ban}
   - {path: /etc/docker/, perms: wa, key: docker_config}
   - {path: /etc/systemd/system/, perms: wa, key: systemd_units}
   - {path: /etc/tailscale/, perms: wa, key: tailscale}

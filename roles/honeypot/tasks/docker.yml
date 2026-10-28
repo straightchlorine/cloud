@@ -44,7 +44,7 @@
     mode: '0644'
     backup: true
   become: true
-  notify: Reload docker
+  notify: Restart docker
 
 - name: Enable and start Docker
   ansible.builtin.systemd_service:

@@ -7,7 +7,8 @@
       - ansible_facts['selinux']['status'] == 'enabled'
       - ansible_facts['selinux']['mode'] == 'enforcing'
     fail_msg: >-
-      SELinux is '{{ ansible_facts['selinux']['mode'] | default('disabled') }}'.
+      SELinux is '{{ ansible_facts['selinux']['mode']
+      if ansible_facts['selinux']['status'] == 'enabled' else 'disabled' }}'.
       Set SELINUX=enforcing in /etc/selinux/config and reboot before deploying.
     success_msg: "[OK] SELinux is enforcing"
 

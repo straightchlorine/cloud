@@ -31,17 +31,14 @@
   become: true
   notify: Restart alloy
 
-- name: Install the Loki push credentials
-  # Kept out of config.alloy so the config file itself carries no secret and
-  # can stay world-readable for debugging.
+- name: Install the Alloy environment file
   ansible.builtin.template:
     src: alloy.sysconfig.j2
     dest: "{{ alloy_env_file }}"
     owner: root
     group: "{{ alloy_group }}"
-    mode: '0640'
+    mode: '0644'
   become: true
-  no_log: true
   notify: Restart alloy
 
 - name: Install the Alloy configuration
@@ -79,4 +76,20 @@
   delay: 5
   register: alloy_ready
   until: alloy_ready is succeeded
+  tags: [post_validation]
+
+- name: Confirm the fleet sinks are reachable over the tailnet
+  # Alloy stays ready while every push fails, so this is what proves the
+  # Headscale ACL, the NodePort and the fleet NetworkPolicy end to end.
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    status_code: 200
+  loop: >-
+    {{ [alloy_loki_url | regex_replace('/loki/api/v1/push$', '/ready')]
+       + ([alloy_prometheus_url | regex_replace('/api/v1/write$', '/-/ready')]
+          if alloy_metrics_enabled else []) }}
+  retries: 6
+  delay: 5
+  register: alloy_sink_ready
+  until: alloy_sink_ready is succeeded
   tags: [post_validation]

@@ -16,26 +16,17 @@
     state: reloaded
   become: true
 
-- name: Restart the honeypot fail2ban jail
-  # Named distinctly from common's "Restart fail2ban": both get loaded into
-  # this play (common via include_role in validate.yml), and Ansible resolves
-  # notify-by-name globally across roles - a shared name here would silently
-  # run whichever role's handler collides, not necessarily this one's.
-  ansible.builtin.systemd_service:
-    name: fail2ban
-    state: restarted
-  become: true
-
 - name: Reload audit rules
   ansible.builtin.command: augenrules --load
   changed_when: true
   become: true
 
-- name: Reload docker
-  # live-restore keeps the containers running across the daemon reload.
+- name: Restart docker
+  # live-restore keeps the containers running across the daemon restart. icc,
+  # log-driver, selinux-enabled and no-new-privileges are not SIGHUP-reloadable.
   ansible.builtin.systemd_service:
     name: docker
-    state: reloaded
+    state: restarted
   become: true
 
 - name: Reload systemd (honeypot)

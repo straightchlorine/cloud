@@ -37,12 +37,12 @@ run "uptime"
 run "hostnamectl"
 
 hdr "packages"
-run "rpm -q firewalld fail2ban fail2ban-systemd audit dnf-automatic policycoreutils-python-utils checkpolicy rclone age tailscale docker-ce docker-ce-cli containerd.io docker-compose-plugin cronie epel-release"
+run "rpm -q firewalld audit dnf-automatic policycoreutils-python-utils checkpolicy rclone age tailscale docker-ce docker-ce-cli containerd.io docker-compose-plugin cronie epel-release"
 run "dnf repolist enabled"
-run "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | grep -E '^(docker|containerd|tailscale|fail2ban|firewalld|audit|rclone|age)' | sort"
+run "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | grep -E '^(docker|containerd|tailscale|firewalld|audit|rclone|age)' | sort"
 
 hdr "installed-file fingerprints (compare against the repo copies)"
-run "sha256sum /etc/ssh/sshd_config.d/99-hardening.conf /etc/firewalld/zones/tailnet.xml /etc/fail2ban/jail.local /etc/dnf/automatic.conf /etc/sysctl.d/99-hardening.conf /etc/audit/rules.d/honeypot.rules /etc/docker/daemon.json /etc/cron.daily/honeywatch-cowrie-cleanup /usr/local/sbin/honeywatch-backup /usr/local/sbin/honeywatch-mmdb-refresh /etc/systemd/system/honeywatch-*.service /etc/systemd/system/honeywatch-*.timer 2>&1"
+run "sha256sum /etc/ssh/sshd_config.d/45-honeypot-hardening.conf /etc/firewalld/zones/tailnet.xml /etc/dnf/automatic.conf /etc/sysctl.d/99-hardening.conf /etc/audit/rules.d/honeypot.rules /etc/docker/daemon.json /etc/cron.daily/honeywatch-cowrie-cleanup /usr/local/sbin/honeywatch-backup /usr/local/sbin/honeywatch-mmdb-refresh /etc/systemd/system/honeywatch-*.service /etc/systemd/system/honeywatch-*.timer 2>&1"
 run "ls -la /etc/ssh/sshd_config.d/ /etc/systemd/system/ | grep -E 'honeywatch|hardening|total|:$'"
 
 hdr "sshd effective config"
@@ -61,11 +61,6 @@ run "firewall-cmd --zone=trusted --list-all"
 run "firewall-cmd --direct --get-all-rules"
 run "firewall-cmd --list-all-policies 2>&1 | head -40"
 run "ls -la /etc/firewalld/zones/"
-
-hdr "fail2ban"
-run "fail2ban-client status"
-run "fail2ban-client status sshd-2022"
-run "systemctl is-enabled fail2ban; systemctl is-active fail2ban"
 
 hdr "sysctl (only the keys the hardening file sets)"
 run "sysctl kernel.kptr_restrict kernel.dmesg_restrict kernel.unprivileged_bpf_disabled user.max_user_namespaces kernel.kexec_load_disabled kernel.sysrq kernel.yama.ptrace_scope net.core.bpf_jit_harden net.ipv4.tcp_syncookies net.ipv4.tcp_rfc1337 net.ipv4.conf.all.rp_filter net.ipv4.conf.all.accept_source_route net.ipv4.conf.all.accept_redirects net.ipv4.conf.all.send_redirects net.ipv4.conf.all.log_martians net.ipv4.icmp_echo_ignore_broadcasts net.ipv4.icmp_ignore_bogus_error_responses net.ipv6.conf.all.disable_ipv6 net.ipv6.conf.all.forwarding net.ipv6.conf.all.accept_redirects fs.protected_symlinks fs.protected_hardlinks fs.protected_regular fs.protected_fifos net.ipv4.ip_forward 2>&1"

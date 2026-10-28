@@ -13,7 +13,6 @@ PermitRootLogin no
 PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
-ChallengeResponseAuthentication no
 PermitEmptyPasswords no
 UsePAM yes
 AuthenticationMethods publickey
@@ -30,6 +29,7 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 
 X11Forwarding no
+GSSAPIAuthentication no
 AllowTcpForwarding no
 GatewayPorts no
 PermitTunnel no

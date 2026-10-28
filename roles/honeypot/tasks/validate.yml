@@ -25,6 +25,8 @@
       - {var: "vault_honeypot_age_recipient", value: "age1your-public-recipient-key"}
       - {var: "vault_honeypot_maxmind_license_key", value: "your-maxmind-license-key"}
       - {var: "vault_honeypot_ntfy_token", value: "tk_your-write-only-ntfy-token"}
+      - {var: "vault_honeypot_r2_endpoint", value: "https://your-account-id.r2.cloudflarestorage.com"}
+      - {var: "vault_honeypot_maxmind_account_id", value: "your-maxmind-account-id"}
   tags: [validation]
 
 - name: Confirm the host OS family is supported
@@ -33,10 +35,38 @@
       - os_family == "RedHat"
     fail_msg: >-
       The honeypot role targets a RedHat-family host (CentOS Stream); got
-      {{ os_family | default('unknown') }}
-      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
+      {{ os_family }} ({{ os_name }} {{ os_version }}).
       Every package, firewall and SELinux task here assumes dnf/firewalld/SELinux.
     success_msg: "[OK] Supported OS: {{ os_name }} {{ os_version }} ({{ os_family }})"
+  tags: [validation]
+
+- name: Validate the automatic-update settings are values dnf-automatic understands
+  # dnf-automatic does not reject unknown values: it silently falls back to its
+  # default (reboot -> never), so a typo would quietly disable kernel reboots.
+  ansible.builtin.assert:
+    that:
+      - honeypot_auto_updates_reboot in ['never', 'when-changed', 'when-needed']
+      - honeypot_auto_updates_upgrade_type in ['default', 'security']
+    fail_msg: >-
+      honeypot_auto_updates_reboot must be never, when-changed or when-needed
+      (got '{{ honeypot_auto_updates_reboot }}') and
+      honeypot_auto_updates_upgrade_type must be default or security
+      (got '{{ honeypot_auto_updates_upgrade_type }}'). dnf-automatic silently
+      falls back to its default for any other value (reboot -> never).
+    quiet: true
+  tags: [validation]
+
+- name: Validate automatic updates can apply anything on this OS
+  # Stream ships no errata metadata: a `security` run is a silent no-op that
+  # leaves every CVE, kernel included, unpatched while the timer looks healthy.
+  ansible.builtin.fail:
+    msg: >-
+      honeypot_auto_updates_upgrade_type is 'security', but CentOS Stream
+      publishes no security errata, so dnf-automatic would never apply
+      anything. Use 'default'.
+  when:
+    - honeypot_auto_updates_upgrade_type == 'security'
+    - os_codename == 'Stream'
   tags: [validation]
 
 - name: Validate the administrative sshd port does not collide with cowrie

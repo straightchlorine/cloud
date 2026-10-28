@@ -3,6 +3,7 @@
   ansible.builtin.dnf:
     name: "*"
     state: latest  # noqa: package-latest
+    exclude: "{{ honeypot_dnf_pinned_packages }}"
   become: true
   when: honeypot_dnf_full_update
   tags: [packages]
@@ -19,6 +20,16 @@
   ansible.builtin.dnf:
     name: "{{ honeypot_base_packages }}"
     state: present
+  become: true
+
+- name: Remove fail2ban
+  # The jail banned in firewalld's public zone, but the admin sshd only accepts
+  # connections on tailscale0 (the tailnet zone), so it never blocked anything;
+  # the admin path is key-only sshd behind the Headscale ACL, and an effective
+  # jail would add a self-lockout risk. fail2ban-server takes its dependents too.
+  ansible.builtin.dnf:
+    name: [fail2ban, fail2ban-server]
+    state: absent
   become: true
 
 - name: Enable the cron daemon for the cowrie cleanup job
