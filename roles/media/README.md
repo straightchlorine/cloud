@@ -609,6 +609,35 @@ as it was (also after a crash between an adopted file's move and its log line), 
 that changed since the apply (a retag, a hand edit) is reported and left alone. An
 apply that stopped halfway is undone the same way. Cover art a pin fetched stays.
 
+### Emptying removed/ (removed)
+
+`removed/<date>/` holds every file an apply moved aside, and any file you moved there by
+hand. Before deleting any of it, let `media-sync --removed` listen to it:
+
+```bash
+media-sync --removed            # report only; nothing changes
+media-sync --removed --purge    # delete the safe files, then the empty folders
+```
+
+For each audio file it finds the file's entry in the apply logs (no entry means it was
+moved by hand), looks in the library for the file it was a copy of, and compares the
+sound of the two (Chromaprint, the first two minutes, 0.85 or more is the same audio).
+The keeper is the row or file the decision names, or else a library file with the same
+YouTube id, track id, or title within 90 s of its length. Each file lands in one class:
+
+| class | meaning | purge |
+|---|---|---|
+| `duplicate` | the same audio, within 6 s of the same length, is still in the library; the line names the file and the score | deletes |
+| `removed on request` | you removed it with `pick remove` and no copy turned up | deletes |
+| `different cut` | the same song is in the library in another version: the audio differs (0.6 to 0.85), or it starts the same but the lengths differ (an extended mix and its edit) | keeps |
+| `needs a look` | no copy found, the keeper's row or file is gone, or the audio differs; the line says which | keeps |
+
+Purge when the `needs a look` and `different cut` lists hold nothing you want back: they
+stay in `removed/` either way. After a purge the deleted files are gone, and
+`media-sync --undo` can no longer put them back. An undone apply is not in the report at
+all (its files went back). Fingerprints are kept in `$LIB/state/review/fp-cache/`, so a
+second run is quick.
+
 ## Configuration
 
 Required (host_vars): `media_library_path`, `restic_*`, and when enabled

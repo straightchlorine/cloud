@@ -238,6 +238,18 @@ eq "a second adopt changes no id" "$(q "select group_concat(id) from (select id 
 eq "a second adopt leaves 7 rows" "$(q "select count(*) from items")" 7
 has "adopt notifies when done" "$(ntfy)" "adopt done \| beets now tracks 7"
 
+# a folder kept as it is, its files carrying the reviewed comment: the marker restore
+# must leave them where they are, not refile them as singletons ($artist/$title)
+TONE_COMMENT="reviewed | kept" tone "Bible/01 Book/01_01_chapter.opus" "Narrator" "Chapter 1"
+ms --adopt
+eq "adopt restores the reviewed marker of a kept folder" \
+    "$(q "select count(*) from item_attributes a join items i on i.id=a.entity_id where i.title='Chapter 1' and a.key='reviewed'")" 1
+eq "and leaves the file in its folder" "$(q "select cast(path as text) from items where title='Chapter 1'")" \
+    "Bible/01 Book/01_01_chapter.opus"
+eq "the file is still on disk there" "$(find "$LIBD/music/Bible" -type f)" "$LIBD/music/Bible/01 Book/01_01_chapter.opus"
+beet remove -f 'title:Chapter 1' > /dev/null 2>&1
+rm -rf "$LIBD/music/Bible"
+
 # what the old adopt did, so this suite proves it would have caught it
 ids_now=$(q "select group_concat(id) from (select id from items order by id)")
 beet -c /config/adopt.yaml import /music > /dev/null 2>&1
@@ -893,7 +905,7 @@ rm "$LIBD/music/Fixture Band/Loose/One (copy).opus" "$LIBD/music/Kept/Loose/Keep
 # throwaway sessions first, each undone by removing the file
 out=$(printf '%s\n' n m q | media-import --library 2>&1)
 has "a release with a track held twice cannot be merged yet" "$out" "1 track\(s\) of it are held twice: decide those first"
-lacks_text "the merge is not offered" "$out" "m merge into one album row"
+lacks_text "the merge is not offered" "$out" "m merge into one album"
 eq "and nothing was saved" "$(cat "$DEC" 2> /dev/null)" ""
 out=$(printf '%s\n' 2 q | media-import --library 2>&1)
 eq "keeping the other copy quarantines the suggested one" \
@@ -1472,12 +1484,16 @@ eq "a loose copy suggests which of the two to keep, and carries its release tags
     "$(jq4 "[(f['path'].rsplit('/', 1)[1], f['suggest'], f['copy_of'], f['mb_albumid'][-1:], f['mb_releasetrackid'][-5:]) for f in sorted(d['unregistered'], key=lambda f: f['path'])]")" \
     "[('Reg Song copy.opus', 'registered', [$reg_old], '', ''), ('Shaun Song.flac', 'loose', [$shaun_old], '5', 'track')]"
 eq "the first menu screen is the copy; the ranking marks the lossless file" \
-    "$(printf 'q\n' | media-import --library Shaun 2>&1 | grep -c '^  \* loose .*FLAC')" 1
+    "$(printf 'q\n' | media-import --library Shaun 2>&1 | grep -c '^  \* not in library .*FLAC')" 1
 out=$(printf '%s\n' 2 q | media-import --library Shaun 2>&1)
-has "the copy screen comes first, with the registered row" "$out" "\[1/1\] copy       Shaun Baker - Shaun Song \(1 registered row\)"
-has "it shows the registered file, bare" "$out" "registered +$shaun_old +Opus .*\(bare\) +/music/Shaun Baker/Shaun Song.opus"
-has "and the loose one with its release" "$out" "\* loose +- +FLAC .* ${SBR:0:8} +/music/Shaun Baker/1/Shaun Song.flac"
-has "answer 2 is saved as a replace" "$out" "saved: the loose file replaces row $shaun_old"
+has "the copy screen comes first, with the registered row" "$out" "\[1/1\] copy       Shaun Baker - Shaun Song \(1 row in the library\)"
+has "it shows the file in the library, with no release tag" "$out" "in library +$shaun_old +Opus .*no release tag .*/music/Shaun Baker/Shaun Song.opus"
+has "and the new one with its release" "$out" "\* not in library +- +FLAC .* ${SBR:0:8} .*/music/Shaun Baker/1/Shaun Song.flac"
+has "the suggestion names the deciding criterion and the other file's format" "$out" \
+    "suggest 2 - use the new one: it is lossless \(FLAC\), the other is Opus"
+has "the options are short labels" "$out" "1 keep library one +2 use the new one +b keep both +T list all"
+has "answer 2 is saved as a replace, said in one line" "$out" \
+    "saved: the new file takes the place of row $shaun_old; that file goes aside \(nothing moves until the apply\)"
 eq "the replace names the loose file first, then the row" \
     "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
     "[('replace', [(None, '/music/Shaun Baker/1/Shaun Song.flac'), ($shaun_old, '/music/Shaun Baker/Shaun Song.opus')])]"
@@ -1500,7 +1516,7 @@ eq "x is a skip naming the loose file and the row" \
     "[('skip', [(None, '/music/Shaun Baker/1/Shaun Song.flac'), ($shaun_old, '/music/Shaun Baker/Shaun Song.opus')])]"
 out=$(printf 'q\n' | media-import --library 2>&1)
 has "the skipped row is out of the queue, the other copy still waits" "$out" "\[1/1\] copy       Reg Artist - Reg Song"
-has "and its registered FLAC is the suggestion" "$out" "\* registered +$reg_old +FLAC"
+has "and its FLAC in the library is the suggestion" "$out" "\* in library +$reg_old +FLAC"
 rm -f "$DEC"
 cp "$LIBD/music/Shaun Baker/1/Shaun Song.flac" "$T/shaun.flac"
 printf 'x' >> "$LIBD/music/Shaun Baker/1/Shaun Song.flac"
@@ -1571,9 +1587,9 @@ multi_low=$(id_of 'Multi Song' Low)
 multi_high=$(id_of 'Multi Song' High)
 ms --audit
 eq "the audit names both rows" "$(jq4 "[sorted(f['copy_of']) for f in d['unregistered']]")" "[[$multi_low, $multi_high]]"
-out=$(printf '%s\n' 2 q | media-import --library "Multi Song" 2>&1)
-has "the screen counts the rows" "$out" "copy       Multi Band - Multi Song \(2 registered rows\)"
-has "answer 2 says which row it replaces" "$out" "it replaces row $multi_high; the other 1 stay"
+out=$(printf '%s\n' '?' 2 q | media-import --library "Multi Song" 2>&1)
+has "the screen counts the rows" "$out" "copy       Multi Band - Multi Song \(2 rows in the library\)"
+has "? says which row answer 2 replaces" "$out" "takes the place of row $multi_high; the other 1 stay"
 eq "and replaces the better-ranked one, not the first by id" \
     "$(ds4 "[(d['action'], [(t['id'], t['path']) for t in d['targets']]) for d in ds]")" \
     "[('replace', [(None, '/music/Multi/Loose/Multi Song.flac'), ($multi_high, '/music/Multi/High/Multi Song.opus')])]"
@@ -1585,7 +1601,7 @@ rm -f "$DEC"
 # a copy with its quarantine waiting is as good as gone: the screen goes on over the row that stays
 decide quarantine "$multi_low"
 out=$(printf '%s\n' 2 q | media-import --library "Multi Song" 2>&1)
-has "the copy screen is still offered, over the row that stays" "$out" "copy       Multi Band - Multi Song \(1 registered row\)"
+has "the copy screen is still offered, over the row that stays" "$out" "copy       Multi Band - Multi Song \(1 row in the library\)"
 eq "and a replace of that row is saved" "$(ds4 "[(d['action'], [t['id'] for t in d['targets']]) for d in ds]")" \
     "[('quarantine', [$multi_low]), ('replace', [None, $multi_high])]"
 rm -f "$DEC"
@@ -1721,7 +1737,7 @@ rm -f "$DEC"
 out=$(printf '%s\n' e "https://musicbrainz.org/release/$DLR" y x | media-import --library 2>&1)
 has "e shows which file takes which track first" "$out" "D One +-> 1-1 +D One"
 has "and what the files lack" "$out" "the files lack 1 of its tracks: D Three"
-has "then asks" "$out" "adopt the files with that release\? \[y/N\]"
+has "then asks" "$out" "add the files with that release\? \[y/N\]"
 eq "y adopts with the release, x skips the other screen" \
     "$(ds4 "[(d['action'], d.get('release', '')[-1:], len(d['targets'])) for d in ds]")" "[('adopt', '3', 3), ('skip', '', 1)]"
 rm -f "$DEC"
@@ -2284,14 +2300,29 @@ session Wiv '' q
 has "the duplicate screen shows each copy's offset from the release's official length" "$out" "122.09 s \(exact\)"
 has "the other copy's offset" "$out" "122.79 s \(\+0.70 s\)"
 has "and the release's own length" "$out" "the release says 122.09 s"
-has "the prompt says what Enter does" "$out" "\[Enter = 1: its length 122.09 s is the closest to the release's 122.09 s\]"
-has "and what n and x do" "$out" "n skip for now \(asked again next time\), x never ask again"
+has "the screen says what it is about" "$out" "The same track of one release is in your library twice\. Keep one\."
+has "the suggestion line comes with its evidence" "$out" "suggest 1 - keep copy 1: its length 122.09 s"
+lacks_text "output that is not a terminal has no escape bytes" "$out" $'\033'
+has "the suggestion line says what Enter does" "$out" "suggest 1 - keep copy 1: its length 122.09 s is the closest to the release's 122.09 s"
+has "the keys every screen has are on a row of their own" "$out" "n skip +x never ask +l list +q quit +\? help"
+has "the prompt says what Enter takes" "$out" "Enter = 1 >"
 eq "wiv: Enter keeps the copy of the release's length although the other has the higher bitrate" \
     "$(dsum)" "[('quarantine', '', [$wiv2], None)]"
 rm -f "$DEC"
+session Wiv '?' q
+has "? says what this kind of screen means" "$out" "This screen: Two or more rows are matched to the same track"
+has "? lists each key with what it does to files" "$out" "1-2 +keep that copy; the others are queued to be moved aside \(saved\)"
+has "and what the suggestion rests on" "$out" "The suggestion rests on: the copies differ in length"
+has "and that nothing moves until the apply" "$out" "Nothing moves until the apply"
+out=$(printf 'q\n' | TERM=xterm script -qec "media-import --library Wiv" /dev/null 2>&1)
+has "on a terminal the header is bold" "$out" $'\033\\[1m\\[1/[0-9]\\] duplicate'
+has "and the suggestion is green" "$out" $'\033\\[32msuggest 1 - '
+out=$(printf 'q\n' | NO_COLOR=1 TERM=xterm script -qec "media-import --library Wiv" /dev/null 2>&1)
+has "NO_COLOR keeps the same screen" "$out" "\[1/[0-9]\] duplicate"
+lacks_text "without colour" "$out" $'\033'
 dup1=$(id_of 'Plain Song' '/A/') dup2=$(id_of 'Plain Song' '/B/')
 session "Dup Band" '' q
-has "copies of one length: the shared ranking suggests, with its reason" "$out" "\[Enter = 2: the higher bitrate \(96k\)\]"
+has "copies of one length: the shared ranking suggests, with its reason" "$out" "suggest 2 - keep copy 2: the higher bitrate \(96k against [0-9]+k\)"
 lacks_text "a release MusicBrainz does not have is not mentioned" "$out" "MusicBrainz"
 has "the better copy is starred" "$out" "2\* +$dup2 "
 eq "Enter keeps the higher bitrate" "$(dsum)" "[('quarantine', '', [$dup1], None)]"
@@ -2308,20 +2339,25 @@ session "Part Band" '' '?' '' q
 eq "Enter on a screen with no suggestion asks again, twice, and never acts" \
     "$(printf '%s\n' "$out" | grep -c 'no suggestion for this screen')" 2
 eq "and saved nothing" "$(cat "$DEC" 2> /dev/null)" ""
-has "? lists the answers, one line each" "$out" "1-1 +pin that edition"
-has "with the ones every screen has" "$out" "x +never ask again"
-has "and k" "$out" "k +keep as it is"
+has "? says what the screen is" "$out" "This screen: The audit found tracks of one album"
+has "? lists the answers, one line each" "$out" "1-1 +match the files that edition takes to its release"
+has "with the ones every screen has" "$out" "x +never ask about these again"
+has "and k" "$out" "k +keep the tracks as they are"
+has "and what the suggestion rests on, or that there is none" "$out" "No suggestion here: "
+has "and that nothing moves until the apply" "$out" "Nothing moves until the apply \(.media-sync --apply., also weekly from cron\)"
+has "and how an apply is taken back" "$out" "media-sync --undo <log>. takes an apply back"
 session "Part Band" bogus q
-has "an unknown answer is said, with the way to the list" "$out" "not an answer on this screen \(\? lists them\)"
+has "an unknown answer is said in one line, with the way to the help" "$out" "'bogus' is not an answer here \(\? for help\)"
+eq "and the options are not printed again for it" "$(printf '%s\n' "$out" | grep -c '^  n skip')" 1
 
 # ---- a twin screen: the same YouTube video, a bare '- Topic' file beside the matched one (Akane)
 akane_m=$(id_of 'Color Me Blue' 'Akane/') akane_b=$(id_of 'Color Me Blue' 'Akane - Topic')
 session Akane '' q
 has "the twin has a screen of its own, after the duplicates" "$out" "\[1/1\] twin       Akane - Color Me Blue \(2 rows, video\)"
-has "it lists the rows with their release or (bare)" "$out" "1\* +$akane_m +Opus .*ffffffff +/music/Akane/Color Me Blue/01 Color Me Blue.opus"
-has "the bare one with its offset" "$out" "2 +$akane_b +Opus .*\(\+0.00 s\) +\(bare\) +/music/Akane - Topic/Color Me Blue.opus"
+has "it lists the rows with their release or that they have none" "$out" "1\* +$akane_m +Opus .*ffffffff +/music/Akane/Color Me Blue/01 Color Me Blue.opus"
+has "the one with no release tag with its offset" "$out" "2 +$akane_b +Opus .*\(\+0.00 s\) +no release tag +/music/Akane - Topic/Color Me Blue.opus"
 has "and says why: the video" "$out" "video twin: the same YouTube video \(vid00000012\)"
-has "Enter is r" "$out" "\[Enter = r: the same YouTube video \(vid00000012\)\]"
+has "Enter is r" "$out" "suggest r - move the others aside: the same YouTube video \(vid00000012\)"
 eq "Enter quarantines the bare twin, the matched file stays" "$(dsum)" "[('quarantine', '', [$akane_b], None)]"
 rm -f "$DEC"
 session Akane 1 q
@@ -2353,8 +2389,8 @@ tw_topic=$(id_of 'Tw Two' 'Topic')
 session "Twin" n '' '' q
 has "the twin screen comes first" "$out" "\[1/2\] twin       Twin Band - Tw Two \(2 rows, video\)"
 has "the album screen offers the twins first" "$out" "twins in this album:"
-has "with n worded for here" "$out" "n leave them, go on, x never ask again"
-has "and then the edition, suggested" "$out" "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+has "with n worded for here" "$out" "n leave them +x never ask"
+has "and then the edition, suggested" "$out" "suggest 1 - match to edition 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact"
 eq "Enter, Enter: the bare twin to the quarantine, then the release pinned for the rest" \
     "$(ds4 "[(d['action'], d.get('release', '')[-3:], sorted(t['id'] for t in d['targets']), d.get('map')) for d in ds]")" \
     "[('quarantine', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
@@ -2371,7 +2407,7 @@ has "the table shows the id, what is covered and exact, the label, the track cou
 has "the second edition's description is shown" "$out" "2\) ${CLNB:0:8} .*\[Dolby Atmos mix\]"
 eq "the Atmos mix is ranked below the plain edition although its track count is nearer the files'" \
     "$(printf '%s\n' "$out" | grep -E '^  [12]\) ' | cut -c6-13 | tr '\n' ' ')" "${CLNA:0:8} ${CLNB:0:8} "
-has "the plain edition is suggested" "$out" "\[Enter = 1: edition ${CLNA:0:8} takes all 3 files, 3 of them exact\]"
+has "the plain edition is suggested" "$out" "suggest 1 - match to edition 1: edition ${CLNA:0:8} takes all 3 files, 3 of them exact"
 session "Clan Band" '' q
 eq "and Enter pins it" "$(dsum)" "[('pin', '103', [$(nrows "artist = 'Clan Band'")], None)]"
 rm -f "$DEC"
@@ -2398,12 +2434,12 @@ rm -f "$DEC"
 
 # ---- keep: nothing on MusicBrainz covers the files, or the editions are another artist's
 session "Nomatch Band" '' q
-has "no edition: k is suggested, with why" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+has "no edition: k is suggested, with why" "$out" "suggest k - keep as it is: the MusicBrainz search found no edition"
 eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$(nrows "artist = 'Nomatch Band'")], None)]"
 rm -f "$DEC"
 session "Other Band" '' q
 has "an edition credited to another artist is marked" "$out" "1\) ${OTHR:0:8} .* by Sound Team  !artist"
-has "and k is suggested" "$out" "\[Enter = k: the editions covering them are credited to another artist\]"
+has "and k is suggested" "$out" "suggest k - keep as it is: the editions covering them are credited to another artist"
 eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$(nrows "artist = 'Other Band'")], None)]"
 rm -f "$DEC"
 
@@ -2416,8 +2452,8 @@ has "the album screen shows both editions" "$out" "2\) ${RGB:0:8} "
 eq "and saved nothing" "$(cat "$DEC" 2> /dev/null)" ""
 session "Blur" '?' '' q
 has "one edition: the scattered screen is shown" "$out" "\[1/1\] scattered  Blur Band - Blur Album \(2 album rows\)"
-has "? lists m, one line" "$out" " m +merge into one album row$"
-has "Enter is m, with why" "$out" "\[Enter = m: one edition holds all 3 tracks, in 2 album rows\]"
+has "? lists m, one line" "$out" " m +put the tracks in one album row"
+has "Enter is m, with why" "$out" "suggest m - merge into one album: one edition holds all 3 tracks, in 2 album rows"
 eq "Enter merges them" "$(dsum)" "[('merge', '115', [$(nrows "artist = 'Blur Band'")], None)]"
 rm -f "$DEC"
 
@@ -2426,7 +2462,7 @@ session "Blur" '' q
 has "the summary counts the decisions and the files, by action" "$out" \
     "1 decision\(s\) saved, 3 file\(s\) queued \(merge 3\); next: media-sync --apply --dry-run$"
 lacks_text "no --force below the limit" "$out" "needs --force"
-has "and says when the apply runs by itself" "$out" "the apply runs by itself Sundays 04:00 \(it refuses more than 200 files without --force\)"
+has "and says the apply also runs weekly" "$out" "the apply also runs weekly from cron; it refuses more than 200 files without --force"
 has "the shell passes the limit on" "$(cat "$STACK/scripts/media-import.sh")" "--max-files 200"
 sed 's/--max-files 200/--max-files 2/' "$STACK/scripts/media-import.sh" > "$STACK/scripts/media-import-low.sh"
 chmod +x "$STACK/scripts/media-import-low.sh"
@@ -2446,7 +2482,7 @@ session "Live Band" v1 '' q
 has "a (live) the files lack still pairs, by length" "$out" "Lv One +-> 1-1 +Lv One \(live\) +3:58 +exact"
 has "and the screen says those pairs are saved with a map" "$out" "Lv One .* exact  \(title differs: saved with a map\)"
 lacks_text "while the pair the strict rule makes needs none" "$out" "Lv Three .* map"
-has "the edition takes all three files and is suggested" "$out" "\[Enter = 1: edition ${LIVR:0:8} takes all 3 files, 3 of them exact\]"
+has "the edition takes all three files and is suggested" "$out" "suggest 1 - match to edition 1: edition ${LIVR:0:8} takes all 3 files, 3 of them exact"
 eq "Enter saves a pin with a map for the two titles that differ" \
     "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
     "[('pin', '110', [$lv1, $lv2, $lv3], {'$lv1': '0110-t1', '$lv2': '0110-t2'})]"
@@ -2455,12 +2491,12 @@ rm -f "$DEC"
 # L: an English-titled set against a Japanese-titled release, paired by length
 eat1=$(id_of 'Eat One' 'Monster Band') eat2=$(id_of 'Eat Two' 'Monster Band') eat3=$(id_of 'Eat Three' 'Monster Band')
 session "Monster" q
-has "no edition is known before an id is entered: k is suggested" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+has "no edition is known before an id is entered: k is suggested" "$out" "suggest k - keep as it is: the MusicBrainz search found no edition"
 session "Monster" e "$MONR" L y
 has "an entered Japanese edition covers none of the English-titled files" "$out" "1\) ${MONR:0:8} +0/3 exact 0 max 0s +私を喰べたい、ひとでなし"
 has "L proposes the pairs by length" "$out" "$eat1 +Eat One .* -> 1-1 +私を喰べたい"
 has "all three" "$out" "$eat3 +Eat Three .* -> 1-3 +終わりの歌"
-has "asks before it pins" "$out" "pair these 3 file\(s\) and pin edition 1\? \[y/N\]"
+has "asks before it matches" "$out" "pair these 3 file\(s\) and match them to edition 1\? \[y/N\]"
 eq "y saves a pin with a map for every pair" \
     "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
     "[('pin', '111', [$eat1, $eat2, $eat3], {'$eat1': '0111-t1', '$eat2': '0111-t2', '$eat3': '0111-t3'})]"
@@ -2476,12 +2512,12 @@ has "L with nothing unmatched says so" "$out" "no unmatched file has exactly one
 hd1=$(id_of 'Hd One' 'Hand Band') hd2=$(id_of 'Hd Two' 'Hand Band') hd3=$(id_of 'Hd Three' 'Hand Band')
 session "Hand Band" a "a 99999=1" "a $hd1=9" "a $hd1=3 $hd2=3" "a $hd1=3" "a $hd2=1-1 $hd3=2" 1
 has "a alone lists the unpaired files" "$out" "files not paired on edition 1:"
-has "and the tracks nobody has" "$out" "tracks nobody has:"
+has "and the tracks no file is matched to" "$out" "tracks no file is matched to:"
 has "a file that is not on the screen is refused" "$out" "99999 is not a file of this screen"
 has "a track the edition lacks is refused" "$out" "edition 1 has no track '9'"
 has "two files for one track are refused" "$out" "two files for one track"
 has "a pairing shows the mapping" "$out" "Hd One +-> 1-3 +Gamma .*\(title differs: saved with a map\)"
-has "and says what to enter" "$out" "enter 1 to pin it, or pair more"
+has "and says what to enter" "$out" "enter 1 to match the files to it, or pair more"
 has "a second answer adds to the first" "$out" "Hd Two .* -> 1-1 +Alpha"
 eq "the number pins with the map of everything paired by hand" \
     "$(ds4 "[(d['action'], d['release'][-3:], sorted(t['id'] for t in d['targets']), d['map']) for d in ds]")" \
@@ -2514,14 +2550,14 @@ session "Twin" x q
 eq "x on a twin screen names the row to drop only" "$(dsum)" "[('skip', '', [$tw_topic], None)]"
 session "Twin" '' q
 has "the keeper is still on the album screen, which takes all three files" "$out" \
-    "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+    "suggest 1 - match to edition 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact"
 has "with only the bare twin counted as decided" "$out" "\(1 of its rows are decided already; these are the rest\)"
 eq "Enter pins the keeper with the others" "$(dsum)" \
     "[('skip', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
 rm -f "$DEC"
 session "Twin" n x '' q
 has "x on the twin inside the album screen does not hide the keeper from it" "$out" \
-    "\[Enter = 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact\]"
+    "suggest 1 - match to edition 1: edition ${TWNR:0:8} takes all 3 files, 3 of them exact"
 has "and again only the bare twin is decided" "$out" "\(1 of its rows are decided already; these are the rest\)"
 eq "so the skip is the bare twin and the pin has all three" "$(dsum)" \
     "[('skip', '', [$tw_topic], None), ('pin', '102', [$(nrows "artist = 'Twin Band'")], None)]"
@@ -2610,7 +2646,7 @@ eq "and one for the carried release MusicBrainz could not be asked for" \
 lost=$(nrows "artist = 'Lost Band'")
 session "Lost Band" '' q
 has "after a search that found nothing, k is suggested and says what is known" "$out" \
-    "\[Enter = k: the MusicBrainz search found no edition\]"
+    "suggest k - keep as it is: the MusicBrainz search found no edition"
 eq "Enter keeps the album as it is" "$(dsum)" "[('keep', '', [$lost], None)]"
 rm -f "$DEC"
 cp "$CJ" "$T/candidates.keep"
@@ -2645,7 +2681,7 @@ eq "the pin is one number away" "$(dsum)" "[('pin', '301', [$(nrows "artist = 'F
 rm -f "$DEC"
 session "Near Band" '' q
 has "lengths 4 s off (a digital release) are still suggested, with how many are exact" "$out" \
-    "\[Enter = 1: edition ${NEARR:0:8} takes all 3 files, 0 of them exact\]"
+    "suggest 1 - match to edition 1: edition ${NEARR:0:8} takes all 3 files, 0 of them exact"
 rm -f "$DEC"
 
 # ---- a release in several album rows that also sits on a second edition: folded only when that
@@ -2654,7 +2690,7 @@ session "Rv Band" '' q
 has "a second edition whose row is reviewed is not on the album screen: the release is a plain merge" "$out" \
     "\[1/1\] scattered  Rv Band - Rv Album \(2 album rows\)"
 lacks_text "so it is not folded" "$out" "decided on the album screen"
-has "Enter is m" "$out" "\[Enter = m: one edition holds all 3 tracks, in 2 album rows\]"
+has "Enter is m" "$out" "suggest m - merge into one album: one edition holds all 3 tracks, in 2 album rows"
 eq "Enter merges the release's rows" "$(dsum)" "[('merge', '303', [$(nrows "title in ('Rv One', 'Rv Two', 'Rv Three')")], None)]"
 has "and nothing is left to review" "$out" "1 decision\(s\) saved this session, 0 left to review"
 rm -f "$DEC"
@@ -2678,21 +2714,21 @@ b_opus=$(q "select id from items where artist='Bounce Man - Topic'")
 session "Bounce Man" '' q
 has "the probable twin has a screen, the FLAC starred" "$out" "\[1/1\] twin       Bounce Man - Bounce Man \(2 rows, probable\)"
 has "the FLAC (the release's file) is the one that stays" "$out" "1\* +$b_flac +FLAC .* 17.00 s +ffffffff +/music/Bounce Man/Bounce Man.flac"
-has "the YouTube Opus shows its offset" "$out" "2 +$b_opus +Opus .* 19.00 s \(\+2.00 s\) +\(bare\) +/music/Bounce Man - Topic/"
+has "the YouTube Opus shows its offset" "$out" "2 +$b_opus +Opus .* 19.00 s \(\+2.00 s\) +no release tag +/music/Bounce Man - Topic/"
 has "the screen says what kind of twin it is" "$out" "probable twin: the same title, \+2 s: probably the same recording from another source"
 has "Enter is r, with the offset in its reason" "$out" \
-    "\[Enter = r: the same title, \+2 s: probably the same recording from another source\]"
+    "suggest r - move the others aside: the same title, \+2 s: probably the same recording from another source"
 eq "Enter quarantines the YouTube row, not the FLAC" "$(dsum)" "[('quarantine', '', [$b_opus], None)]"
 rm -f "$DEC"
 session "Negative Man" '' q
 has "a copy shorter than the keeper shows a negative offset" "$out" "2 +[0-9]+ +Opus .* 17.00 s \(-2.00 s\)"
-has "and the reason says so" "$out" "\[Enter = r: the same title, -2 s: probably"
+has "and the reason says so" "$out" "suggest r - move the others aside: the same title, -2 s: probably"
 eq "Enter still quarantines the YouTube row" "$(dsum)" \
     "[('quarantine', '', [$(q "select id from items where artist='Negative Man - Topic'")], None)]"
 rm -f "$DEC"
 session "Fractional Man" '' q
 has "a fractional gap shows hundredths" "$out" "2 +[0-9]+ +Opus .* 187.40 s \(\+2.40 s\)"
-has "and the reason rounds it" "$out" "\[Enter = r: the same title, \+2 s: probably"
+has "and the reason rounds it" "$out" "suggest r - move the others aside: the same title, \+2 s: probably"
 rm -f "$DEC"
 session "Bounce Man" 2 q
 eq "a number keeps that row instead: the FLAC goes" "$(dsum)" "[('quarantine', '', [$b_flac], None)]"
@@ -2721,9 +2757,23 @@ eq "one 30 s off is listed as neither" \
 session "Loose Band" n '' q
 has "the exact copy keeps its copy screen" "$out" "copy       Loose Band - Same Song"
 has "the other three are one loose screen, not copies" "$out" "loose      /music/Loose Band - \(no album tag\) \(3 files not in the library\)"
-has "it shows the other cut against its row" "$out" "another cut of row [0-9]+ \(\+4\.0 s\)"
-has "Enter on it registers: nothing is quarantined" "$out" "\[Enter = b: they are not copies, so nothing is quarantined"
-eq "the decision is one register of the three files" \
+has "it says what the screen is about" "$out" "These files are not in your library yet\."
+has "it shows the other cut against its row, in words" "$out" \
+    "looks like another cut of a track you have: row [0-9]+ Same Song, 4\.0 s longer"
+lacks_text "and does not claim that none of them looks like a library track" "$out" "None of them matches"
+has "with a file that looks like another cut there is no Enter default" "$out" "no suggestion: one file looks like another cut"
+lacks_text "so the prompt offers none" "$(printf '%s\n' "$out" | sed -n '/^\[2\/2\]/,$p')" "Enter = b"
+has "and Enter asks again" "$out" "no suggestion for this screen"
+eq "which saved nothing" "$(cat "$DEC" 2> /dev/null)" ""
+lacks_text "output that is not a terminal has no escape bytes" "$out" $'\033'
+session "Loose Band" n r q
+has "r says what it saved, and that nothing moves yet" "$out" "saved: 3 file\(s\) go aside \(nothing moves until the apply\)"
+eq "r saves a quarantine of the three files, none of them with a row" \
+    "$(ds4 "[(d['action'], sorted(t['path'].rsplit('/', 1)[1] for t in d['targets']), {t['id'] for t in d['targets']}) for d in ds]")" \
+    "[('quarantine', ['Never Had.opus', 'Same Song.1.opus', 'Same Song.2.opus'], {None})]"
+rm -f "$DEC"
+session "Loose Band" n b q
+eq "b is one register of the three files" \
     "$(ds4 "[(d['action'], sorted(t['path'].rsplit('/', 1)[1] for t in d['targets'])) for d in ds]")" \
     "[('register', ['Never Had.opus', 'Same Song.1.opus', 'Same Song.2.opus'])]"
 ms --apply
@@ -2731,6 +2781,15 @@ has "the apply registers them" "$OUT" "applied: 3 file\(s\) registered"
 eq "so the library has four rows" "$(q "select count(*) from items")" 4
 ms --undo "$(basename "$(ls "$REVIEWD"/apply-log/*.jsonl)")"
 eq "and undo takes the rows away again" "$(q "select count(*) from items")" 1
+rm -f "$DEC"
+# a loose file that looks like nothing in the library: Enter adds it, with the reason
+tone "Fresh Band/Brand New.opus" "Fresh Band" "Brand New" "" "" 5
+ms --audit
+session "Fresh Band" '' q
+has "a loose screen with no other cut suggests adding the files" "$out" \
+    "suggest b - add to library: none matches a library track, so adding them duplicates nothing"
+has "and Enter says what it took" "$out" "Enter took b - add to library"
+eq "Enter saves the register" "$(ds4 "[d['action'] for d in ds]")" "['register']"
 rm -f "$DEC"
 
 # ---------------------------------------------------------------------------------
@@ -2758,7 +2817,8 @@ rm -f "$DEC"
 # numbered, no terminal: everything is the default
 out=$(printf '%s\n' T '' y q | media-import --library 'Batch Band' 2>&1)
 has "the prompt says what a selection can be" "$out" "which\? \[Enter = all, none, except 3,7-9, or 1,3-5\]"
-has "it asks once for all of it, with the size" "$out" "quarantine 5 file\(s\), [0-9.]+ MB, from 5 group\(s\)\? \[y/N\]"
+has "it asks once for all of it, with the size, and says nothing is deleted or moved yet" "$out" \
+    "save 5 decision\(s\): 5 file\(s\) go aside \([0-9.]+ MB\), from 5 group\(s\)\? Nothing is deleted and nothing moves until the apply\. \[y/N\]"
 eq "and saves one quarantine decision per group" "$(ds4 "len(ds), sorted({d['action'] for d in ds})")" "5 ['quarantine']"
 eq "each naming the bare '- Topic' copy only" \
     "$(ds4 "sorted(t['id'] for d in ds for t in d['targets'])" | tr -d '[] ')" "$(q "select group_concat(id) from (select id from items where artist = 'Batch Band - Topic' order by id)" | tr -d ' ')"
@@ -2802,6 +2862,28 @@ rm -f "$DEC"
 printf 'x' >> "$LIBD/music/Batch Band - Topic/Song 1.opus"
 out=$(printf '%s\n' T '' q | media-import --library 'Batch Band' 2>&1)
 lacks_text "a file that changed since the audit is left out of the list" "$out" "  5  video"
+
+# T over copies lists every group: the loose file that wins is saved as a replace, the other as a quarantine
+p4_reset
+tone "Cp Band/Reg/01 Cp One.opus" "Cp Band" "Cp One"
+tone_flac "Cp Band/Reg/02 Cp Two.flac" "Cp Band" "Cp Two"
+beet -c /config/adopt.yaml import -s /music/Cp\ Band/Reg > /dev/null 2>&1
+tone_flac "Cp Band/Loose/Cp One.flac" "Cp Band" "Cp One"
+tone "Cp Band/Loose/Cp Two.opus" "Cp Band" "Cp Two"
+cp_one=$(q "select id from items where title='Cp One'")
+ms --audit
+eq "fixture: two loose files, each a copy of a registered track" "$(jq4 "sorted(len(f['copy_of']) for f in d['unregistered'])")" "[1, 1]"
+out=$(printf '%s\n' T '' y q | media-import --library 'Cp Band' 2>&1)
+has "T lists a copy the loose file wins, with the criterion" "$out" \
+    "keep .*Loose/Cp One.flac \(new\) +\| drop .*Reg/01 Cp One.opus +\| lossless"
+has "and one the library file wins, with the criterion" "$out" \
+    "keep .*Reg/02 Cp Two.flac +\| drop .*Loose/Cp Two.opus \(new\) +\| lossless"
+has "the question says what it saves, and that nothing is deleted or moved yet" "$out" \
+    "save 2 decision\(s\): 2 file\(s\) go aside \([0-9.]+ MB\), 1 new file\(s\) take their place, from 2 group\(s\)\? Nothing is deleted and nothing moves until the apply\. \[y/N\]"
+eq "a group the loose file wins is a replace (loose file, then the row); the other a quarantine of the loose file" \
+    "$(ds4 "[(d['action'], [t['id'] for t in d['targets']]) for d in ds]")" \
+    "[('replace', [None, $cp_one]), ('quarantine', [None])]"
+rm -f "$DEC"
 
 # ---------------------------------------------------------------------------------
 section "4b: replay of the first session"
@@ -2925,15 +3007,15 @@ lacks_text "no Enter met a screen without a suggestion" "$out" "no suggestion fo
 has "Regional at Best-style: the scattered release on two editions is left to its album screen" "$out" \
     "Rp Regional: also on Rp Regional \(${RGY:0:8}\); decided on the album screen"
 has "wiv: the copy of the release's length is the one Enter keeps" "$out" \
-    "\[Enter = 1: its length 122.09 s is the closest to the release's 122.09 s\]"
+    "suggest 1 - keep copy 1: its length 122.09 s is the closest to the release's 122.09 s"
 has "Clancy: the plain edition is suggested over the Atmos mix" "$out" \
-    "\[Enter = 1: edition ${RCA:0:8} takes all 3 files, 3 of them exact\]"
+    "suggest 1 - match to edition 1: edition ${RCA:0:8} takes all 3 files, 3 of them exact"
 has "the CD edition with exact lengths is the one suggested over the digital one" "$out" \
-    "\[Enter = 1: edition ${RKC:0:8} takes all 3 files, 3 of them exact\]"
-has "Vessel: the FLAC is the twin kept, the Opus tied with it goes" "$out" "1\* +[0-9]+ +FLAC .*\(bare\) +/music/Rp Vessel/Flac/"
-has "the Nomatch album is kept as it is, by Enter" "$out" "\[Enter = k: the MusicBrainz search found no edition\]"
+    "suggest 1 - match to edition 1: edition ${RKC:0:8} takes all 3 files, 3 of them exact"
+has "Vessel: the FLAC is the twin kept, the Opus tied with it goes" "$out" "1\* +[0-9]+ +FLAC .*no release tag +/music/Rp Vessel/Flac/"
+has "the Nomatch album is kept as it is, by Enter" "$out" "suggest k - keep as it is: the MusicBrainz search found no edition"
 has "English files against the Japanese release: the pairs by length, then the question" "$out" \
-    "pair these 3 file\(s\) and pin edition 1\? \[y/N\] saved: pin 3 file\(s\) to 私を喰べたい、ひとでなし"
+    "pair these 3 file\(s\) and match them to edition 1\? \[y/N\] saved: 3 file\(s\) will be matched to 私を喰べたい、ひとでなし"
 has "the session ends with nothing left to review" "$out" "14 decision\(s\) saved this session, 0 left to review"
 has "and says what is queued and what to run" "$out" \
     "14 decision\(s\) saved, 31 file\(s\) queued \(quarantine 6, merge 3, pin 19, keep 3\); next: media-sync --apply --dry-run"
@@ -3023,6 +3105,131 @@ kill "$STUB4" 2> /dev/null
 wait "$STUB4" 2> /dev/null
 rm -rf "$P4D"
 build_host ''
+
+# ---------------------------------------------------------------------------------
+section "removed: what the quarantine holds, by audio"
+# ---------------------------------------------------------------------------------
+# song <path under $LIBD> <artist> <title> <seed> [seed of a second song]: 20 s of seeded chords
+# (opus, tagged), the second song's first half after the first's when one is given. A sine tone
+# will not do here: it fingerprints as one frame repeated, and two different tones score 0.84.
+song() {
+    "$PY" - "$T/song.wav" "$4" "${5:-}" << 'PYEOF2'
+import math, random, struct, sys, wave
+out, seed, other = sys.argv[1:4]
+def chords(seed, seconds, rate=22050):
+    rng, frames, t = random.Random(int(seed)), [], 0.0
+    while t < seconds:
+        fs = [55 * 2 ** (rng.randrange(0, 72) / 12) for _ in range(3)]
+        n = int(rate * rng.uniform(0.1, 0.3))
+        for i in range(n):
+            env = min(1, i / 200, (n - i) / 200)
+            frames.append(0.17 * env * sum(math.sin(2 * math.pi * f * i / rate) + 0.4 * math.sin(4 * math.pi * f * i / rate) for f in fs))
+        t += n / rate
+    return frames
+audio = chords(seed, 20) if not other else chords(seed, 10) + chords(other, 20)[:10 * 22050]
+with wave.open(out, "wb") as w:
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+    w.writeframes(b"".join(struct.pack("<h", int(max(-1, min(1, x)) * 32000)) for x in audio))
+PYEOF2
+    mkdir -p "$(dirname "$LIBD/$1")"
+    ffmpeg -loglevel error -y -i "$T/song.wav" -c:a libopus -b:a 24k -metadata "artist=$2" -metadata "title=$3" "$LIBD/$1"
+}
+# decide, then give the line the note a real decision would carry
+decide_note() {  # <note> <decide arguments>
+    decide "${@:2}"
+    sed -i '$ s/"note": "engine-test"/"note": "'"$1"'"/' "$REVIEWD/decisions.jsonl"
+}
+removed_files() { (cd "$LIBD" && find removed -type f | LC_ALL=C sort); }
+# docker compose's own progress lines are not part of the report
+report_of() { printf '%s\n' "$OUT" | grep -v '^ \(Image\|Container\) '; }
+
+DAY=$(date -u +%Y%m%d)
+rm -rf "$LIBD/music" "$LIBD/beets/library.db" "$REVIEWD" "$LIBD/removed"
+mkdir -p "$LIBD/music" "$REVIEWD" "$LIBD/removed"
+song "music/Lib/Dupe One.opus" "Rm" "Dupe One" 1
+song "music/Lib/Dupe One Twin.opus" "Rm Twin" "Dupe One" 1
+song "music/Lib/Lost Keeper.opus" "Rm" "Lost Keeper" 3
+song "music/Lib/Lost Keeper Twin.opus" "Rm Twin" "Lost Keeper" 3
+song "music/Lib/Replaced Old.opus" "Rm" "Replaced Old" 4
+song "music/Lib/Hand Copy.opus" "Rm" "Hand Copy" 5
+song "music/Lib/Cut Song.opus" "Rm" "Cut Song" 6
+song "music/Lib/Radio Edit.opus" "Rm" "Radio Edit" 9
+# the same opening 12 s longer: what an extended mix is to its radio edit
+ffmpeg -loglevel error -y -i "$T/song.wav" -af apad=pad_dur=12 -c:a libopus -b:a 24k -metadata "artist=Rm" \
+    -metadata "title=Radio Edit" "$T/extended.opus"
+song "music/Solo Folder/Picked.opus" "Rm" "Picked" 2
+song "music/Loose/Replacement.opus" "Rm" "Replacement" 4
+beet -c /config/adopt.yaml import -s /music/Lib "/music/Solo Folder" > /dev/null 2>&1
+eq "fixture: nine rows, the replacement still loose" "$(q "select count(*) from items")" 9
+dupe_row=$(id_of "Dupe One" "Dupe One.opus")
+lost_row=$(id_of "Lost Keeper" "Lost Keeper.opus")
+decide_note "copy of row $dupe_row" quarantine "$(id_of "Dupe One" "Twin")"
+decide_note "duplicate of row $lost_row" quarantine "$(id_of "Lost Keeper" "Twin")"
+decide_note "pick remove" quarantine "$(id_of Picked Picked)"
+decide_note "replaces row $(id_of "Replaced Old" Old)" replace "Loose/Replacement.opus" "$(id_of "Replaced Old" Old)"
+ms --apply
+has "the apply moved four files aside" "$OUT" "4 of 4 decision\(s\) applied"
+# the keeper of a copy that was not a copy: its row goes, the file stays where it is
+beet remove -f "id:$lost_row" > /dev/null 2>&1
+eq "the lost keeper has no row now" "$(q "select count(*) from items where title='Lost Keeper'")" 0
+# moved by hand, with no log entry
+H="removed/20261001/music/Lib"
+mkdir -p "$LIBD/$H"
+cp "$LIBD/music/Lib/Hand Copy.opus" "$LIBD/$H/Hand Copy.opus"
+song "$H/Hand Other.opus" "Rm" "Hand Copy" 7
+song "$H/Cut Song.opus" "Rm" "Cut Song" 6 8
+cp "$T/extended.opus" "$LIBD/$H/Radio Edit.opus"
+before_files=$(removed_files)
+before_rows=$(q "select group_concat(id || cast(path as text)) from (select * from items order by id)")
+eq "fixture: eight audio files in the quarantine" "$(printf '%s\n' "$before_files" | wc -l)" 8
+
+ms --removed
+eq "--removed exits 0" "$RC" 0
+has "a copy whose keeper is still in the library: duplicate, keeper and score named" "$OUT" \
+    "^  duplicate +[0-9.]+ MB  /removed/$DAY/music/Lib/Dupe One Twin.opus  - \"copy of row $dupe_row\"  keeper /music/Lib/Dupe One.opus \((1\.00|0\.9[0-9])\)"
+has "a replaced row: the new file is the keeper, found by the apply log" "$OUT" \
+    "^  duplicate +[0-9.]+ MB  /removed/$DAY/music/Lib/Replaced Old.opus  - \"replaces row .*  keeper /music/Loose/Replacement.opus \((1\.00|0\.9[0-9])\)"
+has "a file moved by hand that is still in the library: duplicate" "$OUT" \
+    "^  duplicate +[0-9.]+ MB  /removed/20261001/music/Lib/Hand Copy.opus  - moved by hand  keeper /music/Lib/Hand Copy.opus \(1\.00\)"
+has "pick remove with no copy: removed on request" "$OUT" \
+    "^  removed on request +[0-9.]+ MB  /removed/$DAY/music/Solo Folder/Picked.opus  - pick remove; no copy in the library"
+has "a copy whose keeper row was removed: needs a look, and says why" "$OUT" \
+    "^  needs a look +[0-9.]+ MB  /removed/$DAY/music/Lib/Lost Keeper Twin.opus  - \"duplicate of row $lost_row\"; keeper row $lost_row is gone; no candidate in the library"
+has "different audio under the same title: needs a look, with the best score" "$OUT" \
+    "^  needs a look +[0-9.]+ MB  /removed/20261001/music/Lib/Hand Other.opus  - moved by hand; best match scores 0\.5[0-9]"
+has "half of the song and half of another: a different cut" "$OUT" \
+    "^  different cut +[0-9.]+ MB  /removed/20261001/music/Lib/Cut Song.opus  - moved by hand; the audio differs  keeper /music/Lib/Cut Song.opus \(0\.([67][0-9]|8[0-4])\)"
+has "the same opening but 12 s longer: a different cut, not a duplicate" "$OUT" \
+    "^  different cut +[0-9.]+ MB  /removed/20261001/music/Lib/Radio Edit.opus  - moved by hand; the same start, but the library file is 1[12] s shorter"
+has "the summary counts duplicates" "$OUT" "^removed: duplicate +3 file\(s\)"
+has "the summary counts removed on request" "$OUT" "^removed: removed on request +1 file\(s\)"
+has "the summary counts different cuts" "$OUT" "^removed: different cut +2 file\(s\)"
+has "the summary counts files to look at" "$OUT" "^removed: needs a look +2 file\(s\)"
+has "it says what a purge would free and that nothing changed" "$OUT" "^removed: 4 file\(s\) can go, freeing [0-9.]+ MB; nothing changed"
+eq "the report deleted nothing" "$(removed_files)" "$before_files"
+eq "and wrote nothing to the library" "$(q "select group_concat(id || cast(path as text)) from (select * from items order by id)")" "$before_rows"
+eq "it kept a fingerprint per file it compared" "$(find "$REVIEWD/fp-cache" -mindepth 1 -maxdepth 1 ! -name '.*' | wc -l)" 12
+first=$(report_of)
+ms --removed
+eq "a second run, from the cache, says the same" "$(report_of)" "$first"
+
+ms --removed --purge
+eq "--removed --purge exits 0" "$RC" 0
+has "purge prints each file it deletes" "$OUT" "^removed: deleted /removed/$DAY/music/Lib/Dupe One Twin.opus"
+has "and says how many it deleted and that undo cannot bring them back" "$OUT" \
+    "^removed: deleted 4 file\(s\), freed [0-9.]+ MB; media-sync --undo can no longer restore them"
+eq "purge left exactly the files that need a look" "$(removed_files)" "$(printf '%s\n' \
+    "removed/$DAY/music/Lib/Lost Keeper Twin.opus" "removed/20261001/music/Lib/Cut Song.opus" \
+    "removed/20261001/music/Lib/Hand Other.opus" "removed/20261001/music/Lib/Radio Edit.opus" | LC_ALL=C sort)"
+eq "an emptied folder is gone" "$([ -d "$LIBD/removed/$DAY/music/Solo Folder" ] && echo there || echo gone)" gone
+eq "the library keeper files are all still there" "$(find "$LIBD/music/Lib" -mindepth 1 -maxdepth 1 ! -name '.*' | wc -l) $(find "$LIBD/music/Loose" -mindepth 1 -maxdepth 1 ! -name '.*' | wc -l)" "5 1"
+eq "purge wrote nothing to the library" "$(q "select group_concat(id || cast(path as text)) from (select * from items order by id)")" "$before_rows"
+ms --removed
+has "a run after the purge lists only what is left" "$OUT" "^removed: duplicate +0 file\(s\)"
+ms --removed foo; eq "--removed takes no argument" "$RC" 2
+ms --audit --purge; eq "--purge belongs to --removed" "$RC" 2
+ms --removed --force; eq "--removed takes no --force" "$RC" 2
+clear_logs
 
 # ---------------------------------------------------------------------------------
 section "media-import under a terminal"

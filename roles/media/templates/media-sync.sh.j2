@@ -39,6 +39,8 @@
 #                                     batch (the weekly apply, from cron); needs a
 #                                     fresh restic backup
 #   media-sync --undo <apply log>     take an apply back (state/review/apply-log/)
+#   media-sync --removed [--purge]    check removed/ against the library by audio and
+#                                     list what is safe to delete; --purge deletes it
 #   media-sync --plan                 show what --maintenance would face; changes nothing
 #   media-sync --maintenance [--from <1-8>]
 #                                     the one-time routine for an existing library,
@@ -72,13 +74,14 @@ MODE="${1:-sync}"
 # After the mode: a directory (or, for --upgrade, a beets query), --id <release>
 # for the two release modes, --from <step> for --maintenance.
 [ "$#" -eq 0 ] || shift
-DIR="" ALBUM_ID="" FROM=1 DRY=0 FORCE=0 ARGS=()
-# FROM is read by media-maintenance, DRY by --complete, --pin and --apply.
+DIR="" ALBUM_ID="" FROM=1 DRY=0 FORCE=0 PURGE=0 ARGS=()
+# FROM is read by media-maintenance, DRY by --complete, --pin and --apply, PURGE by --removed.
 # shellcheck disable=SC2034
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run) DRY=1; shift ;;
         --force) FORCE=1; shift ;;
+        --purge) PURGE=1; shift ;;
         --id | --from)
             [ "$#" -ge 2 ] || { echo "media-sync $1 needs a value" >&2; exit 2; }
             if [ "$1" = --id ]; then ALBUM_ID="$2"; else FROM="$2"; fi
@@ -93,6 +96,7 @@ if [ -n "$ALBUM_ID" ]; then
     [[ "$ALBUM_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
         { echo "--id wants a MusicBrainz release id (a UUID), got: $ALBUM_ID" >&2; exit 2; }
 fi
+[ "$PURGE" = 0 ] || [ "$MODE" = --removed ] || { echo "--purge only applies to --removed" >&2; exit 2; }
 case "$MODE" in
     --pin)
         [ -n "$DIR" ] || { echo "usage: media-sync --pin '<beets query>' --id <release> [--dry-run]" >&2; exit 2; }
@@ -389,6 +393,21 @@ case "$MODE" in
             notify "failed" "Exit $rc: $(printf '%s\n' "$result" | tail -1). See $LIB/logs/media-sync.log." high rotating_light,error
         fi
         exit "$rc" ;;
+    --removed)
+        # Read-only unless --purge (see media_removed.py): it fingerprints every audio
+        # file in removed/, so the first run over a big quarantine takes a while. --purge
+        # asks for nothing more than itself: the report is the review, and every file it
+        # deletes is printed. Under the lock so the library holds still while read.
+        if [ -n "$DIR" ] || [ "$DRY" = 1 ] || [ "$FORCE" = 1 ]; then
+            echo "media-sync --removed takes only --purge" >&2
+            exit 2
+        fi
+        purge_args=()
+        [ "$PURGE" = 0 ] || purge_args+=(--purge)
+        result="$(check_removed "${purge_args[@]}")"
+        echo "$result"
+        notify "done" "$(printf '%s\n' "$result" | tail -1)"
+        exit 0 ;;
     --settle)
         # See settle_library.
         echo "checkpoint: $(checkpoint)"
@@ -439,6 +458,7 @@ case "$MODE" in
         echo "usage: media-sync [mode]"
         echo "  modes: --retag --upgrade [all|<query>] --albums [<dir>] [--id <release>] --keep [<dir>]"
         echo "         --adopt --regroup --audit --apply [--dry-run] [--force] --undo <log> --settle"
+        echo "         --removed [--purge]"
         echo "         --pin '<query>' --id <release> [--dry-run] --complete [--dry-run] --backfill"
         echo "         --plan --maintenance [--from <1-8>] --interactive [<dir>] --review [<dir>]"
         echo "         --singles [<dir>] --release [<dir>] [--id <release>]"

@@ -438,6 +438,37 @@ def drop_emptied_albums(lib, album_ids, before_remove=lambda album: None):
     return removed
 
 
+# ------------------------------------------------------------------- audio
+
+# Chromaprint frames are about 0.124 s: a copy cut a little differently starts up to
+# ~10 s later. Two fingerprints are compared only where at least two thirds of the
+# shorter one overlaps (and FINGERPRINT_LEAST frames, ~5 s), or a sliver of a long
+# file would match a short one perfectly.
+FINGERPRINT_SPAN = 80
+FINGERPRINT_LEAST = 40
+
+
+def fingerprint_match(a, b, span=FINGERPRINT_SPAN, least=FINGERPRINT_LEAST):
+    """(similarity, offset) of two raw Chromaprint fingerprints (lists of 32-bit ints).
+
+    The best alignment with one shifted against the other by up to `span` frames: similarity is
+    1 minus the share of differing bits over the overlap, offset is the shift with a[offset + i]
+    lined up with b[i]. Unrelated audio scores about 0.55-0.6, the same audio in another codec
+    0.85-1.0. (0.0, 0) when no shift leaves enough overlap."""
+    need = max(least, 2 * min(len(a), len(b)) // 3)
+    best = (0.0, 0)
+    for offset in range(-span, span + 1):
+        x, y = (a[offset:], b) if offset >= 0 else (a, b[-offset:])
+        overlap = min(len(x), len(y))
+        if overlap < need:
+            continue
+        differing = sum((p ^ q).bit_count() for p, q in zip(x, y))
+        similarity = 1 - differing / (32 * overlap)
+        if similarity > best[0]:
+            best = (similarity, offset)
+    return best
+
+
 # ------------------------------------------------------------ rows, as records
 
 def to_json(value):
@@ -711,11 +742,11 @@ def apply_pin(lib, info, album, mapping, moving=lambda item, dest: None, created
     return created
 
 
-def write_json(path, data):
+def write_json(path, data, indent=1):
     """Write JSON so a reader never sees half a file: a temporary file, then rename."""
     tmp = "%s.tmp" % path
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
+        json.dump(data, f, ensure_ascii=False, indent=indent)
         f.write("\n")
     os.replace(tmp, path)
 

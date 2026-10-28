@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# One-time migration from the legacy music-stack Pi to a rebuilt one.
-# Run on the Pi as the stack user (uses sudo). The SSD survives the SD wipe.
+# Export and restore the beets DB, Navidrome DB, secrets and download archive
+# between two host layouts. Run on the Pi as the stack user (uses sudo); the SSD
+# survives an SD wipe.
 #
-#   1. old Pi:   migrate-legacy.sh export  (writes /mnt/data/migration; copy it off-Pi too)
-#   2. fresh Pi: deploy with -e common_start_stack=false so Navidrome never starts,
-#                then migrate-legacy.sh restore
+#   1. old layout: migrate-legacy.sh export  (writes /mnt/data/migration; copy it off-Pi too)
+#   2. new layout: deploy with -e common_start_stack=false so Navidrome never starts,
+#                  then migrate-legacy.sh restore
 #   3. redeploy normally
 #
 # Env overrides: LIB (/mnt/data), OLD_STACK (~/music-stack or ~/stack), STACK (~/stack).
 set -euo pipefail
 
 LIB="${LIB:-/mnt/data}"
-# The legacy host kept its stack home at ~/music-stack; the role's layout uses
-# ~/stack. Pick whichever exists, so `export` works on either.
+# The old layout keeps its stack home at ~/music-stack, the role's at ~/stack;
+# pick whichever exists, so `export` works on either.
 OLD_STACK="${OLD_STACK:-$([ -d "$HOME/music-stack" ] && echo "$HOME/music-stack" || echo "$HOME/stack")}"
 STACK="${STACK:-$HOME/stack}"
 MIG="$LIB/migration"
@@ -23,9 +24,8 @@ export_legacy() {
     # with our own ownership so the copies below can be written without sudo.
     sudo install -d -o "$(id -un)" -g "$(id -gn)" "$MIG"
 
-    # The two hosts have different layouts: the legacy one kept beets under the
-    # stack home and the download archive at the data root; the role's layout
-    # keeps them in the library ($LIB/beets, $LIB/state). Accept either.
+    # The old layout keeps beets under the stack home and the download archive at
+    # the data root; the role's layout keeps them in $LIB/beets and $LIB/state.
     local beet_db="" archive="" path
     for path in "$OLD_STACK/config/beets/library.db" "$LIB/beets/library.db"; do
         if [ -f "$path" ]; then beet_db="$path"; break; fi
@@ -48,7 +48,7 @@ export_legacy() {
         echo "warning: no youtube-archive.txt found - the next sync would re-download everything" >&2
     fi
 
-    # The role persists the secret as a file; the legacy host only had it in .env.
+    # The role persists the secret as a file; the old layout only had it in .env.
     if [ -f "$OLD_STACK/.navidrome_jwt_secret" ]; then
         install -m 0600 "$OLD_STACK/.navidrome_jwt_secret" "$MIG/navidrome_jwt_secret"
     else
@@ -103,7 +103,7 @@ Restored. Next:
   1. Redeploy normally (without common_start_stack=false).
   2. ./scripts/media/validate-deploy.sh <host>, and check plays/stars/playlists in Navidrome.
   3. Optional: media-sync --adopt, then media-sync --backfill (lyrics + ReplayGain).
-  4. Once satisfied: sudo rm -rf $MIG (the nightly snapshot now covers this state).
+  4. Once satisfied: sudo rm -rf $MIG (the nightly snapshot covers this state).
 EOF
 }
 

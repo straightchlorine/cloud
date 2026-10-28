@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Check the disposable media host after media teardown; pairs with validate-deploy.sh.
 # Usage: ./scripts/media/validate-clean.sh [ansible-host-alias]
 set -euo pipefail
 

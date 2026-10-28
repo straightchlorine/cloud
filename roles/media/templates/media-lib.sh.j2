@@ -263,6 +263,12 @@ audit_library() {
         --downloads /downloads
 }
 
+# The quarantine (/removed) checked against the library, by audio (see
+# media_removed.py). Changes nothing unless given --purge.
+check_removed() {  # [--purge]
+    "${BEET_PY[@]}" "$TOOLS/media_removed.py" --review "$REVIEW" --removed /removed "$@"
+}
+
 # The saved review decisions, applied in one container (see media_apply.py). Lines
 # starting with @ are for album_art; the rest is the report. Exit 3: refused, over
 # the per-run file limit.

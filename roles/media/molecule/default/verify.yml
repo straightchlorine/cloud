@@ -33,6 +33,7 @@
         - "{{ media_library_path }}/beets/tools/media_review.py"
         - "{{ media_home }}/scripts/pick.sh"
         - "{{ media_home }}/scripts/pick-core.sh"
+        - "{{ media_library_path }}/beets/tools/media_removed.py"
       register: media_files
 
     - name: Parse the deployed files
@@ -60,6 +61,7 @@
         media_review_py: "{{ media_files.results[20].content | b64decode }}"
         pick_wrapper: "{{ media_files.results[21].content | b64decode }}"
         pick_core: "{{ media_files.results[22].content | b64decode }}"
+        media_removed_py: "{{ media_files.results[23].content | b64decode }}"
 
     - name: Stat the deployed files
       ansible.builtin.stat:
@@ -338,6 +340,11 @@
           - "'def cmd_undo(' in media_apply_py"
           - "'os.fsync' in media_apply_py"
           - "'import media_common as mc' in media_apply_py"
+          # the quarantine check: read-only unless --purge, which only deletes the safe classes
+          - "'--removed)' in media_sync"
+          - "'$TOOLS/media_removed.py\"' in media_lib"
+          - "'SAFE = CLASSES[:2]' in media_removed_py"
+          - "'import media_common as mc' in media_removed_py"
           # pick on the host: the wrapper sets PICK_LOCAL and runs the same script the workstation uses
           - "'PICK_LOCAL=1' in pick_wrapper"
           - "'pick-core.sh' in pick_wrapper"

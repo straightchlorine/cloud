@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only probe of a media host's library, tags and pipeline state.
 
-Collects what the yt-dlp -> beets -> navidrome pipeline actually produced so
+Collects what the yt-dlp -> beets -> navidrome pipeline produced so
 the tagging/naming config can be tuned against real data. Writes nothing.
 
 Usage (from the repo root; the host needs python3 + ffprobe, both present):

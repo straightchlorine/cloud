@@ -5,18 +5,18 @@
 #
 #   pick album  <host> <query>      assign an album to the tracks the query matches
 #   pick fix    <host> [<query>]    the library review (media-import --library) over ssh
-#   pick remove <host> [<query>]    queue tracks for the quarantine (fzf multi-select)
-#   pick remove <host> --purge      empty the quarantine
+#   pick remove <host> [<query>]    queue tracks to be moved aside (fzf multi-select)
+#   pick remove <host> --purge      empty removed/ (the files moved aside)
 #
 # On the media host the `pick` command (a wrapper the media role installs) leaves the
 # host out and runs everything locally: pick remove [<query>], pick fix [<query>], ...
 #
 # Read-only until you confirm: album and track lists are fetched over ssh (or read
 # locally on the host), fzf runs where you are, and the only writes are the ones you
-# picked. `remove` saves a
-# quarantine decision: the next `media-sync --apply` (Sundays 04:00) moves the
-# files - logged, undoable - rather than deleting them; `music/` is a send-only
-# Syncthing share, so a delete here would reach the vault copy within seconds.
+# picked. `remove` saves a decision to move the files aside: the next weekly
+# `media-sync --apply` moves them (logged, undoable) rather than deleting them;
+# `music/` is a send-only Syncthing share, so a delete here would reach the vault
+# copy within seconds.
 #
 # Flags: --yes (skip the confirmation), --purge (empty the quarantine instead of
 # picking tracks). Env: LIB (remote library root, /mnt/data), REMOVED
@@ -30,7 +30,16 @@ FZF="${FZF:-fzf}"
 SSH="${SSH:-ssh}"
 
 die() { echo "pick: $*" >&2; exit 1; }
-usage() { sed -n '4,12p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() {
+    cat >&2 <<'EOF'
+pick album  <host> <query>      assign an album to the tracks the query matches
+pick fix    <host> [<query>]    the library review (media-import --library) over ssh
+pick remove <host> [<query>]    queue tracks to be moved aside (fzf multi-select)
+pick remove <host> --purge      empty removed/
+On the media host leave out <host>. Flags: --yes, --purge.
+EOF
+    exit 2
+}
 
 LOCAL="${PICK_LOCAL:-}"
 verb="${1:-}"
@@ -116,7 +125,7 @@ pick_album() {
     echo "will set album='$album' on $count track(s) matching: $query"
     confirm "apply?"
     beet modify -y "album=$album" "$query" >&2
-    echo "done: $count track(s) now carry album='$album'"
+    echo "done: $count track(s) have album='$album'"
 }
 
 # ---- remove: quarantine tracks (or --purge the quarantine) --------------------

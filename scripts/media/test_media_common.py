@@ -8,6 +8,7 @@ engine-test.sh runs this too. Exits non-zero and names each failing case.
 
 import json
 import pathlib
+import random
 import sys
 import tempfile
 import types
@@ -15,6 +16,7 @@ import types
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "roles/media/files/tools"))
 import media_apply
 import media_common as mc
+import media_removed
 import media_review
 
 LIVE = " (Live In Mexico City)"
@@ -147,6 +149,38 @@ check("suggest_copy: the best of several registered rows is compared",
 check("duplicates rank like copies", mc.best_copy([row(1), row(2, bitrate=950000)], {}).id, 2)
 
 
+def cp(id_, fmt="Opus", bitrate=128000, mb="", name="Song.opus", album_id=None):
+    return item(id=id_, format=fmt, bitrate=bitrate, mb_albumid=mb, path="/music/A/" + name, album_id=album_id)
+
+
+# a copy's release tag, then the bitrate in 16 kbit/s steps, then the file name
+check("copy_rank: a tagged copy beats an untagged one of the same format with a little more bitrate",
+      mc.best_copy([cp(1, bitrate=130000), cp(2, bitrate=128000, mb="r")], {}).id, 2)
+check("copy_rank: a FLAC on a release beats a bare FLAC with 4k more",
+      mc.best_copy([cp(1, "FLAC", 904000), cp(2, "FLAC", 900000, mb="r")], {}).id, 2)
+check("copy_rank: a bare WAV beats a tagged Opus (lossless first)",
+      mc.best_copy([cp(1, "WAV", 1411000), cp(2, "Opus", 128000, mb="r")], {}).id, 1)
+check("copy_rank: 130k against 131k is a tie on bitrate, so the file without the .1 suffix wins",
+      mc.best_copy([cp(1, bitrate=130000), cp(2, bitrate=131000, name="Song.1.opus")], {}).id, 1)
+check("copy_rank: the original download beats its .1 copy although the copy is the older row",
+      mc.best_copy([cp(1, name="Song.1.opus"), cp(2)], {}).id, 2)
+check("copy_rank: bitrate steps are floors of the kbit/s shown, so equal shown bitrates never differ",
+      mc.copy_rank(cp(1, bitrate=136000), {}) == mc.copy_rank(cp(1, bitrate=136999), {}), True)
+check("copy_rank: a real bitrate step decides after the release tag",
+      mc.best_copy([cp(1, bitrate=128000), cp(2, bitrate=96000)], {}).id, 1)
+check("copy_criterion: names what decided",
+      [mc.copy_criterion(cp(1, **a), cp(2, **b), {}) for a, b in (
+          (dict(fmt="FLAC"), {}), (dict(mb="r"), {}), (dict(bitrate=160000), {}), ({}, dict(name="Song.1.opus")),
+          ({}, {}))],
+      ["format", "release", "bitrate", "name", "age"])
+check("copy_criterion: the fuller album row",
+      mc.copy_criterion(cp(1, album_id=1), cp(2, album_id=2), {1: 5, 2: 1}), "album")
+check("suggest_copy: a loose file with a release beats a registered bare one of the same format",
+      mc.suggest_copy(cp(None, mb="r", name="New.opus"), [cp(7)], {}), "loose")
+check("suggest_copy: a loose original beats a registered .1 copy",
+      mc.suggest_copy(cp(None, name="Song.opus"), [cp(7, name="Song.1.opus")], {}), "loose")
+
+
 # ---- twins: the same recording on two rows, found over the whole library
 def tw(id_, artist="Akane", title="Color Me Blue", length=190.65, url="", fmt="Opus", mb="", bitrate=128000,
        path="", album_id=None, **kw):
@@ -266,8 +300,8 @@ check("twin keeper: a bare '- Topic' path loses a tie even to a newer row",
 check("twin keeper: then the older row", keeper(tw(5), tw(3), tw(4)), 3)
 check("twin keeper: bytes paths work (beets items)",
       keeper(tw(1, path=b"/music/Akane - Topic/x.opus"), tw(2, path=b"/music/Akane/x.opus")), 2)
-check("copy_rank without twin ignores the release id and the folder (the duplicates' ranking is unchanged)",
-      (mc.copy_rank(tw(1, mb="r"), {}) == mc.copy_rank(tw(1), {}),
+check("copy_rank without twin ignores the folder; the release id counts (twins rank on it first)",
+      (mc.copy_rank(tw(1, mb="r"), {}) > mc.copy_rank(tw(1), {}),
        mc.best_copy([tw(3, path="/music/A - Topic/x.opus"), tw(4)], {}).id), (True, 3))
 
 check("twins: a reviewed track is still a twin, and may be the keeper",
@@ -571,13 +605,79 @@ check("official_length: a release MusicBrainz does not have", mr.official_length
 check("official_length: a track it does not have, a bare row", (mr.official_length(FakeMB(official), "r", "zz"),
                                                               mr.official_length(FakeMB(official), "", "t1")), (None, None))
 sz = {1: 4}
-check("why_keep: format, then bitrate, then the album row, then age", [mr.why_keep(*a, sz) for a in (
-    (item(id=1, format="FLAC", bitrate=1, album_id=1), [item(id=2, format="Opus", bitrate=9, album_id=1)]),
-    (item(id=1, format="Opus", bitrate=96000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=1)]),
-    (item(id=1, format="Opus", bitrate=64000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=2)]),
-    (item(id=1, format="Opus", bitrate=64000, album_id=1), [item(id=2, format="Opus", bitrate=64000, album_id=1)]))],
-    ["the better format (FLAC)", "the higher bitrate (96k)", "it sits in the fuller album row", "the older row"])
+def other(**kw):
+    return item(**{"id": 2, "format": "Opus", "bitrate": 64000, "album_id": 1, "path": "/music/A/Song.opus",
+                   "mb_albumid": "", **kw})
 
+
+check("why_keep: names the criterion that decided, with the values the screen shows", [mr.why_keep(*a, sz) for a in (
+    (item(id=1, format="FLAC", bitrate=1, album_id=1), [other(bitrate=9)]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1, mb_albumid="5d8b440c-0000"), [other()]),
+    (item(id=1, format="Opus", bitrate=96000, album_id=1), [other(bitrate=64000)]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [other(album_id=2)]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [other(path="/music/A/Song.1.opus")]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [other()]),
+    (item(id=1, format="Opus", bitrate=64000, album_id=1), [other(id=None)]))],
+    ["it is lossless (FLAC), the other is Opus", "it has release 5d8b440c, the other has no release tag",
+     "the higher bitrate (96k against 64k)", "its album row holds more of the release (4 tracks against 0)",
+     "same audio and tags; keeps the file without the .1 suffix", "same audio and tags; keeps the older row",
+     "same audio and tags; keeps the one already in the library"])
+check("why_keep: never claims a bitrate edge the screen does not show",
+      [mr.why_keep(item(id=1, format="Opus", bitrate=b, album_id=1, path="/m/Song.opus", mb_albumid=""),
+                   [other(path="/m/Song.1.opus", bitrate=131000)], sz)
+       for b in (130000, 130500)], ["same audio and tags; keeps the file without the .1 suffix"] * 2)
+check("paint: plain text unless colour is on", (mr.Session(None, None, False, colour=False).paint("red", "x"),
+                                                         mr.Session(None, None, False, colour=True).paint(
+                                                             "bold+green", "x")), ("x", "\033[1;32mx\033[0m"))
+
+
+# ---- the T list: lines, detail text and fzf options
+keeper = item(id=1, format="Opus", bitrate=96500, album_id=1, path="/music/A/Song.opus", length=201.4,
+              mb_albumid="5d8b440c-0000")
+loser = item(id=None, format="Opus", bitrate=64000, album_id=None, path="/downloads/Song.opus", length=201.0,
+             mb_albumid="")
+for on in (False, True):
+    paint = mr.Session(None, None, False, colour=on).paint
+    block = mr.batch_detail(paint, keeper, [loser], sz, mr.why_keep(keeper, [loser], sz))
+    line = mr.batch_line(paint, "copy", "A/Song.opus (new)", "Song.opus", "has a release tag")
+    if not on:
+        check("T list: colour off gives no ESC bytes in lines or detail", "\033" in block + line, False)
+    else:
+        check("T list: colour on wraps keep and drop in SGR", ("\033[32mkeep A/Song" in line,
+              "\033[31mdrop Song" in line, "\033[32mkeep\033[0m" in block, "\033[31mmove aside\033[0m" in block),
+              (True, True, True, True))
+check("T list: the line reads the same without colour", mr.batch_line(
+    mr.Session(None, None, False, colour=False).paint, "copy", "A", "B", "lossless"), "copy      keep A | drop B | lossless")
+block = mr.batch_detail(mr.Session(None, None, False, colour=False).paint, keeper, [loser], sz,
+                        mr.why_keep(keeper, [loser], sz))
+check("T list: the detail names both files, keep and move aside, release, why, the closing line",
+      [t in block for t in ("/music/A/Song.opus", "/downloads/Song.opus", "keep  in library (row 1)",
+                            "move aside  new file", "96k", "3:21", "release 5d8b440c", "no release tag",
+                            "album row: 4 tracks", "why: it has release 5d8b440c, the other has no release tag",
+                            "Nothing is deleted. Files move aside at the next apply; media-sync --undo takes it back.")],
+      [True] * 11)
+args = mr.fzf_multi_args("copy> ", "/tmp/x y", False)
+check("fzf_multi_args: preview of the index file, no --ansi without colour, the bindings",
+      ("--preview" in args, "cat '/tmp/x y'/{1}" in args, "--ansi" in args, "--multi" in args,
+       "start:select-all,ctrl-a:select-all,ctrl-d:deselect-all" in args),
+      (True, True, False, True, True))
+check("fzf_multi_args: --ansi with colour", "--ansi" in mr.fzf_multi_args("p", "/t", True), True)
+
+
+class Tty:
+    def __init__(self, tty):
+        self.tty = tty
+
+    def isatty(self):
+        return self.tty
+
+
+check("colour_wanted: a terminal, NO_COLOR unset, TERM not dumb", [mr.colour_wanted(Tty(t), env) for t, env in (
+    (True, {"TERM": "xterm"}), (False, {"TERM": "xterm"}), (True, {"TERM": "xterm", "NO_COLOR": "1"}),
+    (True, {"TERM": "dumb"}), (True, {}))], [True, False, False, False, True])
+check("parse of answers: in_range and view_key", (mr.in_range("2", 3), mr.in_range("4", 3), mr.in_range("0", 3),
+                                                 mr.view_key("v2", 2), mr.view_key("o 3", 2), mr.view_key("x1", 2)),
+      (True, False, False, True, False, False))
 
 
 def suggest_for(editions, members, searched=True, failed=False):
@@ -695,6 +795,63 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         stub.terminate()
         stub.wait()
+
+# fingerprint_match: what media-sync --removed trusts to call two files the same audio
+rng = random.Random(7)
+fp_a = [rng.getrandbits(32) for _ in range(300)]
+fp_b = [rng.getrandbits(32) for _ in range(300)]
+check("fingerprint: identical arrays are 1.0 at offset 0", mc.fingerprint_match(fp_a, list(fp_a)), (1.0, 0))
+check("fingerprint: a copy starting 25 frames later is found", mc.fingerprint_match(fp_a, fp_a[25:]), (1.0, 25))
+check("fingerprint: and the other way round", mc.fingerprint_match(fp_a[25:], fp_a), (1.0, -25))
+noisy = [x ^ (1 << rng.randrange(32)) if rng.random() < 0.5 else x for x in fp_a]
+check("fingerprint: one bit in four flipped in half the frames is still ~0.98",
+      round(mc.fingerprint_match(fp_a, noisy)[0], 2), 0.98)
+unrelated = mc.fingerprint_match(fp_a, fp_b)[0]
+check("fingerprint: random arrays score about 0.5", 0.48 < unrelated < 0.56, True)
+check("fingerprint: half of one file is not the other", mc.fingerprint_match(fp_a, fp_a[:100] + fp_b[:200])[0] < 0.85, True)
+check("fingerprint: a shift past the span finds nothing better than chance",
+      mc.fingerprint_match(fp_a, fp_a[120:], span=80)[0] < 0.56, True)
+check("fingerprint: too little to compare is 0.0", mc.fingerprint_match(fp_a[:30], fp_a[:30]), (0.0, 0))
+check("fingerprint: empty is 0.0", mc.fingerprint_match([], fp_a), (0.0, 0))
+
+# media_removed.moved_aside: which apply-log quarantines the quarantine report may trust
+def log_line(**record):
+    return json.dumps(record) + "\n"
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    review = pathlib.Path(tmp)
+    (review / "apply-log").mkdir()
+    (review / "applied").mkdir()
+    quarantine = lambda seq, decision, path, **more: [  # noqa: E731
+        log_line(seq=seq, phase="before", decision=decision, kind="quarantine", path="/music/" + path,
+                 to="/removed/20261020/music/" + path, **more)]
+    done = lambda seq, **more: [log_line(seq=seq, phase="done", **more)]  # noqa: E731
+    lines = (
+        quarantine(1, 1, "a.opus", before={"id": 10, "title": "A"}) + done(1)
+        + [log_line(seq=2, phase="before", decision=2, kind="register", path="/music/new.opus")]
+        + done(2, after={"id": 99, "path": {"bytes": "/music/new.opus"}})
+        + quarantine(3, 2, "old.opus", before={"id": 11}) + done(3)
+        + quarantine(4, 3, "halfway.opus", before=None)
+        + quarantine(5, 4, "picked.opus", before={"id": 12}) + done(5))
+    (review / "apply-log" / "20261020T100000Z.jsonl").write_text("".join(lines))
+    (review / "applied" / "20261020T100000Z.jsonl").write_text("".join([
+        log_line(line=1, result="applied", decision={"action": "quarantine", "note": "copy of row 10 and row 55",
+                                                     "targets": []}),
+        log_line(line=2, result="applied", decision={"action": "replace", "note": "replaces row 11",
+                                                     "targets": [{"id": None, "path": "/music/new.opus"}]}),
+        log_line(line=4, result="applied", decision={"action": "quarantine", "note": "Pick remove", "targets": []})]))
+    (review / "apply-log" / "20261021T100000Z.undone.jsonl").write_text("".join(
+        quarantine(1, 1, "undone.opus", before=None) + done(1)))
+    got = media_removed.moved_aside(str(review))
+    stem = "/removed/20261020/music/"
+    check("moved_aside: a quarantine and the rows its note names, not its own row",
+          (got[stem + "a.opus"]["rows"], got[stem + "a.opus"]["pick"]), ([55], False))
+    check("moved_aside: a replace names the row the log registered and the file",
+          (got[stem + "old.opus"]["rows"], got[stem + "old.opus"]["paths"]), ([99], ["/music/new.opus"]))
+    check("moved_aside: a pick remove is recognised however it is capitalised", got[stem + "picked.opus"]["pick"], True)
+    check("moved_aside: a quarantine with no done line did not happen", stem + "halfway.opus" in got, False)
+    check("moved_aside: an undone log is left out", stem + "undone.opus" in got, False)
 
 print("media_common: %d failed of %d" % (failed, ran))
 sys.exit(1 if failed else 0)
