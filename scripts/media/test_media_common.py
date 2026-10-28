@@ -853,5 +853,35 @@ with tempfile.TemporaryDirectory() as tmp:
     check("moved_aside: a quarantine with no done line did not happen", stem + "halfway.opus" in got, False)
     check("moved_aside: an undone log is left out", stem + "undone.opus" in got, False)
 
+# ---- unescape_text: HTML-escaped letters of "Topic" uploads
+UNESCAPE = [
+    ("Dominika&#324ski O&#347rodek Liturgiczny - Topic", "Dominikański Ośrodek Liturgiczny - Topic"),
+    ("& #346wi & #281ty Józefie milcz & #261cy", "Święty Józefie milczący"),
+    ("Nowa Pie & #347 & #324", "Nowa Pieśń"),
+    ("Dominika&#324;ski", "Dominikański"),
+    ("Dominika&#x144ski", "Dominikański"),
+    ("Dominika&#X144;ski", "Dominikański"),
+    ("Pie & #x15b & #x144", "Pieśń"),
+    ("Don&#39t", "Don't"),
+    ("Tom &amp; Jerry", "Tom & Jerry"),
+    ("&amp;#324;ski", "ński"),
+    # an uppercase letter starts a word, so the space before it stays
+    ("Hello & #346wi", "Hello Świ"),
+    # left alone: plain ampersands, non-letters in the spaced form, names without a semicolon
+    ("Tom & Jerry", "Tom & Jerry"),
+    ("AC/DC & #1", "AC/DC & #1"),
+    ("Rock & #8211 Roll", "Rock & #8211 Roll"),
+    ("Hits & #", "Hits & #"),
+    ("AT&T", "AT&T"),
+    ("Q&notes", "Q&notes"),
+    ("&#99999999 and &#1114112", "&#99999999 and &#1114112"),
+    ("", ""),
+    (None, None),
+]
+for text, want in UNESCAPE:
+    check("unescape_text: %r" % (text,), mc.unescape_text(text), want)
+check("unescape_text: decoding twice changes nothing more",
+      mc.unescape_text(mc.unescape_text("Nowa Pie & #347 & #324")), "Nowa Pieśń")
+
 print("media_common: %d failed of %d" % (failed, ran))
 sys.exit(1 if failed else 0)

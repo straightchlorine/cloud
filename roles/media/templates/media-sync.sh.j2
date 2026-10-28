@@ -30,6 +30,11 @@
 #                                     MusicBrainz release, in one album row
 #   media-sync --complete [--dry-run] finish partly matched albums: give their
 #                                     remaining tracks the release the rest found
+#   media-sync --fix-text [--dry-run]
+#                                     decode HTML-escaped letters in titles, artists
+#                                     and albums (YouTube Music "Topic" uploads), in the
+#                                     tags and the folder names; the nightly run does it
+#                                     for what it imports
 #   media-sync --settle               stamp the library as older than the 4-week
 #                                     "recent" window (see the README); database only
 #   media-sync --audit                find what the release pass left half placed,
@@ -408,6 +413,17 @@ case "$MODE" in
         echo "$result"
         notify "done" "$(printf '%s\n' "$result" | tail -1)"
         exit 0 ;;
+    --fix-text)
+        # See fix_text. A dry run lists the changes and moves nothing.
+        [ -z "$DIR" ] && [ "$FORCE" = 0 ] || { echo "media-sync --fix-text takes only --dry-run" >&2; exit 2; }
+        if [ "$DRY" = 1 ]; then result="$(fix_text dry)"; else result="$(fix_text)"; fi
+        if [ -z "$result" ]; then
+            echo "fix-text: nothing to fix"
+        else
+            echo "$result"
+            [ "$DRY" = 1 ] || notify "done" "$(printf '%s\n' "$result" | tail -1)"
+        fi
+        exit 0 ;;
     --settle)
         # See settle_library.
         echo "checkpoint: $(checkpoint)"
@@ -458,7 +474,7 @@ case "$MODE" in
         echo "usage: media-sync [mode]"
         echo "  modes: --retag --upgrade [all|<query>] --albums [<dir>] [--id <release>] --keep [<dir>]"
         echo "         --adopt --regroup --audit --apply [--dry-run] [--force] --undo <log> --settle"
-        echo "         --removed [--purge]"
+        echo "         --removed [--purge] --fix-text [--dry-run]"
         echo "         --pin '<query>' --id <release> [--dry-run] --complete [--dry-run] --backfill"
         echo "         --plan --maintenance [--from <1-8>] --interactive [<dir>] --review [<dir>]"
         echo "         --singles [<dir>] --release [<dir>] [--id <release>]"
@@ -505,11 +521,23 @@ left="$(fresh | wc -l)"
 older=$(( $(find "$LIB/downloads" -type f ! -name '.*' | wc -l) - left ))
 touch "$stamp"
 
+# Decode HTML-escaped letters in what came in; silent when nothing changes.
+fix_failed=0
+fixes="$(fix_text)" || fix_failed=1
+[ -z "$fixes" ] || echo "$fixes"
+fixed="$(printf '%s\n' "$fixes" | grep -c ' -> ' || true)"
+
 summary="$(grep -cv '^\s*$' "{{ media_home }}/config/playlists.txt") playlist(s): $((new - left)) track(s) imported, $left left in downloads/, $errors unexpected yt-dlp error(s)."
 if [ "$older" -gt 0 ]; then
     summary="$summary $older older track(s) wait for media-import."
 fi
-if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ]; then
+if [ "$fixed" -gt 0 ]; then
+    summary="$summary $fixed escaped text field(s) fixed."
+fi
+if [ "$fix_failed" = 1 ]; then
+    summary="$summary The text fix failed."
+fi
+if [ "$errors" -gt 0 ] || [ "$left" -gt 0 ] || [ "$fix_failed" = 1 ]; then
     notify "needs a look" \
         "$summary Run 'media-import' to resolve what is left, interactively. See $LIB/logs/media-sync.log." \
         default warning

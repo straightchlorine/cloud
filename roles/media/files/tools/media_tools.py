@@ -12,6 +12,7 @@ Commands:
     regroup                         album rows for tracks that carry a release id
     plan --mb-url URL --cache DIR   the albums --complete would finish (stdout)
     pin <release id>                give the files on stdin that release
+    fix-text [--dry-run]            decode HTML-escaped letters in titles, artists and albums
 
 beets is imported inside each command, so media_common stays importable (and
 testable) without it.
@@ -193,6 +194,79 @@ def cmd_pin(args):
     return 0
 
 
+# ---------------------------------------------------------------------- fix-text
+
+TEXT_FIELDS = ("title", "artist", "album", "albumartist", "artists", "albumartists")
+ALBUM_FIELDS = ("album", "albumartist", "albumartists")
+
+
+def text_fixes(row, fields):
+    """{field: decoded text} for the fields of `row` that unescape_text changes."""
+    fixes = {}
+    for name in fields:
+        old = row.get(name)
+        if isinstance(old, list):
+            new = [mc.unescape_text(v) for v in old]
+        else:
+            new = mc.unescape_text(old) if isinstance(old, str) else old
+        if new != old:
+            fixes[name] = new
+    return fixes
+
+
+def show_fix(kind, row, fixes):
+    for name, new in fixes.items():
+        old = row.get(name)
+        if isinstance(old, list):
+            old, new = "; ".join(old), "; ".join(new)
+        print("%s %d %s: %s -> %s" % (kind, row.id, name, old, new))
+
+
+def cmd_fix_text(args):
+    """Decode the HTML-escaped letters of YouTube Music "Topic" uploads (see
+    media_common.unescape_text) in titles, artists, albums and album artists. Prints
+    each change and nothing else when there is none. Without --dry-run the new text is
+    written to the file's tags, the file moves to where the path format puts it, and an
+    album row changes with its tracks. A track's own album fields follow its album row,
+    so they are not reported twice."""
+    mc.write_overlay("pinned")
+    lib = mc.open_beets()
+    albums = {}
+    for album in lib.albums():
+        fixes = text_fixes(album, ALBUM_FIELDS)
+        if fixes:
+            albums[album.id] = (album, fixes)
+            show_fix("album", album, fixes)
+    items = {}
+    for item in lib.items():
+        fixes = text_fixes(item, TEXT_FIELDS)
+        if item.album_id in albums:
+            fixes = {k: v for k, v in fixes.items() if k not in ALBUM_FIELDS}
+        if fixes:
+            items[item.id] = fixes
+            show_fix("item", item, fixes)
+    if args.dry_run and (albums or items):
+        print("dry run: nothing changed.")
+    if args.dry_run:
+        return 0
+    done = set()
+    for album, fixes in albums.values():
+        for name, new in fixes.items():
+            album[name] = new
+        album.store()
+        for item in album.items():
+            item.update(items.get(item.id, {}))
+            item.try_sync(True, True)
+            done.add(item.id)
+    for item_id in set(items) - done:
+        item = lib.get_item(item_id)
+        item.update(items[item_id])
+        item.try_sync(True, True)
+    if albums or items:
+        print("fixed %d album row(s) and %d track(s)." % (len(albums), len(set(items) | done)))
+    return 0
+
+
 # -------------------------------------------------------------------------- main
 
 def main(argv=None):
@@ -215,6 +289,9 @@ def main(argv=None):
     p = sub.add_parser("pin")
     p.add_argument("release")
     p.set_defaults(func=cmd_pin)
+    p = sub.add_parser("fix-text")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_fix_text)
     args = parser.parse_args(argv)
     return args.func(args) or 0
 

@@ -1002,6 +1002,30 @@ has "pick remove queues the picked tracks" "$out" "1 file\(s\) go to the quarant
 eq "as a quarantine decision" "$(tail -1 "$DEC" | "$PY" -c "import json,sys; d=json.load(sys.stdin); print(d['action'], [t['id'] for t in d['targets']])")" \
     "quarantine [$(id_k 3)]"
 eq "and moves nothing itself" "$(find "$LIBD/removed" -type f | wc -l)" 0
+# on a terminal the lists and prompts are coloured; fzf --ansi hands back the bare line
+cat > "$T/fake-fzf-ansi" << STUB
+#!/bin/sh
+tee "$T/fzf-in" | sed 's/\x1b\[[0-9;]*m//g'
+STUB
+# the remote commands must not read the answer meant for the prompt
+# shellcheck disable=SC2016  # the stub's own $1 and $*
+printf '#!/bin/sh\n[ "$1" != -t ] || shift\nshift\nexec bash -c "$*" < /dev/null\n' > "$T/fake-ssh-pty"
+chmod +x "$T/fake-fzf-ansi" "$T/fake-ssh-pty"
+before_n=$(wc -l < "$DEC")
+rm -f "$T/fzf-in"
+out=$(printf 'n\n' | SSH="$T/fake-ssh-pty" FZF="$T/fake-fzf-ansi" LIB="$LIBD" TERM=xterm \
+    timeout 120 script -qec "scripts/media/pick.sh remove media 'title:Keep 3'" /dev/null 2>&1)
+has "on a terminal the question is bold" "$out" $'\033\\[1mqueue them for the quarantine'
+has "and the answer no is dim" "$out" $'\033\\[2mnothing done\\.'
+has "the list handed to fzf is coloured" "$(cat "$T/fzf-in")" $'\033\\['
+eq "answering no queues nothing" "$(wc -l < "$DEC")" "$before_n"
+rm -f "$T/fzf-in"
+out=$(printf 'n\n' | SSH="$T/fake-ssh-pty" FZF="$T/fake-fzf-ansi" LIB="$LIBD" TERM=xterm NO_COLOR=1 \
+    timeout 120 script -qec "scripts/media/pick.sh remove media 'title:Keep 3'" /dev/null 2>&1)
+has "NO_COLOR keeps the same prompt" "$out" "nothing done\."
+lacks_text "without colour in the output" "$out" $'\033'
+lacks_text "or in the list handed to fzf" "$(cat "$T/fzf-in")" $'\033'
+eq "NO_COLOR queues nothing either" "$(wc -l < "$DEC")" "$before_n"
 out=$(printf 'q\n' | SSH="$T/fake-ssh" scripts/media/pick.sh fix media Game 2>&1)
 has "pick fix opens the review over ssh, with its query" "$out" "\[1/1\] album      Composer - Game Soundtrack"
 
@@ -3229,6 +3253,75 @@ has "a run after the purge lists only what is left" "$OUT" "^removed: duplicate 
 ms --removed foo; eq "--removed takes no argument" "$RC" 2
 ms --audit --purge; eq "--purge belongs to --removed" "$RC" 2
 ms --removed --force; eq "--removed takes no --force" "$RC" 2
+clear_logs
+
+# ---------------------------------------------------------------------------------
+section "fix-text: HTML-escaped letters from Topic uploads"
+# ---------------------------------------------------------------------------------
+seed_library
+ESC='Dominika&#324ski O&#347rodek Liturgiczny - Topic'
+FIXED='Dominikański Ośrodek Liturgiczny - Topic'
+ALBUM_ESC='Nowa Pie & #347 & #324'
+tone "$ESC/Single.opus" "$ESC" '& #346wi & #281ty'
+tone "$ESC/$ALBUM_ESC/01 One.opus" "$ESC" "Plain One" "$ALBUM_ESC" 1 2 "$ESC"
+tone "$ESC/$ALBUM_ESC/02 Two.opus" "$ESC" "Plain Two" "$ALBUM_ESC" 2 2 "$ESC"
+beet -c /config/adopt.yaml import -s "/music/$ESC/Single.opus" > /dev/null 2>&1
+beet -c /config/as-album.yaml import "/music/$ESC/$ALBUM_ESC" > /dev/null 2>&1
+rows_sql="select group_concat(id || '|' || artist || '|' || title || '|' || album || '|' || cast(path as text), char(10)) from (select * from items order by id)"
+albums_sql="select group_concat(id || '|' || album || '|' || albumartist, char(10)) from (select * from albums order by id)"
+before_rows=$(q "$rows_sql")
+before_albums=$(q "$albums_sql")
+eq "the fixture holds the escaped rows" "$(q "select count(*) from items where artist like '%&#%'")" 3
+ms --fix-text --dry-run
+eq "a dry run exits 0" "$RC" 0
+has "it lists the artist change" "$OUT" "artist: Dominika&#324ski O&#347rodek Liturgiczny - Topic -> $FIXED"
+has "and the broken form of a title" "$OUT" "title: & #346wi & #281ty -> Święty"
+has "and the album row" "$OUT" "album [0-9]+ album: Nowa Pie & #347 & #324 -> Nowa Pieśń"
+has "and says nothing changed" "$OUT" "dry run: nothing changed"
+eq "the dry run left the rows alone" "$(q "$rows_sql")" "$before_rows"
+eq "and the album rows" "$(q "$albums_sql")" "$before_albums"
+eq "and the escaped folders where they were" "$(find "$LIBD/music" -type d -name '*&*' | wc -l)" 2
+: > "$T/ntfy.log"
+ms --fix-text
+eq "the fix exits 0" "$RC" 0
+has "it takes a checkpoint first" "$OUT" "^checkpoint: "
+has "and lists what it changed" "$OUT" "title: & #346wi & #281ty -> Święty"
+has "and says how much" "$OUT" "fixed 1 album row\(s\) and 3 track\(s\)"
+has "it tells ntfy" "$(ntfy)" "fix-text done \| fixed 1 album row"
+eq "the single's row is fixed" "$(q "select artist || '|' || title from items where title='Święty'")" "$FIXED|Święty"
+eq "no row keeps an escape" "$(q "select count(*) from items where artist like '%&%' or title like '%&%' or album like '%&%' or albumartist like '%&%'")" 0
+eq "the album row is fixed" "$(q "select album || '|' || albumartist from albums where album='Nowa Pieśń'")" "Nowa Pieśń|$FIXED"
+eq "and its tracks agree with it" "$(q "select count(*) from items i join albums a on a.id = i.album_id where i.album = a.album and i.albumartist = a.albumartist and a.album = 'Nowa Pieśń'")" 2
+single=$(q "select cast(path as text) from items where title='Święty'")
+has "the single now lives under the fixed artist" "$single" "^$FIXED/Święty\.opus\$"
+# an opus file lists its tags under the stream
+tag() { ffprobe -v error -show_entries format_tags:stream_tags -of default=nw=1 "$LIBD/music/$1" | sed -n "s/^TAG:$2=//Ip" | head -1; }
+eq "its file carries the fixed title" "$(tag "$single" title)" "Święty"
+eq "and the fixed artist" "$(tag "$single" artist)" "$FIXED"
+album_file=$(q "select cast(path as text) from items where title='Plain One'")
+has "an album track moved into the fixed folder" "$album_file" "^$FIXED/Nowa Pieśń"
+eq "its file carries the fixed album" "$(tag "$album_file" album)" "Nowa Pieśń"
+eq "no folder or file keeps an escape" "$(find "$LIBD/music" -name '*&*' | wc -l)" 0
+after_rows=$(q "$rows_sql")
+ms --fix-text
+eq "a second run exits 0" "$RC" 0
+has "and finds nothing to fix" "$OUT" "^fix-text: nothing to fix"
+lacks_text "without a checkpoint" "$OUT" "checkpoint"
+eq "and changes no row" "$(q "$rows_sql")" "$after_rows"
+ms --fix-text --force; eq "--fix-text takes no --force" "$RC" 2
+ms --fix-text foo; eq "--fix-text takes no argument" "$RC" 2
+# the nightly run fixes what it imports, and is quiet when there is nothing to fix
+: > "$T/ntfy.log"
+ms
+eq "a nightly run with nothing to fix exits 0" "$RC" 0
+lacks_text "and says nothing about text" "$OUT$(ntfy)" "escaped|fix-text"
+tone "Nocna Pie & #347 & #324/Night.opus" 'Nocna Pie & #347 & #324' "Night Song"
+beet -c /config/adopt.yaml import -s "/music/Nocna Pie & #347 & #324/Night.opus" > /dev/null 2>&1
+ms
+eq "a nightly run with an escaped row exits 0" "$RC" 0
+has "lists the change" "$OUT" "artist: Nocna Pie & #347 & #324 -> Nocna Pieśń"
+has "and reports it in its summary" "$(ntfy)" "escaped text field\(s\) fixed"
+eq "and the row is fixed" "$(q "select count(*) from items where artist='Nocna Pieśń'")" 1
 clear_logs
 
 # ---------------------------------------------------------------------------------

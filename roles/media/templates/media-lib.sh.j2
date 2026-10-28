@@ -144,6 +144,21 @@ checkpoint() {
     echo "$f"
 }
 
+# Decode HTML-escaped letters in titles, artists and albums (YouTube Music "Topic"
+# uploads; see unescape_text in media_common.py). With <dry> the changes are listed
+# and nothing moves. A real run lists them again, and checkpoints first, but only
+# when the dry listing found something: the nightly run stays quiet otherwise.
+fix_text() {  # [dry]
+    local plan
+    plan="$("${BEET_PY[@]}" "$TOOLS/media_tools.py" fix-text --dry-run)" || return 1
+    if [ "${1:-}" = dry ] || ! printf '%s\n' "$plan" | grep -q ' -> '; then
+        [ -z "$plan" ] || printf '%s\n' "$plan"
+        return 0
+    fi
+    echo "checkpoint: $(checkpoint)"
+    "${BEET_PY[@]}" "$TOOLS/media_tools.py" fix-text
+}
+
 # Can the beets container reach MusicBrainz? A pass that cannot silently matches
 # nothing and logs "Skipping." for days, so ask before starting one.
 musicbrainz_reachable() {

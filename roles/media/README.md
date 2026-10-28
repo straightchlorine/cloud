@@ -88,7 +88,15 @@ Sun 04:15  media-sync --retag  retry MusicBrainz; give recent matches a release
     then singleton pass, over that night's downloads only. Only strong matches are
     applied and the rest stay in `downloads/`. A leftover is not judged again on
     later nights; it waits for `media-import`. Age-restricted videos are skipped
-    because the host has no YouTube cookies.
+    because the host has no YouTube cookies. Afterwards it decodes HTML-escaped
+    letters in titles, artists and albums (see `--fix-text`) and says nothing when
+    there are none.
+  - **`media-sync --fix-text [--dry-run]`** repairs the "Topic" uploads whose
+    metadata arrives escaped, as `Dominika&#324ski` or the broken `Pie & #347 & #324`
+    (`Pieśń`). It lists each change, then writes the tags and moves the file to its
+    path-format folder, so a folder named after the escaped artist is renamed. An album
+    row changes with its tracks. It takes a checkpoint first; `--dry-run` lists the
+    changes only. Text such as `AC/DC & #1` or `Tom & Jerry` is left alone.
   - **`media-import [<dir>]`** is a review session: the release pass asks per file
     (pick a candidate by number, `E` to search MusicBrainz, `I` to paste a release
     id), then the singleton pass asks per track. It surfaces releases the automatic

@@ -9,6 +9,7 @@ with a plain python3.
 import collections
 import difflib
 import hashlib
+import html
 import http.client
 import json
 import os
@@ -56,6 +57,42 @@ def same_title(mine, theirs):
     if len(key(short)) >= 4 and long_.startswith(short):
         return long_[len(short):].lstrip()[:1] not in ("(", "[")
     return min(len(a), len(b)) >= 8 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
+
+
+# YouTube Music "Topic" uploads sometimes carry HTML-escaped letters: "&#324" with no
+# semicolon, or a broken "& #346" with a space after the ampersand.
+_NAMED_REF = re.compile(r"&[A-Za-z][A-Za-z0-9]{1,31};")
+_NUMERIC_REF = re.compile(r"(?P<lead>\s*)&(?P<gap> ?)#(?:[xX](?P<hex>[0-9a-fA-F]{1,6})|(?P<dec>[0-9]{1,7}));?")
+
+
+def unescape_text(text):
+    """Tag text with its HTML escapes decoded: "Dominika&#324ski" -> "Dominikański".
+
+    Numeric references decode with or without the semicolon, in decimal or hex. A
+    named reference decodes only with its semicolon ("&amp;"), so "Q&notes" stays.
+    The broken "& #347" form (a space after the ampersand) decodes only to a letter,
+    so "AC/DC & #1" and "Tom & Jerry" are left alone. Its space before the ampersand
+    is an artefact too and goes when a lowercase letter follows a letter ("Pie & #347
+    & #324" -> "Pieśń"); an uppercase letter starts a word and keeps the space.
+    """
+    if not text or "&" not in text:
+        return text
+    text = _NAMED_REF.sub(lambda m: html.unescape(m.group()), text)
+    out, pos = "", 0
+    for m in _NUMERIC_REF.finditer(text):
+        out += text[pos:m.start()]
+        pos = m.end()
+        try:
+            ch = chr(int(m.group("hex"), 16) if m.group("hex") else int(m.group("dec")))
+        except ValueError:
+            ch = ""
+        if m.group("gap"):
+            valid = ch.isalpha()
+            lead = "" if valid and ch.islower() and out[-1:].isalpha() else m.group("lead")
+        else:
+            valid, lead = ch.isprintable() and ch != "", m.group("lead")
+        out += lead + ch if valid else m.group()
+    return out + text[pos:]
 
 
 def album_artist(item):

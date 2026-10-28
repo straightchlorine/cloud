@@ -29,7 +29,17 @@ REMOVED="${REMOVED:-$LIB/removed}"
 FZF="${FZF:-fzf}"
 SSH="${SSH:-ssh}"
 
-die() { echo "pick: $*" >&2; exit 1; }
+# Same gate as the review screen: colour on a terminal only, never with NO_COLOR or
+# TERM=dumb. Every variable is empty when off, so piped output stays plain.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
+    BOLD=$'\033[1m' DIM=$'\033[2m' RED=$'\033[31m' GREEN=$'\033[32m' CYAN=$'\033[36m' OFF=$'\033[0m'
+    FZF_ANSI=(--ansi)
+else
+    BOLD="" DIM="" RED="" GREEN="" CYAN="" OFF=""
+    FZF_ANSI=()
+fi
+
+die() { echo "${RED}pick:${OFF} $*" >&2; exit 1; }
 usage() {
     cat >&2 <<'EOF'
 pick album  <host> <query>      assign an album to the tracks the query matches
@@ -98,9 +108,26 @@ beet() {
 confirm() {  # <question>
     [ "$yes" = yes ] && return 0
     local answer
-    printf '%s [y/N] ' "$1"
+    printf '%s%s%s %s[y/N]%s ' "$BOLD" "$1" "$OFF" "$DIM" "$OFF"
     read -r answer
-    case "$answer" in [yY] | [yY][eE][sS]) ;; *) echo "nothing done."; exit 0 ;; esac
+    case "$answer" in [yY] | [yY][eE][sS]) ;; *) echo "${DIM}nothing done.${OFF}"; exit 0 ;; esac
+}
+# Colour the fzf lists after the sort, so the order is untouched. fzf --ansi strips
+# the codes from the line it prints, so cut -f1 still yields the bare id.
+tint_albums() {
+    if [ -n "$OFF" ]; then
+        awk -F'\t' -v OFS='\t' -v b="$BOLD" -v d="$DIM" -v o="$OFF" '{ $1 = b $1 o; $3 = d $3 o; print }'
+    else
+        cat
+    fi
+}
+tint_tracks() {
+    if [ -n "$OFF" ]; then
+        awk -F'\t' -v OFS='\t' -v b="$BOLD" -v c="$CYAN" -v d="$DIM" -v o="$OFF" \
+            '{ $1 = d $1 o; $2 = c $2 o; $4 = b $4 o; $5 = d $5 o; print }'
+    else
+        cat
+    fi
 }
 # ---- album: pick an existing album (or type a new name) and assign it ---------
 
@@ -109,23 +136,23 @@ pick_album() {
     albums="$(mktemp)"
     trap 'rm -f "$albums"' RETURN
 
-    echo "fetching the library's albums..." >&2
-    beet ls -a -f '%album	%albumartist	%year' | sort -u > "$albums"
+    echo "${DIM}fetching the library's albums...${OFF}" >&2
+    beet ls -a -f '%album	%albumartist	%year' | sort -u | tint_albums > "$albums"
     [ -s "$albums" ] || die "no albums in the library"
-    echo "$(wc -l < "$albums") albums - pick one, or type a name that is not there" >&2
+    echo "${BOLD}$(wc -l < "$albums")${OFF} albums${DIM} - pick one, or type a name that is not there${OFF}" >&2
 
     # --print-query: the typed text comes first, the selection (if any) last.
-    sel="$("$FZF" --print-query --prompt='album> ' < "$albums" | tail -n 1)" || true
-    [ -n "$sel" ] || { echo "nothing selected."; exit 0; }
+    sel="$("$FZF" "${FZF_ANSI[@]}" --print-query --prompt='album> ' < "$albums" | tail -n 1)" || true
+    [ -n "$sel" ] || { echo "${DIM}nothing selected.${OFF}"; exit 0; }
     album="$(printf '%s' "$sel" | cut -f1)"
 
     count="$(beet ls -f '$id' "$query" | wc -l)"
     [ "$count" -gt 0 ] || die "the query matches no tracks: $query"
     echo
-    echo "will set album='$album' on $count track(s) matching: $query"
+    echo "will set album='${BOLD}$album${OFF}' on ${BOLD}$count${OFF} track(s) matching: ${CYAN}$query${OFF}"
     confirm "apply?"
     beet modify -y "album=$album" "$query" >&2
-    echo "done: $count track(s) have album='$album'"
+    echo "${GREEN}done:${OFF} $count track(s) have album='$album'"
 }
 
 # ---- remove: quarantine tracks (or --purge the quarantine) --------------------
@@ -134,14 +161,14 @@ purge_quarantine() {
     local listing
     listing="$(remote "if [ -d '$REMOVED' ]; then du -sh '$REMOVED'/* 2>/dev/null; fi")"
     if [ -z "$listing" ]; then
-        echo "the quarantine is empty ($REMOVED)"
+        echo "${DIM}the quarantine is empty ($REMOVED)${OFF}"
         return 0
     fi
-    echo "the quarantine holds:"
+    echo "${BOLD}the quarantine holds:${OFF}"
     printf '%s\n' "$listing" | sed 's/^/  /'
     confirm "delete all of it?"
     remote "rm -rf '$REMOVED'"
-    echo "purged $REMOVED"
+    echo "${GREEN}purged${OFF} $REMOVED"
 }
 
 pick_remove() {
@@ -149,19 +176,19 @@ pick_remove() {
     list="$(mktemp)"
     trap 'rm -f "$list"' RETURN
 
-    echo "fetching tracks..." >&2
+    echo "${DIM}fetching tracks...${OFF}" >&2
     # shellcheck disable=SC2016  # '$id' etc. are beets format fields
-    beet ls -f '$id	$albumartist	$album	$title	$path' ${query:+"$query"} | sort -t"	" -k2,2 -k3,3 -k4,4 > "$list"
+    beet ls -f '$id	$albumartist	$album	$title	$path' ${query:+"$query"} | sort -t"	" -k2,2 -k3,3 -k4,4 | tint_tracks > "$list"
     [ -s "$list" ] || die "the query matches no tracks: ${query:-<everything>}"
-    echo "$(wc -l < "$list") tracks - select with TAB, confirm with ENTER" >&2
+    echo "${BOLD}$(wc -l < "$list")${OFF} tracks${DIM} - select with TAB, confirm with ENTER${OFF}" >&2
 
-    sel="$("$FZF" --multi --prompt='remove> ' < "$list")" || true
-    [ -n "$sel" ] || { echo "nothing selected."; exit 0; }
+    sel="$("$FZF" "${FZF_ANSI[@]}" --multi --prompt='remove> ' < "$list")" || true
+    [ -n "$sel" ] || { echo "${DIM}nothing selected.${OFF}"; exit 0; }
 
     echo
-    printf '%s\n' "$sel" | awk -F'\t' '{ printf "  %s - %s\n", $2, $4 }'
+    printf '%s\n' "$sel" | awk -F'\t' -v b="$BOLD" -v o="$OFF" '{ printf "  %s - %s%s%s\n", $2, b, $4, o }'
     count="$(printf '%s\n' "$sel" | wc -l)"
-    echo "$count track(s) selected"
+    echo "${BOLD}$count${OFF} track(s) selected"
     confirm "queue them for the quarantine ($REMOVED/<date>, with the next apply)?"
 
     remote "media-import --quarantine $(printf '%s\n' "$sel" | cut -f1 | tr '\n' ' ')"
