@@ -50,3 +50,9 @@
     name: honeywatch-mmdb-refresh.timer
     state: restarted
   become: true
+
+- name: Restart image prune timer
+  ansible.builtin.systemd_service:
+    name: honeywatch-image-prune.timer
+    state: restarted
+  become: true

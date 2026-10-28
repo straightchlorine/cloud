@@ -5,6 +5,10 @@
 when:
   event: [push, pull_request]
 
+# Unlabelled workflows also go to the OCI arm64 agent, whose pods never start.
+labels:
+  platform: linux/amd64
+
 steps:
   - name: checkout
     image: woodpeckerci/plugin-git:2

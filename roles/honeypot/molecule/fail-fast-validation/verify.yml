@@ -14,9 +14,10 @@
         - /tmp/molecule-case3.passed
         - /tmp/molecule-case4.passed
         - /tmp/molecule-case5.passed
+        - /tmp/molecule-case6.passed
       register: honeypot_failfast_markers
 
-    - name: Assert all five fail-fast cases completed
+    - name: Assert all six fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -38,6 +39,7 @@
           Case 3 - admin sshd port colliding with the cowrie port: FAILED as expected
           Case 4 - age private identity instead of a public recipient: FAILED as expected
           Case 5 - security-only dnf-automatic on CentOS Stream: FAILED as expected
+          Case 6 - image prune keep count of 0: FAILED as expected
 
-          All five cases ran the real roles/honeypot/tasks/validate.yml end to
+          All six cases ran the real roles/honeypot/tasks/validate.yml end to
           end - no hand-copied guards anywhere in this scenario.

@@ -103,3 +103,15 @@
     - honeypot_backup_enabled
     - honeypot_backup_retention_days | int < 1
   tags: [validation]
+
+- name: Validate the image prune keeps at least one release per repo
+  # 0 would delete every semver tag, including the previous release that a
+  # rollback needs.
+  ansible.builtin.fail:
+    msg: >-
+      honeypot_image_prune_keep must be an integer >= 1, got
+      '{{ honeypot_image_prune_keep }}'.
+  when:
+    - honeypot_image_prune_enabled
+    - honeypot_image_prune_keep | int < 1
+  tags: [validation]

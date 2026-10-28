@@ -172,6 +172,18 @@ pinned in the honeywatch repo's `ingestor/Dockerfile`. Deploy order: run this
 role before the honeywatch release that mounts the directory; otherwise Docker
 creates it root-owned and the ingestor cannot write.
 
+## Image prune
+
+`honeywatch-image-prune.timer` runs weekly (`honeypot_image_prune_schedule`,
+Sunday 04:45 UTC plus up to 30 minutes of jitter). For each repo in
+`honeypot_image_prune_repos` it keeps the newest `honeypot_image_prune_keep`
+(3) semver tags and removes the rest, then prunes dangling layers. Non-semver
+tags such as `latest` and images of other repos are left alone, and an image a
+container still references is skipped (plain `docker rmi`, no `-f`).
+
+Run it now with `systemctl start honeywatch-image-prune.service`; read what it
+removed with `journalctl -u honeywatch-image-prune.service`.
+
 ## Automatic updates
 
 `dnf-automatic` applies every available update daily. The packaged timer fires

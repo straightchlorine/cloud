@@ -19,6 +19,10 @@ when:
     - feature/*
     - refactor/*
 
+# Unlabelled workflows also go to the OCI arm64 agent, whose pods never start.
+labels:
+  platform: linux/amd64
+
 matrix:
   # Only roles whose molecule scenarios exercise the real task files run in CI:
   # fixture-based scenarios burn runner resources without catching regressions.
@@ -52,10 +56,15 @@ steps:
     commands:
       - dnf install -y python3 python3-pip git containers-common
       - mkdir -p /etc/containers
+      # vfs copies every image layer in full (~6 GB for the Debian 13 image); two
+      # such steps at once push the node into DiskPressure and get evicted
+      # (exit 137). Native overlay cannot sit on the step's own overlay rootfs,
+      # but the workspace volume under /woodpecker is a plain host directory.
       - |
         cat > /etc/containers/storage.conf << 'CONF'
         [storage]
-        driver = "vfs"
+        driver = "overlay"
+        graphroot = "/woodpecker/containers-storage"
         CONF
       - |
         cat > /etc/containers/containers.conf << 'CONF'

@@ -1,0 +1,29 @@
+[Unit]
+Description=Honeywatch old release image prune
+Documentation=https://github.com/straightchlorine/honeywatch
+After=docker.service
+Requires=docker.service
+OnFailure=honeywatch-notify@%n.service
+
+# {{ ansible_managed }}
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=honeywatch-image-prune
+ExecStart=/usr/local/sbin/honeywatch-image-prune {{ honeypot_image_prune_keep }} {{ honeypot_image_prune_repos | join(' ') }}
+TimeoutStartSec={{ honeypot_image_prune_timeout_sec }}
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native

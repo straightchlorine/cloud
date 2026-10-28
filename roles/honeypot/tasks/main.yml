@@ -113,6 +113,14 @@
   when: honeypot_mmdb_enabled
   tags: [honeypot, mmdb, geoip]
 
+- name: Configure the old release image prune timer
+  ansible.builtin.include_tasks:
+    file: image_prune.yml
+    apply:
+      tags: [honeypot, image-prune]
+  when: honeypot_image_prune_enabled
+  tags: [honeypot, image-prune]
+
 - name: Ship host logs and metrics to the fleet observability stack
   ansible.builtin.include_role:
     name: alloy

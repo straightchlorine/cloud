@@ -230,3 +230,15 @@ honeypot_mmdb_randomized_delay: 30min
 honeypot_mmdb_timeout_sec: 900
 honeypot_mmdb_geoip_volume: honeywatch_geoip-data
 honeypot_mmdb_ingestor_container: honeywatch-ingestor
+
+# --- Old release image prune --------------------------------------------------
+# Each release leaves a ~450 MB image per repo; only semver tags are pruned.
+honeypot_image_prune_enabled: true
+honeypot_image_prune_repos:
+  - ghcr.io/straightchlorine/honeywatch/api
+  - ghcr.io/straightchlorine/honeywatch/ingestor
+# Newest tags kept per repo; at least 1 so a rollback image always remains.
+honeypot_image_prune_keep: 3
+honeypot_image_prune_schedule: "Sun *-*-* 04:45:00 UTC"
+honeypot_image_prune_randomized_delay: 30min
+honeypot_image_prune_timeout_sec: 900

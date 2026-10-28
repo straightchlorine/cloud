@@ -1,0 +1,18 @@
+[Unit]
+Description=Weekly trigger for the Honeywatch old release image prune
+Documentation=https://github.com/straightchlorine/honeywatch
+
+# {{ ansible_managed }}
+
+[Timer]
+# Off the 03:30 backup and the Wednesday mmdb refresh so the daemon is not
+# busy with either while it deletes layers.
+OnCalendar={{ honeypot_image_prune_schedule }}
+RandomizedDelaySec={{ honeypot_image_prune_randomized_delay }}
+# Run a missed prune on next boot if the timer fired while powered off.
+Persistent=true
+Unit=honeywatch-image-prune.service
+AccuracySec=15min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,34 @@
+---
+- name: Install the image prune script
+  ansible.builtin.copy:
+    src: honeywatch-image-prune.sh
+    dest: /usr/local/sbin/honeywatch-image-prune
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Install the image prune service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop:
+    - honeywatch-image-prune.service
+    - honeywatch-image-prune.timer
+  notify:
+    - Reload systemd (honeypot)
+    - Restart image prune timer
+
+- name: Flush handlers so systemd sees the prune units before they are enabled
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the image prune timer
+  ansible.builtin.systemd_service:
+    name: honeywatch-image-prune.timer
+    enabled: true
+    state: started
+  become: true

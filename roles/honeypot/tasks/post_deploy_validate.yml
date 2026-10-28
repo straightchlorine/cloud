@@ -161,7 +161,8 @@
   failed_when: honeypot_timer_state.status.ActiveState != 'active'
   loop: "{{ ['dnf-automatic.timer']
             + (['honeywatch-backup.timer'] if honeypot_backup_enabled else [])
-            + (['honeywatch-mmdb-refresh.timer'] if honeypot_mmdb_enabled else []) }}"
+            + (['honeywatch-mmdb-refresh.timer'] if honeypot_mmdb_enabled else [])
+            + (['honeywatch-image-prune.timer'] if honeypot_image_prune_enabled else []) }}"
   tags: [post_validation]
 
 - name: Read whether the dnf-automatic timer is enabled
