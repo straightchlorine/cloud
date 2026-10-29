@@ -12,6 +12,8 @@ _ENV_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 : "${GPU_QP_PROBE_TIMEOUT:=10}"
 : "${GPU_QP_STALL_MIN:=30}"
 : "${GPU_QP_GPU_COUNT:=2}"
+: "${GPU_QP_POLL_SEC:=30}" # the poll step of the stop --by sleeper and the resume waiters
+: "${GPU_QP_STACK_WAIT_SEC:=120}" # per stack container: how long start waits for it to be healthy after a docker start
 export PYTHONDONTWRITEBYTECODE=1
 
 # Run helpers get their run from GPU_QP_RUN_DIR (exported by `start`). The old overrides are gone.
@@ -32,6 +34,31 @@ need_run_dir() {
 log() { echo "[supervise] $*" >> "$GPU_QP_RUN_DIR/supervise.log"; }
 
 die() { echo "[FAIL] $*" >&2; exit 1; }
+
+# host_signature: what a run's results depend on beyond the lib, one key=value line per field ("-" when
+# unknown): the kernel, the NVIDIA driver (the loaded module's version, else nvidia-smi's), nvidia-ctk
+# and the Docker server.
+host_signature() {
+  local drv ctk dkr
+  drv=$(head -n 1 /proc/driver/nvidia/version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1)
+  [ -n "$drv" ] || drv=$(timeout 10 nvidia-smi --query-gpu=driver_version --format=csv,noheader 2> /dev/null | head -n 1)
+  ctk=$(nvidia-ctk --version 2> /dev/null | head -n 1)
+  dkr=$(timeout "$GPU_QP_PROBE_TIMEOUT" docker version --format '{{.Server.Version}}' 2> /dev/null | head -n 1)
+  echo "kernel=$(uname -r)"
+  echo "driver=${drv:--}"
+  echo "nvidia-ctk=${ctk:--}"
+  echo "docker=${dkr:--}"
+}
+
+# host_diff FILE SIGNATURE: "key: old -> new" for each field of the signature text that differs from
+# FILE, joined by "; " on one line (empty when none).
+host_diff() {
+  awk 'function k(l) { return substr(l, 1, index(l, "=") - 1) }
+    function v(l) { return substr(l, index(l, "=") + 1) }
+    NR == FNR { o[k($0)] = v($0); next }
+    v($0) != o[k($0)] { s = s (s == "" ? "" : "; ") k($0) ": " (k($0) in o ? o[k($0)] : "-") " -> " v($0) }
+    END { print s }' "$1" <(printf '%s\n' "$2")
+}
 
 # A name `start` may create: not pilot (the root itself), nor a directory the tree already uses.
 valid_run_name() {
@@ -97,9 +124,17 @@ proc_start() {
   echo "${f[19]}"
 }
 
-# pid_alive PID START: rc 0 when that pid is the process that started at START.
+# pid_alive PID START: rc 0 when that pid is the process that started at START (an empty START
+# never matches).
 pid_alive() {
-  [ "$(proc_start "$1")" = "$2" ]
+  local s
+  s=$(proc_start "$1") && [ -n "$s" ] && [ "$s" = "$2" ]
+}
+
+# pidfile_alive FILE: rc 0 when FILE ("pid x starttime") names a process that is still alive.
+pidfile_alive() {
+  local pid st
+  [ -f "$1" ] && read -r pid _ st < "$1" && [[ $pid =~ ^[0-9]+$ ]] && pid_alive "$pid" "$st"
 }
 
 # rc 0 while any process holds the lock. The probe takes a shared lock in a subshell and drops it
@@ -117,7 +152,7 @@ lock_holder() {
   echo "${run:-unknown run}"
 }
 
-# done_state RUNDIR: the verdict in supervise.done as DONE FAILED BLOCKED STOPPED, else INCOMPLETE.
+# done_state RUNDIR: the verdict in supervise.done as DONE FAILED BLOCKED STOPPED CLOSED, else INCOMPLETE.
 # Legacy runs hold a `SUPERVISE_DONE <ts>` line.
 done_state() {
   local word=''
@@ -127,11 +162,12 @@ done_state() {
     failed:*) echo FAILED ;;
     blocked:*) echo BLOCKED ;;
     stopped) echo STOPPED ;;
+    closed) echo CLOSED ;;
     *) echo INCOMPLETE ;;
   esac
 }
 
-# run_state RUNDIR prints RUNNING ORPHANED DONE FAILED BLOCKED STOPPED or INCOMPLETE.
+# run_state RUNDIR prints RUNNING ORPHANED DONE FAILED BLOCKED STOPPED CLOSED or INCOMPLETE.
 run_state() {
   local dir=$1 name a_run='' a_pid='' a_start=''
   if [ "$dir" = "$GPU_QP_BENCH_ROOT" ]; then name=pilot; else name=$(basename "$dir"); fi

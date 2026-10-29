@@ -67,6 +67,11 @@
   ansible.builtin.import_tasks: data.yml
   tags: [data]
 
+- name: Hold the kernel and the NVIDIA stack while benchmark work is pending
+  # After data.yml, which installs the guard script. Static import: the tags reach the tasks inside.
+  ansible.builtin.import_tasks: kernel_guard.yml
+  tags: [kernel-guard, driver, nvidia]
+
 - name: Prepare the GPU image
   ansible.builtin.include_tasks: image.yml
   tags: [image, build]
@@ -82,6 +87,9 @@
     stack_user: "{{ ansible_user }}"
     stack_environment_vars:
       - "GPU_QP_HOME={{ gpu_qp_home }}"
+    # The shared unit retries every 5 s and gives up after 5 failures (StartLimitBurst) in 25 s, so a
+    # driver that is not ready at boot leaves the stack down for good. 30 s apart it never hits the limit.
+    restart_sec: "30"
     # Explicit -f: the shared systemd template's WorkingDirectory guard is a
     # known-open issue (see its header), so don't rely on the unit's cwd.
     stack_exec_start: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml up -d"

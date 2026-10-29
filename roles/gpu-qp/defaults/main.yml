@@ -15,6 +15,11 @@ gpu_qp_log_path: "{{ gpu_qp_home }}/logs"
 gpu_qp_bench_path: "{{ gpu_qp_home }}/bench"
 # Disk floor in GB for the `start` preflight and before each phase (below it: blocked:disk).
 gpu_qp_bench_min_free_gb: 10
+# `gpu-qp side check DIR` also wants this many GB beyond the floor free on / before a side stack builds.
+gpu_qp_side_margin_gb: 5
+# Images a side checkout must not retag: a service that names one of these (or any ml-*) and has
+# a build: section fails `gpu-qp side check`. Space-separated.
+gpu_qp_protected_images: "quantum-pipeline:cpu quantum-pipeline:gpu quantum-pipeline-spark:4.0.2-python3.12"
 
 # pciutils: lspci, for inspecting the GPU and passthrough by hand.
 gpu_qp_specific_packages:
@@ -33,15 +38,7 @@ gpu_qp_image_ref: "master"
 gpu_qp_source_path: "{{ gpu_qp_home }}/src/quantum-pipeline"
 gpu_qp_image_name: "quantum-pipeline:gpu"
 gpu_qp_image_pull_name: "ghcr.io/straightchlorine/quantum-pipeline:gpu"
-gpu_qp_aer_version: "0.17.2"
 gpu_qp_image_force_rebuild: false
-
-# CUDA toolkit the GPU image is built on - the CUDA_VERSION build arg of
-# quantum-pipeline's docker/Dockerfile.gpu. It must not exceed what the guest
-# driver supports: `nvidia-smi` prints the driver's max ("CUDA Version: 12.4" for
-# the 550 branch). A newer CUDA than the driver needs minor-version compatibility;
-# a much newer one simply will not run, and CUDA 13 drops Pascal altogether.
-gpu_qp_cuda_version: "12.6.3"
 
 # Build args plus source revision of the last successful build. `gpu-qp build`
 # skips the build while it matches; a rebuild stays fast, since Docker's layer
@@ -67,11 +64,19 @@ gpu_qp_driver_install: true
 # set gpu_qp_driver_install: false instead of listing packages.
 gpu_qp_driver_packages:
   - nvidia-driver
-# The running kernel's headers package (cloud kernels included) - never the plain
-# linux-headers-amd64, which targets a different kernel and builds a module the
-# running kernel cannot load.
+# The running kernel's headers plus the headers metapackage of its flavour
+# (linux-headers-cloud-amd64 on a cloud kernel, never the plain -amd64 one), so a
+# kernel upgrade pulls matching headers and DKMS builds the module for it. Without
+# the metapackage an upgraded cloud kernel boots with no NVIDIA module. Debian
+# naming; override on Ubuntu.
 gpu_qp_driver_headers_packages:
   - "linux-headers-{{ ansible_kernel }}"
+  - "linux-headers-{{ ansible_kernel | regex_replace('^[^-]+-', '') }}"
+
+# While benchmark work is pending (a run `gpu-qp resume` would pick up, or running), a root timer holds the
+# host on the kernel the run started on and blocks unattended kernel and NVIDIA package updates; with no
+# work pending it undoes that. See "Kernel pin" in the README. false removes the timer and the pin.
+gpu_qp_kernel_guard: true
 
 # --- Containers ------------------------------------------------------------
 gpu_qp_container_toolkit_enabled: true

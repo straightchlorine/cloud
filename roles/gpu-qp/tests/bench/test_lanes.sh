@@ -30,6 +30,8 @@ check "row: C2H starts at the HF point" "$(lanes row C2H analytic 0)" "quantum-p
 check "cells: C2 Aer lanes take one seed" "$(lanes cells C2 | awk -F'\t' '$2!="analytic"' | wc -l)" "2"
 check "cells: A2 NH3 has one seed on an Aer lane" "$(lanes cells A2 cpu-aer | awk -F'\t' '$3==5' | wc -l)" "1"
 
+check "names: the molecule names of lane.sh" "$(lanes names)" "$(sed -n "s/^MOLNAME=(\(.*\))\$/\1/p" "$LIB/lane.sh" | tr -d "'")"
+
 for bad in "cells Z" "cells A nope" "steps Z" "lanes Z" "expect A Z" "row A analytic 9" "row Z analytic 0" "frobnicate"; do
   # shellcheck disable=SC2086
   lanes $bad > /dev/null 2>&1

@@ -85,7 +85,8 @@
           - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in tool"
           - "'SOURCE=\"/home/gpu/gpu-qp/src/quantum-pipeline\"' in tool"
           # build: the host settings reach Dockerfile.gpu as build args
-          - "'CUDA_VERSION=\"12.6.3\"' in tool"
+          - "'CUDA_VERSION' not in tool"
+          - "'AER_VERSION' not in tool"
           - "'CUDA_ARCH=\"6.1\"' in tool"
           - "'--build-arg=' in tool"
           # run: defaults, the per-run directory, a non-root user
@@ -128,6 +129,14 @@
           - gpu_qp_help.stdout is search('(?m)^  stop ')
           - gpu_qp_help.stdout is search('(?m)^  runs$')
           - gpu_qp_help.stdout is search('(?m)^  fetch ')
+          - gpu_qp_help.stdout is search('(?m)^  resume ')
+          - gpu_qp_help.stdout is search('(?m)^  fingerprint ')
+          - gpu_qp_help.stdout is search('(?m)^  close --run NAME$')
+          - gpu_qp_help.stdout is search('--allow-host-change')
+          - gpu_qp_help.stdout is search('(?m)^  side check ')
+          - gpu_qp_help.stdout is search('(?m)^  stop [(]--by TIME [|] --cancel[)]$')
+          - "'--after' not in gpu_qp_help.stdout"
+          - gpu_qp_help.stdout is search('(?m)^      --phases ')
         fail_msg: "gpu-qp help wrong:\n{{ gpu_qp_help.stdout }}"
         success_msg: "[OK] gpu-qp help lists the commands, benchmark runs included; unknown commands exit 2"
 
@@ -206,6 +215,7 @@
           - settings is search('(?m)^GPU_QP_SOURCE=/home/gpu/gpu-qp/src/quantum-pipeline$')
           - settings is search('(?m)^GPU_QP_BENCH_ROOT=/home/gpu/gpu-qp/bench$')
           - settings is search('(?m)^GPU_QP_MIN_FREE_GB=10$')
+          - settings is search('(?m)^GPU_QP_USER=root$')
         fail_msg: "override or bench.env wrong:\n{{ override }}\n{{ settings }}"
         success_msg: "[OK] override.yml defines the three workers; bench.env carries the role values"
 

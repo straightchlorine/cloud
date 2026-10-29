@@ -1,0 +1,10 @@
+# Managed by Ansible - Do not edit manually
+[Unit]
+Description=gpu-qp kernel guard, hourly
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+# Managed by Ansible - Do not edit manually
+[Unit]
+Description=gpu-qp kernel guard (pin the kernel and NVIDIA stack while benchmark work is pending)
+Before=apt-daily-upgrade.service unattended-upgrades.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash {{ gpu_qp_lib_path }}/kernel-guard.sh
+SyslogIdentifier=gpu-qp-kernel-guard

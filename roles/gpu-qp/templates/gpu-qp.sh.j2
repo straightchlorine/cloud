@@ -4,8 +4,8 @@
 # Host tool for the gpu-qp stack: keep the source checkout current, build the GPU
 # image from it, prove the image runs on the GPU, and run simulations with it.
 # The deploy uses the same commands, so a by-hand build or check is the deployed one.
-# The benchmark-run commands (status start stop runs fetch) live in the helper directory
-# $LIB; this file only checks it against the manifest of its own deploy and hands over.
+# The benchmark-run commands (status start stop close runs fetch fingerprint side resume) live in the
+# helper directory $LIB; this file only checks it against the manifest of its own deploy and hands over.
 
 set -euo pipefail
 
@@ -40,9 +40,7 @@ GIT_NET_SSH='ssh -o BatchMode=yes -o ConnectTimeout=8 -o ServerAliveInterval=15 
 
 # Reach docker/Dockerfile.gpu as build args - the Dockerfile is never rewritten.
 BUILD_ARGS=(
-  CUDA_VERSION="{{ gpu_qp_cuda_version }}"
   CUDA_ARCH="{{ gpu_qp_cuda_arch }}"
-  AER_VERSION="{{ gpu_qp_aer_version }}"
 )
 
 # Every run starts with these; arguments given to `run` are appended, so the
@@ -164,22 +162,71 @@ $(printf '        %s\n' "${BUILD_ARGS[@]}")
       per-phase progress, newest errors and the remaining-time estimate. --pipe,
       --airflow, --iceberg, --monitor and --batch probe the stack; --all shows every
       section; --no-color. Exit 0 whenever the arguments are valid, "no runs" included.
-  start (--run NAME | --check) [--upgrade-lib] [PHASE]...
+  resume [--run NAME [--phases "P1 [P2...]"]] [--allow-host-change] [--dry-run]
+      Start again what a power-off or a stop left unfinished: every STOPPED, ORPHANED or
+      INCOMPLETE (cut off, e.g. by a power loss) run that has cells left, oldest first, one
+      after another: each starts only when the one before ended DONE or FAILED, any other
+      end stops the chain. With --run, only that run, in any ended state. Done cells are
+      skipped. A run whose supervise is alive is never touched; the rest waits for it. An
+      ORPHANED run (lanes alive, supervise gone) is stopped with stop --now first. Refuses
+      while a stop --by cap is armed (gpu-qp stop --cancel first), while runs are already
+      queued, while something else holds the bench lock, and when another resume runs.
+      Prints one 'run' row per run (name, state, cells left, what happens) and one 'cell'
+      row per cell left (run, phase, lane, molecule, seed).
+      --phases       with --run: run only these phases of the run (see start)
+      --allow-host-change  passed to start (see there)
+      --dry-run      print the rows, plus a stack row per stopped stack container start would
+                     restart, and change nothing
+      e.g.  gpu-qp stop --by "fri 20:30"   before the power-off, then  gpu-qp resume
+  start (--run NAME | --check) [--upgrade-lib] [--allow-host-change] [--phases "P1 [P2...]"] [PHASE]...
       Start run NAME in the background (phases are required the first time and stored)
       or resume it: done cells are skipped. Run as the bench owner. Refuses a done run,
-      a legacy run and a second run. Takes the lock, runs the preflight, snapshots the
-      helpers into the run.
+      a legacy run, a closed run and a second run. Takes the lock, then starts (docker start)
+      any stopped container of the stack (never compose up, never a recreate; waits up to
+      GPU_QP_STACK_WAIT_SEC, 120, for it to be healthy), runs the preflight (a running side
+      stack, see 'side', fails it) and snapshots the helpers into the run. The preflight
+      host row compares kernel, NVIDIA driver, nvidia-ctk and Docker versions with the
+      run's <run>/host record (written at its first start) and FAILs on a difference.
       --check        only the preflight: one ok|FAIL line per check, no lock taken
       --upgrade-lib  replace the run's helper snapshot with the installed one (logged)
+      --allow-host-change  accept a changed host: logged in supervise.log, appended to
+                     <run>/host.changes, and the new signature becomes the run's record
+      --phases       on a resume, run only these phases of the run (the first list is kept
+                     in <run>/phases.orig; a phase the run never had is refused)
   stop [--run NAME] [--now]
       Graceful: finish the cell in flight, then stop. --now kills the run and its cell
       containers; the cell reruns on resume.
+  stop (--by TIME | --cancel)
+      The one power-off cap of the host, for whatever runs. --by TIME (anything 'date -d'
+      reads, in the future) stops the running run gracefully now (no new cell starts) and
+      leaves a detached sleeper (bench/stop.by, log stop.by.log) that at TIME kills the
+      resume waiters and runs stop --now on the run holding the lock; 'status' shows
+      'stop by'. --cancel drops it: kills the sleeper and the waiters, removes bench/stop.by
+      and the running run's stop.request. e.g.  gpu-qp stop --by "fri 20:30"
+  close --run NAME
+      Give an abandoned run (stopped, cut off, failed, blocked) the final state CLOSED:
+      resume, start and the kernel pin guard skip it. Refuses a run in progress.
   runs
       One tab-separated line per run: NAME STATE DONE EXPECTED CURRENT NOTE.
-      States: RUNNING ORPHANED DONE FAILED BLOCKED STOPPED INCOMPLETE.
+      States: RUNNING ORPHANED DONE FAILED BLOCKED STOPPED CLOSED INCOMPLETE.
   fetch --run NAME [--full]
       A tar.gz of the run on stdout: code, tables and driver logs; --full adds the cell
       directories. e.g.  ssh gpu 'gpu-qp fetch --run final' | tar xzf -
+  fingerprint
+      Read-only digest of the benchmark environment (checkout, images, containers, volumes,
+      networks, gpu-qp files, run trees): one line per section with a 16-hex hash, then
+      FINGERPRINT <hash>. Side stacks (project qpside-*) are left out; the checkout's
+      .git/index is not touched. e.g.  gpu-qp fingerprint > before; ...; diff before <(gpu-qp fingerprint)
+  side check DIR
+      Is the checkout DIR safe to bring up beside the benchmark stack? Renders its
+      compose config as project qpside-<name of DIR> with DIR/compose/side.override.yml
+      (read-only) and fails, one line per problem, on: a run in progress (the bench lock is
+      held); a bind mount of a path under ~/gpu-qp outside DIR; a network_mode other than
+      a qpside container's; a volume or network name the bench stack uses; a Docker socket
+      mount; a build of a protected image (quantum-pipeline:cpu quantum-pipeline:gpu, the
+      Spark image, ml-*); the bench S3_ENDPOINT or R2_* values; less free disk on / than
+      the floor plus the side margin. Prints OK otherwise. Bring the stack up by hand with
+      -p qpside-<name>.
       Run trees: $BENCH_ROOT  Helpers: $LIB
 
   help
@@ -447,10 +494,11 @@ cmd_build() {
 
   local dockerfile="$SOURCE/docker/Dockerfile.gpu"
   [ -f "$dockerfile" ] || die "no docker/Dockerfile.gpu in $SOURCE"
-  # An older Dockerfile.gpu ignores the build args and ships CUDA's forward-compat
-  # libcuda, which fails on GeForce cards (error 804).
-  grep -q "^ARG CUDA_VERSION=" "$dockerfile" \
-    || die "docker/Dockerfile.gpu at this revision has no ARG CUDA_VERSION - gpu-qp pull a newer branch"
+  # A final stage on an nvidia/cuda image ships CUDA's forward-compat libcuda,
+  # which fails on GeForce cards (error 804); the runtime stage must be plain Ubuntu.
+  if grep -i '^FROM ' "$dockerfile" | tail -n 1 | grep -qi 'nvidia/cuda'; then
+    die "docker/Dockerfile.gpu at this revision ends on an nvidia/cuda image (forward-compat libcuda, error 804) - gpu-qp pull a newer branch"
+  fi
 
   local revision fingerprint
   revision="$(source_revision)"
@@ -876,7 +924,7 @@ case "$command" in
   pull|patch|sync|build|check|run|bench|matrix|scan)
     read_only_call "$command" "$@" || refuse_while_running
     "cmd_$command" "$@" ;;
-  status|start|stop|runs|fetch)
+  status|start|stop|close|runs|fetch|fingerprint|side|resume)
     check_lib "$command"
     exec bash "$LIB/cli.sh" "$command" "$@" ;;
   help|-h|--help) usage ;;

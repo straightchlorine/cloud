@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake nvidia-ctk for tests/bench: --version prints two lines, the first names $FAKE_CTK.
+echo "NVIDIA Container Toolkit CLI version ${FAKE_CTK:-1.17.8}"
+echo "commit: 0000000"

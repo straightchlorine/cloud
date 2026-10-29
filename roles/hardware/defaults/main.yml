@@ -62,9 +62,12 @@ hardware_profiles:
       cpus: "0.75"
       memory_reservation: "128M"
       cpus_reservation: "0.5"
+    # 512M: page cache counts against the limit, and at 256M the 65 MB database and
+    # the cover thumbnails were evicted on every browse. 2.0 for scans and thumbnails;
+    # playback uses under 1% of a core.
     navidrome:
-      memory: "256M"
-      cpus: "1.0"
+      memory: "512M"
+      cpus: "2.0"
       memory_reservation: "128M"
       cpus_reservation: "0.5"
     portainer:

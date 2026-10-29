@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake runuser for tests/bench: `runuser -u USER -- CMD...` runs CMD as the caller; FAKE_RUNUSER=fail fails.
+[ "${FAKE_RUNUSER:-ok}" != fail ] || exit 1
+[ "${1:-}" = -u ] && [ "${3:-}" = -- ] || exit 2
+shift 3
+exec "$@"

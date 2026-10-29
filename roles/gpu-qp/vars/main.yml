@@ -11,10 +11,13 @@ gpu_qp_bench_files:
   - env.sh
   - eta.py
   - extract.py
+  - fingerprint.sh
+  - kernel-guard.sh
   - lane.sh
   - lanes.py
   - lanes.tsv
   - phase.sh
   - sample.sh
+  - side.py
   - status.sh
   - supervise.sh

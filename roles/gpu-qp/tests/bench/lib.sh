@@ -21,6 +21,9 @@ GPU_QP_SOURCE=$T/src
 GPU_QP_BENCH_ROOT=$T/bench
 GPU_QP_IMAGES='quantum-pipeline:cpu quantum-pipeline:gpu'
 GPU_QP_MIN_FREE_GB=0
+GPU_QP_SIDE_MARGIN_GB=0
+GPU_QP_PROTECTED_IMAGES='quantum-pipeline:cpu quantum-pipeline:gpu quantum-pipeline-spark:4.0.2-python3.12'
+GPU_QP_USER=$(id -un)
 GPU_QP_STACK_SERVICES='kafka schema-registry redpanda-connect'
 EOF2
   [ -e "$LIB/override.yml" ] || : > "$LIB/override.yml"

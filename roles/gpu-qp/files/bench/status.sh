@@ -112,7 +112,22 @@ case $state in
     age=$(stalled_min "$BENCH") && line+="  stalled ${age}m"
     ;;
 esac
+# The host-wide power-off cap (stop --by), and every run queued behind another (resume).
+if pidfile_alive "$GPU_QP_BENCH_ROOT/stop.by"; then
+  read -r _ e _ < "$GPU_QP_BENCH_ROOT/stop.by"
+  line+="  stop by $(date -d "@$e" '+%a %F %H:%M')"
+fi
 printf '%s\n' "$line"
+# The kernel guard's pin (bench/kernel.pin: kernel, then the pending runs).
+if [ -r "$GPU_QP_BENCH_ROOT/kernel.pin" ] && read -r k pend < "$GPU_QP_BENCH_ROOT/kernel.pin"; then
+  printf 'kernel pinned to %s (pending: %s)\n' "$k" "${pend// /, }"
+fi
+for f in "$GPU_QP_BENCH_ROOT"/*/start.after; do
+  if pidfile_alive "$f"; then
+    read -r _ e _ < "$f"
+    printf 'run %s: start after %s\n' "$(basename "$(dirname "$f")")" "$e"
+  fi
+done
 printf '%sgpu-qp status%s  %s  %s\n' "$B" "$R" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)"
 
 # True when the Docker daemon answers; the first failure prints the one `docker: unreachable` line.

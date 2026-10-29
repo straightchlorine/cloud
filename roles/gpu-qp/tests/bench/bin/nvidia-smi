@@ -15,6 +15,7 @@ case "${1:-}" in
         case "$f" in
           index) v=$gpu ;;
           name) v=Fake ;;
+          driver_version) v=${FAKE_DRIVER:-550.163.01} ;;
           *) v=5 ;;
         esac
         row="${row:+$row, }$v"

@@ -27,11 +27,11 @@
   become: true
 
 - name: Remove Syncthing apt repository
-  ansible.builtin.apt_repository:
-    repo: |
-      deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg]
-      https://apt.syncthing.net/ syncthing stable-v2
-    filename: syncthing
+  # The file syncthing.yml's apt_repository (filename: syncthing) writes.
+  # apt_repository itself refuses to run, even for state: absent, on a host
+  # without gpg or apt-key - which Debian 13 no longer ships.
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/syncthing.list
     state: absent
   become: true
 

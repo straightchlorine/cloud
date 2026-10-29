@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake update-grub for tests/bench: logs the call; FAKE_UPDATE_GRUB=fail makes it fail.
+echo "update-grub" >> "${FAKE_LOG:-/dev/null}"
+[ "${FAKE_UPDATE_GRUB:-ok}" != fail ] || { echo "grub-mkconfig: boom" >&2; exit 1; }

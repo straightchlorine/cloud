@@ -1,0 +1,5 @@
+# Managed by Ansible - Do not edit manually
+# A timer that fires after a power-off (Persistent=true) starts the upgrade at once; run the guard first.
+[Unit]
+Wants=gpu-qp-kernel-guard.service
+After=gpu-qp-kernel-guard.service

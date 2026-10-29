@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lanes  # noqa: E402
 
-MOLS = ['H2', 'HeH+', 'LiH', 'BeH2', 'H2O', 'NH3']
+MOLS = lanes.MOLECULES
 THESIS = {  # seconds per evaluation, thesis
     'cpu-aer': [0.067, 0.086, 1.59, 2.75, 4.45, 16.6],
     'gpu1': [0.078, 0.102, 1.67, 2.01, 3.28, 12.2],

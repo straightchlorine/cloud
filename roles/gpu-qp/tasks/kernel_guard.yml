@@ -1,0 +1,82 @@
+---
+# After data.yml: the timer runs kernel-guard.sh from the installed helper directory.
+
+- name: Install the kernel guard units
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop:
+    - {src: gpu-qp-kernel-guard.service.j2, dest: /etc/systemd/system/gpu-qp-kernel-guard.service}
+    - {src: gpu-qp-kernel-guard.timer.j2, dest: /etc/systemd/system/gpu-qp-kernel-guard.timer}
+  loop_control:
+    label: "{{ item.dest }}"
+  when: gpu_qp_kernel_guard
+
+- name: Run the guard before every unattended upgrade
+  ansible.builtin.file:
+    path: /etc/systemd/system/apt-daily-upgrade.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: gpu_qp_kernel_guard
+
+- name: Install the apt-daily-upgrade drop-in
+  ansible.builtin.template:
+    src: gpu-qp-kernel-guard.conf.j2
+    dest: /etc/systemd/system/apt-daily-upgrade.service.d/gpu-qp-kernel-guard.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: gpu_qp_kernel_guard
+
+- name: Enable the kernel guard timer
+  ansible.builtin.systemd:
+    name: gpu-qp-kernel-guard.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: gpu_qp_kernel_guard
+
+- name: Stop and disable the kernel guard timer
+  ansible.builtin.systemd:
+    name: gpu-qp-kernel-guard.timer
+    enabled: false
+    state: stopped
+  become: true
+  failed_when: false
+  when: not gpu_qp_kernel_guard
+
+- name: Undo the kernel pin
+  # The guard's own unpin: apt config, kernel.pin, and GRUB_DEFAULT only when it carries the marker.
+  ansible.builtin.command:
+    cmd: bash {{ gpu_qp_lib_path }}/kernel-guard.sh --unpin
+    removes: "{{ gpu_qp_lib_path }}/kernel-guard.sh"
+  become: true
+  register: gpu_qp_kernel_unpin
+  changed_when: "'kernel-guard:' in gpu_qp_kernel_unpin.stdout"
+  when: not gpu_qp_kernel_guard
+
+- name: Remove the kernel guard units
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /etc/systemd/system/gpu-qp-kernel-guard.timer
+    - /etc/systemd/system/gpu-qp-kernel-guard.service
+    - /etc/systemd/system/apt-daily-upgrade.service.d/gpu-qp-kernel-guard.conf
+  when: not gpu_qp_kernel_guard
+
+- name: Reload systemd after removing the units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  when: not gpu_qp_kernel_guard

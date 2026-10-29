@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake uname for tests/bench: -r prints $FAKE_KERNEL; anything else is the real one.
+[ "${1:-}" = -r ] && { echo "${FAKE_KERNEL:-6.12.111+deb13-cloud-amd64}"; exit 0; }
+exec /usr/bin/uname "$@"

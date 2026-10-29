@@ -4,6 +4,7 @@
 Usage: lanes.py TSV SUBCOMMAND [ARGS]
 
   phases                 the phases in file order, one line
+  names                  the molecule names by index (the --molecule-index of lane.sh), one line
   cells PHASE [LANE]     phase<TAB>lane<TAB>molecule_index<TAB>seed per cell, in run order
   expect PHASE...        PHASE<TAB>N per phase, then total<TAB>N
   steps PHASE            step<TAB>lane lane ... per step, ascending
@@ -19,6 +20,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+MOLECULES = ['H2', 'HeH+', 'LiH', 'BeH2', 'H2O', 'NH3']  # the same order as MOLNAME in lane.sh
 COLUMNS = ['phase', 'lane', 'service', 'extra_args', 'basis', 'seeds', 'molecules', 'budget', 'init', 'step']
 
 
@@ -71,6 +73,8 @@ def run(rows: list[dict], cmd: str, args: list[str]) -> list[str]:
     out = []
     if cmd == 'phases' and not args:
         out.append(' '.join(uniq(r['phase'] for r in rows)))
+    elif cmd == 'names' and not args:
+        out.append(' '.join(MOLECULES))
     elif cmd == 'cells' and 1 <= len(args) <= 2:
         out += [f'{p}\t{ln}\t{m}\t{s}' for p, ln, m, s in cells(rows, *args)]
     elif cmd == 'expect' and args:

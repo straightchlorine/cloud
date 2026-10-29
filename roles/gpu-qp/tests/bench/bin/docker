@@ -2,6 +2,11 @@
 # Fake docker for tests/bench. Every call is appended to $FAKE_LOG as one space-joined line:
 # the argument after the second -f is @OVERRIDE@, then $FAKE_RUN is @RUN@, $FAKE_SRC is
 # @SRC@ and uid:gid is @U@. Behaviour per FAKE_MODE (compose run), FAKE_INFO, FAKE_PS, FAKE_STACK.
+# Read-only queries print their variable: FAKE_SIDE (project label of each running container),
+# FAKE_VOLUMES, FAKE_NETWORKS, FAKE_CONFIG (a file for `compose config`), FAKE_IMAGES, FAKE_IDS,
+# FAKE_INSPECT, FAKE_DOCKER_VERSION. Stack restore: FAKE_STACK_ALL lists the containers `ps -a` shows
+# (service, id, state, name; default: the three services, running), `start ID` marks one up and the
+# running list then includes it.
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 args=("$@")
 line="docker $*"
@@ -67,6 +72,15 @@ cell_run() {
 case "${1:-}" in
   compose)
     for a in "${args[@]}"; do
+      [ "$a" = config ] && {
+        prev=''
+        for b in "${args[@]}"; do
+          case "$prev" in -f | --env-file) [ -e "$b" ] || { echo "no such file: $b" >&2; exit 1; } ;; esac
+          prev=$b
+        done
+        [ -z "${FAKE_CONFIG:-}" ] || cat "$FAKE_CONFIG"
+        exit 0
+      }
       [ "$a" = run ] && cell_run
     done
     exit 0 ;;
@@ -78,11 +92,39 @@ case "${1:-}" in
   image)
     # image inspect --format ... IMG
     echo "sha256:fake-${args[-1]##*:} 2026-10-18T00:00:00Z"; exit 0 ;;
+  images) printf '%s\n' "${FAKE_IMAGES:-}" | sed '/^$/d'; exit 0 ;;
+  inspect) printf '%s\n' "${FAKE_INSPECT:-}" | sed '/^$/d'; exit 0 ;;
+  volume)
+    case "$*" in
+      "volume ls"*) printf '%s\n' "${FAKE_VOLUMES:-}" | sed '/^$/d' ;;
+      "volume inspect"*) for v in "${args[@]:4}"; do echo "$v 2026-10-01T00:00:00Z"; done ;;
+    esac
+    exit 0 ;;
+  network)
+    case "$*" in "network ls"*) printf '%s\n' "${FAKE_NETWORKS:-}" | sed '/^$/d' ;; esac
+    exit 0 ;;
+  start)
+    [ "${FAKE_START:-ok}" != fail ] || exit 1
+    echo "${args[1]}" >> "${FAKE_LOG:-/dev/null}.up"
+    exit 0 ;;
+  version) echo "${FAKE_DOCKER_VERSION:-29.0.1}"; exit 0 ;;
   ps)
     case "$*" in
+      "ps -a "*)
+        if [ -n "${FAKE_STACK_ALL+x}" ]; then printf '%b\n' "$FAKE_STACK_ALL"
+        else
+          for s in kafka schema-registry redpanda-connect; do printf '%s\tid-%s\trunning\tml-%s\n' "$s" "$s" "$s"; done
+        fi ;;
+      *" -aq"*) printf '%s\n' "${FAKE_IDS:-}" | sed '/^$/d' ;;
+      *'{{.Label "com.docker.compose.project"}}'*) printf '%s\n' "${FAKE_SIDE:-}" | sed '/^$/d' ;;
       *" -q"*) [ -n "${FAKE_PS:-}" ] && printf '%s\n' "$FAKE_PS" ;;
       *--format*)
-        if [ -n "${FAKE_STACK+x}" ]; then printf '%s\n' "$FAKE_STACK"
+        if [ -n "${FAKE_STACK+x}" ]; then
+          printf '%s\n' "$FAKE_STACK"
+          # containers `docker start` brought up
+          while IFS= read -r up; do
+            printf '%b\n' "${FAKE_STACK_ALL:-}" | awk -F'\t' -v i="$up" '$2 == i { print $1 "\trunning\tUp 1 second (healthy)" }'
+          done < "${FAKE_LOG:-/dev/null}.up" 2> /dev/null
         else
           for s in kafka schema-registry redpanda-connect; do
             printf '%s\trunning\tUp 2 hours (healthy)\n' "$s"

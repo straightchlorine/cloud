@@ -13,8 +13,10 @@
   become: true
 
 - name: Check whether the NVIDIA kernel module is already built
-  ansible.builtin.stat:
-    path: "/lib/modules/{{ ansible_kernel }}/updates/dkms/nvidia.ko"
+  # Debian ships it as nvidia-current.ko.xz, other builds as nvidia.ko.
+  ansible.builtin.find:
+    paths: "/lib/modules/{{ ansible_kernel }}/updates/dkms"
+    patterns: ["nvidia.ko*", "nvidia-current.ko*"]
   register: gpu_qp_nvidia_module
   become: true
 
@@ -25,14 +27,14 @@
   ansible.builtin.command:
     cmd: dkms autoinstall
   become: true
-  when: not gpu_qp_nvidia_module.stat.exists
+  when: gpu_qp_nvidia_module.matched == 0
   changed_when: true
 
 - name: Refresh the initramfs so the new module loads at boot
   ansible.builtin.command:
     cmd: update-initramfs -u -k all
   become: true
-  when: not gpu_qp_nvidia_module.stat.exists
+  when: gpu_qp_nvidia_module.matched == 0
   changed_when: true
 
 - name: Load the NVIDIA kernel module now
@@ -40,4 +42,4 @@
     name: nvidia
     state: present
   become: true
-  when: not gpu_qp_nvidia_module.stat.exists
+  when: gpu_qp_nvidia_module.matched == 0
