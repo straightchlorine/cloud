@@ -37,3 +37,6 @@ Thumbs.db
 
 # Docs WIP
 docs/
+
+# pip wheels downloaded next to the media tools (not part of the role)
+roles/media/files/tools/*.whl
