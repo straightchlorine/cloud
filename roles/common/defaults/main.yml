@@ -35,6 +35,9 @@ common_packages:
   - fzf
   # mosh: interactive sessions that survive a flaky wifi hop
   - mosh
+  # kitty-terminfo: kitty sends TERM=xterm-kitty over ssh, and without its entry
+  # tmux refuses to start ("missing or unsuitable terminal")
+  - kitty-terminfo
   - ufw
   - fail2ban
   # cron: the role schedules jobs with ansible.builtin.cron (auto_updates,

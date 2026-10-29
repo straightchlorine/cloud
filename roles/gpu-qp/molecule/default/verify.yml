@@ -130,7 +130,7 @@
           - gpu_qp_help.stdout is search('(?m)^  runs$')
           - gpu_qp_help.stdout is search('(?m)^  fetch ')
           - gpu_qp_help.stdout is search('(?m)^  resume ')
-          - gpu_qp_help.stdout is search('(?m)^  fingerprint ')
+          - gpu_qp_help.stdout is search('(?m)^  fingerprint$')
           - gpu_qp_help.stdout is search('(?m)^  close --run NAME$')
           - gpu_qp_help.stdout is search('--allow-host-change')
           - gpu_qp_help.stdout is search('(?m)^  side check ')
