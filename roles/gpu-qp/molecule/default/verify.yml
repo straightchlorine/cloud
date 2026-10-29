@@ -338,6 +338,15 @@
 
     # --- the helpers against the installed lib ---------------------------------------------
 
+    - name: Install git for the bench tests
+      # test_side.sh builds a real checkout to prove fingerprint leaves .git/index alone;
+      # the base image has no git, so those steps would silently do nothing.
+      ansible.builtin.apt:
+        name: git
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
     - name: Copy the bench tests into the container
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../tests/bench/"
