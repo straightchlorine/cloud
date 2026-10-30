@@ -490,8 +490,23 @@
         fail_msg: manage/media-sync/beet symlinks, playlists.txt or a stale media-import-album
         success_msg: "[OK] manage-media + media-sync + beet in PATH, playlists.txt 0600, media-import-album retired"
 
+    - name: Stub docker for the beets pull and the text-fix dry run
+      # Nothing is downloaded, so no import runs, but every sync still pulls the
+      # beets image and ends with the text-fix dry run in that container. The
+      # stub answers those two calls ("nothing to fix") and fails any other, so
+      # the sync cannot reach a container path this test does not expect.
+      ansible.builtin.copy:
+        dest: /usr/local/bin/docker
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          echo "$*" >> /tmp/molecule-docker-calls
+          case "$*" in
+            *" --profile tools pull -q beets" | *"media_tools.py fix-text --dry-run") exit 0 ;;
+          esac
+          exit 1
+
     - name: Run the deployed media-sync against the stub yt-dlp
-      # The stub downloads nothing, so beets is skipped.
       ansible.builtin.command: /usr/local/bin/media-sync
       changed_when: false
 
@@ -527,6 +542,23 @@
           - "'2 playlist(s): 0 track(s) imported, 0 left in downloads/, 0 unexpected yt-dlp error(s).' in sent[0]"
         fail_msg: "ntfy calls wrong: {{ sent }}"
         success_msg: "[OK] one success summary per sync run"
+
+    - name: Read the docker stub's recorded calls
+      ansible.builtin.slurp:
+        src: /tmp/molecule-docker-calls
+      register: media_docker_calls
+
+    - name: Assert the sync pulled beets, then ran the text fix once as a dry run
+      vars:
+        calls: "{{ (media_docker_calls.content | b64decode).splitlines() }}"
+      ansible.builtin.assert:
+        that:
+          - calls | length == 2
+          - calls[0].endswith(' --profile tools pull -q beets')
+          - calls[1] is search(' run --rm -T --entrypoint /lsiopy/bin/python3 beets ')
+          - calls[1].endswith('/config/tools/media_tools.py fix-text --dry-run')
+        fail_msg: "docker calls wrong: {{ calls }}"
+        success_msg: "[OK] the nightly sync checks for escaped text, and a clean library changes nothing"
 
     - name: Read root's and the stack user's crontab
       ansible.builtin.command: crontab -l -u root
