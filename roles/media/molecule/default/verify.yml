@@ -455,18 +455,26 @@
         fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"
         success_msg: "[OK] yt-dlp.conf rendered with the tag rules and archive"
 
-    - name: Assert the interactive tools are installed
+    - name: Read the common package list
+      # converge skips packages.yml (the whole apt list is too slow for a
+      # container), so the tools themselves are never installed here: check the
+      # list the media host gets them from instead.
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../../common/defaults/main.yml"
+        name: media_common_defaults
+
+    - name: Assert common_packages carries the interactive tools
       # tmux for the long backfill run (see the README), fzf for
-      # scripts/media/pick.sh, mosh for the sessions themselves. All of these
-      # come from common_packages.
-      ansible.builtin.command: "{{ item }}"
+      # scripts/media/pick.sh, mosh for the sessions themselves.
+      ansible.builtin.assert:
+        that:
+          - item in media_common_defaults.common_packages
+        fail_msg: "{{ item }} was dropped from common_packages; the media host needs it"
+        quiet: true
       loop:
-        - tmux -V
-        - fzf --version
-        - mosh --version
-      register: media_tools
-      changed_when: false
-      failed_when: media_tools.rc != 0
+        - tmux
+        - fzf
+        - mosh
 
     - name: Assert the management symlinks, the 0600 playlists and the retired command
       ansible.builtin.assert:
