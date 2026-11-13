@@ -101,39 +101,94 @@
     - restic_legacy_sudoers.stat.exists
     - restic_legacy_left.matched == 0
   block:
+    - name: Look at whether the push-model file is itself a general grant
+      ansible.builtin.command:
+        argv: [grep, -qE, '(NOPASSWD:|,)[[:space:]]*ALL[[:space:]]*$', /etc/sudoers.d/backup-user]
+      register: restic_legacy_sudoers_general
+      changed_when: false
+      failed_when: restic_legacy_sudoers_general.rc not in [0, 1]
+
+    - name: Move the connection user's general grant out of the push-model file
+      # Older installs wrote backup's NOPASSWD: ALL into this file next to restic env_keep defaults.
+      # The grant moves unchanged to its own file, so retiring the push-model file grants and revokes nothing.
+      ansible.builtin.copy:
+        content: "backup ALL=(root) NOPASSWD: ALL\n"
+        dest: /etc/sudoers.d/ansible-backup
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+      when:
+        - restic_connection_user == 'backup'
+        - restic_legacy_sudoers_general.rc == 0
+
     - name: Look for a general passwordless sudo grant for the backup account
-      # This is needed only when Ansible connects as backup, because removing its sudoers file
-      # without a second grant would lock the play out of root.
-      # The check is the capability itself: backup runs /usr/bin/true as root without a password. The old
-      # restic-only wildcard grant cannot allow that, so success means another general grant exists.
-      # A file that is itself a general grant cannot vouch for itself and is kept.
-      ansible.builtin.shell: |
-        ! grep -qE '(NOPASSWD:|,)[[:space:]]*ALL[[:space:]]*$' /etc/sudoers.d/backup-user || exit 1
-        runuser -u backup -- sudo -n -u root /usr/bin/true
-      args:
-        executable: /bin/bash
+      # This is needed only when Ansible connects as backup and the file is the command-limited restic grant.
+      # The check is the capability itself: that grant cannot allow /usr/bin/true, so success means another
+      # general grant exists and removing the file cannot lock the play out of root.
+      ansible.builtin.command:
+        argv: [runuser, -u, backup, --, sudo, -n, -u, root, /usr/bin/true]
       register: restic_legacy_other_sudo_grant
       changed_when: false
       failed_when: false  # rc 1 means no general grant; the next tasks read the result
-      when: restic_connection_user == 'backup'
+      when:
+        - restic_connection_user == 'backup'
+        - restic_legacy_sudoers_general.rc != 0
 
-    - name: Remove the wildcard sudoers file
-      ansible.builtin.file:
-        path: /etc/sudoers.d/backup-user
-        state: absent
-      when: restic_connection_user != 'backup' or restic_legacy_other_sudo_grant.rc == 0
+    - name: Retire the push-model sudoers file
+      when: >-
+        restic_connection_user != 'backup' or restic_legacy_sudoers_general.rc == 0
+        or restic_legacy_other_sudo_grant.rc == 0
+      block:
+        - name: Keep a disabled copy while the removal is proven
+          # sudo skips files in sudoers.d whose name contains a dot, so the copy grants nothing.
+          ansible.builtin.copy:
+            src: /etc/sudoers.d/backup-user
+            dest: /etc/sudoers.d/.backup-user.restore
+            remote_src: true
+            mode: "0440"
+
+        - name: Remove the push-model sudoers file
+          ansible.builtin.file:
+            path: /etc/sudoers.d/backup-user
+            state: absent
+
+        - name: Prove the connection user still becomes root
+          ansible.builtin.command:
+            argv: [runuser, -u, backup, --, sudo, -n, -u, root, /usr/bin/true]
+          changed_when: false
+          when: restic_connection_user == 'backup'
+
+        - name: Drop the disabled copy
+          ansible.builtin.file:
+            path: /etc/sudoers.d/.backup-user.restore
+            state: absent
+      rescue:
+        - name: Restore the push-model sudoers file
+          ansible.builtin.copy:
+            src: /etc/sudoers.d/.backup-user.restore
+            dest: /etc/sudoers.d/backup-user
+            remote_src: true
+            mode: "0440"
+
+        - name: Stop, because the connection user lost its root grant
+          ansible.builtin.fail:
+            msg: >-
+              Restored /etc/sudoers.d/backup-user: after removing it, backup could no longer run sudo without a
+              password. Check sudo -l -U backup before the next run.
 
     - name: Report the sudoers file Ansible still depends on
-      # The ignored failure only makes the kept file visible in the play output.
-      # The run must continue, because stopping would leave the host half-migrated.
+      # Left only when the file is the command-limited restic grant and backup has no other root grant.
+      # The ignored failure makes the kept, root-equivalent file visible; stopping would leave the host
+      # half-migrated.
       ansible.builtin.fail:
         msg: >-
-          Kept /etc/sudoers.d/backup-user: Ansible connects as backup and sudo shows no general
-          passwordless grant for it besides that file (the file itself may be one, and cannot vouch for itself).
-          Grant backup NOPASSWD: ALL elsewhere (or connect as another user), then delete the file by hand.
+          Kept /etc/sudoers.d/backup-user: its restic wildcard rule is backup's only root grant, and Ansible
+          connects as backup. Grant backup NOPASSWD: ALL in its own sudoers file, then rerun to retire it.
       ignore_errors: true
       when:
         - restic_connection_user == 'backup'
+        - restic_legacy_sudoers_general.rc != 0
         - restic_legacy_other_sudo_grant.rc != 0
 
     - name: Read the legacy backup account

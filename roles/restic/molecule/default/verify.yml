@@ -666,7 +666,7 @@
         - /opt/backup
         - /var/lib/molecule-lockout-home-kept
         - /var/lib/molecule-unrelated-kept
-        - /var/lib/molecule-self-grant-kept
+        - /var/lib/molecule-self-grant-moved
       register: molecule_lockout
 
     - name: Read the account entry recorded while the guard ran

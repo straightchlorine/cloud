@@ -208,8 +208,8 @@
             mode: "0644"
           when: molecule_lockout_kept.stat.exists
 
-        # The push-model file is itself a general grant here: sudo -l shows NOPASSWD: ALL, but that grant is the
-        # file about to be removed, so it must be kept.
+        # The push-model file is itself a general grant here: the grant moves to its own file before the
+        # push-model file goes.
         - name: Arrange the previous install's sudoers file as a general grant
           ansible.builtin.copy:
             content: "backup ALL=(root) NOPASSWD: ALL\n"
@@ -225,18 +225,30 @@
             restic_connection_user: backup
             restic_job_cfg: { name: lockout }
 
-        - name: Look at the self-granting sudoers file
+        - name: Look at the self-granting sudoers file, its replacement and the disabled copy
           ansible.builtin.stat:
-            path: /etc/sudoers.d/backup-user
-          register: molecule_self_grant_kept
+            path: "{{ item }}"
+          loop:
+            - /etc/sudoers.d/backup-user
+            - /etc/sudoers.d/ansible-backup
+            - /etc/sudoers.d/.backup-user.restore
+          register: molecule_self_grant
 
-        - name: Record that it was kept
+        - name: Record that the grant moved and the push-model file went
           ansible.builtin.copy:
             content: ""
-            dest: /var/lib/molecule-self-grant-kept
+            dest: /var/lib/molecule-self-grant-moved
             force: false
             mode: "0644"
-          when: molecule_self_grant_kept.stat.exists
+          when:
+            - not molecule_self_grant.results[0].stat.exists
+            - molecule_self_grant.results[1].stat.exists
+            - not molecule_self_grant.results[2].stat.exists
+
+        - name: Remove the moved grant, so the next case starts without a general grant
+          ansible.builtin.file:
+            path: /etc/sudoers.d/ansible-backup
+            state: absent
 
         - name: Make the file command-limited again
           ansible.builtin.copy:

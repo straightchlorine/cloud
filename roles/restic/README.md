@@ -247,10 +247,10 @@ A host with no stack role (station-arch, whose job is `station`) gets the engine
 these on the machine before the first deploy:
 
 1. `ssh backup@<host> 'sudo -n true && echo become-ok'` decides whether the deploy needs `-K`. When the host is
-   reached as `backup`, also run `sudo -l -U backup` on it and check that it shows a general grant
-   (`NOPASSWD: ALL`) that is not the one in `/etc/sudoers.d/backup-user`: the role removes that file only when
-   `backup` can run `sudo -n -u root /usr/bin/true` and the file is not itself a general grant, and otherwise keeps
-   it and reports it as an ignored failure in the play output.
+   reached as `backup`, `sudo -l -U backup` shows where its root grant comes from. If it is a `NOPASSWD: ALL`
+   line inside `/etc/sudoers.d/backup-user`, the role moves that grant unchanged to
+   `/etc/sudoers.d/ansible-backup` and retires the old file. If the old file only holds the restic wildcard rule,
+   it is removed only when another general grant exists; otherwise it is kept and reported as an ignored failure.
 2. Keep a copy of the legacy install, because the role removes it and cannot restore it:
    `sudo tar -C / -cpzf /root/legacy-backup.tgz --exclude=opt/backup/cache opt/backup etc/sudoers.d/backup-user
    etc/systemd/system/backup-station-arch.service etc/systemd/system/backup-station-arch.timer`. Read why the last
@@ -281,11 +281,9 @@ with the restic error if the password is wrong; arms `restic-job@station.timer` 
 retires the legacy install: it stops and disables `backup-<legacy_name>.{timer,service}` (`backup-station-arch.*`),
 deletes the units, every
 `.service.<pid>.<date>~` copy and the `.backup` files, resets the failed state, moves `/opt/backup/cache` into the
-cache directory (across filesystems) and keeps or removes `/etc/sudoers.d/backup-user` as the lockout guard
-decides (it tries `runuser -u backup -- sudo -n -u root /usr/bin/true`, which the old restic-only wildcard grant cannot
-satisfy, and never removes a file that is itself a general grant); a kept file is reported as an ignored failure and
-removed by hand once the connection user has another general passwordless grant. It removes `/opt/backup` unless that is
-the connection user's home.
+cache directory (across filesystems) and retires `/etc/sudoers.d/backup-user`: a general grant in it moves to
+`/etc/sudoers.d/ansible-backup` first, and the removal is undone if `backup` can no longer run `sudo -n`
+afterwards. It removes `/opt/backup` unless that is the connection user's home.
 The final tasks list the history the job continues. A first run on a real host also sends a test ntfy message.
 
 Watch the first run (it covers everything since the last good backup, so it takes a while):
