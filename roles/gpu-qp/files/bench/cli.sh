@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# cli.sh COMMAND [ARGS]: the benchmark-run commands of gpu-qp (status start stop close runs fetch
-# fingerprint side resume holder). The dispatcher /usr/local/bin/gpu-qp execs this file; tests run it
-# directly.
+# Implements the benchmark-run commands of gpu-qp as `cli.sh COMMAND [ARGS]`.
+# The dispatcher /usr/local/bin/gpu-qp execs this file, and the tests run it directly.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -30,11 +29,11 @@ EOF2
 NL=$'\n'
 now=$(date +%s)
 
-# stack_restore [dry]: `docker start` each GPU_QP_STACK_SERVICES container of the ml project that exists
-# but is stopped (exited or created: it did not come back after a power-off), then wait up to
-# GPU_QP_STACK_WAIT_SEC for it to be healthy (running, when it has no healthcheck). Only ever the
-# same container: never compose up, never a recreate. A missing container is left to the preflight.
-# Prints "restarted stopped stack container NAME"; with `dry`, only "stack<TAB>NAME<TAB>would restart".
+# stack_restore [dry]: run `docker start` on each GPU_QP_STACK_SERVICES container of the ml project that
+# is stopped (exited or created). It then waits up to GPU_QP_STACK_WAIT_SEC for the container to be
+# healthy, which means running when it has no healthcheck. It never runs compose up or recreates a
+# container, and a missing container is left to the preflight. It prints "restarted stopped stack
+# container NAME"; with `dry` it prints only "stack<TAB>NAME<TAB>would restart (STATE)".
 stack_restore() {
   local svc id state name all i
   all=$(timeout 20 docker ps -a --filter label=com.docker.compose.project=ml --filter label=com.docker.compose.oneoff=False \
@@ -56,8 +55,8 @@ stack_restore() {
 }
 
 # preflight [check] [RUNDIR]: one "ok|FAIL<TAB>check<TAB>detail" line per check, rc 1 if any FAIL. The
-# `lock` check is for --check; `start` already holds the lock. HOST_SIG is the host signature `start`
-# took (else it is read here); RUNDIR is the run whose host record the `host` row compares with.
+# `lock` check is for --check, because `start` already holds the lock. HOST_SIG is the host signature
+# `start` took, and is read here when unset. RUNDIR is the run whose host record the `host` row compares with.
 preflight() {
   local bad=0 root n img svc stack line diff
   row() { # status check detail
@@ -99,13 +98,14 @@ preflight() {
   n=$(timeout 20 docker ps -q --filter label=com.docker.compose.project=ml \
     --filter label=com.docker.compose.oneoff=True 2> /dev/null | grep -c .)
   if [ "$n" -eq 0 ]; then row ok orphans none; else row FAIL orphans "$n running cell container(s)"; fi
-  # A side stack (project qpside-*) shares the host: it would disturb the timings.
+  # A side stack (project qpside-*) shares the host and would disturb the timings.
   line=$(timeout 20 docker ps --format '{{.Label "com.docker.compose.project"}}' 2> /dev/null | grep '^qpside-' | sort -u | paste -sd' ' -)
   if [ -z "$line" ]; then row ok side none; else row FAIL side "side stack running: $line"; fi
   return "$bad"
 }
 
-# lib_diff OLD NEW: one supervise.log line per changed lib file.
+# lib_diff OLD NEW: log one supervise.log line per added, removed or changed lib file.
+# It logs a single "unchanged" line when nothing differs.
 lib_diff() {
   local -A o n
   local h f changed=0
@@ -174,9 +174,9 @@ arm_stop() {
   echo "stop --now at $(date -d "@$1" '+%a %F %H:%M') (pid $pid, log $f.log); gpu-qp stop --cancel drops it"
 }
 
-# schedule_after RUN OTHER START-ARGS...: internal, for resume. A detached waiter that runs
-# `start START-ARGS` once OTHER has ended. It records itself in <run>/start.after (pid OTHER
-# starttime).
+# schedule_after RUN OTHER START-ARGS...: internal, for resume. It launches a detached waiter that runs
+# `start START-ARGS` once OTHER has ended. The waiter records its pid, OTHER and its start time
+# in <run>/start.after.
 schedule_after() {
   local dir=$GPU_QP_BENCH_ROOT/$1 pid
   setsid nohup bash "$HERE/cli.sh" _start_after "$@" 8<&- 9<&- < /dev/null >> "$dir/start.after.log" 2>&1 &
@@ -220,10 +220,10 @@ check_phases() {
   done
 }
 
-# record_host DIR: with HOST_SIG the signature `start` took. No <run>/host yet (a first start, or a run
-# from before the record): write it, and say so for a run that has history. A signature that differs
-# (the preflight let it through, so --allow-host-change): log it, append it to host.changes and make it
-# the run's record; the first entry of host.changes still names what the run started on.
+# record_host DIR: compare HOST_SIG, the signature `start` took, with the run's host record.
+# Without a <run>/host (a first start, or a run that never had one) it writes the record. It also logs
+# that for a run with a supervise.log. A differing signature got past the preflight only through
+# --allow-host-change, so it is logged, appended to host.changes and becomes the record.
 record_host() {
   local diff
   if [ ! -f "$1/host" ]; then
@@ -281,7 +281,7 @@ cmd_start() {
     [ "$(done_state "$dir")" = DONE ] && die "run $run is done; start a new run"
     [ "$(done_state "$dir")" = CLOSED ] && die "run $run is closed; start a new run"
     if [ -n "$sel" ]; then
-      # --phases restricts the resume to some of the run's phases (phases.orig keeps the first list)
+      # --phases restricts the resume to some of the run's phases, and phases.orig keeps the first list.
       check_phases "$dir" "$sel"
       read -ra phases <<< "$sel"
     elif [ ${#phases[@]} -eq 0 ]; then
@@ -473,7 +473,7 @@ cmd_close() {
 # _pending: internal, for the kernel guard. One "run<TAB>state<TAB>kernel" row per run that has work
 # left, oldest start first: a managed run (it has lib/supervise.sh) that is RUNNING or that resume
 # would pick up (STOPPED, ORPHANED, INCOMPLETE) and that has cells left. Not DONE, FAILED, BLOCKED
-# or CLOSED, not a legacy run. kernel is the run's host record (`-` when it has none).
+# or CLOSED, and not a legacy run (one without lib/supervise.sh). kernel is the run's host record (`-` when it has none).
 cmd_pending() {
   local name dir state k c
   for name in $(known_runs); do
@@ -571,15 +571,14 @@ remaining_cells() {
   done
 }
 
-# resume [--run NAME [--phases "P1 ..."]] [--dry-run]: start the stopped runs that have cells left,
-# oldest first, one after another (each waiter starts its run only when the one before ended DONE or
-# FAILED). Without --run: every STOPPED, ORPHANED or INCOMPLETE (power loss) run; with --run: that
-# run, whatever ended it. A run whose supervise lives is never touched; the rest waits for it. An
-# ORPHANED run (lanes alive, supervise gone) is finalized with stop --now first. It refuses while a
-# stop --by cap is armed (gpu-qp stop --cancel), while resume waiters are queued, and while a
-# foreign process holds the bench lock; one resume at a time (.resume.lock). Dead stop.by and
-# start.after files (a reboot) are removed. Output: `run` rows (name, state, cells left, what
-# happens), `cell` rows, `skip` rows.
+# resume [--run NAME [--phases "P1 ..."]] [--dry-run]: start the runs that have cells left, oldest first.
+# Each run waits for the one before it and starts only when that one ended DONE or FAILED.
+# Without --run it takes every STOPPED, ORPHANED or INCOMPLETE run, and with --run it takes that run.
+# A run whose supervise is alive is never touched, and the others queue behind it.
+# An ORPHANED run (lanes alive, supervise gone) is finalized with stop --now first.
+# It refuses while a stop --by cap is armed, while resume waiters are queued, or while a foreign process
+# holds the bench lock. Only one resume runs at a time, guarded by .resume.lock.
+# The output has `run` rows (name, state, cells left, action), `cell` rows and `skip` rows.
 cmd_resume() {
   local run='' sel='' dry=0 allow='' name dir state left total busy='' prev='' c names f ph
   local list=() order=()
@@ -602,7 +601,7 @@ cmd_resume() {
     for f in "$GPU_QP_BENCH_ROOT"/*/start.after; do
       [ ! -e "$f" ] || ! pidfile_alive "$f" || die "runs are already queued ($(basename "$(dirname "$f")")...): gpu-qp stop --cancel drops them"
     done
-    # what a reboot left behind: the pids are gone
+    # A reboot leaves these files behind with dead pids.
     rm -f "$GPU_QP_BENCH_ROOT"/stop.by "$GPU_QP_BENCH_ROOT"/*/start.after
   fi
   if [ -n "$run" ]; then
@@ -638,7 +637,7 @@ cmd_resume() {
     c=$(sed -n 's/^\[supervise\] start \([^ ]*\) .*/\1/p;T;q' "$dir/supervise.log" 2> /dev/null)
     list+=("${c:--} $name")
   done
-  # oldest start first
+  # Sort the runs by start time, oldest first.
   while read -r _ name; do [ -z "$name" ] || order+=("$name"); done < <(printf '%s\n' "${list[@]}" | LC_ALL=C sort)
   [ ${#order[@]} -gt 0 ] || { echo "nothing to resume"; return 0; }
 
@@ -679,7 +678,7 @@ cmd_resume() {
 
 cmd_fingerprint() { [ $# -eq 0 ] || usage; exec bash "$HERE/fingerprint.sh"; }
 
-# side check DIR: side.py reads the live bench state itself; it gets the bench.env values.
+# side check DIR: side.py reads the live bench state itself and receives the bench.env values through the environment.
 cmd_side() {
   [ "${1:-}" = check ] && [ $# -eq 2 ] || usage
   export GPU_QP_HOME GPU_QP_SOURCE GPU_QP_BENCH_ROOT GPU_QP_MIN_FREE_GB GPU_QP_SIDE_MARGIN_GB GPU_QP_PROTECTED_IMAGES

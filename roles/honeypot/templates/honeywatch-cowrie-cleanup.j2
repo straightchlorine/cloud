@@ -1,13 +1,13 @@
 #!/bin/sh
 # {{ ansible_managed }}
-# Cap cowrie's captured-download volume: cowrie limits each file but not the
-# cumulative size, so a long-running honeypot fills the disk otherwise.
+# Caps cowrie's captured-download volume.
+# Cowrie limits each file but not the cumulative size, so a long-running honeypot would otherwise fill the disk.
 set -eu
 
 TAG=honeywatch-cowrie-cleanup
-# Log every outcome to journald and stdout. run-parts has no OnFailure handler, so
-# a silent no-op (e.g. the volume name drifting when COMPOSE_PROJECT_NAME is not
-# "honeywatch") would let downloads grow until the disk fills.
+# Every outcome is logged to journald and stdout, because run-parts has no OnFailure handler.
+# A silent no-op, such as a volume name that drifts when COMPOSE_PROJECT_NAME is not "honeywatch",
+# would let downloads grow until the disk fills.
 log() {
     echo "$TAG: $*"
     command -v logger >/dev/null 2>&1 && logger -t "$TAG" -- "$*" || true

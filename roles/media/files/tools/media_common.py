@@ -36,13 +36,10 @@ def split_tail(text):
 def same_title(mine, theirs):
     """Whether two titles name the same track.
 
-    They do when they match after normalisation, when one opens the other
-    ("Principles of Lust" / "Principles of Lust: Sadeness / ..."), or when they
-    are nearly identical. A parenthetical both carry - the "(Live In Mexico City)"
-    every track of a live album ends with - is taken off first: left on, it is
-    most of every title and makes "Ride" and "Trees" 88% alike. A parenthetical
-    only one has ("(Slowed)", "(Sped Up)") is kept, because that is a different
-    track, and a title that merely continues into one is not the same track.
+    They do when they match after normalisation, when one opens the other, or when they
+    are nearly identical. A parenthetical both carry, such as "(Live In Mexico City)", is
+    removed first so that it cannot make unrelated titles look alike. A parenthetical only
+    one title has, such as "(Slowed)", is kept because it marks a different track.
     """
     (a_base, a_tail), (b_base, b_tail) = split_tail(mine), split_tail(theirs)
     if a_tail and b_tail and key(a_tail) == key(b_tail):
@@ -110,10 +107,11 @@ def path_of(item):
 
 
 def same_title_lenient(mine, theirs):
-    """same_title, and also two titles that differ only by a trailing parenthetical one of
-    them carries ("Heavydirtysoul" / "Heavydirtysoul (live)", "Song (Original Mix)"). A
-    parenthetical is how a file and a release name the same track differently, but also
-    how a different track is told apart ("(Slowed)"): the caller must check the lengths."""
+    """Like same_title, but also true when the titles differ only by one trailing parenthetical.
+
+    A parenthetical can name the same track differently or mark another track ("(Slowed)"),
+    so the caller must compare the lengths as well.
+    """
     if same_title(mine, theirs):
         return True
     (a_base, a_tail), (b_base, b_tail) = split_tail(mine), split_tail(theirs)
@@ -127,15 +125,12 @@ LENIENT_SECONDS = 2.0
 def assign(items, tracks, held=lambda track: False, lenient=False):
     """Match files to the tracks of a release by title, at most one file per track.
 
-    `items` and `tracks` only need .title and .length (seconds). A file whose title
-    is on no track is left out, as is one whose only tracks `held` says are taken
-    (the album already has them: the file is a copy). Two files on one track: the
-    closer in length keeps it and the other is left out, not moved to another
-    track - a near-miss title is the wrong song more often than a second edition.
-    `lenient` (the review menu, never the pin) also matches a title that differs only
-    by a trailing parenthetical one side carries, when the lengths are within
-    LENIENT_SECONDS. Returns ({track index: item}, [(item, reason)]), in the order
-    the items came.
+    `items` and `tracks` only need .title and .length (seconds). A file is left out when its title
+    is on no track, or when `held` says every track it matches is already taken. When two files
+    match one track, the closer in length keeps it and the other is left out instead of moving
+    to another track, because a near-miss title is usually the wrong song. `lenient` also
+    matches a title that differs only by a trailing parenthetical, within LENIENT_SECONDS.
+    Returns ({track index: item}, [(item, reason)]).
     """
     def titled_as(item, track):
         if same_title(item.title, track.title):
@@ -191,10 +186,9 @@ def album_key(item):
 def classify(tracks):
     """What the release pass left wrong in one album group, as a list of kinds.
 
-    tracks need .mb_albumid ("" when bare) and .album. 'split': the tracks carry two
-    or more release ids. 'partial': some carry one and some none. 'whole': none
-    does, there are at least three, and no album title is an edit. A group can be
-    split and partial at once.
+    Tracks need .mb_albumid ("" when bare) and .album. 'split' means the tracks carry two or
+    more release ids, and 'partial' means some carry one and some none. 'whole' means none does,
+    there are at least three tracks, and no album title is an edit.
     """
     ids = {t.mb_albumid for t in tracks if t.mb_albumid}
     bare = sum(1 for t in tracks if not t.mb_albumid)
@@ -220,13 +214,12 @@ def group_albums(items):
 
 # ---------------------------------------------------------- one release, many rows
 
-# Lossless first: a person keeps the better copy, and this is only the suggestion.
+# Lossless formats rank first when choosing which copy to suggest keeping.
 FORMAT_RANK = {"FLAC": 3, "ALAC": 3, "WAV": 3, "AIFF": 3}
 
 
 def scattered(items):
-    """Releases whose tracks sit in two or more album rows: {release id: [items]}. One
-    release is one album; the per-file release pass created a row per track it placed."""
+    """Releases whose tracks sit in two or more album rows, as {release id: [items]}."""
     rows = collections.defaultdict(set)
     for item in items:
         if item.mb_albumid and item.album_id is not None:
@@ -254,27 +247,21 @@ def in_topic_folder(copy):
     return any(re.search(r"\s-\s*topic$", part, re.IGNORECASE) for part in path.split("/")[:-1])
 
 
-# "Song.1.opus": the name a second download of "Song.opus" gets
+# Matches the suffix of "Song.1.opus", the name a second download of "Song.opus" gets.
 COPY_SUFFIX = re.compile(r"(\.\d+)\.[^./]+$")
 # The copy criteria, in the order copy_rank compares them.
 COPY_CRITERIA = ("format", "release", "bitrate", "album", "name", "age")
 
 
 def copy_rank(copy, sizes, twin=False):
-    """How good a copy of a track is, higher better. Works on items and on the audit's loose-file
-    records (id and album_id None: no row, so no album and, on a tie, the newest). `sizes` is
-    album_sizes(...).
+    """A sort key for how good a copy of a track is, where higher is better.
 
-    Copies, in order (COPY_CRITERIA): lossless format; a release id; bitrate in 16 kbit/s steps;
-    the album row holding most of its release; a file name without a ".N" copy suffix (the
-    original download); the older row. The steps are floors of the kbit/s a screen shows, so two
-    copies that show the same bitrate never differ on it; the bitrate is computed from the file
-    size, so a cover or longer tags move it by a percent, which must not decide the keeper.
-
-    `twin` is the ranking of twins(), whose copies need not be matched at all: the release id
-    comes before the format (it carries the album identity the library is organised by, which a
-    better bare file would lose), and on a tie a file in a '- Topic' folder loses before the age
-    decides."""
+    It accepts items and the audit's loose-file records, which have no row (id and album_id are None).
+    `sizes` is album_sizes(...), and the criteria are listed in COPY_CRITERIA. The bitrate is
+    bucketed in steps because it is computed from the file size, so a cover or longer tags must not
+    decide the keeper. With `twin` the release id outranks the format, because it carries the
+    album identity that a better bare file would lose, and a file in a '- Topic' folder loses a tie.
+    """
     held = sizes.get(copy.album_id, 0) if copy.album_id is not None else 0
     age = -(copy.id if copy.id is not None else float("inf"))
     fmt, bitrate = FORMAT_RANK.get((copy.format or "").upper(), 1), copy.bitrate or 0
@@ -313,38 +300,37 @@ def duplicates(items):
 
 # -------------------------------------------------------------------- twins
 
-# How far apart two lengths may be (seconds) for each kind of twin. One download of a
-# video is the same length to the tenth, so the video bound only absorbs rounding; a
-# longer gap under one URL is a video cut into chapters, not a copy. 6 s is the widest
-# gap seen between a YouTube upload and the CD track (-6 s); different versions
-# differed by 13 s and 65 s.
+# How far apart two lengths may be, in seconds, for each kind of twin.
+# One video downloaded twice has the same length, so the video bound only absorbs rounding.
+# A longer gap under one URL is a video cut into chapters, not a copy.
+# The probable bound is the widest gap seen between a YouTube upload and the CD track.
 VIDEO_SECONDS = 2.0
 RECORDING_SECONDS = 1.0
 PROBABLE_SECONDS = 6.0
-# A loose file is a copy of a registered row only when the title matches AND the length does
-# (RECORDING_SECONDS). Title alone is wrong: the five loose Live at Austin City Limits FLACs
-# share titles with studio and MTV tracks (Ride 247 s against 215 s) and are the other half of
-# that album; two Breach FLACs 2.5-4.3 s off their registered twins are another cut.
+# A loose file is a copy of a registered row only when the title and the length both match.
+# A live album can share titles with studio tracks yet differ in length by tens of seconds.
 COPY_SECONDS = RECORDING_SECONDS
-# strongest first: a row in groups of two kinds belongs to the first
+# Ordered strongest first: a row that falls in groups of two kinds stays in the first.
 TWIN_KINDS = ("video", "recording", "probable")
 YOUTUBE = re.compile(r"(?:youtube\.com/watch\?(?:[^\s#]*?&)?v=|youtu\.be/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])",
                      re.IGNORECASE)
 
 
 def same_recording_title(a, b):
-    """Two titles that name one track, for deciding two files are the same recording: equal once
-    case, punctuation and spacing are ignored, nothing looser. same_title's "one opens the other"
-    and "nearly identical" rules are right for matching a file to a release and wrong here:
-    "1 Corinthians 1" opens "1 Corinthians 11" and "Galatians 2" is 90% of "Galatians 5" - the
-    chapters of an audiobook, all the same length."""
+    """Whether two titles are equal once case, punctuation and spacing are ignored.
+
+    The looser rules of same_title would wrongly join audiobook chapters, such as
+    "1 Corinthians 1" and "1 Corinthians 11", which have the same length.
+    """
     return bool(key(a)) and key(a) == key(b)
 
 
 def loose_copies(title, length, rows):
-    """(copies, other cuts) among `rows` for a loose file: copies share the title and the length
-    within COPY_SECONDS; another cut shares the title and is up to PROBABLE_SECONDS away (shown,
-    never a reason to quarantine). Anything further apart is another recording."""
+    """Split `rows` into (copies, other cuts) for a loose file.
+
+    A copy shares the title and is within COPY_SECONDS in length. Another cut shares the title
+    and is up to PROBABLE_SECONDS away, and it is shown but never a reason to quarantine.
+    """
     copies, cuts = [], []
     for r in rows:
         if not same_recording_title(title, r.title):
@@ -358,8 +344,10 @@ def loose_copies(title, length, rows):
 
 
 def video_id(item):
-    """The YouTube video id in an item's comments tag (yt-dlp stores the watch URL
-    there; a 'reviewed | ' prefix or a '&list=' suffix does not matter), or None."""
+    """The YouTube video id in an item's comments tag, or None.
+
+    yt-dlp stores the watch URL there, and a 'reviewed | ' prefix or a '&list=' suffix is ignored.
+    """
     m = YOUTUBE.search(getattr(item, "comments", None) or "")
     return m.group(1) if m else None
 
@@ -369,10 +357,11 @@ def _gap(a, b):
 
 
 def _near(buckets, seconds, related):
-    """Pairs of rows in one bucket whose lengths are within `seconds` and that
-    related(a, b) accepts, as {row id: [partners]}. Each bucket is walked in length
-    order and the walk stops at the first row too far away, so a bucket costs its
-    close pairs, not all of them."""
+    """Pairs of rows in one bucket within `seconds` in length that related(a, b) accepts.
+
+    Returns {row id: [partners]}. Each bucket is walked in length order and the walk stops at
+    the first row too far away, so the cost follows the close pairs and not all pairs.
+    """
     near = collections.defaultdict(list)
     for rows in buckets:
         rows = sorted(rows, key=lambda r: r.length or 0)
@@ -387,19 +376,13 @@ def _near(buckets, seconds, related):
 
 
 def twins(items, queued=()):
-    """Rows that are the same recording, found across the whole library (album tag or not):
-    [{"kind", "keep": item, "drop": [items], "offsets": {row id: seconds}, "reason"}].
+    """Groups of rows that are the same recording, across the whole library.
 
-    video: the same YouTube video id in the comments, lengths within VIDEO_SECONDS.
-    recording: the same artist (artist_key), the same title (same_recording_title) and a length
-    within RECORDING_SECONDS, unless the two rows carry different release ids (an album and
-    a compilation). probable: the same, within PROBABLE_SECONDS but not
-    RECORDING_SECONDS, from another source (a different format, or a YouTube download
-    against a file with no URL) - only a suggestion; further apart it is another
-    version and never grouped. A row is in one group, the strongest kind's. The keeper
-    is best_copy(twin=True), except that a row in `queued` (ids with a quarantine
-    already waiting) is never the keeper, only a row to drop. `offsets` is each row's
-    length minus the keeper's. Tracks marked reviewed are still twins.
+    Each group is {"kind", "keep": item, "drop": [items], "offsets": {row id: seconds}, "reason"}.
+    A 'video' group shares a YouTube video id within VIDEO_SECONDS. A 'recording' group shares
+    the artist, the title and a length within RECORDING_SECONDS, unless the release ids differ.
+    A 'probable' group is the same within PROBABLE_SECONDS from another source and is only a suggestion.
+    A row is in one group, the strongest kind's, and a row in `queued` is never the keeper.
     """
     rows = list(items)
     sizes = album_sizes(rows)
@@ -461,10 +444,11 @@ def empty_album_ids(lib):
 
 
 def drop_emptied_albums(lib, album_ids, before_remove=lambda album: None):
-    """Remove the album rows among `album_ids` that hold no item any more (a decision
-    moved or quarantined their last track); returns their ids. `before_remove(album)`
-    runs first, with the row still whole: the apply logs the row there. Rows only: no
-    file is touched."""
+    """Remove the album rows among `album_ids` that hold no item and return their ids.
+
+    `before_remove(album)` runs first, with the row still whole, so the apply can log it.
+    Only rows are removed and no file is touched.
+    """
     removed = []
     for aid in sorted({a for a in album_ids if a is not None}):
         album = lib.get_album(aid)
@@ -477,21 +461,20 @@ def drop_emptied_albums(lib, album_ids, before_remove=lambda album: None):
 
 # ------------------------------------------------------------------- audio
 
-# Chromaprint frames are about 0.124 s: a copy cut a little differently starts up to
-# ~10 s later. Two fingerprints are compared only where at least two thirds of the
-# shorter one overlaps (and FINGERPRINT_LEAST frames, ~5 s), or a sliver of a long
-# file would match a short one perfectly.
+# A Chromaprint frame spans about 0.124 s, so FINGERPRINT_SPAN frames cover a copy cut a little later.
+# Two fingerprints are compared only where enough of the shorter one overlaps,
+# or a sliver of a long file would match a short one perfectly.
 FINGERPRINT_SPAN = 80
 FINGERPRINT_LEAST = 40
 
 
 def fingerprint_match(a, b, span=FINGERPRINT_SPAN, least=FINGERPRINT_LEAST):
-    """(similarity, offset) of two raw Chromaprint fingerprints (lists of 32-bit ints).
+    """(similarity, offset) of the best alignment of two raw Chromaprint fingerprints.
 
-    The best alignment with one shifted against the other by up to `span` frames: similarity is
-    1 minus the share of differing bits over the overlap, offset is the shift with a[offset + i]
-    lined up with b[i]. Unrelated audio scores about 0.55-0.6, the same audio in another codec
-    0.85-1.0. (0.0, 0) when no shift leaves enough overlap."""
+    The fingerprints are lists of 32-bit ints, shifted against each other by up to `span` frames.
+    Similarity is 1 minus the share of differing bits, and a[offset + i] lines up with b[i].
+    The result is (0.0, 0) when no shift leaves enough overlap.
+    """
     need = max(least, 2 * min(len(a), len(b)) // 3)
     best = (0.0, 0)
     for offset in range(-span, span + 1):
@@ -527,10 +510,11 @@ def snapshot(model):
 
 
 def restore(model, before, after=None):
-    """Put back what an operation changed. With `after`, only the fields that differ
-    between the two: a field changed since by something else (a retag, a later apply)
-    is not this operation's to take back. Without (it died before recording the
-    result), every field, and every flexible field the row has gained."""
+    """Put back what an operation changed.
+
+    With `after`, only the fields that differ between the two are restored, so a later change by
+    something else stays. Without it, every field is restored and every flexible field the row gained is removed.
+    """
     keys = changed(before, after) if after is not None else [k for k in before if k != "mtime"]
     if after is None:
         keys += [k for k in model.keys(computed=False) if k not in before]
@@ -544,8 +528,7 @@ def restore(model, before, after=None):
 
 
 def changed(before, after):
-    """The fields an operation changed. mtime is left out: beets bumps it on every tag
-    write (fetchart/embedart after a pin too), so it would make every undo look stale."""
+    """The fields an operation changed, leaving out mtime because beets bumps it on every tag write."""
     return sorted(k for k in set(before) | set(after) if k != "mtime" and before.get(k) != after.get(k))
 
 
@@ -600,10 +583,10 @@ def malformed(d):
 
 
 def decisions_lock(review):
-    """The decisions file's lock, held by whoever appends a decision and by the apply
-    while it takes the file over, so a line written meanwhile is neither lost nor half
-    read. A flock: the review menu on the host and the apply in the container share
-    it through the bind mount (one kernel, one inode)."""
+    """The decisions file's lock, held while appending a decision and while the apply takes the file over.
+
+    It is a flock, which the review menu on the host and the apply in the container share through the bind mount.
+    """
     import fcntl
 
     f = open(os.path.join(review, ".decisions.lock"), "a")
@@ -646,9 +629,10 @@ def queued_quarantines(review):
 # ----------------------------------------------------------------- library
 
 def open_library():
-    """The library, with the user's config.yaml read - the CLI's own entry point does
-    this, a bare Library() would not. directory= is explicit: without it the default
-    ~/Music applies and every item looks like an orphan."""
+    """The library with the user's config.yaml read, which a bare Library() would not do.
+
+    The directory is passed explicitly, because the default ~/Music would make every item look like an orphan.
+    """
     from beets import config
     from beets.library import Library
 
@@ -658,9 +642,10 @@ def open_library():
 
 
 def open_beets(plugins=()):
-    """The library as the beets CLI opens it - config.yaml, the overlay in .run.yaml
-    and the configured path formats, so item.move() files a track where an import
-    would - with only `plugins` loaded (musicbrainz for album_for_id)."""
+    """The library as the beets CLI opens it, so item.move() files a track where an import would.
+
+    It reads config.yaml, the overlay in .run.yaml and the path formats, and loads only `plugins`.
+    """
     from beets import config, plugins as beets_plugins, ui
 
     config.read(user=False, defaults=True)
@@ -693,12 +678,11 @@ def write_overlay(kind):
 
 
 def force_tracks(items, tracks, forced, held):
-    """Give files the tracks a person named, by release track id: ({item: track}, [(item, why)]).
+    """Give files the tracks a person named, returning ({item: track}, [(item, why)]).
 
-    `forced` is {item id: release track id}; only the items named in it are looked at.
-    There is no title check - the person looked at the files and the release. A track
-    the release does not have, two files named for one track, or a track `held` says
-    the album has already, leave the files alone, with the reason.
+    `forced` is {item id: release track id}, and only the items named in it are looked at.
+    The titles are not checked. A track missing from the release, two files for one track, or a track `held`
+    already has leaves those files alone with the reason.
     """
     by_id = {t.release_track_id: t for t in tracks if t.release_track_id}
     wanted, skipped = collections.defaultdict(list), []
@@ -723,11 +707,9 @@ def force_tracks(items, tracks, forced, held):
 def plan_pin(lib, info, items, forced=None):
     """Which of `items` a release takes: (album row or None, {item: track}, [(item, why)]).
 
-    Each file is matched to a track of the release by title (assign); the album row of
-    the release is joined if there is one. A file already in that row is not touched,
-    and a track the row already holds is not given to a second file (a copy). `forced`
-    ({item id: release track id}) names the track of a file by hand (force_tracks); the
-    other files are matched around the tracks it takes.
+    Each file is matched to a track by title (assign) and joins the album row of the release if one exists.
+    A file already in that row is not touched, and a track the row holds is not given to a second file.
+    `forced` names tracks by hand (force_tracks), and the other files are matched around them.
     """
     from beets.dbcore import MatchQuery
 
@@ -749,17 +731,17 @@ def plan_pin(lib, info, items, forced=None):
 
 
 def apply_pin(lib, info, album, mapping, moving=lambda item, dest: None, created_row=lambda album: None):
-    """Give the mapped files the release: tags written, the album row joined (or
-    created: returned), files moved to where the album keeps them. The release is
-    applied directly, not by importing: an import into an album with members re-imports
-    them and lets beets re-assign every slot, which retitled a copy as another song.
-    `created_row(album)` is called as soon as a new album row exists and `moving(item,
-    dest)` before each file moves: the apply logs both before going on."""
+    """Write the release's tags to the mapped files, join or create the album row, and move the files.
+
+    It applies the release directly instead of importing, because importing into an album with members re-assigns
+    every slot.
+    `created_row(album)` runs as soon as a new row exists and `moving(item, dest)` before each file moves.
+    """
     from beets.autotag import AlbumMatch
     from beets.autotag.distance import Distance
 
     created = None
-    # the release's length is not the file's: keep the file's own
+    # apply_metadata copies the release's length, which is not the file's.
     own = {item.id: item.length for item in mapping}
     AlbumMatch(Distance(), info, mapping).apply_metadata()
     if album is None:
@@ -791,20 +773,19 @@ def write_json(path, data, indent=1):
 # ------------------------------------------------------------- MusicBrainz
 
 def lucene(text):
-    """A term for a MusicBrainz search query, its query syntax escaped. Lower case, so
-    an AND or OR in a title is a word and not an operator (the search ignores case)."""
+    """A MusicBrainz search term with its query syntax escaped and lower-cased.
+
+    Lower case makes an AND or OR in a title a word, because the search ignores case.
+    """
     return re.sub(r'([+\-&|!(){}\[\]^"~*?:\\/])', r"\\\1", (text or "").lower())
 
 
 class MusicBrainz:
     """A small client for the MusicBrainz web service.
 
-    One request per `delay` seconds, as the service asks of every client; a 503
-    (its rate limiter, which it also sends when busy), a 429 or a network error
-    (a body cut short included) is retried with a growing pause, and any other
-    refusal is not: it would fail the same way again. With a cache directory every answer is kept for
-    `ttl_days`, so a second audit costs no requests. A release the service does
-    not know (404) is an answer and is cached; a failure is not.
+    It sends one request per `delay` seconds, as the service asks of every client.
+    A server error, a 429 or a network error is retried with a growing pause, and any other refusal is not.
+    With a cache directory every answer is kept for `ttl_days`, including a 404, but a failure is not.
     """
 
     def __init__(self, base_url, cache_dir=None, ttl_days=30, delay=1.1, tries=3, agent="media-library/1.0"):

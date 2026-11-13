@@ -1,0 +1,19 @@
+---
+# The container has systemd but no Docker daemon. The stack unit Requires=docker.service
+# and runs /usr/bin/docker compose ...; these stubs let the real unit start and prove the
+# boot path without a daemon.
+- name: Stub the docker binary
+  ansible.builtin.copy:
+    dest: /usr/bin/docker
+    content: "#!/bin/sh\nexit 0\n"
+    mode: "0755"
+
+- name: Stub docker.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service
+    content: |
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/true
+    mode: "0644"

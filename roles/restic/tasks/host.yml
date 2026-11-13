@@ -1,0 +1,178 @@
+---
+- name: Look for bzip2, which unpacks the release archive
+  # Probed first so that a Gentoo host, which already has bzip2, never goes through its package manager.
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: [/usr/bin/bzip2, /bin/bzip2]
+  register: restic_bzip2
+
+- name: Install bzip2 for the release archive
+  ansible.builtin.package:
+    name: bzip2
+    state: present
+  when: restic_bzip2.results | selectattr('stat.exists') | list | length == 0
+
+- name: Look for the nologin shell this distribution ships
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: [/usr/sbin/nologin, /sbin/nologin, /usr/bin/nologin]
+  register: restic_nologin
+
+- name: Require a nologin shell
+  ansible.builtin.assert:
+    that: restic_nologin.results | selectattr('stat.exists') | list | length > 0
+    fail_msg: "nologin: none of /usr/sbin/nologin, /sbin/nologin or /usr/bin/nologin exists for the restic user"
+    quiet: true
+
+- name: Create the restic group
+  ansible.builtin.group:
+    name: restic
+    system: true
+
+- name: Create the restic user
+  # This is a separate system uid, not Debian's uid-34 backup account.
+  # It has no home, because every path restic and ssh use is set explicitly.
+  ansible.builtin.user:
+    name: restic
+    group: restic
+    system: true
+    shell: "{{ (restic_nologin.results | selectattr('stat.exists') | first).item }}"
+    home: /nonexistent
+    create_home: false
+
+- name: Look at the cache directory's parent
+  ansible.builtin.stat:
+    path: "{{ restic_cache_dir | dirname }}"
+  register: restic_cache_parent
+
+- name: Create the cache directory's parent when it does not exist
+  # Only a missing parent is created, as root: an existing one (such as /data/vault) is never chown'ed,
+  # and the restic user must never own a directory root-run tasks walk through.
+  ansible.builtin.file:
+    path: "{{ restic_cache_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+    follow: false
+  when: not restic_cache_parent.stat.exists
+
+- name: Create the restic directories
+  # follow: false everywhere: the restic user owns /var/lib/restic and the cache directory, and a symlink it plants
+  # there must not make a root task act on another path. The cache's tmp directory is made by restic-job.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+    follow: false
+  loop: "{{ restic_engine_dirs + (restic_cron_dirs if restic_scheduler == 'cron' else []) }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Name the pinned release for this architecture
+  ansible.builtin.set_fact:
+    restic_release: "restic_{{ restic_binary_version }}_linux_{{ restic_arch_map[ansible_architecture] }}"
+
+- name: Download the pinned restic release
+  ansible.builtin.get_url:
+    url: "https://github.com/restic/restic/releases/download/v{{ restic_binary_version }}/{{ restic_release }}.bz2"
+    dest: "/usr/local/libexec/restic/{{ restic_release }}.bz2"
+    checksum: "sha256:{{ restic_binary_sha256[restic_arch_map[ansible_architecture]] }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Unpack the release
+  ansible.builtin.command:
+    argv: [bzip2, -dk, "/usr/local/libexec/restic/{{ restic_release }}.bz2"]
+    creates: "/usr/local/libexec/restic/{{ restic_release }}"
+
+- name: Make the release executable
+  ansible.builtin.file:
+    path: "/usr/local/libexec/restic/{{ restic_release }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Point /usr/local/bin/restic at the pinned release
+  # Forcing the link replaces a stray regular file that a legacy role may have installed.
+  ansible.builtin.file:
+    src: "/usr/local/libexec/restic/{{ restic_release }}"
+    dest: /usr/local/bin/restic
+    state: link
+    force: true
+
+- name: Write the vault-managed Storage Box key
+  # This key wins over legacy adoption.
+  # Trimming and then adding one newline keeps the file stable however the vault value ends.
+  # That is what makes a second run report no change.
+  ansible.builtin.copy:
+    content: "{{ restic_storage_key | trim ~ '\n' }}"
+    dest: /etc/ssh/restic_storage_key
+    owner: restic
+    group: restic
+    mode: "0400"
+  no_log: true
+  when: restic_storage_key | length > 0
+
+- name: Look for the hand-placed legacy Storage Box key
+  ansible.builtin.stat:
+    path: /opt/backup/.ssh/hetzner
+  register: restic_legacy_key
+
+- name: Adopt the legacy Storage Box key
+  # Setting force to false never replaces a key already placed at the new path.
+  ansible.builtin.copy:
+    src: /opt/backup/.ssh/hetzner
+    dest: /etc/ssh/restic_storage_key
+    remote_src: true
+    force: false
+    owner: restic
+    group: restic
+    mode: "0400"
+  when:
+    - restic_legacy_key.stat.exists
+    - restic_storage_key | length == 0
+
+- name: Look for the Storage Box key
+  ansible.builtin.stat:
+    path: /etc/ssh/restic_storage_key
+  register: restic_storage_key_after
+
+- name: Hand the Storage Box key to the restic user
+  # OpenSSH rejects a key readable by group or other only when the invoking user owns it.
+  # The restic user owns the key, so the units may use it, and root is never refused.
+  # Root runs restic-job exec by hand and is not the owner.
+  ansible.builtin.file:
+    path: /etc/ssh/restic_storage_key
+    owner: restic
+    group: restic
+    mode: "0400"
+  when: restic_storage_key_after.stat.exists
+
+- name: Install the engine script
+  ansible.builtin.copy:
+    src: restic-job.sh
+    dest: /usr/local/libexec/restic/restic-job
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the ntfy helper (station-arch never ran the fleet base play)
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: ntfy_install
+
+- name: Install the units and the freshness timer
+  ansible.builtin.include_tasks: host_systemd.yml
+  when: restic_scheduler == 'systemd'
+
+- name: Install the cron daemon's freshness entries
+  ansible.builtin.include_tasks: host_cron.yml
+  when: restic_scheduler == 'cron'
+
+- name: Mark the restic host as set up for this run
+  ansible.builtin.set_fact:
+    restic_host_ready: true

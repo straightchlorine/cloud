@@ -1,6 +1,6 @@
 ---
-# Installs the shared ntfy CLI helper on every host, so scripts can just call
-# ntfy-notify (bare name) instead of embedding their own curl/API-key logic.
+# Installs the shared ntfy helper on every host, so scripts call ntfy-notify instead of embedding their own curl and
+# key handling.
 
 - name: Ensure the ntfy config directory exists
   ansible.builtin.file:
@@ -23,8 +23,8 @@
   when: vault_ntfy_api_key is defined
 
 - name: Install the ntfy notification helper
-  # 0755 is safe: the script reads its API key from /etc/ntfy/notify-api-key
-  # at runtime - no secret is embedded in the script itself.
+  # The script is world-executable because it reads the API key from /etc/ntfy/notify-api-key at runtime and
+  # embeds no secret.
   ansible.builtin.template:
     src: ntfy-notify.j2
     dest: /usr/local/bin/ntfy-notify

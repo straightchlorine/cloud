@@ -22,8 +22,8 @@
 # single instead of one "[Unknown Album]" per artist.
 --parse-metadata "%(album,title)s:%(album)s"
 --parse-metadata "%(artist)s:%(album_artist)s"
-# Keep the source link in the comment tag (shows in Navidrome's Info panel);
-# filenames stay lean, the link lives in the metadata.
+# Keep the source link in the comment tag, which Navidrome shows in its Info panel.
+# That keeps the filenames lean.
 --parse-metadata "%(webpage_url)s:%(comment)s"
 --embed-metadata
 
@@ -31,16 +31,16 @@
 --embed-thumbnail
 --convert-thumbnails jpg
 
-# Flat and transient: beets renames on import. The B limits are BYTES: ext4 caps a
-# name at 255 and a title in 4-byte "bold" letters passes that at ~60 characters;
-# the tags keep the full text.
+# The files are flat and transient because beets renames them on import. The `B`
+# limits count bytes: ext4 caps a name at 255 bytes, which a title of 4-byte "bold"
+# letters exceeds at about 60 characters. The tags keep the full text.
 --output "{{ media_library_path }}/downloads/%(artist).60B - %(title).120B [%(id)s].%(ext)s"
 --download-archive "{{ media_library_path }}/state/youtube-archive.txt"
 --cache-dir "{{ media_library_path }}/cache"
 
-# YouTube's JS challenges need a runtime; pin deno's path from youtube.yml so it
-# is found regardless of the invoking PATH (yt-dlp otherwise warns "No supported
-# JavaScript runtime could be found" and may drop some formats).
+# YouTube's JS challenges need a runtime. The deno path installed by youtube.yml is
+# pinned so it is found whatever the invoking PATH is, because yt-dlp otherwise warns
+# "No supported JavaScript runtime could be found" and may drop some formats.
 --js-runtimes "deno:/usr/local/bin/deno"
 
 --ignore-errors

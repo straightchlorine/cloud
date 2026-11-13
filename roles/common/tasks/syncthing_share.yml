@@ -1,0 +1,26 @@
+---
+# This installs Syncthing once and registers each folder when common_syncthing_enabled is set.
+# Callers add their own `when:` for the feature that makes the share worthwhile.
+# common_syncthing_share_folders is a list of folders with the keys id, path, type and ignore.
+# The id is a unique folder id, and the path is the host path to share.
+# The type is optional and may be sendonly, receiveonly or sendreceive.
+# Syncthing shares both ways by default, so a backup folder must be sendonly or a peer's delete would wipe this
+# host's copies.
+# The ignore key is an optional list of .stignore lines that stay local and are never synced to peers.
+- name: Share folders through Syncthing
+  # The flag is undefined under tag-scoped runs that skip the play loading common's defaults, so the default
+  # mirrors the flag's own.
+  when: common_syncthing_enabled | default(false) | bool
+  block:
+    - name: Install Syncthing
+      ansible.builtin.include_tasks: syncthing.yml
+
+    - name: Gather service facts for Syncthing folder registration
+      ansible.builtin.service_facts:
+
+    - name: Register each shared folder
+      ansible.builtin.include_tasks: syncthing_folder.yml
+      loop: "{{ common_syncthing_share_folders }}"
+      loop_control:
+        loop_var: common_syncthing_folder
+        label: "{{ common_syncthing_folder.id }}"

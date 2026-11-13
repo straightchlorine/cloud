@@ -1,0 +1,11 @@
+[Unit]
+Description=restic backup schedule %i
+
+# OnCalendar= comes only from the per-job drop-in: it is a list setting, so a
+# value here would fire in addition to the job's schedule.
+[Timer]
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

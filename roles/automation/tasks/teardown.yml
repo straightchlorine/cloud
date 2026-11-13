@@ -1,7 +1,6 @@
 ---
-# Reverse the automation role so a disposable test Pi can be re-tested from a
-# near-clean state. User data under automation_data_path is intentionally left
-# in place.
+# Reverses the automation role so a disposable test Pi can be redeployed from a near-clean state.
+# User data under automation_data_path is left in place on purpose.
 
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.include_role:
@@ -18,12 +17,6 @@
     common_teardown_stack_home: "{{ automation_stack_home }}"
     common_teardown_stack_user: "{{ ansible_user }}"
 
-- name: Remove the manage-automation symlink
-  ansible.builtin.file:
-    path: /usr/local/bin/manage-automation
-    state: absent
-  become: true
-
 - name: Remove the automation cron jobs
   ansible.builtin.include_role:
     name: common
@@ -32,30 +25,18 @@
     common_teardown_cron_jobs:
       - { name: "Automation Syncthing local backup", user: root }
 
-- name: Remove the automation role file artifacts
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
-    - /usr/local/bin/automation-syncthing-backup
-    - "{{ automation_stack_home }}"
-    - /var/log/automation-syncthing-backup.log
-
 - name: Tear down Syncthing
-  # Unconditional: the install is opt-in per host (common_syncthing_enabled),
-  # but a re-test host can carry Syncthing from an earlier run whose flag no
-  # longer matches the current inventory. Every task here is idempotent (apt
-  # state=absent, file state=absent, unit stop with failed_when:false), so
-  # always running it is safe and guarantees no Syncthing leftovers remain.
+  # This runs unconditionally although the install is opt-in per host through common_syncthing_enabled.
+  # A retest host can still carry Syncthing from an earlier run whose flag no longer matches the inventory.
+  # The teardown tasks are idempotent, so running them always is safe.
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing_teardown
 
-- name: Verify the automation artifacts are gone
+- name: Remove the automation artifacts and verify they are gone
   ansible.builtin.include_role:
     name: common
-    tasks_from: teardown_verify_absent
+    tasks_from: teardown_paths
   vars:
     common_teardown_name: automation
     common_teardown_paths:
@@ -64,7 +45,3 @@
       - /etc/systemd/system/stack.service
       - /var/log/automation-syncthing-backup.log
       - "{{ automation_stack_home }}"
-      - /etc/systemd/system/syncthing.service
-      - /etc/apt/preferences.d/syncthing.pref
-      - /etc/apt/keyrings/syncthing-archive-keyring.gpg
-      - /usr/bin/syncthing

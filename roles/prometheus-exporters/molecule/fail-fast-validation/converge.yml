@@ -1,9 +1,7 @@
 ---
 - name: Converge - Fail-Fast Validation
   hosts: all
-  # Intentionally omit ALL required variables to test fail-fast behavior:
-  # prometheus_exporters_enabled, base_dir, node_exporter_enabled,
-  # prometheus_environment, prometheus_role, device_type
+  # The play deliberately sets none of the variables that validate.yml requires.
   tasks:
     - name: Include the real validate.yml (expect it to fail)
       block:
@@ -15,10 +13,9 @@
             msg: "validate.yml did not fail fast on the missing required variables"
       rescue:
         - name: Assert the failure is the validation failure, not an include error
-          # A looped fail task's top-level msg is the generic "One or more
-          # items failed" - the per-item detail lives in .results. Without
-          # this check, any error (e.g. an unresolved include_role) would
-          # count as a pass.
+          # The top-level msg of a looped fail task is the generic "One or more items failed".
+          # The per-item detail lives in .results, and the default covers a failure that has none.
+          # Without this check, any error such as an unresolved include_role would count as a pass.
           vars:
             failed_items: "{{ ansible_failed_result.results | default([]) | selectattr('failed') | list }}"
           ansible.builtin.assert:
@@ -32,9 +29,8 @@
             success_msg: "[OK] validate.yml failed on all six missing required variables"
 
         - name: Record the case as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary.
+          # A marker file carries the result because converge and verify are separate ansible-playbook processes.
+          # In-memory facts do not cross that boundary.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-promexp-validation.passed

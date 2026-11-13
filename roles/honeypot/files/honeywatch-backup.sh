@@ -2,14 +2,14 @@
 # Honeywatch daily backup: pg_dumpall -> gzip -> age -> rclone rcat to Cloudflare
 # R2 in a single pipeline; nothing large lands on disk.
 #
-# Asymmetric (age): only the public recipient lives here, so a compromised host can
+# Only the public age recipient lives on this host, so a compromised host can
 # upload new backups but can never decrypt existing ones.
 #
-# Invoked by honeywatch-backup.timer, not directly. Env comes from
-# /etc/honeywatch/backup.env (RCLONE_CONFIG_R2_*, R2_*, AGE_RECIPIENT_FILE,
-# RETENTION_DAYS, POSTGRES_*) and optionally notify.env (NTFY_URL/NTFY_TOKEN).
-# pg_dumpall runs inside the postgres container over the Unix socket (trust auth,
-# so no Postgres password is required or stored on the host).
+# The script is invoked by honeywatch-backup.timer, not directly. Its environment comes from
+# /etc/honeywatch/backup.env, which sets the RCLONE_CONFIG_R2_*, R2_*, AGE_RECIPIENT_FILE,
+# RETENTION_DAYS and POSTGRES_* variables. notify.env optionally adds NTFY_URL and NTFY_TOKEN.
+# pg_dumpall runs inside the postgres container over the Unix socket, which uses trust
+# auth, so no Postgres password is required or stored on the host.
 
 set -euo pipefail
 
@@ -35,42 +35,35 @@ if [ ! -r "$AGE_RECIPIENT_FILE" ]; then
     exit 1
 fi
 
-# Success side of the alerting: failure is covered by the unit's OnFailure
-# handler, but a backup that silently stops looks like one with nothing to do.
-# Best-effort - a broken ntfy must never fail a good backup.
+# The unit's OnFailure handler covers failures, but a backup that silently stops
+# looks like one with nothing to do, so success is reported too.
+# This is best-effort, because a broken ntfy must never fail a good backup.
 notify_success() {
-    [ -n "${NTFY_URL:-}" ] || return 0
     local host
     host=$(hostname -s)
-    set -- --silent --fail --max-time 10 \
-        -H "Title: honeywatch: backup ok on ${host}" \
-        -H "Tags: white_check_mark,floppy_disk"
-    if [ -n "${NTFY_TOKEN:-}" ]; then
-        set -- "$@" -H "Authorization: Bearer ${NTFY_TOKEN}"
-    fi
-    curl "$@" \
-        -d "host=${host} - uploaded ${key} (${uploaded_size}); retention ${retention}d: ${trim_status}" \
-        "$NTFY_URL" >/dev/null 2>&1 || true
+    /usr/local/sbin/honeywatch-ntfy "honeywatch: backup ok on ${host}" "white_check_mark,floppy_disk" \
+        "host=${host} - uploaded ${key} (${uploaded_size}); retention ${retention}d: ${trim_status}"
 }
 
-# Validate retention BEFORE the expensive dump: `--min-age 0d` matches every object
-# in the prefix (the whole bucket when R2_PREFIX is empty), including the dump about
-# to be uploaded. The `:-30` default guards unset/empty only, not a literal "0".
+# Retention is validated before the expensive dump, because `--min-age 0d` matches every
+# object in the prefix, including the dump about to be uploaded. The prefix is the
+# whole bucket when R2_PREFIX is empty. The `:-30` default covers only an unset or
+# empty value, not a literal "0".
 retention="${RETENTION_DAYS:-30}"
 if ! [[ "$retention" =~ ^[1-9][0-9]*$ ]]; then
     echo "honeywatch-backup: refusing invalid RETENTION_DAYS='${retention}' (must be a positive integer number of days)" >&2
     exit 1
 fi
 
-# Talk to postgres by container_name via plain `docker exec`: `docker compose exec`
-# parses the whole compose file and errors when the app's API_VERSION /
-# INGESTOR_VERSION are absent from this unit's environment.
+# Use plain `docker exec` by container name instead of `docker compose exec`.
+# The compose command parses the whole compose file and errors when API_VERSION
+# and INGESTOR_VERSION are absent from this unit's environment.
 if ! docker inspect -f '{{.State.Running}}' "$POSTGRES_CONTAINER" 2>/dev/null | grep -q true; then
     echo "honeywatch-backup: container '$POSTGRES_CONTAINER' is not running; aborting" >&2
     exit 1
 fi
 
-# Confirm postgres accepts connections before piping a dump that would half
+# Confirm postgres accepts connections before starting a dump that would half
 # succeed and then fail the upload.
 if ! docker exec "$POSTGRES_CONTAINER" \
         pg_isready -t 10 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
@@ -79,8 +72,8 @@ then
     exit 1
 fi
 
-# Normalize prefix: accept "honeywatch", "honeywatch/" or "" - store with
-# exactly one trailing slash unless empty.
+# Normalize the prefix so that "honeywatch", "honeywatch/" and an empty value all work.
+# The result has exactly one trailing slash unless it is empty.
 prefix="${R2_PREFIX-honeywatch}"
 prefix="${prefix%/}"
 [ -n "$prefix" ] && prefix="${prefix}/"
@@ -90,15 +83,11 @@ key="${prefix}honeywatch-${ts}.sql.gz.age"
 
 echo "honeywatch-backup: starting ${key}"
 
-# pg_dumpall flags:
-#   --clean --if-exists  -> restore drops existing objects safely
-#   --no-role-passwords  -> role hashes never enter the backup; restore must run
-#                           postgres/init.sh to re-seed them
-# Stream straight to R2 - nothing large lands on disk. PIPESTATUS is captured
-# because a mid-stream failure does NOT fail the pipeline: the downstream stages
-# see a clean EOF and finalize a structurally valid but truncated object, which
-# rclone then PUTs as the newest - and corrupt - key. Any non-zero stage deletes
-# that partial object instead.
+# --clean --if-exists makes a restore drop existing objects first.
+# --no-role-passwords keeps role password hashes out of the dump, so a restore must re-seed them.
+# PIPESTATUS is checked because when pg_dumpall dies mid-stream, gzip, age and rclone see a clean
+# end of input and upload a truncated object as the newest key. Any non-zero stage therefore
+# deletes that object, and errexit is off so the cleanup can run.
 set +e
 docker exec -i "$POSTGRES_CONTAINER" \
         pg_dumpall -U "$POSTGRES_USER" \
@@ -120,8 +109,7 @@ done
 
 echo "honeywatch-backup: uploaded ${key}"
 
-# Read the stored size back from R2 rather than measuring the stream: it also
-# proves the object is actually listable after the PUT.
+# Reading the stored size back from R2 also proves the object is listable after the upload.
 uploaded_bytes="$(rclone lsl "r2:${R2_BUCKET}/${key}" 2>/dev/null | awk '{print $1}')"
 if [ -n "$uploaded_bytes" ]; then
     uploaded_size="$(numfmt --to=iec "$uploaded_bytes" 2>/dev/null || echo "${uploaded_bytes}B")"
@@ -129,9 +117,8 @@ else
     uploaded_size="size unknown"
 fi
 
-# Server-side retention: delete objects in our prefix older than RETENTION_DAYS
-# (validated above). Without Object Delete scope on the token this step warns but
-# the upload stands; a deployment using an R2 lifecycle rule parks the window high.
+# Delete objects under the prefix that are older than RETENTION_DAYS, which was validated above.
+# A token without Object Delete scope only makes this step warn, and the upload stands.
 echo "honeywatch-backup: trimming objects older than ${retention}d"
 trim_status="trimmed"
 if ! rclone delete --min-age "${retention}d" "r2:${R2_BUCKET}/${prefix}"; then

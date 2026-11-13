@@ -1,58 +1,23 @@
 #!/usr/bin/env bash
-# Post-deployment check for a disposable automation test host.
-# Run after a successful site.yml deploy to confirm compose, vaultwarden, firefly,
-# mariadb, watchtower, backup and the SSD layout all work. Pairs with
-# validate-clean.sh: clean = "ready to deploy", this = "deployed & healthy".
+# Run this after a successful site.yml deploy to confirm that the compose stack, its services, the backup and the SSD layout work.
+# The counterpart validate-clean.sh checks that a host is ready to deploy, while this script checks that it is healthy.
 # Usage: ./scripts/automation/validate-deploy.sh <ansible-host-alias>
+# Optional overrides, exported before the call: STACK_HOME (default: ~/stack on the host), DATA_PATH (/mnt/data).
 set -euo pipefail
 
 HOST="${1:?Usage: ./scripts/automation/validate-deploy.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after automation deploy =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
+{
+  cat "$LIB"
+  for v in STACK_HOME DATA_PATH; do
+    [ -z "${!v:-}" ] || printf '%s=%q\n' "$v" "${!v}"
+  done
+  cat <<'INNEREOF'
 
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_present() {
-  if [ -e "$1" ]; then
-    note_ok "$1 present"
-  else
-    note_left "$1 missing"
-  fi
-}
-
-check_script() {
-  local path="$1"
-  local want_mode="${2:-}"
-  local got_mode
-  if [ ! -e "$path" ]; then
-    note_left "$path missing"
-    return
-  fi
-  # -L: symlinks (e.g. /usr/local/bin/manage-automation) always report
-  # lrwxrwxrwx for their own mode bits - the real permission lives on
-  # whatever the link points at, so dereference before checking.
-  got_mode="$(stat -L -c '%a' "$path" 2>/dev/null || echo "000")"
-  if [ "$got_mode" = "$want_mode" ]; then
-    note_ok "$path mode $want_mode"
-  else
-    note_left "$path mode is $got_mode (expected $want_mode)"
-  fi
-}
-
-# default-route source address, same as Ansible's primary_ip fact.
+# The default-route source address is the same value as Ansible's primary_ip fact.
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
   PRIMARY_IP="$(hostname -I | awk '{print $1}')"
@@ -62,6 +27,9 @@ if [ -n "$PRIMARY_IP" ]; then
 else
   note_left "could not detect primary IP"
 fi
+
+# STACK_HOME follows the SSH user's home, as the role's automation_stack_home does.
+: "${STACK_HOME:=$HOME/stack}" "${DATA_PATH:=/mnt/data}"
 
 echo "-- Services --"
 for svc in docker stack syncthing node-exporter; do
@@ -86,22 +54,17 @@ else
 fi
 
 echo "-- SSD / storage --"
-if findmnt -n /mnt/data >/dev/null 2>&1; then
-  fstype="$(findmnt -no FSTYPE /mnt/data)"
-  note_ok "/mnt/data mounted ($fstype)"
+if findmnt -n "$DATA_PATH" >/dev/null 2>&1; then
+  fstype="$(findmnt -no FSTYPE "$DATA_PATH")"
+  note_ok "$DATA_PATH mounted ($fstype)"
 else
-  note_left "/mnt/data not mounted"
+  note_left "$DATA_PATH not mounted"
 fi
 if findmnt -n /var/log/journal >/dev/null 2>&1; then
   note_ok "/var/log/journal relocated to SSD"
 else
   note_left "/var/log/journal not a separate mount"
 fi
-
-# STACK_HOME follows the SSH user's home, mirroring the role's derived
-# automation_stack_home (/home/<ansible_user>/stack).
-STACK_HOME="${HOME}/stack"
-DATA="/mnt/data"
 
 echo "-- Compose file + secrets --"
 check_present "$STACK_HOME/docker-compose.yml"
@@ -116,10 +79,9 @@ if [ -f "$STACK_HOME/.env" ]; then
   fi
 fi
 
-# Compose file must not carry an INLINED secret value. The legit env lines
-# reference secrets by NAME ("DB_PASSWORD=${FIREFLY_DB_PASSWORD}"), so a '$'
-# immediately after the key's '=' marks a reference; anything else there is a
-# real (inlined) value - which is exactly what we refuse.
+# The compose file must not carry an inlined secret value.
+# Legitimate env lines reference secrets by name, as in "DB_PASSWORD=${FIREFLY_DB_PASSWORD}", so a '$' right after the '=' marks a reference.
+# Anything else after the '=' is an inlined value, which the check refuses.
 if grep -qE '(DB_PASSWORD|ADMIN_TOKEN)=[^$]' "$STACK_HOME/docker-compose.yml" 2>/dev/null; then
   note_left "compose file contains a secret value (!)"
 else
@@ -134,8 +96,8 @@ else
   note_left "manage-automation missing"
 fi
 
-# The local backup script + its cron exist only when the local backup is
-# enabled (automation_backup_enabled); key off the script, as scripts/dns does.
+# The local backup script and its cron exist only when automation_backup_enabled is true.
+# The check keys off the script, as scripts/dns/validate-deploy.sh does.
 if [ -e /usr/local/bin/automation-syncthing-backup ]; then
   check_script /usr/local/bin/automation-syncthing-backup 755
   root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
@@ -153,8 +115,8 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   ps_out="$(docker compose -f "$STACK_HOME/docker-compose.yml" ps --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
   for svc in vaultwarden firefly firefly-cron mariadb watchtower; do
     if [ "$svc" = "firefly-cron" ]; then
-      # Sleep-sidecar (see post_deploy_validate.yml): a clean last exit code means
-      # healthy, since State=running only holds ~60s of every ~62s cycle.
+      # This is the sleep sidecar described in post_deploy_validate.yml.
+      # A clean last exit code means healthy, because the container leaves State=running between its restarts.
       state_line="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' firefly-cron 2>/dev/null || true)"
       if [ -n "$state_line" ] && printf '%s\n' "$state_line" | grep -Eq '^(running|restarting|exited) 0$'; then
         note_ok "$svc running"
@@ -193,11 +155,6 @@ echo "-- Notification helper (common role) --"
 check_script /usr/local/bin/ntfy-notify 755
 check_present /etc/ntfy/notify-api-key
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "DEPLOYMENT CHECKS FAILED - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "All deployment checks passed. The host is healthy."
+summary_deploy "All deployment checks passed. The host is healthy."
 INNEREOF
+} | ssh "$HOST" bash -s

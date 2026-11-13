@@ -1,6 +1,5 @@
 ---
-# Fail-fast pre-deployment validation for the automation stack. site.yml also
-# includes this file directly, so it re-runs os discovery itself.
+# The site.yml playbook includes this file directly as well, so it runs OS discovery itself.
 
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
@@ -22,9 +21,9 @@
       - automation_data_path
       - automation_stack_home
       - automation_trusted_proxies
-      - restic_enabled
-      - restic_repository
-      - restic_password
+      - automation_restic_enabled
+      - automation_backup_enabled
+    validation_supported_os_families: [Debian]
     vault_placeholders:
       - { var: "vault_firefly_app_key", value: "your-firefly-app-key" }
       - { var: "vault_firefly_static_cron_token", value: "your-firefly-static-cron-token" }
@@ -33,43 +32,37 @@
       - { var: "vault_watchtower_api_token", value: "your-watchtower-api-token" }
   tags: [validation]
 
-- name: Confirm the host OS and architecture are supported
+- name: Require the consistent dumps the off-site backup relies on
   ansible.builtin.assert:
-    that:
-      - os_family == "Debian"
+    that: automation_backup_enabled or not automation_restic_enabled
     fail_msg: >-
-      automation requires a Debian-family OS; got
-      {{ os_family | default('unknown') }}
-      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
-    success_msg: >
-      [OK] Supported OS: {{ os_name }} {{ os_version }}
-      ({{ os_family }}).
+      automation_backup_enabled: must be true when automation_restic_enabled is true -
+      the 02:30 dumps are the only consistent database copies restic ships
+    quiet: true
   tags: [validation]
 
-- name: Validate the parent directories of the stack paths exist
-  ansible.builtin.stat:
-    path: "{{ item | dirname }}"
-  register: automation_parent_path_check
-  failed_when: not automation_parent_path_check.stat.exists or not automation_parent_path_check.stat.isdir
-  loop:
-    - "{{ automation_data_path }}"
-    - "{{ automation_stack_home }}"
+- name: Validate the restic job this role builds
+  # Pre-validation runs before any role deploys, whereas the job's own checks in backup.yml run after the stack.
+  # A bad job caught there would leave the firewall and the stack service unapplied.
+  # An undefined repository or password variable inside the job is named by the resulting error.
+  ansible.builtin.include_role:
+    name: restic
+    tasks_from: validate_job
+  vars:
+    restic_job: "{{ automation_restic_job }}"
+  when: automation_restic_enabled
   tags: [validation]
 
-- name: Refuse a stack home under /root for a non-root stack user
-  # Guard against deriving the stack home from the ansible_user_dir/_id facts:
-  # under become:true those reflect root, which lands in /root for a non-root
-  # control user and cannot be traversed by the stack owner.
-  ansible.builtin.fail:
-    msg: >-
-      automation_stack_home ({{ automation_stack_home }}) resolves under /root,
-      but ansible_user is '{{ ansible_user }}'. The role derives the stack home
-      from the inventory's ansible_user (/home/<user>/stack); a /root
-      path usually means an ansible_user_dir / ansible_user_id FACT was used -
-      under become:true those reflect the become root user, not the stack owner.
-  when:
-    - ansible_user is defined and ansible_user != 'root'
-    - automation_stack_home is match('/root(/|$)')
+- name: Validate the stack paths
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: validate_stack_paths
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_role: automation
+    validation_data_paths:
+      - "{{ automation_data_path }}"
+      - "{{ automation_stack_home }}"
+    validation_stack_home_var: automation_stack_home
   tags: [validation]
 
 - name: Refuse the Firefly TRUSTED_PROXIES catch-all
@@ -82,8 +75,8 @@
   tags: [validation]
 
 - name: Require a 32-character hex Firefly static cron token
-  # Firefly's CLIToken binder rejects anything that is not exactly 32 characters,
-  # and the API answers HTTP 500 - which crash-loops the firefly-cron sidecar.
+  # Firefly's CLIToken binder rejects any token that is not exactly 32 characters.
+  # The API then answers HTTP 500, which crash-loops the firefly-cron sidecar.
   ansible.builtin.fail:
     msg: >-
       vault_firefly_static_cron_token must be exactly 32 hex characters
@@ -97,9 +90,9 @@
   tags: [validation]
 
 - name: Require a well-formed Firefly APP_KEY
-  # Laravel builds its encrypter from APP_KEY before routing, so a malformed key
-  # 500s every route and crash-loops the firefly-cron sidecar. Both upstream
-  # formats are accepted; the only pipeline constraint is no literal double quote.
+  # Laravel builds its encrypter from APP_KEY before routing, so a malformed key makes every route fail with HTTP 500.
+  # That also crash-loops the firefly-cron sidecar.
+  # The check accepts the raw 32-character form, which must not contain a double quote, and the base64-prefixed form.
   ansible.builtin.fail:
     msg: >-
       vault_firefly_app_key is not a valid Firefly APP_KEY; got

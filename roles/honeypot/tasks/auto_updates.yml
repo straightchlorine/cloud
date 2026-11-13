@@ -18,9 +18,9 @@
   become: true
 
 - name: Alert via ntfy when an unattended patch run fails
-  # A failed run (repo outage, GPG failure, failed reboot_command) is otherwise
-  # only in the journal. honeywatch-notify@ is installed by notify.yml later in
-  # the run; a drop-in does not need the target unit to exist yet.
+  # A failed run, such as a repo outage, a GPG failure or a failed reboot_command,
+  # would otherwise appear only in the journal.
+  # notify.yml installs honeywatch-notify@ later in the play, and a drop-in does not need its target unit to exist yet.
   ansible.builtin.copy:
     dest: /etc/systemd/system/dnf-automatic.service.d/10-notify.conf
     content: |

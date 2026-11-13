@@ -3,12 +3,12 @@
   hosts: all
   become: true
   vars:
-    # Pinned: the role's ownership/become wiring reads ansible_user directly.
+    # The role's ownership and become wiring reads ansible_user directly, so it is pinned.
     ansible_user: root
     timezone: UTC
     domain_name: example.test
     common_start_stack: false
-    # No GPU in a container; validate.yml's device check is a real-host gate.
+    # A container has no GPU, and validate.yml's device check is meant for real hosts.
     gpu_qp_require_nvidia_device: false
     gpu_qp_cuda_arch: "6.1"
     gpu_qp_home: /home/gpu/gpu-qp
@@ -22,7 +22,7 @@
         mode: "0755"
 
     - name: Look for pgrep
-      # The deploy guard and the installed test suite need it; the default image has it.
+      # The deploy guard and the installed test suite need pgrep.
       ansible.builtin.stat:
         path: /usr/bin/pgrep
       register: gpu_qp_pgrep
@@ -33,14 +33,11 @@
         state: present
       when: not gpu_qp_pgrep.stat.exists
   tasks:
-    # Deliberately not run here:
-    #   - packages.yml / docker.yml (apt installs; no docker-in-docker)
-    #   - nvidia_driver.yml (no GPU, no DKMS build)
-    #   - image.yml / nvidia_container_toolkit.yml (need a live Docker daemon)
-    #   - dotfiles.yml (its src is playbook_dir-relative: ../dotfiles/tmux.conf
-    #     resolves from playbooks/, not from a molecule scenario directory)
-    #   - firewall (ufw cannot apply rules inside a container)
-    #   - post_deploy_validate.yml (needs a live stack and a real GPU)
+    # The scenario skips what a container cannot do.
+    # That is the common package and Docker setup (no docker-in-docker), nvidia_driver.yml (no GPU for DKMS)
+    # and image.yml with nvidia_container_toolkit.yml (they need a live Docker daemon).
+    # It also skips the firewall, because ufw cannot apply rules in a container.
+    # post_deploy_validate.yml is skipped as well because it needs a real GPU.
     - name: Gather network facts
       ansible.builtin.include_role:
         name: common
@@ -66,34 +63,22 @@
         name: gpu-qp
         tasks_from: stack
 
-    - name: Render the stack systemd unit
-      # Rendered standalone so a broken unit template variable still fails CI.
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
-        dest: /tmp/gpu-qp.service.rendered
-        mode: "0644"
+    - name: Install the real stack unit (docker is stubbed in prepare)
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: docker_stack_service
       vars:
-        service_description: "gpu-qp stack (molecule render)"
-        service_requires: ["docker.service"]
-        service_after: ["docker.service", "network-online.target"]
-        common_service_wants: ["network.target"]
-        service_type: "oneshot"
-        common_remain_after_exit: "true"
-        common_working_directory: "{{ gpu_qp_home }}"
-        service_user: "{{ ansible_user }}"
-        service_group: "{{ ansible_user }}"
-        service_environment:
+        common_start_stack: true
+        common_stack_description: "gpu-qp stack (molecule)"
+        common_stack_home: "{{ gpu_qp_home }}"
+        common_stack_user: "{{ ansible_user }}"
+        common_stack_environment_vars:
           - "GPU_QP_HOME={{ gpu_qp_home }}"
-        exec_start: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml up -d"
-        exec_stop: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml down"
-        exec_reload: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml restart"
-        syslog_identifier: "stack"
-        common_timeout_start_sec: "0"
-        kill_mode: "none"
-        common_standard_output: "journal"
-        common_standard_error: "journal"
-        common_restart_policy: "on-failure"
-        common_restart_sec: "5"
-        common_wanted_by: "multi-user.target"
-        common_enable_security_hardening: true
-        common_no_new_privileges: "true"
+
+    - name: Start the unit and flush the "Restart stack" handler
+      # The handler is resolved from the common role, so an unknown handler name fails the play.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: stack_start
+      vars:
+        common_start_stack: true

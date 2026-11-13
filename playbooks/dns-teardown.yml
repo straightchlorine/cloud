@@ -1,27 +1,25 @@
 ---
-# Single confirmation flag cascades into all related teardowns.
+# Tear down the DNS stack. One confirmation flag gates every related teardown below.
 #   ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
 #     --limit <your-test-host> -e dns_teardown_confirm=true
 #
-# Pattern (shared by every teardown playbook):
+# Every teardown playbook follows the same pattern.
 #   1. Gate on this role's own flag (dns_teardown_confirm) and refuse any host
 #      marked teardown_protected in the inventory.
 #   2. Set the shared fact teardown_confirmed: true.
-#   3. Run the teardown manifest below - every included teardown task file
-#      checks teardown_confirmed, so nothing can run outside a confirmed
-#      teardown.
+#   3. Run the teardown task files below, which all check teardown_confirmed,
+#      so nothing can run outside a confirmed teardown.
 #
-# The feature-flag gates below use | default(false) because this playbook never
-# loads the owning roles' defaults (acceptable cross-role flag default per
-# CLAUDE.md).
+# The feature-flag gates below use | default(false) because this playbook never loads the owning roles' defaults.
+# That is an acceptable cross-role flag default under CLAUDE.md.
 - name: Tear down the DNS role for repeatable testing
   hosts: dns
   become: true
   gather_facts: true
   pre_tasks:
     - name: Gather network facts for teardown
-      # pihole-exporter teardown needs primary_network_cidr to delete its src-restricted
-      # ufw rule; it's a custom fact, not in the normal gather_facts payload.
+      # The exporter teardown deletes its source-restricted ufw rule using prometheus_exporters_firewall_source.
+      # That value is primary_network_cidr, a custom fact that normal fact gathering does not provide.
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
@@ -47,19 +45,3 @@
         - teardown_confirmed | default(false) | bool
         - prometheus_exporters_pihole_exporter_enabled | default(false)
         - "'dns' in group_names"
-
-    - name: Tear down Syncthing (common role)
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: syncthing_teardown
-      when:
-        - teardown_confirmed | default(false) | bool
-        - common_syncthing_enabled | default(false) | bool
-
-    - name: Tear down zram swap
-      # Not gated on common_zram_enabled: foreign zram units (zram-generator,
-      # hand-rolled) would collide with the next deploy's zramswap.
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: zram_teardown
-      when: teardown_confirmed | default(false) | bool

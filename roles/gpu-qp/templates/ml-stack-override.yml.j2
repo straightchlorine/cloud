@@ -19,7 +19,7 @@
 #                         is lost under --rm.
 #   nvidia-gpu-exporter   port {{ gpu_qp_gpu_exporter_port }} is already served by this role's own exporter.
 #
-# If `runtime: nvidia` is still refused, add device reservations instead of the env var:
+# If `runtime: nvidia` is refused, add device reservations like these:
 #   deploy:
 #     resources:
 #       reservations:

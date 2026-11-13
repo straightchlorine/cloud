@@ -1,24 +1,13 @@
 ---
-# The run trees are the only copy of the benchmark data, and a live run's cells would die
-# mid-flight. Included by teardown.yml right after the confirmation gate.
-
-- name: Look for the benchmark lock file
-  ansible.builtin.stat:
-    path: "{{ gpu_qp_bench_path }}/.lock"
-  register: gpu_qp_teardown_lock_stat
+# The run trees are the only copy of the benchmark data, and teardown would kill the cells of a live run.
 
 - name: Probe the benchmark lock
-  ansible.builtin.command: "flock -n -s {{ gpu_qp_bench_path }}/.lock true"
-  register: gpu_qp_teardown_lock
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  when: gpu_qp_teardown_lock_stat.stat.exists
+  ansible.builtin.import_tasks: lock_probe.yml
 
 - name: Refuse while a benchmark run holds the lock
   ansible.builtin.fail:
     msg: "a benchmark run holds {{ gpu_qp_bench_path }}/.lock; stop it first: gpu-qp stop --now"
-  when: gpu_qp_teardown_lock_stat.stat.exists and gpu_qp_teardown_lock.rc != 0
+  when: gpu_qp_lock_held
 
 - name: Look for run trees
   ansible.builtin.find:

@@ -1,39 +1,20 @@
 #!/usr/bin/env bash
-# Post-teardown check for the DNS host (default: the `dns` inventory host).
-# Run after playbooks/dns-teardown.yml to confirm the box is clean enough for
-# a fresh dns-role test. Pairs with validate-deploy.sh (deployed host check).
-# Usage: ./scripts/dns/validate-clean.sh [ansible-host-alias]
+# Run this after playbooks/dns-teardown.yml to confirm the host is clean enough for a fresh dns-role test.
+# The deployed-host counterpart is validate-deploy.sh.
+# Usage: ./scripts/dns/validate-clean.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-dns}"
+HOST="${1:?Usage: ./scripts/dns/validate-clean.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after DNS teardown =="
 
-ssh "$HOST" bash -s <<'EOF'
-set -u
-fail=0
-pass=0
+{
+  cat "$LIB"
+  cat <<'EOF'
 
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_absent() {
-  if [ -e "$1" ]; then
-    note_left "$1 still exists"
-  else
-    note_ok "$1 absent"
-  fi
-}
-
-# A staging box that never completed a full site.yml run lacks the shared fleet
-# state (ufw, node-exporter, prometheus user); that is not teardown damage.
+# A staging host that never completed a full site.yml run lacks the shared fleet state.
+# That state is ufw, the node exporter and the prometheus user, and its absence is not teardown damage.
 shared_state_deployed="yes"
 if ! command -v ufw >/dev/null 2>&1; then
   shared_state_deployed="no"
@@ -54,8 +35,8 @@ check_absent /etc/pihole.backup
 check_absent /tmp/pi-hole-repo
 
 echo "-- Notification scripts + ntfy key (should be torn down with the role) --"
-# ntfy-notify and reboot-notify are common-role helpers the dns teardown
-# removes; the API key must not survive in /etc/ntfy either.
+# The dns teardown removes ntfy-notify and reboot-notify, which are common-role helpers.
+# The API key must not survive in /etc/ntfy either.
 check_absent /usr/local/bin/ntfy-notify
 check_absent /usr/local/bin/reboot-notify
 check_absent /etc/ntfy/notify-api-key
@@ -67,7 +48,7 @@ else
   note_ok "pihole-FTL service not active"
 fi
 
-# Syncthing fully torn down: unit removed, service stopped, package purged.
+# A full Syncthing teardown removes the unit, stops the service and purges the package.
 check_absent /etc/systemd/system/syncthing.service
 check_absent /etc/apt/preferences.d/syncthing.pref
 check_absent /etc/apt/keyrings/syncthing-archive-keyring.gpg
@@ -78,7 +59,7 @@ else
   note_ok "syncthing service not active"
 fi
 
-# dns role crons live in root's crontab; only root may read it.
+# The dns role crons live in root's crontab, which only root may read.
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
 for cron_job in "Weekly Pi-hole updates" "Pihole Syncthing local backup" "Pi-hole Syncthing local backup" \
   "Reboot pending notification"; do
@@ -91,8 +72,8 @@ done
 
 echo "-- Listening ports --"
 listeners="$( { ss -H -ltn; ss -H -lun; } 2>/dev/null || true )"
-# Trailing space bounds each port so "0.0.0.0:53 " doesn't match the
-# always-present mDNS listener on 5353 (ss separates local/peer addr).
+# The trailing space ends each port, so "0.0.0.0:53 " does not match the always-present mDNS listener on 5353.
+# The space works because ss separates the local and peer addresses with whitespace.
 for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 "; do
   if printf '%s\n' "$listeners" | grep -qF -- "$port_line"; then
     note_left "still listening on ${port_line% }"
@@ -179,8 +160,8 @@ if findmnt -n /mnt/data >/dev/null 2>&1; then
 else
   note_ok "/mnt/data unmounted"
 fi
-# Teardown wipes the drive; leftover signatures on sd* (USB/SATA - the
-# SD card is mmcblk*) mean it wasn't fully wiped.
+# The teardown wipes the drive, so leftover signatures on sd* devices mean the wipe was incomplete.
+# Those devices are USB or SATA disks, while the SD card is mmcblk*.
 sd_sigs="$(lsblk -no FSTYPE /dev/sd* 2>/dev/null | grep . || true)"
 if [ -n "$sd_sigs" ]; then
   note_left "optional drive still has filesystem signatures: $sd_sigs"
@@ -253,12 +234,7 @@ for leftover in /tmp/pihole_exporter_checksum.txt /tmp/node_exporter_checksums.t
   fi
 done
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "LEFTOVERS FOUND - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "Clean. The host is ready for a fresh dns-role test."
+summary_clean "Clean. The host is ready for a fresh dns-role test."
 
 EOF
+} | ssh "$HOST" bash -s

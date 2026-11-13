@@ -1,7 +1,7 @@
 ---
 - name: Read what the bench reads from the Docker daemon
-  # runuser re-initialises the group list, so this also proves the bench user
-  # can reach the socket through the docker group without a new login.
+  # runuser re-initialises the group list, so this also proves that the bench user
+  # can reach the Docker socket through the docker group without a new login.
   ansible.builtin.command: >-
     runuser -u {{ honeybench_user }} -- docker info
     --format '{% raw %}{{.CgroupDriver}} {{.CgroupVersion}} {{.Driver}}{% endraw %}'
@@ -38,7 +38,7 @@
   tags: [post_validation]
 
 - name: Read the version each pinned tool reports
-  # Absolute path, no become: sudo's secure_path does not include /usr/local/bin.
+  # The path is absolute and become is off because sudo's secure_path does not include /usr/local/bin.
   ansible.builtin.command: "/usr/local/bin/{{ item.binaries[0] }} {{ item.version_args }}"
   become: false
   changed_when: false
@@ -60,8 +60,8 @@
   tags: [post_validation]
 
 - name: Read the transparent hugepage mode
-  # It changes Postgres behaviour and measure.py records it per run, so the
-  # deploy log should carry it too.
+  # The mode changes Postgres behaviour and measure.py records it per run.
+  # The deploy log should therefore carry it too.
   ansible.builtin.slurp:
     src: /sys/kernel/mm/transparent_hugepage/enabled
   register: honeybench_thp

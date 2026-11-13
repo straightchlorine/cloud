@@ -1,7 +1,7 @@
 ---
-# Removes pihole_exporter artifacts only. The shared prometheus user/group
-# stays - node_exporter and pi_hardware_metrics still run under it.
-# Gated on teardown_confirmed so it can never run outside a teardown playbook.
+# This removes the Pi-hole exporter artifacts only.
+# The shared prometheus user and group stay because node_exporter and pi_hardware_metrics still run under them.
+# The teardown_confirmed gate keeps it from running outside a teardown playbook.
 
 - name: Tear down Pi-hole Exporter
   when: teardown_confirmed | default(false) | bool
@@ -12,6 +12,7 @@
         state: stopped
         enabled: false
       become: true
+      # The unit does not exist when the exporter was never deployed.
       failed_when: false
 
     - name: Remove Pi-hole Exporter systemd service
@@ -21,27 +22,29 @@
       become: true
 
     - name: Reload systemd after removing the unit file
-      # Not a notify: can run from playbooks (e.g. dns-teardown.yml) that never
-      # load roles/common's handlers into scope.
+      # This is not a notify because the file can run from playbooks such as dns-teardown.yml.
+      # Those playbooks never load the handlers of roles/common.
       ansible.builtin.systemd:
         daemon_reload: true
       become: true
 
     - name: Remove Pi-hole Exporter binary and config
-      # /tmp/pihole_exporter_checksum.txt too: an interrupted run between download
-      # and cleanup leaves a stale checksum that forces a re-fetch next deploy.
+      # The list includes the checksum file in /tmp.
+      # A run interrupted between download and cleanup leaves a stale checksum.
+      # That checksum would force a re-fetch on the next deploy.
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
         - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
         - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
         - "/tmp/pihole_exporter_checksum.txt"
       become: true
 
     - name: Remove firewall rule for Pi-hole Exporter
-      # Mirror firewall.yml's add (same src + proto): ufw only deletes rules whose
-      # parameters match, so deleting by port alone would silently leave it.
+      # The rule mirrors the one firewall.yml adds, with the same source and protocol.
+      # ufw only deletes rules whose parameters match, so deleting by port alone would silently leave it.
       community.general.ufw:
         rule: allow
         port: "{{ prometheus_exporters_pihole_exporter_port }}"
@@ -50,15 +53,17 @@
         comment: "Pi-hole Prometheus Exporter"
         delete: true
       become: true
+      # Deleting a rule that is not there must not fail the teardown.
       failed_when: false
 
     - name: Remove the Pi-hole Exporter's src-unrestricted common firewall rule too
-      # common_firewall_ports may also open 9617 with no src restriction. 9617 is
-      # this exporter's exclusive port, so both rules go with it. Missing = no-op.
+      # firewall_common_ports may also open this port with no source restriction.
+      # The port belongs exclusively to this exporter, so both rules go with it.
       community.general.ufw:
         rule: allow
         port: "{{ prometheus_exporters_pihole_exporter_port }}"
         proto: tcp
         delete: true
       become: true
+      # Deleting a rule that is not there must not fail the teardown.
       failed_when: false

@@ -1,46 +1,20 @@
 ---
-# Install Syncthing from the official apt repository (stable-v2 channel),
-# not the Debian package which lags badly. Mirrors the Docker key/repo pattern.
-# Opt in fleet-wide via common_syncthing_enabled; configure folders/devices
-# per-host in host_vars.
+# Syncthing comes from the official apt repository because the Debian package lags far behind.
 #
-# Runs as a system-level service (not syncthing@.user) - user-scope systemd
-# needs a login session/user bus that headless hosts don't have, which makes
-# it unreliable to drive from Ansible.
+# It runs as a system-level service rather than a user service.
+# User-scope systemd needs a login session and user bus, which headless hosts lack.
 #
-# Teardown lives in syncthing_teardown.yml - kept separate so the teardown
-# playbook never re-runs these install tasks.
+# Teardown lives in syncthing_teardown.yml so that the teardown playbook never re-runs these install tasks.
 
-- name: Ensure apt keyrings directory exists
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-  become: true
-
-- name: Add Syncthing release GPG key
-  ansible.builtin.get_url:
-    url: https://syncthing.net/release-key.gpg
-    dest: /etc/apt/keyrings/syncthing-archive-keyring.gpg
-    mode: '0644'
-  become: true
-  register: common_syncthing_key
-  until: common_syncthing_key is succeeded
-  retries: 3
-  delay: 2
-
-- name: Add Syncthing stable-v2 apt repository
-  ansible.builtin.apt_repository:
-    repo: |
+- name: Add the Syncthing stable-v2 apt repository
+  ansible.builtin.include_tasks: apt_source.yml
+  vars:
+    common_apt_source_name: syncthing
+    common_apt_source_key_url: https://syncthing.net/release-key.gpg
+    common_apt_source_key_path: /etc/apt/keyrings/syncthing-archive-keyring.gpg
+    common_apt_source_line: >-
       deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg]
       https://apt.syncthing.net/ syncthing stable-v2
-    filename: syncthing
-    state: present
-  become: true
-  register: common_syncthing_repo
-  until: common_syncthing_repo is succeeded
-  retries: 3
-  delay: 2
 
 - name: Pin Syncthing repo priority to prefer official packages over Debian
   ansible.builtin.copy:
@@ -59,6 +33,7 @@
     name: syncthing
     state: present
     update_cache: true
+    cache_valid_time: "{{ common_package_cache_valid_time }}"
   become: true
 
 - name: Create Syncthing home directory
@@ -66,7 +41,7 @@
     path: "{{ common_syncthing_home }}"
     state: directory
     owner: "{{ ansible_user }}"
-    group: "{{ ansible_user_gid | default(ansible_user) }}"
+    group: "{{ ansible_facts['user_gid'] }}"
     mode: '0750'
   become: true
 

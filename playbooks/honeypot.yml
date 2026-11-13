@@ -1,16 +1,14 @@
 ---
 # Standalone deployment for the public-facing honeywatch honeypot VPS.
 #
-# The host is a CentOS Stream VPS reached over the tailnet, not a LAN Pi: the
-# fleet-wide common/firewall/prometheus-exporters roles are apt- and ufw-based
-# and are deliberately not applied here.
+# The host is a CentOS Stream VPS reached over the tailnet, not a LAN Pi.
+# The fleet-wide common, firewall and prometheus-exporters roles are apt and ufw based, so they are not applied here.
 #
-# First bootstrap only - sshd is still on 22 and the tailnet does not exist yet,
-# so the hardened listener has no address to bind:
+# The first bootstrap needs overrides, because sshd is still on port 22 and the tailnet does not exist yet.
+# The hardened listener has no tailnet address to bind at that point:
 #   ansible-playbook playbooks/honeypot.yml -e ansible_port=22 \
 #     -e honeypot_ssh_listen_address=0.0.0.0
-# Bring the tailnet up, then re-run without either override to move sshd onto
-# the tailnet address.
+# Bring the tailnet up, then re-run without either override to move sshd onto the tailnet address.
 
 - name: Deploy the honeypot host configuration
   hosts: honeypot

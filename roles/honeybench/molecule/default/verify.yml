@@ -1,0 +1,50 @@
+---
+- name: Verify honeybench Docker configuration
+  hosts: all
+  become: true
+  tasks:
+    - name: Read the Docker daemon configuration
+      ansible.builtin.slurp:
+        src: /etc/docker/daemon.json
+      register: honeybench_verify_daemon
+
+    - name: Assert daemon.json is the role options alone, newline-terminated
+      vars:
+        honeybench_verify_text: "{{ honeybench_verify_daemon.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - (honeybench_verify_text | from_json)['exec-opts'] == ['native.cgroupdriver=systemd']
+          - (honeybench_verify_text | from_json)['live-restore'] == true
+          - (honeybench_verify_text | from_json).ip == '127.0.0.1'
+          - "'data-root' not in honeybench_verify_text"
+          - honeybench_verify_text.endswith('\n')
+        quiet: true
+
+    - name: Stat daemon.json
+      ansible.builtin.stat:
+        path: /etc/docker/daemon.json
+      register: honeybench_verify_stat
+
+    - name: Assert daemon.json ownership and mode
+      ansible.builtin.assert:
+        that:
+          - honeybench_verify_stat.stat.mode == '0644'
+          - honeybench_verify_stat.stat.pw_name == 'root'
+        quiet: true
+
+    - name: Count the stub docker.service starts
+      ansible.builtin.command: wc -l /var/tmp/docker-stub-starts
+      register: honeybench_verify_starts
+      changed_when: false
+
+    - name: Assert common's Restart docker handler ran once, after the initial start
+      ansible.builtin.assert:
+        that: honeybench_verify_starts.stdout.split()[0] == '2'
+        fail_msg: "expected enable-start plus one handler restart, got {{ honeybench_verify_starts.stdout }}"
+        quiet: true
+
+    - name: Check the bench user is in the docker group
+      ansible.builtin.command: id -nG root
+      register: honeybench_verify_groups
+      changed_when: false
+      failed_when: "'docker' not in honeybench_verify_groups.stdout.split()"

@@ -1,31 +1,30 @@
 ---
 
 - name: Install Node Exporter via binary (recommended)
-  when: node_exporter_install_method == "binary"
+  when: prometheus_exporters_node_exporter_install_method == "binary"
   block:
-    - name: Check current Node Exporter version
-      ansible.builtin.shell: |
-        set -o pipefail
-        if [ -f "{{ prometheus_exporters_base_dir }}/bin/node_exporter" ]; then
-          {{ prometheus_exporters_base_dir }}/bin/node_exporter --version 2>/dev/null | head -n 1 |
-          grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
-        else
-          echo "not_installed"
-        fi
+    - name: Check the installed Node Exporter version
+      # A missing binary makes the command fail with empty stdout, which triggers the install.
+      ansible.builtin.command: "{{ prometheus_exporters_base_dir }}/bin/node_exporter --version"
+      register: prom_exp_node_exporter_installed
       changed_when: false
+      failed_when: false
 
     - name: Download and install Node Exporter
+      when: >-
+        prom_exp_node_exporter_installed.stdout
+        is not search('version ' ~ (prometheus_exporters_node_exporter_version | regex_escape) ~ ' ')
       block:
         - name: Download Node Exporter checksums
-          # retries: GitHub release downloads redirect through
-          # objects.githubusercontent.com - occasional dropped connections on
-          # a Pi's link are transient, not a real failure.
+          # GitHub release downloads redirect through objects.githubusercontent.com.
+          # A dropped connection on a Pi's link is transient, so the download is retried.
           ansible.builtin.get_url:
             url: "{{ prometheus_exporters_node_exporter_checksum_url }}"
             dest: "/tmp/node_exporter_checksums.txt"
-            # force: a partial file can be left behind by a dropped connection; get_url
-            # would accept it without a checksum and grep would read stale data.
+            # A dropped connection can leave a partial file behind.
+            # Without a checksum get_url would accept it, and grep would read stale data.
             force: true
+            mode: "0644"
             timeout: 30
           register: prom_exp_node_exporter_checksums_download
           retries: 3
@@ -36,7 +35,7 @@
           ansible.builtin.shell: |
             set -o pipefail
             grep "node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
-                  prometheus_exporters_prometheus_arch_map[ansible_architecture] }}.tar.gz" \
+                  os_arch_download }}.tar.gz" \
               /tmp/node_exporter_checksums.txt | cut -d' ' -f1
           register: prom_exp_expected_checksum
           changed_when: false
@@ -46,6 +45,7 @@
             url: "{{ prometheus_exporters_node_exporter_binary_url }}"
             dest: "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             checksum: "sha256:{{ prom_exp_expected_checksum.stdout }}"
+            mode: "0644"
             timeout: 60
           register: prom_exp_node_exporter_archive_download
           retries: 3
@@ -62,7 +62,7 @@
           ansible.builtin.copy:
             src: >-
               /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.linux-{{
-              prometheus_exporters_prometheus_arch_map[ansible_architecture] }}/node_exporter
+              os_arch_download }}/node_exporter
             dest: "{{ prometheus_exporters_base_dir }}/bin/node_exporter"
             owner: "{{ prometheus_exporters_user }}"
             group: "{{ prometheus_exporters_group }}"
@@ -79,16 +79,15 @@
             - "/tmp/node_exporter-{{ prometheus_exporters_node_exporter_version }}.tar.gz"
             - >-
               /tmp/node_exporter-{{ prometheus_exporters_node_exporter_version
-              }}.linux-{{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
+              }}.linux-{{ os_arch_download }}
             - "/tmp/node_exporter_checksums.txt"
 
 - name: Install Node Exporter via package manager (fallback)
   ansible.builtin.apt:
     name: prometheus-node-exporter
     state: present
-    update_cache: true
   become: true
-  when: node_exporter_install_method == "package"
+  when: prometheus_exporters_node_exporter_install_method == "package"
 
 - name: Create Node Exporter service file
   ansible.builtin.template:
@@ -107,7 +106,7 @@
     exec_reload: "/bin/kill -HUP $MAINPID"
     exec_start: >-
       {{ prometheus_exporters_base_dir }}/bin/node_exporter
-      {% for collector in node_exporter_enabled_collectors %}
+      {% for collector in prometheus_exporters_node_exporter_enabled_collectors %}
       --collector.{{ collector }}
       {% endfor %}
       --collector.textfile.directory={{ prometheus_exporters_node_exporter_textfile_dir }}
@@ -119,8 +118,8 @@
     restart_policy: "always"
     restart_sec: "1"
     start_limit_interval_sec: "0"
-    # read-only, not true: true swaps /home for an empty tmpfs inside the unit, so the
-    # filesystem collector would report it instead of a separate /home partition.
+    # The value is read-only and not true, because true swaps /home for an empty tmpfs inside the unit.
+    # The filesystem collector would then report that tmpfs instead of a separate /home partition.
     common_protect_home: "read-only"
     common_protect_system: "strict"
     protect_control_groups: "true"
@@ -131,25 +130,27 @@
   notify:
     - Reload systemd
     - Restart node-exporter
-  when: node_exporter_install_method == "binary"
+  when: prometheus_exporters_node_exporter_install_method == "binary"
 
 - name: Enable and start Node Exporter service
   ansible.builtin.systemd:
-    name: "{{ 'node-exporter' if node_exporter_install_method == 'binary' else 'prometheus-node-exporter' }}"
+    name: >-
+      {{ 'node-exporter' if prometheus_exporters_node_exporter_install_method == 'binary'
+      else 'prometheus-node-exporter' }}
     enabled: true
     state: started
     daemon_reload: true
   become: true
 
 - name: Flush pending handlers before verifying
-  # The handlers above only flush at the end of the play, long after this verify
-  # would fail against a unit whose file changed (e.g. --web.listen-address after
-  # primary_ip changes) but whose running process was never restarted.
+  # The handlers above would only flush at the end of the play, long after this verification.
+  # Without the flush it would fail against a unit whose file changed but whose process was never restarted.
+  # An example is --web.listen-address after primary_ip changes.
   ansible.builtin.meta: flush_handlers
 
 - name: Verify Node Exporter is responding
-  # Must target primary_ip, not localhost: the unit binds
-  # --web.listen-address={{ primary_ip }}:port, so 127.0.0.1:port refuses.
+  # The check must target primary_ip and not localhost.
+  # The unit binds --web.listen-address to primary_ip, so 127.0.0.1 refuses the connection.
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET

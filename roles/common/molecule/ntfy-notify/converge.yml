@@ -1,0 +1,20 @@
+---
+- name: Converge - install the real ntfy helper against a local stub server
+  hosts: all
+  become: true
+  vars:
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "http://127.0.0.1:8099"
+    ntfy_topic: molecule-test
+  pre_tasks:
+    - name: Install curl, which the image lacks and the packages role provides on the fleet
+      ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+  tasks:
+    - name: Install the shared ntfy helper and its key file
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ntfy_install

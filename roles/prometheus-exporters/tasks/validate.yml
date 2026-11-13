@@ -15,17 +15,6 @@
       - prometheus_role
       - device_type
     vault_placeholders: [] # No vault variables for exporters
-    common_backup_directories:
-      - "{{ prometheus_exporters_base_dir }}"
-    critical_backup_paths:
-      - "{{ prometheus_exporters_base_dir }}/bin"
-  tags: [validation]
-
-# Role-specific checks that supplement unified_validation above
-- name: Validate exporter architecture support
-  ansible.builtin.fail:
-    msg: "Architecture {{ ansible_architecture }} is not supported by Prometheus exporters"
-  when: ansible_architecture not in prometheus_exporters_prometheus_arch_map.keys()
   tags: [validation]
 
 - name: Check for port conflicts
@@ -144,7 +133,7 @@
   ansible.builtin.debug:
     msg: |
       [OK] Prometheus Exporters Validation Complete:
-      - Architecture: {{ ansible_architecture }} → {{ prometheus_exporters_prometheus_arch_map[ansible_architecture] }}
+      - Architecture: {{ ansible_architecture }} → {{ os_arch_download }}
       - Enabled exporters: >-
           {{ [('node' if prometheus_exporters_node_exporter_enabled else ''),
           ('pihole' if prometheus_exporters_pihole_exporter_enabled else '')] | select | join(', ') }}

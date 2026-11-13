@@ -1,0 +1,51 @@
+---
+- name: Prepare - stand-ins for what the role expects on the real host
+  hosts: all
+  become: true
+  tasks:
+    - name: Install a stub docker.service
+      # The real docker-ce cannot run in the container.
+      # The stub records each start so verify can prove the Restart docker handler from common fired.
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Docker stub for molecule
+          [Service]
+          ExecStartPre=/bin/sh -c 'echo start >> /var/tmp/docker-stub-starts'
+          ExecStart=/usr/bin/sleep infinity
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/docker.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload systemd to see the stub
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Create /etc/docker
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Seed daemon.json with keys set out of band
+      # The role merges into daemon.json, so these keys must survive.
+      ansible.builtin.copy:
+        content: '{"data-root": "/srv/docker", "icc": true}'
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create the honeywatch config directory
+      # selinux.yml creates this directory on the real host, but SELinux cannot run in the container.
+      ansible.builtin.file:
+        path: /etc/honeywatch
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'

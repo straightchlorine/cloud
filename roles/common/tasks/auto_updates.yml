@@ -62,8 +62,8 @@
     - Restart apt timers
 
 - name: Compute reboot notification time
-  # Updates run at common_auto_updates_run_time and the reboot follows the same morning. A longer lead
-  # would fire after the reboot already cleared /var/run/reboot-required.
+  # The notice fires three hours before the reboot, after the update run has created /var/run/reboot-required.
+  # A longer lead could fire before that file exists.
   ansible.builtin.set_fact:
     common_reboot_notify_total_minutes: >-
       {{ ((common_auto_updates_reboot_time.split(':')[0] | int * 60
@@ -89,3 +89,20 @@
     user: root
   become: true
   when: common_auto_updates_reboot_if_required
+
+- name: Remove the reboot-pending notification when reboots are off
+  # A host that stops auto-rebooting must not keep nagging about a reboot that never comes.
+  when: not common_auto_updates_reboot_if_required
+  block:
+    - name: Remove the reboot-pending notification cron entry
+      ansible.builtin.cron:
+        name: "Reboot pending notification"
+        user: root
+        state: absent
+      become: true
+
+    - name: Remove the reboot-pending notification script
+      ansible.builtin.file:
+        path: /usr/local/bin/reboot-notify
+        state: absent
+      become: true

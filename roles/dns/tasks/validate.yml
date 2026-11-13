@@ -1,14 +1,12 @@
 ---
-# Also included directly by site.yml's pre-validation (not via main.yml), so it
-# re-runs os discovery itself - cheap and idempotent.
+# The site.yml pre-validation includes this file directly instead of through main.yml, so it runs OS discovery itself.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
   tags: [validation]
 
 - name: Gather network facts
-  # Needed when included standalone: primary_network_cidr and primary_interface
-  # are only defined by network_facts.
+  # Standalone inclusion needs this because only network_facts defines primary_network_cidr and primary_interface.
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
@@ -22,6 +20,7 @@
     validation_context: "DNS services"
     validation_type: "full"
     validation_role: "dns"
+    validation_supported_os_families: [Debian]
     required_variables:
       - vault_pihole_webpassword
       - dns_pihole_interface
@@ -30,13 +29,6 @@
       - common_ntp_upstream_server
     vault_placeholders:
       - { var: "vault_pihole_webpassword", value: "your-secure-web-password" }
-  tags: [validation]
-
-- name: Confirm the host runs a Debian-family OS
-  ansible.builtin.assert:
-    that: os_family == "Debian"
-    fail_msg: "DNS requires a Debian-family OS; got {{ os_family }} ({{ os_name }} {{ os_version }})."
-    quiet: true
   tags: [validation]
 
 - name: Validate NTP allowed networks are set when serving NTP to the VLAN

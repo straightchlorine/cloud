@@ -108,7 +108,7 @@ check "pid_alive: matching start" "$(fn pid_alive $$ "$(starttime $$)"; echo $?)
 check "pid_alive: reused pid" "$(fn pid_alive $$ 1; echo $?)" "1"
 check "pid_alive: no such pid" "$(fn pid_alive 99999999 1; echo $?)" "1"
 
-# pilot: state.tsv straight under a phase dir; conv/ and final/ phases do not count
+# The pilot is the bench root holding a phase dir with a state.tsv; conv/ and final/ phases do not count.
 rm -f "$B/.active"
 mkdir -p "$B/conv/A2" "$B/final/B"
 : > "$B/conv/A2/state.tsv"

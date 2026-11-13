@@ -9,11 +9,9 @@
     domain_name: example.test
     media_home: /home/music/stack
     media_library_path: /mnt/music
-    # the media host's board: its hardware profile sizes the navidrome container
+    # This is the media host's board type, and its hardware profile sizes the navidrome container.
     device_type: rpi3b
-    restic_enabled: false
-    restic_repository: /tmp/test-restic
-    restic_password: molecule-test-restic-password
+    media_restic_enabled: false
     vault_watchtower_api_token: molecule-test-watchtower-token
     common_start_stack: false
     media_youtube_enabled: true
@@ -34,8 +32,7 @@
         - "{{ media_library_path }}"
 
     - name: Publish fixture userns-remap facts
-      # The uid must sit inside the nested rootless-podman mapping (0-65536), or chown
-      # fails with EINVAL.
+      # The uid must sit inside the nested rootless-podman mapping, or chown fails with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"
@@ -46,7 +43,7 @@
         name: media_role_defaults
 
     - name: Stub yt-dlp and deno
-      # youtube.yml only downloads missing binaries, so stubbing lets it run offline.
+      # Youtube.yml downloads only missing binaries, so the stubs let it run offline.
       ansible.builtin.copy:
         dest: "/usr/local/bin/{{ item.name }}"
         mode: "0755"
@@ -65,13 +62,13 @@
         label: "{{ item.name }}"
 
   tasks:
-    # Deliberately not run here:
-    #   - packages.yml (apt installs the whole common list - slow)
-    #   - optional_ssd (containers must not touch block devices)
-    #   - docker.yml (no docker-in-docker; compose up is skipped too)
-    #   - docker_stack_service (unit Requires=docker.service; rendered standalone below)
-    #   - firewall (ufw cannot bind rules in a container)
-    #   - post_deploy_validate.yml (needs a running compose stack)
+    # Several parts of the role are deliberately not run here.
+    # The packages task would apt-install the whole common list, which is too slow.
+    # The optional SSD task is skipped because containers must not touch block devices.
+    # Docker is not installed, and prepare stubs docker and docker.service.
+    # The real stack unit therefore installs and starts below.
+    # The firewall task is skipped because ufw cannot bind rules in a container.
+    # post_deploy_validate.yml is skipped because it needs a running compose stack.
     - name: Gather network facts
       ansible.builtin.include_role:
         name: common
@@ -86,14 +83,24 @@
         name: media
         tasks_from: validate
 
+    - name: Validate the stack with the off-site backup on (the restic job this role builds)
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: validate
+      vars:
+        media_restic_enabled: true
+        media_restic_repository: /srv/molecule-restic/media
+        media_restic_password: molecule-restic-password-media
+
     - name: Run the backup deployment
+      # Restic stays disabled here because deploying the job needs systemd, which this image lacks.
       ansible.builtin.include_role:
         name: media
         tasks_from: backup
 
     - name: Run the pipeline deployment
-      # main.yml runs the youtube pipeline BEFORE stack.yml; mirror that order here
-      # so a fresh deploy (no stack dirs yet) is actually exercised.
+      # Main.yml runs the youtube pipeline before stack.yml, and this converge keeps that order.
+      # A fresh deploy with no stack directories yet is then actually exercised.
       ansible.builtin.include_role:
         name: media
         tasks_from: youtube
@@ -103,34 +110,22 @@
         name: media
         tasks_from: stack
 
-    - name: Render the stack systemd unit
-      # Rendered standalone so a broken template variable still fails CI.
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
-        dest: /tmp/media.service.rendered
-        mode: "0644"
+    - name: Install the real stack unit (docker is stubbed in prepare)
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: docker_stack_service
       vars:
-        service_description: "Media Stack (molecule render)"
-        service_requires: ["docker.service"]
-        service_after: ["docker.service", "network-online.target"]
-        common_service_wants: ["network.target"]
-        service_type: "oneshot"
-        common_remain_after_exit: "true"
-        common_working_directory: "{{ media_home }}"
-        service_user: "{{ ansible_user }}"
-        service_group: "{{ ansible_user }}"
-        service_environment:
+        common_start_stack: true
+        common_stack_description: "Media Stack (molecule)"
+        common_stack_home: "{{ media_home }}"
+        common_stack_user: "{{ ansible_user }}"
+        common_stack_environment_vars:
           - "MEDIA_LIBRARY_PATH={{ media_library_path }}"
-        exec_start: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml up -d"
-        exec_stop: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml down"
-        exec_reload: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml restart"
-        syslog_identifier: "stack"
-        common_timeout_start_sec: "0"
-        kill_mode: "none"
-        common_standard_output: "journal"
-        common_standard_error: "journal"
-        common_restart_policy: "on-failure"
-        common_restart_sec: "5"
-        common_wanted_by: "multi-user.target"
-        common_enable_security_hardening: true
-        common_no_new_privileges: "true"
+
+    - name: Start the unit and flush the "Restart stack" handler
+      # Resolves the handler from common; an unknown handler name fails the play.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: stack_start
+      vars:
+        common_start_stack: true

@@ -14,8 +14,8 @@
       tags: [honeypot, packages]
   tags: [honeypot, packages]
 
-# Before sshd: the default policy only labels 22/tcp as ssh_port_t, so a
-# reload after the port drop-in lands would fail to bind 2022 under Enforcing.
+# This runs before sshd.yml because the default policy labels only 22/tcp as ssh_port_t.
+# Without the port label, a reload after the port drop-in lands could not bind the admin port under Enforcing.
 - name: Configure SELinux labels and the local policy module
   ansible.builtin.include_tasks:
     file: selinux.yml
@@ -37,11 +37,9 @@
       tags: [honeypot, firewall, security]
   tags: [honeypot, firewall, security]
 
-# Deliberate, not incidental: applies the sshd/firewalld templates now, in the
-# safe handler order (firewalld, then sshd - see handlers/main.yml), instead of
-# leaving them queued. Without this, a later failure leaves the new config written
-# but never applied, and a re-run reports the template as unchanged so the handler
-# never re-fires.
+# Flushing here applies the firewalld and sshd changes in handler order (see handlers/main.yml).
+# Without it, a later failure leaves the new config written but never applied.
+# A re-run then reports the template as unchanged, so the handler never fires.
 - name: Apply the sshd/firewalld configuration before continuing
   ansible.builtin.meta: flush_handlers
   tags: [honeypot, sshd, firewall, security]
@@ -88,8 +86,8 @@
       tags: [honeypot, cowrie]
   tags: [honeypot, cowrie]
 
-# Before backup/mmdb: both units reference honeywatch-notify@ as their
-# OnFailure handler and read its env file for success notifications.
+# This runs before the timer jobs because their units name honeywatch-notify@ as the OnFailure handler.
+# The backup and mmdb jobs also read its env file for success notifications.
 - name: Install the ntfy failure-notification handler
   ansible.builtin.include_tasks:
     file: notify.yml
@@ -115,9 +113,11 @@
 
 - name: Configure the old release image prune timer
   ansible.builtin.include_tasks:
-    file: image_prune.yml
+    file: timer_job.yml
     apply:
       tags: [honeypot, image-prune]
+  vars:
+    honeypot_timer_job: image-prune
   when: honeypot_image_prune_enabled
   tags: [honeypot, image-prune]
 
@@ -131,8 +131,8 @@
   when: honeypot_alloy_enabled
   tags: [honeypot, monitoring, observability]
 
-# Post-deploy assertions must see the daemon-reload (dnf-automatic OnFailure
-# drop-in) and the docker restart.
+# The post-deploy assertions must see the daemon-reload that loads the dnf-automatic
+# OnFailure drop-in and the docker restart.
 - name: Apply pending handlers before post-deployment validation
   ansible.builtin.meta: flush_handlers
   tags: [honeypot, post_validation]

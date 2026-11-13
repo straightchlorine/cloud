@@ -2,10 +2,8 @@
 - name: Converge - honeypot fail-fast validation
   hosts: all
   vars:
-    # Every required variable except vault_honeypot_r2_bucket, so Case 1 leaves
-    # it genuinely undefined. Each case then runs the REAL
-    # roles/honeypot/tasks/validate.yml with per-case vars - no hand-copied
-    # guards to keep in sync.
+    # Every required variable is set except vault_honeypot_r2_bucket, so Case 1 leaves it undefined.
+    # Each case runs the real roles/honeypot/tasks/validate.yml with per-case vars.
     ntfy_server_url: "https://ntfy.example.test"
     vault_honeypot_ntfy_token: "tk_molecule_test_token"
     vault_honeypot_r2_endpoint: "https://molecule.r2.cloudflarestorage.com"
@@ -15,7 +13,6 @@
     vault_honeypot_maxmind_account_id: "molecule-account"
     vault_honeypot_maxmind_license_key: "molecule-license"
   tasks:
-    # Case 1: a required vault variable is missing.
     - name: "Case 1: validate.yml fails when a required vault variable is missing"
       block:
         - name: Run the real validate.yml with vault_honeypot_r2_bucket undefined
@@ -28,8 +25,8 @@
             msg: "validate.yml did not fail fast on the missing vault_honeypot_r2_bucket"
       rescue:
         - name: Assert the failure was for the missing vault_honeypot_r2_bucket specifically
-          # A looped fail task's top-level msg is the generic "One or more items
-          # failed" - the per-item detail lives in .results.
+          # A looped fail task's top-level msg is the generic "One or more items failed".
+          # The per-item detail lives in .results.
           ansible.builtin.assert:
             that:
               - ansible_failed_result.results is defined
@@ -41,16 +38,14 @@
             success_msg: "[OK] validate.yml correctly failed on the missing vault_honeypot_r2_bucket"
 
         - name: Record case 1 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes. force: false keeps the idempotence
-          # rerun unchanged.
+          # A file is used instead of set_fact because converge and verify are separate ansible-playbook processes.
+          # With force: false the idempotence rerun reports no change.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case1.passed
             force: false
             mode: "0644"
 
-    # Case 2: a vault secret still holds its documented placeholder value.
     - name: "Case 2: validate.yml fails when vault_honeypot_age_recipient still has its placeholder value"
       block:
         - name: Run the real validate.yml with the placeholder age recipient
@@ -85,7 +80,6 @@
             force: false
             mode: "0644"
 
-    # Case 3: the admin sshd would collide with cowrie's public port.
     - name: "Case 3: validate.yml fails when the admin sshd port collides with the cowrie port"
       block:
         - name: Run the real validate.yml with the admin sshd on the cowrie port
@@ -117,7 +111,6 @@
             force: false
             mode: "0644"
 
-    # Case 4: a private age identity where the public recipient belongs.
     - name: "Case 4: validate.yml fails when the age recipient is a private identity"
       block:
         - name: Run the real validate.yml with an age private identity
@@ -149,12 +142,11 @@
             force: false
             mode: "0644"
 
-    # Case 5: the security-only update guard on CentOS Stream.
     - name: "Case 5: validate.yml fails when upgrade_type is security on CentOS Stream"
       block:
         - name: Run the real validate.yml with upgrade_type security on a Stream host
-          # os_codename is overridden because the Rocky 9 container never
-          # reports Stream; the include_role var outranks the os role's set_fact.
+          # os_codename is overridden because the Rocky 9 container never reports Stream.
+          # The include_role var outranks the os role's set_fact.
           ansible.builtin.include_role:
             name: honeypot
             tasks_from: validate
@@ -184,7 +176,6 @@
             force: false
             mode: "0644"
 
-    # Case 6: the image prune would delete every release.
     - name: "Case 6: validate.yml fails when the image prune keep count is 0"
       block:
         - name: Run the real validate.yml with honeypot_image_prune_keep 0

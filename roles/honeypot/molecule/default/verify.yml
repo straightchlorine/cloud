@@ -1,0 +1,116 @@
+---
+- name: Verify honeypot timer jobs, ntfy helper and Docker daemon config
+  hosts: all
+  become: true
+  tasks:
+    - name: Stat the installed scripts
+      ansible.builtin.stat:
+        path: "/usr/local/sbin/{{ item }}"
+      loop: [honeywatch-ntfy, honeywatch-backup, honeywatch-mmdb-refresh, honeywatch-image-prune]
+      register: honeypot_verify_scripts
+
+    - name: Assert the scripts are root-owned and executable
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == '0755'
+          - item.stat.pw_name == 'root'
+        quiet: true
+      loop: "{{ honeypot_verify_scripts.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read the units and the notify env file
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /etc/systemd/system/honeywatch-notify@.service
+        - /etc/systemd/system/honeywatch-backup.service
+        - /etc/systemd/system/honeywatch-backup.timer
+        - /etc/systemd/system/honeywatch-mmdb-refresh.service
+        - /etc/systemd/system/honeywatch-mmdb-refresh.timer
+        - /etc/systemd/system/honeywatch-image-prune.service
+        - /etc/systemd/system/honeywatch-image-prune.timer
+        - /etc/honeywatch/notify.env
+      register: honeypot_verify_units
+
+    - name: Assert unit contents come from the role templates
+      vars:
+        honeypot_verify_text: "{{ honeypot_verify_units.results | map(attribute='content') | map('b64decode') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "'/usr/local/sbin/honeywatch-ntfy' in honeypot_verify_text[0]"
+          - "'ExecStart=/usr/local/sbin/honeywatch-backup' in honeypot_verify_text[1]"
+          - "'OnCalendar=*-*-* 03:30:00 UTC' in honeypot_verify_text[2]"
+          - "'Unit=honeywatch-backup.service' in honeypot_verify_text[2]"
+          - "'ExecStart=/usr/local/sbin/honeywatch-mmdb-refresh' in honeypot_verify_text[3]"
+          - "'OnCalendar=Wed *-*-* 04:15:00 UTC' in honeypot_verify_text[4]"
+          - "'honeywatch-image-prune 3 ghcr.io/straightchlorine/honeywatch/api' in honeypot_verify_text[5]"
+          - "'OnCalendar=Sun *-*-* 04:45:00 UTC' in honeypot_verify_text[6]"
+          - "'NTFY_URL=https://ntfy.example.test/honeywatch' in honeypot_verify_text[7]"
+        quiet: true
+
+    - name: Check each timer is enabled and running
+      ansible.builtin.command: "systemctl is-enabled --quiet honeywatch-{{ item }}.timer"
+      loop: [backup, mmdb-refresh, image-prune]
+      changed_when: false
+
+    - name: Check each timer was restarted into the active state by the one handler
+      ansible.builtin.command: "systemctl is-active honeywatch-{{ item }}.timer"
+      loop: [backup, mmdb-refresh, image-prune]
+      register: honeypot_verify_active
+      changed_when: false
+      failed_when: honeypot_verify_active.stdout != 'active'
+
+    - name: Read the Docker daemon configuration
+      ansible.builtin.slurp:
+        src: /etc/docker/daemon.json
+      register: honeypot_verify_daemon
+
+    - name: Assert daemon.json is the role options merged over the existing keys
+      vars:
+        honeypot_verify_daemon_json: "{{ honeypot_verify_daemon.content | b64decode | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - honeypot_verify_daemon_json['data-root'] == '/srv/docker'
+          - honeypot_verify_daemon_json.icc == false
+          - honeypot_verify_daemon_json['live-restore'] == true
+          - honeypot_verify_daemon_json['no-new-privileges'] == true
+          - not (honeypot_verify_daemon.content | b64decode).endswith('\n')
+        quiet: true
+
+    - name: Count the stub docker.service starts
+      ansible.builtin.command: wc -l /var/tmp/docker-stub-starts
+      register: honeypot_verify_starts
+      changed_when: false
+
+    - name: Assert common's Restart docker handler ran once, after the initial start
+      ansible.builtin.assert:
+        that: honeypot_verify_starts.stdout.split()[0] == '2'
+        fail_msg: "expected enable-start plus one handler restart, got {{ honeypot_verify_starts.stdout }}"
+        quiet: true
+
+    - name: Run the ntfy helper against a fake curl
+      # The helper must pass the title, tags, message, priority and bearer token through.
+      # It must also exit 0 even when curl fails.
+      ansible.builtin.shell: |
+        set -e
+        mkdir -p /var/tmp/fakebin
+        printf '#!/bin/sh\nfor a in "$@"; do echo "$a"; done > /var/tmp/curl-args\nexit 1\n' > /var/tmp/fakebin/curl
+        chmod +x /var/tmp/fakebin/curl
+        set -a; . /etc/honeywatch/notify.env; set +a
+        PATH=/var/tmp/fakebin:$PATH /usr/local/sbin/honeywatch-ntfy "T" "a,b" "the message" high
+        cat /var/tmp/curl-args
+      register: honeypot_verify_ntfy
+      changed_when: false
+
+    - name: Assert the helper built the ntfy request
+      ansible.builtin.assert:
+        that:
+          - "'Title: T' in honeypot_verify_ntfy.stdout_lines"
+          - "'Tags: a,b' in honeypot_verify_ntfy.stdout_lines"
+          - "'Priority: high' in honeypot_verify_ntfy.stdout_lines"
+          - "'Authorization: Bearer tk_molecule_test_token' in honeypot_verify_ntfy.stdout_lines"
+          - "'the message' in honeypot_verify_ntfy.stdout_lines"
+          - "'https://ntfy.example.test/honeywatch' in honeypot_verify_ntfy.stdout_lines"
+        quiet: true

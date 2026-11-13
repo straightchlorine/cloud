@@ -1,0 +1,50 @@
+---
+# Applies the interface, upstreams and web ports to an installed Pi-hole (the installer reads
+# them only on a fresh install), then restarts FTL before validation.
+- name: Read the running Pi-hole DNS settings
+  # The installer reads these settings only on a fresh install, so an installed host is compared and updated below.
+  ansible.builtin.command: "pihole-FTL --config {{ item }}"
+  loop:
+    - dns.interface
+    - dns.upstreams
+  register: dns_pihole_running_config
+  changed_when: false
+  become: true
+  when: not dns_pihole_needs_install
+
+- name: Apply the DNS interface from host_vars
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, dns.interface, "{{ dns_pihole_interface }}"]
+  become: true
+  changed_when: true
+  notify: Restart pihole-FTL
+  when:
+    - not dns_pihole_needs_install
+    - dns_pihole_running_config.results[0].stdout | trim != dns_pihole_interface
+
+- name: Apply the upstream DNS servers from host_vars
+  # The running list is compared by IPv4 address only, so formatting differences do not trigger a change.
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, dns.upstreams, "{{ dns_pihole_dns_servers | to_json }}"]
+  become: true
+  changed_when: true
+  notify: Restart pihole-FTL
+  when:
+    - not dns_pihole_needs_install
+    - >-
+      dns_pihole_running_config.results[1].stdout | regex_findall('[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+') | sort
+      != dns_pihole_dns_servers | sort
+
+- name: Pin the web interface to ports 80/443
+  # The installer falls back to alternate web ports when the default ones look busy, but the firewall,
+  # exporter and validation expect the defaults. The regexp skips the dns.port line, which has no flag suffix.
+  ansible.builtin.lineinfile:
+    path: /etc/pihole/pihole.toml
+    regexp: '^  port = "[0-9]+o.*'
+    line: '  port = "80o,[::]:80o,[::]:443os,443os"'
+  become: true
+  notify: Restart pihole-FTL
+
+- name: Flush handlers so FTL rebinds before validation
+  # Without this flush the restart would fire at the end of the play, after validation has already waited on port 80.
+  ansible.builtin.meta: flush_handlers

@@ -1,51 +1,16 @@
 #!/usr/bin/env bash
-# Post-deploy check for the disposable media test host; pairs with validate-clean.sh.
-# Usage: ./scripts/media/validate-deploy.sh [ansible-host-alias]
+# Run this after a deploy to check the disposable media test host. The counterpart is validate-clean.sh.
+# Usage: ./scripts/media/validate-deploy.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-pi-test-media}"
+HOST="${1:?Usage: ./scripts/media/validate-deploy.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after media deploy =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
-
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_present() {
-  if [ -e "$1" ]; then
-    note_ok "$1 present"
-  else
-    note_left "$1 missing"
-  fi
-}
-
-check_script() {
-  local path="$1"
-  local want_mode="${2:-}"
-  local got_mode
-  if [ ! -e "$path" ]; then
-    note_left "$path missing"
-    return
-  fi
-  # -L: a symlink's own mode is always lrwxrwxrwx; check the target's.
-  got_mode="$(stat -L -c '%a' "$path" 2>/dev/null || echo "000")"
-  if [ "$got_mode" = "$want_mode" ]; then
-    note_ok "$path mode $want_mode"
-  else
-    note_left "$path mode is $got_mode (expected $want_mode)"
-  fi
-}
+{
+  cat "$LIB"
+  cat <<'INNEREOF'
 
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
@@ -92,7 +57,7 @@ else
   note_left "/var/log/journal not a separate mount"
 fi
 
-# Mirrors the role's media_home (/home/<ansible_user>/stack).
+# This is the role's media_home, which lies under the SSH user's home.
 STACK_HOME="${HOME}/stack"
 
 echo "-- Compose file + secrets --"
@@ -108,8 +73,8 @@ if [ -f "$STACK_HOME/.env" ]; then
   fi
 fi
 
-# The legit env line references the secret by name (ND_JWTKEY=${...}), so a '$'
-# right after '=' is a reference; anything else is an inlined value.
+# The legitimate env line references the secret by name, as in ND_JWTKEY=${...}, so a '$' right after '=' is a reference.
+# Anything else after the '=' is an inlined value.
 if grep -qE 'ND_JWTKEY=[^$]' "$STACK_HOME/docker-compose.yml" 2>/dev/null; then
   note_left "compose file contains a secret value (!)"
 else
@@ -121,8 +86,8 @@ check_script /usr/local/bin/media-sync 755
 check_script /usr/local/bin/media-import 755
 check_script /usr/local/bin/beet 755
 
-# The local snapshot script + its cron exist only when the local backup is
-# enabled (media_backup_enabled); key off the script, as scripts/dns does.
+# The local snapshot script and its cron exist only when media_backup_enabled is true.
+# The check keys off the script, as scripts/dns/validate-deploy.sh does.
 if [ -e /usr/local/bin/media-syncthing-backup ]; then
   check_script /usr/local/bin/media-syncthing-backup 755
   if sudo crontab -l -u root 2>/dev/null | grep -qF -- "Media Syncthing local backup"; then
@@ -134,8 +99,7 @@ else
   note_ok "media-syncthing-backup + cron absent (media_backup_enabled false - optional, not a failure)"
 fi
 
-# The reboot cron exists only on hosts that deploy reboot-notify
-# (common_auto_updates_reboot_if_required: true).
+# The reboot cron exists only on hosts that deploy reboot-notify, which needs common_auto_updates_reboot_if_required.
 if [ -e /usr/local/bin/reboot-notify ]; then
   if sudo crontab -l -u root 2>/dev/null | grep -qF -- "Reboot pending notification"; then
     note_ok "root cron: Reboot pending notification"
@@ -192,11 +156,6 @@ echo "-- Notification helper (common role) --"
 check_script /usr/local/bin/ntfy-notify 755
 check_present /etc/ntfy/notify-api-key
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "DEPLOYMENT CHECKS FAILED - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "All deployment checks passed. The host is healthy."
+summary_deploy "All deployment checks passed. The host is healthy."
 INNEREOF
+} | ssh "$HOST" bash -s

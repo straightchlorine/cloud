@@ -1,38 +1,10 @@
 ---
-# Ansible-lint configuration - progressively enabling rules as refactoring completes
-# Updated: 2026-01-08 - All Phase 1, 2, and 3 refactoring complete!
-
 skip_list:
-  # REFACTORED IN PHASE 1-3: Variable naming
-  # ✅ Common role: 51 variables prefixed with common_
-  # ✅ DNS role: 13 variables prefixed with dns_
-  # ✅ Automation: 13 variables refactored
-  # ✅ Monitoring: 13 variables refactored
-  # ✅ Backup: 12 variables refactored
-  # ✅ Prometheus-exporters: 15 variables refactored
-  # ✅ Music-stack: 10 variables refactored
-  # ✅ Firewall: 1 variable refactored
-  # Status: var-naming rule ENABLED as of 2026-01-08
-  # All 128 variables across 7 roles are already refactored with proper prefixes
-
-  # TODO: Review and refactor these
-  - command-instead-of-module  # 57 instances, needs refactor
-  - command-instead-of-shell   # Requires module replacements
-  - ignore-errors              # Must audit each one
-  - no-changed-when            # Missing changed_when conditions
-
-  # Keep disabled for security review (post-refactoring)
-  - risky-file-permissions
+  # The remaining hits are in roles/backup, roles/monitoring and roles/restic.
+  # Drop each entry once those roles are clean.
+  - ignore-errors
+  - no-changed-when
   - risky-shell-pipe
-  - partial-become             # Review all become usage
-
-  # Other hygiene rules (low priority)
-  - meta-no-tags
-  - role-name
-  - jinja
-  - args
-  # Schema validation is overly strict for this project's Galaxy metadata
-  - schema
 
 exclude_paths:
   - ./inventory

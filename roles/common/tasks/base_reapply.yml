@@ -1,0 +1,9 @@
+---
+# Re-applies the fleet notification helpers (ntfy-notify, unattended-upgrades and the
+# reboot notification) from inside a stack role. A tag-scoped run (--tags <role>) skips the
+# site.yml base play that installs them, and a teardown removes them; a no-op after a full run.
+- name: Install the ntfy notification helper
+  ansible.builtin.include_tasks: ntfy_install.yml
+
+- name: Configure unattended-upgrades and the reboot notification
+  ansible.builtin.include_tasks: auto_updates.yml

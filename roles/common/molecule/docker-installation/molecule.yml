@@ -15,9 +15,6 @@ platforms:
     privileged: true
     capabilities:
       - SYS_ADMIN
-    tmpfs:
-      - /run
-      - /tmp
     env:
       container: podman
 
@@ -36,7 +33,7 @@ provisioner:
       all:
         ansible_user: root
         timezone: UTC
-        package_cache_valid_time: 3600
+        common_package_cache_valid_time: 3600
 
 verifier:
   name: ansible

@@ -1,0 +1,71 @@
+---
+- name: Verify the restic teardown
+  hosts: all
+  become: true
+  tasks:
+    - name: Load the role's list of what the engine installs, and the cache directory it names
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../{{ item }}/main.yml"
+      loop: [defaults, vars]
+
+    - name: Stat what must be gone and what must stay
+      vars:
+        molecule_gone: >-
+          {{ restic_engine_units | map('regex_replace', '^', '/etc/systemd/system/') | list
+             + restic_engine_dirs | map(attribute='path') | list
+             + ['/usr/local/bin/restic', '/etc/systemd/system/restic-job@ok.service.d',
+                '/etc/systemd/system/restic-job@ok.timer.d',
+                '/etc/systemd/system/timers.target.wants/restic-job@ok.timer',
+                '/etc/systemd/system/timers.target.wants/restic-freshness.timer'] }}
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ molecule_gone + ['/srv/molecule-repos/ok/config', '/etc/ssh/restic_storage_key'] }}"
+      register: molecule_paths
+
+    - name: Stat the cache directory's parent and the cache directory
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: [/srv/pre-parent, /srv/pre-parent/restic, /var/lib/restic-alerts]
+      register: molecule_cache
+
+    - name: Ask systemd about the timers and unit files
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - systemctl is-enabled restic-job@ok.timer
+        - systemctl is-enabled restic-freshness.timer
+        - systemctl is-active restic-job@ok.timer
+        - systemctl is-active restic-freshness.timer
+      register: molecule_systemd
+      changed_when: false
+      failed_when: false
+
+    - name: List the restic unit files systemd still knows
+      ansible.builtin.command: systemctl list-unit-files 'restic-*' --no-legend
+      register: molecule_unit_files
+      changed_when: false
+      failed_when: false
+
+    - name: Look up the restic user
+      ansible.builtin.command: getent passwd restic
+      register: molecule_user
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the engine is gone and the repository and a root-only key remain
+      vars:
+        molecule_stats: "{{ molecule_paths.results | map(attribute='stat') | list }}"
+        molecule_key: "{{ molecule_stats | last }}"
+        molecule_repo: "{{ molecule_stats[-2] }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_stats[:-2] | selectattr('exists') | list | length == 0
+          - molecule_systemd.results | selectattr('rc', 'equalto', 0) | list | length == 0
+          - molecule_unit_files.stdout | trim == ''
+          - molecule_repo.exists
+          - molecule_key.exists and molecule_key.mode == '0400'
+          - molecule_key.pw_name == 'root' and molecule_key.gr_name == 'root'
+          - molecule_user.rc == 2
+          - molecule_cache.results[0].stat.exists and molecule_cache.results[0].stat.pw_name == 'nobody'
+          - molecule_cache.results[0].stat.mode == '0755'
+          - not molecule_cache.results[1].stat.exists
+          - not molecule_cache.results[2].stat.exists

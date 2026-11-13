@@ -1,0 +1,22 @@
+---
+# Entry point for hosts that list their jobs in host_vars, such as station-arch.
+# Stack roles call tasks_from: job with restic_job instead.
+- name: Refuse duplicate job names
+  ansible.builtin.assert:
+    that: restic_jobs | map(attribute='name') | unique | length == restic_jobs | length
+    fail_msg: "restic_jobs: job names must be unique"
+    quiet: true
+
+- name: Validate every job before deploying any
+  ansible.builtin.include_tasks: validate_job.yml
+  loop: "{{ restic_jobs }}"
+  loop_control:
+    loop_var: restic_job
+    label: "{{ restic_job.name }}"
+
+- name: Deploy each restic job
+  ansible.builtin.include_tasks: job.yml
+  loop: "{{ restic_jobs }}"
+  loop_control:
+    loop_var: restic_job
+    label: "{{ restic_job.name }}"

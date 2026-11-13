@@ -1,14 +1,8 @@
 ---
 - name: Resolve the stack user's uid/gid
-  # ansible_user_uid reflects root under become, so look the user up.
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ ansible_user }}"
-
-- name: Publish the stack user's uid/gid
-  ansible.builtin.set_fact:
-    media_uid: "{{ getent_passwd[ansible_user][1] }}"
-    media_gid: "{{ getent_passwd[ansible_user][2] }}"
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_user_ids
 
 - name: Create the stack home directories
   ansible.builtin.file:
@@ -24,19 +18,18 @@
     - "{{ media_home }}/scripts"
 
 - name: Create the library data directories
-  # navidrome runs userns-remapped (host uid dockremap + media_uid) and owns
-  # navidrome-data. beets runs userns_mode:host as the real stack uid so it can
-  # move the files yt-dlp wrote on the host, so music/, beets/ and downloads/
-  # stay owned by ansible_user. Only navidrome-data recurses; walking the
-  # library is slow.
+  # Navidrome runs userns-remapped, so its uid is the dockremap base plus the stack uid, and it owns navidrome-data.
+  # Beets runs with userns_mode host as the stack uid so that it can move files yt-dlp wrote on the host.
+  # Music/, beets/ and downloads/ therefore stay owned by ansible_user.
+  # Only navidrome-data is chowned recursively, because walking the whole library is slow.
   ansible.builtin.file:
     path: "{{ media_library_path }}/{{ item }}"
     state: directory
     owner: >-
-      {{ ((common_dockremap_uid | int) + (media_uid | int))
+      {{ ((common_dockremap_uid | int) + (common_stack_uid | int))
       if item == 'navidrome-data' else ansible_user }}
     group: >-
-      {{ ((common_dockremap_gid | int) + (media_gid | int))
+      {{ ((common_dockremap_gid | int) + (common_stack_gid | int))
       if item == 'navidrome-data' else ansible_user }}
     mode: "0755"
     recurse: "{{ item == 'navidrome-data' }}"
@@ -56,7 +49,7 @@
   no_log: true
 
 - name: Generate a Navidrome JWT secret
-  # Persisted so redeploys don't rotate ND_JWTKEY and log everyone out.
+  # The secret is persisted so that a redeploy does not rotate ND_JWTKEY and log everyone out.
   ansible.builtin.command: openssl rand -hex 32
   register: media_jwt_secret_generated
   when: not media_jwt_secret_file.stat.exists
@@ -92,14 +85,13 @@
     - adopt.yaml
     - interactive.yaml
     - album.yaml
-    # album.yaml + `lastgenre: auto: no`: the overlay the upgrade path re-imports
-    # through, so a re-match cannot re-derive genres. Separate from album.yaml,
-    # which the nightly release pass uses and where Last.fm genres are wanted.
+    # The upgrade overlay is album.yaml with lastgenre auto disabled, so a re-match cannot re-derive genres.
+    # It is separate from album.yaml because the nightly release pass uses that one and wants Last.fm genres.
     - upgrade.yaml
 
 - name: Install the beets plugin directory and plugins
-  # reviewed.py turns a reviewer's "use as-is" answer into a marker; config.yaml
-  # loads it via pluginpath.
+  # The reviewed.py plugin turns a reviewer's "use as-is" answer into a marker.
+  # The beets config loads it through pluginpath.
   ansible.builtin.file:
     path: "{{ media_library_path }}/beets/plugins"
     state: directory
@@ -119,8 +111,8 @@
     - reviewed.py
 
 - name: Create the python tools directory
-  # The beets container sees $LIB/beets as /config, so these run there as
-  # /config/tools/*.py with beets' own python (see media-lib).
+  # The beets container sees the library's beets/ directory as /config.
+  # The tools therefore run there as /config/tools/*.py with beets' own python, as media-lib.sh.j2 does.
   ansible.builtin.file:
     path: "{{ media_library_path }}/beets/tools"
     state: directory
@@ -130,9 +122,9 @@
   become: true
 
 - name: Create the library review directory
-  # Mounted into the beets container as /review before docker would create it
-  # root-owned: the audit writes candidates.json and its MusicBrainz cache here.
-  # Under state/, so restic keeps the decisions (it excludes *.log, not *.json).
+  # The directory is created before Docker can create it root-owned, because the beets container mounts it as /review.
+  # The audit writes candidates.json and its MusicBrainz cache here.
+  # It sits under state/ so that restic keeps the decisions, since restic excludes *.log but not *.json.
   ansible.builtin.file:
     path: "{{ media_library_path }}/state/review"
     state: directory
@@ -157,10 +149,9 @@
     - media_review.py
 
 - name: Install the pipeline scripts
-  # One engine, an interactive wrapper, and a host-side `beet` for looking at the
-  # library; deployed unconditionally so the wrapper always has its target. Only
-  # the schedule and the downloads are gated by media_youtube_enabled
-  # (see youtube.yml).
+  # These scripts are the engine, an interactive wrapper and a host-side `beet` for inspecting the library.
+  # They are deployed unconditionally so that the wrapper always has its target.
+  # Only the schedule and the downloads depend on media_youtube_enabled, in youtube.yml.
   ansible.builtin.template:
     src: "{{ item }}.sh.j2"
     dest: "{{ media_home }}/scripts/{{ item }}.sh"
@@ -171,28 +162,25 @@
     - media-sync
     - media-import
     - beet
-    # Read-only dashboard for a long pass; deliberately not a media-sync mode,
-    # because it must not take the writer lock. See its header.
+    # The read-only dashboard for a long pass is not a media-sync mode, because it must not take the writer lock.
     - media-status
-    # The fzf helper, host-local (a wrapper over pick-core, see the next task)
+    # This host-local wrapper runs pick-core.sh, which the next task installs.
     - pick
 
 - name: Install pick, the fzf helper shared with the workstation
-  # One script for both: scripts/media/pick.sh in the repo is what a workstation runs
-  # over ssh; here it is the core behind the `pick` wrapper above, which sets
-  # PICK_LOCAL so nothing goes through ssh.
+  # A workstation runs files/pick-core.sh from the repo over ssh.
+  # On this host it is the core behind the `pick` wrapper above, which sets PICK_LOCAL so that nothing goes through ssh.
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../scripts/media/pick.sh"
+    src: pick-core.sh
     dest: "{{ media_home }}/scripts/pick-core.sh"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
 
 - name: Install the shared script modules
-  # Sourced by media-sync and media-status, never run and never in PATH: the
-  # library operations (media-lib) and the existing-library routine
-  # (media-maintenance). They sit beside the scripts so `readlink -f` on the
-  # PATH symlink finds them.
+  # The pipeline scripts source these modules, which are never run directly and never in PATH.
+  # Media-lib holds the library operations and media-maintenance holds the routine for an existing library.
+  # They sit beside the scripts so that `readlink -f` on the PATH symlink finds them.
   ansible.builtin.template:
     src: "{{ item }}.sh.j2"
     dest: "{{ media_home }}/scripts/{{ item }}.sh"
@@ -218,8 +206,8 @@
     - pick
 
 - name: Remove the retired command artifacts
-  # media-import-album folded into `media-sync --albums`. A host deployed before
-  # that would keep a symlink to an unmanaged script, shadowing the new usage.
+  # `media-sync --albums` covers the media-import-album command.
+  # A host deployed earlier would keep a symlink to an unmanaged script that shadows it.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -241,7 +229,7 @@
       + [common_watchtower_compose_service, common_cadvisor_compose_service] }}
     compose_networks: "{{ media_compose_networks }}"
     compose_volumes: "{{ media_compose_volumes }}"
-    # beets is a tools-profile container, not part of the running stack.
+    # Beets is excluded here because it is a tools-profile container that never runs as part of the stack.
     compose_critical_services:
       - navidrome
       - watchtower
@@ -249,23 +237,12 @@
     compose_env_vars: >-
       {{ {'NAVIDROME_JWT_SECRET': media_jwt_secret} | combine(common_watchtower_env_vars) }}
     start_stack: "{{ common_start_stack }}"
-  # No notify: compose up -d recreates containers on file changes.
+  # No handler is notified because `compose up -d` recreates containers when their files change.
 
 - name: Install the stack management script
-  ansible.builtin.template:
-    src: "{{ role_path }}/../common/templates/manage-stack.sh.j2"
-    dest: "{{ media_home }}/scripts/manage-media.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: manage_stack_script
   vars:
-    manage_stack_home: "{{ media_home }}"
-    manage_stack_name: "media"
-
-- name: Symlink the management script into PATH
-  ansible.builtin.file:
-    src: "{{ media_home }}/scripts/manage-media.sh"
-    dest: /usr/local/bin/manage-media
-    state: link
-    force: true
-  become: true
+    common_manage_stack_home: "{{ media_home }}"
+    common_manage_stack_name: media

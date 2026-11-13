@@ -1,0 +1,78 @@
+---
+- name: Prepare - sources, a repository parent and a legacy install to migrate
+  hosts: all
+  become: true
+  tasks:
+    - name: Create the source tree and repository parent
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: /srv/molecule-src, mode: "0755" }
+        - { path: /srv/molecule-src/private, mode: "0700" }
+        - { path: /srv/molecule-src/skip, mode: "0755" }
+        - { path: /srv/molecule-stale, mode: "0755" }
+        - { path: /srv/molecule-repos, mode: "1777" }
+        - { path: /opt/backup/.ssh, mode: "0700" }
+        - { path: /opt/backup/cache/0123abcd, mode: "0700" }
+        - { path: /etc/sudoers.d, mode: "0750" }
+
+    - name: Install ssh-keygen for the vault-managed key test
+      ansible.builtin.apt:
+        name: openssh-client
+        update_cache: true
+
+    - name: Generate the throwaway Storage Box key the vault would hold
+      ansible.builtin.command:
+        argv: [ssh-keygen, -q, -t, ed25519, -N, "", -f, /root/molecule-storage-key]
+        creates: /root/molecule-storage-key
+
+    - name: Create the source files and the legacy install's files
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        mode: "{{ item.mode }}"
+      loop:
+        # Root-only: readable by the restic user only through CAP_DAC_READ_SEARCH.
+        - { dest: /srv/molecule-src/private/secret, content: "root-only\n", mode: "0600" }
+        - { dest: /srv/molecule-src/public, content: "public\n", mode: "0644" }
+        - { dest: /srv/molecule-src/skip/excluded, content: "excluded\n", mode: "0644" }
+        - { dest: /srv/molecule-stale/dump, content: "old\n", mode: "0644" }
+        - { dest: /opt/backup/.ssh/hetzner, content: "not-a-real-key\n", mode: "0600" }
+        - { dest: /opt/backup/cache/0123abcd/index, content: "cache\n", mode: "0600" }
+        - dest: /etc/sudoers.d/backup-user
+          content: "backup ALL=(root) NOPASSWD: /usr/bin/restic backup *\n"
+          mode: "0440"
+        - dest: /etc/systemd/system/backup-ok.service
+          content: "[Service]\nType=oneshot\nExecStart=/bin/true\n"
+          mode: "0644"
+        - dest: /etc/systemd/system/backup-ok.service.1234.2026-01-01@00:00:00~
+          content: "[Service]\nType=oneshot\nExecStart=/bin/true\n"
+          mode: "0644"
+        - dest: /etc/systemd/system/backup-ok.service.backup
+          content: "[Service]\nType=oneshot\nExecStart=/bin/true\n"
+          mode: "0644"
+        - dest: /etc/systemd/system/backup-ok.timer.backup
+          content: "[Timer]\nOnCalendar=daily\n"
+          mode: "0644"
+        - dest: /etc/systemd/system/backup-ok.timer
+          content: "[Timer]\nOnCalendar=daily\n[Install]\nWantedBy=timers.target\n"
+          mode: "0644"
+
+    - name: Age the stale job's fresh path past its 1 h limit
+      ansible.builtin.command: touch -d '3 hours ago' /srv/molecule-stale
+      changed_when: true
+
+    - name: Repurpose Debian's backup account as the previous install did
+      ansible.builtin.user:
+        name: backup
+        home: /opt/backup
+        shell: /bin/bash
+
+    - name: Enable the legacy timer
+      ansible.builtin.systemd_service:
+        name: backup-ok.timer
+        enabled: true
+        state: started
+        daemon_reload: true

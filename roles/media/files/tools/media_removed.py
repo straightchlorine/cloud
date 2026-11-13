@@ -8,8 +8,8 @@ Every audio file under /removed is put in one of four classes:
     duplicate           the same audio is still in the library (Chromaprint similarity of
                         0.85 or more with a file there): safe to delete
     removed on request  moved aside by `pick remove` and no copy turned up: safe, you asked
-    different cut       the same song is in the library but the audio differs (0.6 to 0.85):
-                        another version, so look first
+    different cut       the same song is in the library but the audio or the length differs
+                        (a similarity between 0.6 and 0.85): another version, so look first
     needs a look        no matching file, the keeper is gone, or the audio differs
 
 The apply logs (<review>/apply-log) say which decision moved a file and what it was a copy
@@ -37,13 +37,15 @@ import media_audit
 import media_common as mc
 
 DUPLICATE_AT = 0.85
-# same-title rows this far apart in length are still compared, so an extended mix
-# shows up as a different cut of its radio edit instead of as a file with no match
+# Same-title rows this far apart in length (seconds) are still compared.
+# An extended mix then shows up as a different cut of its radio edit, not as a file with no match.
 TITLE_SECONDS = 90
 CUT_AT = 0.6
-# the first two minutes decide: enough to tell a cut from a copy, and a quarter of the cost of a whole track
+# Only the first FINGERPRINT_SECONDS are fingerprinted, which is enough to tell a cut from a copy and cheaper than a
+# whole track.
 FINGERPRINT_SECONDS = 120
-# same-title candidates compared per file, the nearest in length first; a bare "Intro" has hundreds
+# Same-title candidates compared per file, nearest in length first, because a common title such as "Intro" can match
+# hundreds of rows.
 MAX_BY_TITLE = 8
 CLASSES = ("duplicate", "removed on request", "different cut", "needs a look")
 SAFE = CLASSES[:2]
@@ -61,8 +63,10 @@ def megabytes(size):
 
 
 def fingerprint(path, cache):
-    """The raw Chromaprint fingerprint of a file's first two minutes, or None when fpcalc cannot
-    read it. Kept under <cache> by path, size and mtime."""
+    """The raw Chromaprint fingerprint of a file's first FINGERPRINT_SECONDS, or None when fpcalc cannot read it.
+
+    It is cached under <cache> by path, size and mtime.
+    """
     path = os.fsdecode(path)
     stat = os.stat(path)
     name = hashlib.sha1(("%s\0%d\0%d" % (path, stat.st_size, stat.st_mtime_ns))
@@ -86,10 +90,11 @@ def fingerprint(path, cache):
 
 
 def moved_aside(review):
-    """{path in the quarantine: what the apply logs know of it}: the decision's note and action,
-    the row the file had, and the rows and the file that took its place (a replace registers
-    the new file first). Logs taken back by an undo are left out, and so are quarantines
-    that never got their `done` line."""
+    """What the apply logs know of each quarantined file, as {path in the quarantine: facts}.
+
+    The facts are the decision's note and action, the row the file had, and the rows and file that took its place.
+    Logs taken back by an undo are left out, and so are quarantines that never got their `done` line.
+    """
     out = {}
     for log in sorted(glob.glob(os.path.join(review, "apply-log", "*.jsonl"))):
         if log.endswith(".undone.jsonl"):
@@ -159,8 +164,11 @@ def facts_of(tags, before):
 
 
 def candidates(known, facts, idx):
-    """([(row, how found)], [what the library no longer has]): the keepers the log names, the
-    rows with the same YouTube id or track id, and the same-title rows within TITLE_SECONDS."""
+    """The candidate keepers as ([(row, how found)], [what the library no longer has]).
+
+    They are the keepers the log names, the rows with the same YouTube id or track id, and the same-title rows within
+    TITLE_SECONDS.
+    """
     found, missing = {}, []
 
     def add(row, how):
@@ -208,8 +216,8 @@ def judge(path, known, idx, cache):
     best = max(scored, default=None)
     if best:
         verdict.update(score=best[0], keeper=best[1])
-    # the fingerprint covers the first FINGERPRINT_SECONDS only: an extended mix and its
-    # radio edit open the same, so a duplicate also needs the lengths to agree
+    # The fingerprint covers only the start, where an extended mix and its radio edit are the same, so a duplicate also
+    # needs the lengths to agree.
     if best and best[0] >= DUPLICATE_AT and abs(best[2]) <= mc.PROBABLE_SECONDS:
         verdict.update(cls="duplicate", why=moved)
     elif known["pick"]:

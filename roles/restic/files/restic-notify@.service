@@ -1,0 +1,21 @@
+[Unit]
+Description=restic result notification %i
+After=network-online.target
+# A permanent ntfy failure, such as a revoked token or a deleted topic, would retry every RestartSec for ever.
+# The start limit stops that after about a day and leaves the unit failed.
+StartLimitIntervalSec=1d
+StartLimitBurst=90
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/restic/restic-job notify %i
+# ntfy-notify fails under NTFY_STRICT when delivery fails, so the unit retries until it lands.
+Restart=on-failure
+RestartSec=15min
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# The fail- instance clears <job>.interrupted after delivery.
+ReadWritePaths=/var/lib/restic
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

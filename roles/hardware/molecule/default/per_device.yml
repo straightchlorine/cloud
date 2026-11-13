@@ -1,0 +1,18 @@
+---
+- name: "Run the hardware role for {{ hardware_case.key }}"
+  ansible.builtin.include_role:
+    name: hardware
+  vars:
+    device_type: "{{ hardware_case.key }}"
+
+- name: "Assert the platform and limits for {{ hardware_case.key }}"
+  ansible.builtin.assert:
+    that:
+      - hardware_platform == hardware_case.value
+      - hardware_details.memory_mb | int > 0
+      - hardware_limits.navidrome.memory is defined
+      - hardware_limits.navidrome.cpus is defined
+      - hardware_limits.navidrome.memory_reservation is defined
+      - hardware_limits.navidrome.cpus_reservation is defined
+    fail_msg: "{{ hardware_case.key }}: platform {{ hardware_platform }}, limits {{ hardware_limits }}"
+    success_msg: "[OK] {{ hardware_case.key }} -> {{ hardware_platform }}"

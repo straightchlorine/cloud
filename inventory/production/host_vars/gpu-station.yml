@@ -1,38 +1,24 @@
 ---
-# GPU research host - runs the quantum-pipeline VQE solver with NVIDIA
-# acceleration. See roles/gpu-qp/README.md.
+# GPU research host for the quantum-pipeline VQE solver. See roles/gpu-qp/README.md.
 
 device_role: gpu-qp
 device_type: cloud_vm
 
-# CUDA compute capability of the installed card(s):
-#   6.1 Pascal (GTX 10xx) | 7.5 Turing | 8.6 Ampere | 8.9 Ada.
+# CUDA compute capability of the installed card, for example 6.1 for Pascal or 8.6 for Ampere.
 gpu_qp_cuda_arch: "6.1"
 
-# Built on-host for gpu_qp_cuda_arch: the published :gpu tag is compiled for
-# Ampere (sm_86) and will not run on a Pascal/Turing card.
-gpu_qp_image_mode: "build"
+# SSH uses the fleet-wide ansible_ssh_private_key_file from hosts.yml and the debian user set there.
+# The public half of that key must be in /home/debian/.ssh/authorized_keys on the instance.
 
-# GPU the worker container sees: "all", or a device index ("0"/"1") to pin one.
-gpu_qp_worker_device: "all"
-
-# Auth: inherits the fleet-wide ansible_ssh_private_key_file
-# (~/.ssh/ansible_controller_key, hosts.yml all: vars) with ansible_user: debian
-# (set on this host in hosts.yml) - no per-host override. The controller key's
-# public half must be in /home/debian/.ssh/authorized_keys on the instance.
-
-# A cloud instance is disposable - never block a teardown on it.
+# A cloud instance is disposable, so teardowns are never blocked on it.
 teardown_protected: false
 
-# --- Monitoring --------------------------------------------------------------
-# Node Exporter is installed by the base play's prometheus-exporters role
-# (playbooks/site.yml, `hosts: all:!honeypot`), which this host reaches via the
-# `prometheus` group in hosts.yml. The role's validate.yml requires prometheus_role,
-# and Prometheus uses it as the scrape label (see monitoring/templates/prometheus.yml.j2).
+# The base play in playbooks/site.yml installs Node Exporter here through the `prometheus` group.
+# The prometheus-exporters validation requires prometheus_role.
+# The monitoring role uses it as the scrape label in roles/monitoring/templates/prometheus.yml.j2.
 prometheus_role: "gpu-qp"
 
-# The exporter's own firewall.yml only opens :9100 to primary_network_cidr (this
-# host's own subnet), which the monitoring host is not on, so allow the one
-# scrape source explicitly. Matches the media/automation host_vars convention.
+# The exporter role opens its port only to primary_network_cidr, which is this host's own subnet.
+# The monitoring host is on another subnet, so it is allowed explicitly.
 firewall_rules:
   - {port: 9100, proto: "tcp", src: "192.168.20.5", comment: "Node Exporter metrics (Prometheus scrape)"}

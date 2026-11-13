@@ -4,7 +4,7 @@
 # common_teardown_stack_user: user the stack runs as
 - name: Stop and disable the stack systemd unit
   ansible.builtin.systemd:
-    name: stack
+    name: "{{ common_stack_unit }}"
     enabled: false
     state: stopped
     daemon_reload: true
@@ -13,7 +13,7 @@
 
 - name: Remove the stack systemd unit
   ansible.builtin.file:
-    path: /etc/systemd/system/stack.service
+    path: "/etc/systemd/system/{{ common_stack_unit }}.service"
     state: absent
   become: true
 
@@ -31,4 +31,4 @@
   become: true
   become_user: "{{ common_teardown_stack_user }}"
   when: common_teardown_docker_info.rc == 0
-  ignore_errors: true
+  failed_when: false

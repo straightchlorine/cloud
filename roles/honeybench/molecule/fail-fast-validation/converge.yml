@@ -2,10 +2,9 @@
 - name: Converge - honeybench fail-fast validation
   hosts: all
   vars:
-    # A valid baseline; each case breaks exactly one thing, then runs the REAL
-    # roles/honeybench/tasks/validate.yml - no hand-copied guards to keep in sync.
+    # These variables are a valid baseline, and each case breaks exactly one thing before running the real validate.yml.
     # honeybench_user is only defined per case, so Case 1 leaves it undefined.
-    # ansible_user is root (molecule.yml inventory), the container's connection user.
+    # The molecule.yml inventory sets ansible_user to "0", the container's connection user.
   tasks:
     # Case 1: a required variable is missing.
     - name: "Case 1: validate.yml fails when honeybench_user is undefined"
@@ -20,8 +19,8 @@
             msg: "validate.yml did not fail fast on the missing honeybench_user"
       rescue:
         - name: Assert the failure was for the missing honeybench_user specifically
-          # A looped fail task's top-level msg is the generic "One or more items
-          # failed" - the per-item detail lives in .results.
+          # The top-level msg of a looped fail task is the generic "One or more items failed".
+          # The per-item detail lives in .results.
           ansible.builtin.assert:
             that:
               - ansible_failed_result.results is defined
@@ -33,9 +32,8 @@
             success_msg: "[OK] validate.yml correctly failed on the missing honeybench_user"
 
         - name: Record case 1 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes. force: false keeps the idempotence
-          # rerun unchanged.
+          # A marker file carries the result because converge and verify are separate ansible-playbook processes.
+          # Setting force to false keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case1.passed
@@ -78,7 +76,7 @@
             name: honeybench
             tasks_from: validate
           vars:
-            honeybench_user: root
+            honeybench_user: "0"
             honeybench_tools:
               - {name: uv, version: "0.13.5", url: "https://example.test/uv-0.13.5.tar.gz",
                  sha256: "f68d291c", strip_components: 1, binaries: [uv], version_args: --version}
@@ -113,7 +111,7 @@
             name: honeybench
             tasks_from: validate
           vars:
-            honeybench_user: root
+            honeybench_user: "0"
             honeybench_tools:
               - {name: k6, version: "2.1.0", url: "https://example.test/k6-v2.0.0-linux-amd64.tar.gz",
                  sha256: "2ae87d976f6cdba17185bdd980d8819a3a98e9092c6f0638cd58272ecefc8b90",
@@ -142,13 +140,13 @@
     - name: "Case 5: validate.yml fails when the dump is enabled without a source or checksum"
       block:
         - name: Run the real validate.yml with honeybench_dump_enabled passed as a string
-          # `-e honeybench_dump_enabled=true` arrives as the string "true"; the
-          # role must treat it as true, not as an always-truthy or always-falsy string.
+          # `-e honeybench_dump_enabled=true` arrives as the string "true".
+          # The role must still treat it as true and not as a plain string.
           ansible.builtin.include_role:
             name: honeybench
             tasks_from: validate
           vars:
-            honeybench_user: root
+            honeybench_user: "0"
             honeybench_dump_enabled: "true"
 
         - name: Fail the test - validate.yml should have refused to run

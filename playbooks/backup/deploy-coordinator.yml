@@ -1,22 +1,10 @@
 ---
-# Backup System - Coordinator Only Deployment
-# Deploys only the backup coordinator (backup-wyse)
-
 - name: Deploy Backup Coordinator
   hosts: backup_primary
   become: true
   gather_facts: true
 
   pre_tasks:
-    - name: Debug vault variables
-      ansible.builtin.debug:
-        msg: |
-          Vault variables check:
-          - vault_backup_repository_base: {{ vault_backup_repository_base | default('UNDEFINED') }}
-          - vault_restic_station_arch_password: {{ vault_restic_station_arch_password | default('UNDEFINED') }}
-          - vault_domain_name: {{ vault_domain_name | default('UNDEFINED') }}
-          - vault_letsencrypt_email: {{ vault_letsencrypt_email | default('UNDEFINED') }}
-
     - name: Force load coordinator_targets variable from hostvars
       ansible.builtin.set_fact:
         coordinator_targets: "{{ hostvars[inventory_hostname]['coordinator_targets'] }}"
@@ -64,12 +52,10 @@
       ansible.builtin.copy:
         content: |
           #!/bin/bash
-          # Backup Coordinator Verification Script
 
           BACKUP_BASE="{{ common_backup_base_path }}"
           echo "[INFO] Verifying Backup Coordinator..."
 
-          # Check coordinator services
           echo "Checking coordinator services..."
           {% for target in coordinator_targets %}
           if systemctl is-enabled backup-{{ target.service_name }}.timer >/dev/null 2>&1; then
@@ -79,7 +65,6 @@
           fi
           {% endfor %}
 
-          # Check SSH connectivity
           echo "Testing SSH connectivity..."
           {% for target in coordinator_targets %}
           if ssh -i "$BACKUP_BASE/.ssh/backup-{{ target.service_name }}" \
@@ -93,7 +78,6 @@
           fi
           {% endfor %}
 
-          # Check repositories
           echo "Checking repository access..."
           {% for target in coordinator_targets %}
           export RESTIC_REPOSITORY="{{ target.restic_repository }}"

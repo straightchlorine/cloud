@@ -1,4 +1,11 @@
 ---
+# Shared fail-fast checks. Inputs cannot carry a role prefix; they are per-call:
+# validation_context: noun phrase for messages ("automation stack")
+# validation_type:    full | vault (vault placeholders are checked for both)
+# validation_role:    role name, prefixed to every failure message
+# required_variables: names that must be defined and non-empty
+# vault_placeholders: list of {var, value}; a var still equal to value is refused
+# validation_supported_os_families: optional; os_family (from the os role) must be listed
 - name: Validate required validation parameters
   ansible.builtin.fail:
     msg: >-
@@ -9,8 +16,9 @@
   tags: [validation]
 
 - name: Validate required variables are defined
+  # Looped on purpose: molecule fail-fast cases read the failing names from .results.
   ansible.builtin.fail:
-    msg: "Required {{ validation_context }} variable '{{ item }}' is not defined or empty"
+    msg: "[{{ validation_role }}] Required {{ validation_context }} variable '{{ item }}' is not defined or empty"
   when:
     - required_variables is defined
     - vars[item] is not defined or vars[item] == ""
@@ -19,7 +27,9 @@
 
 - name: Validate vault variables are properly set
   ansible.builtin.fail:
-    msg: "Vault variable '{{ item.var }}' contains placeholder value. Please set a real value in vault.yml."
+    msg: >-
+      [{{ validation_role }}] Vault variable '{{ item.var }}' contains placeholder value.
+      Please set a real value in vault.yml.
   when:
     - validation_type in ['full', 'vault']
     - vault_placeholders is defined
@@ -28,26 +38,12 @@
   loop: "{{ vault_placeholders }}"
   tags: [validation, vault_validation]
 
-- name: Validate backup directories exist and are accessible
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: common_backup_path_check
-  when:
-    - validation_type in ['full', 'backup']
-    - common_backup_directories is defined
-  loop: "{{ common_backup_directories }}"
-  tags: [validation, backup_validation]
-
-- name: Fail if critical backup directories are missing
-  ansible.builtin.fail:
-    msg: "Critical backup directory '{{ item.item }}' does not exist or is not accessible"
-  when:
-    - validation_type in ['full', 'backup']
-    - common_backup_path_check.results is defined
-    - not item.stat.exists
-    - critical_backup_paths is defined
-    - item.item in critical_backup_paths
-  loop: "{{ common_backup_path_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  tags: [validation, backup_validation]
+- name: Confirm the host OS family is supported
+  ansible.builtin.assert:
+    that: os_family in validation_supported_os_families
+    fail_msg: >-
+      {{ validation_role }} supports only {{ validation_supported_os_families | join(', ') }};
+      got {{ os_family }} ({{ os_name }} {{ os_version }}).
+    success_msg: "[OK] Supported OS: {{ os_name }} {{ os_version }} ({{ os_family }})."
+  when: validation_supported_os_families is defined
+  tags: [validation]

@@ -1,6 +1,6 @@
 ---
-# Also runnable standalone (--tags validation) and from the molecule scenario,
-# so it re-runs os discovery itself - cheap and idempotent.
+# This file also runs standalone with --tags validation and from the molecule scenario.
+# It therefore runs the os discovery itself.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -10,6 +10,7 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
+  # The common validation task names its inputs without this role's prefix.
   vars:  # noqa: var-naming[no-role-prefix]
     validation_context: "honeybench host"
     validation_type: "full"
@@ -20,8 +21,8 @@
   tags: [validation]
 
 - name: Confirm the host OS family is supported
-  # The release is checked in preflight.yml, so this file stays runnable on the
-  # RedHat-family image molecule uses.
+  # Only the family is checked here, because preflight.yml checks the release.
+  # That keeps this file runnable on the RedHat-family image molecule uses.
   ansible.builtin.assert:
     that:
       - os_family == "RedHat"
@@ -32,8 +33,8 @@
   tags: [validation]
 
 - name: Confirm the bench runs as the connection user
-  # git and the post-deploy checks run as the connection user without become,
-  # so a different bench user would own a checkout Ansible cannot write.
+  # git and the post-deploy checks run as the connection user without become.
+  # A different bench user would own a checkout that Ansible cannot write.
   ansible.builtin.assert:
     that:
       - honeybench_user == ansible_user
@@ -44,8 +45,8 @@
   tags: [validation]
 
 - name: Validate every pinned tool is well formed
-  # A malformed checksum would only surface at download time, after Docker has
-  # already been installed. The version-in-url check catches a half-done bump.
+  # A malformed checksum would only surface at download time, after Docker is installed.
+  # The version-in-url check catches a half-finished version bump.
   ansible.builtin.assert:
     that:
       - item.sha256 is match('^[0-9a-f]{64}$')

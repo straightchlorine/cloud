@@ -1,0 +1,14 @@
+---
+# Starts the `stack` unit now, which proves the boot path, and flushes the pending "Restart stack" handler.
+# The flush must precede any post-deploy check, because a changed unit would otherwise restart the stack at the end
+# of the play.
+# Nothing is started when common_start_stack is false, so a deliberate down-deploy leaves the stack down.
+- name: Activate the stack auto-start unit
+  ansible.builtin.systemd:
+    name: "{{ common_stack_unit }}"
+    state: started
+  become: true
+  when: common_start_stack | bool
+
+- name: Flush pending handlers before validation
+  ansible.builtin.meta: flush_handlers

@@ -1,71 +1,76 @@
 ---
-# Registers one Syncthing-shared folder. Callers gate the include on their own
-# enabled flags (e.g. common_syncthing_enabled and <role>_backup_enabled) - this
-# task assumes Syncthing is meant to be installed and running already.
-#
-# Contract:
-#   common_syncthing_folder_id:    unique folder id (e.g. "automation-backup")
-#   common_syncthing_folder_path:  host path to share (the backup script's destination)
-#   common_syncthing_folder_label: optional, defaults to the id
-#   common_syncthing_folder_type:  optional (sendonly / receiveonly / sendreceive).
-#                                  A backup folder belongs in sendonly: Syncthing's
-#                                  default is bidirectional, so a peer's delete
-#                                  or move would propagate back and wipe this
-#                                  host's copies.
+# Registers one folder (common_syncthing_folder: {id, path, type, ignore}); see
+# syncthing_share.yml for the fields. Registration is best-effort: the callers' backup
+# scripts create their own destinations, so a Syncthing failure must not fail the deploy.
+- name: "Write the .stignore for {{ common_syncthing_folder.path }}"
+  # The ignore file needs a folder root Syncthing (running as ansible_user) can write; live-data
+  # folders leave that root dockremap-owned, so this hands it over. Children stay untouched.
+  when: common_syncthing_folder.ignore is defined
+  block:
+    - name: Ensure the folder root is writable for the ignore file
+      ansible.builtin.file:
+        path: "{{ common_syncthing_folder.path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_facts['user_gid'] }}"
+        mode: "0755"
+      become: true
 
-- name: Gather service facts for Syncthing folder registration
-  ansible.builtin.service_facts:
+    - name: Deploy the folder ignore file
+      ansible.builtin.copy:
+        content: |
+          {% for line in common_syncthing_folder.ignore %}
+          {{ line }}
+          {% endfor %}
+        dest: "{{ common_syncthing_folder.path }}/.stignore"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_facts['user_gid'] }}"
+        mode: "0644"
+      become: true
 
-- name: List existing Syncthing folders
-  ansible.builtin.command: syncthing cli config folders list
-  become: true
-  become_user: "{{ ansible_user }}"
-  register: common_syncthing_existing_folders
-  changed_when: false
-  failed_when: false
-  when: >-
-    ansible_facts['services']['syncthing.service'] is defined
-    and ansible_facts['services']['syncthing.service']['state'] == 'running'
-
-- name: "Ensure the Syncthing folder is configured: {{ common_syncthing_folder_id }}"
-  ansible.builtin.command: >-
-    syncthing cli config folders add --id "{{ common_syncthing_folder_id }}"
-    --label "{{ common_syncthing_folder_label | default(common_syncthing_folder_id) }}"
-    --path "{{ common_syncthing_folder_path }}"
-  become: true
-  become_user: "{{ ansible_user }}"
-  when: >-
-    ansible_facts['services']['syncthing.service'] is defined
-    and ansible_facts['services']['syncthing.service']['state'] == 'running'
-    and common_syncthing_folder_id not in (common_syncthing_existing_folders.stdout | default(''))
-  # Best-effort registration: the backup script creates its destination itself,
-  # so a failure here must not fail the deploy.
-  ignore_errors: true
-
-- name: "Read the current Syncthing folder type: {{ common_syncthing_folder_id }}"
-  ansible.builtin.command: >-
-    syncthing cli config folders {{ common_syncthing_folder_id }} type get
-  become: true
-  become_user: "{{ ansible_user }}"
-  register: common_syncthing_folder_current_type
-  changed_when: false
-  failed_when: false
-  when: >-
-    common_syncthing_folder_type is defined
-    and ansible_facts['services']['syncthing.service'] is defined
-    and ansible_facts['services']['syncthing.service']['state'] == 'running'
-
-- name: "Set the Syncthing folder type to {{ common_syncthing_folder_type }}"
-  ansible.builtin.command: >-
-    syncthing cli config folders {{ common_syncthing_folder_id }} type set {{ common_syncthing_folder_type }}
-  become: true
-  become_user: "{{ ansible_user }}"
+- name: Register and configure the folder
   when:
-    - common_syncthing_folder_type is defined
-    - common_syncthing_folder_current_type is defined
     - ansible_facts['services']['syncthing.service'] is defined
     - ansible_facts['services']['syncthing.service']['state'] == 'running'
-    - common_syncthing_folder_type not in common_syncthing_folder_current_type.stdout
-  # Same best-effort contract as registration: a wrong type is visible in the
-  # Syncthing UI, not worth failing the whole deploy over.
-  ignore_errors: true
+  block:
+    - name: List existing Syncthing folders
+      ansible.builtin.command: syncthing cli config folders list
+      become: true
+      become_user: "{{ ansible_user }}"
+      register: common_syncthing_existing_folders
+      changed_when: false
+      failed_when: false
+
+    - name: "Add the Syncthing folder: {{ common_syncthing_folder.id }}"
+      ansible.builtin.command: >-
+        syncthing cli config folders add --id "{{ common_syncthing_folder.id }}"
+        --label "{{ common_syncthing_folder.id }}" --path "{{ common_syncthing_folder.path }}"
+      become: true
+      become_user: "{{ ansible_user }}"
+      register: common_syncthing_folder_add
+      changed_when: common_syncthing_folder_add.rc == 0
+      # Best-effort, see the header.
+      failed_when: false
+      when: common_syncthing_folder.id not in common_syncthing_existing_folders.stdout_lines
+
+    - name: "Read the current folder type: {{ common_syncthing_folder.id }}"
+      ansible.builtin.command: syncthing cli config folders {{ common_syncthing_folder.id }} type get
+      become: true
+      become_user: "{{ ansible_user }}"
+      register: common_syncthing_folder_current_type
+      changed_when: false
+      failed_when: false
+      when: common_syncthing_folder.type is defined
+
+    - name: "Set the folder type: {{ common_syncthing_folder.id }}"
+      ansible.builtin.command: >-
+        syncthing cli config folders {{ common_syncthing_folder.id }} type set {{ common_syncthing_folder.type }}
+      become: true
+      become_user: "{{ ansible_user }}"
+      register: common_syncthing_folder_type_set
+      changed_when: common_syncthing_folder_type_set.rc == 0
+      # Best-effort, see the header; a wrong type shows in the Syncthing UI.
+      failed_when: false
+      when:
+        - common_syncthing_folder.type is defined
+        - common_syncthing_folder.type != common_syncthing_folder_current_type.stdout | trim

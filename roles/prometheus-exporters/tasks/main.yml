@@ -1,7 +1,28 @@
 ---
 
+- name: Discover the OS and architecture
+  # os_arch_download selects the exporter binary, and a play that did not run the os role lacks it.
+  ansible.builtin.include_role:
+    name: os
+    apply:
+      tags:
+        - dns
+        - automation
+        - music
+        - monitoring
+        - backup
+        - validation
+  when: prometheus_exporters_enabled
+  tags:
+    - dns
+    - automation
+    - music
+    - monitoring
+    - backup
+    - validation
+
 - name: Gather network facts
-  # primary_ip is used by the exporters' units and validation.
+  # The exporters' units and validation use primary_ip.
   ansible.builtin.include_role:
     name: common
     tasks_from: network_facts
@@ -77,7 +98,7 @@
         - backup
   when:
     - prometheus_exporters_enabled
-    - pi_hardware_metrics_enabled
+    - prometheus_exporters_pi_hardware_metrics_enabled
     - ansible_architecture in ['armv7l', 'aarch64']
   tags:
     - dns

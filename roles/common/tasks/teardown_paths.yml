@@ -1,0 +1,14 @@
+---
+# Removes every path in one list and then proves they are gone, so the removal and the
+# self-check cannot drift apart.
+# common_teardown_name:  role name, used in the messages
+# common_teardown_paths: paths to remove (files, symlinks, directories)
+- name: Remove the role artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ common_teardown_paths }}"
+  become: true
+
+- name: Verify the artifacts are gone
+  ansible.builtin.include_tasks: teardown_verify_absent.yml

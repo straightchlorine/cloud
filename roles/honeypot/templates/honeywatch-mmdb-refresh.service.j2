@@ -12,19 +12,18 @@ Type=oneshot
 User=root
 SyslogIdentifier=honeywatch-mmdb-refresh
 EnvironmentFile={{ honeypot_config_dir }}/maxmind.env
-# Supplies NTFY_URL/NTFY_TOKEN for the success notification; the failure side
-# goes through OnFailure above.
+# Supplies NTFY_URL and NTFY_TOKEN for the success notification.
+# The failure side goes through OnFailure above.
 EnvironmentFile=-{{ honeypot_config_dir }}/notify.env
 ExecStart=/usr/local/sbin/honeywatch-mmdb-refresh
-# Two downloads, an extract and a container restart; the headroom is for
-# curl's --retry 5 --retry-delay 30 when MaxMind's CDN flaps.
+# The run covers the database downloads, the ingestor restart and the IP reclassification.
 TimeoutStartSec={{ honeypot_mmdb_timeout_sec }}
 
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-# The refresh writes the new mmdb files into the geoip docker volume only -
-# the local volume driver's mountpoint is deterministic from its name.
+# Write access is limited to the geoip volume's mountpoint.
+# The local volume driver derives that path from the volume name.
 ReadWritePaths=/var/lib/docker/volumes/{{ honeypot_mmdb_geoip_volume }}/_data
 ProtectHome=yes
 ProtectKernelTunables=yes

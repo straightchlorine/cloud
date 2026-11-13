@@ -1,0 +1,358 @@
+---
+- name: Converge - the real restic role through both entry points, local repositories
+  hosts: all
+  become: true
+  vars:
+    # molecule connects as root; production derives this from ansible_user.
+    restic_connection_user: root
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: molecule-test
+    restic_init_repository: true
+    # A non-default cache directory, so the whole scenario runs through the knob; the teardown and cron
+    # scenarios cover the default.
+    restic_cache_dir: /srv/molecule-cache/restic
+    restic_storage_host: storage.example.test
+    restic_storage_user: u0
+    restic_storage_port: 23
+    restic_known_hosts: "[storage.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n"
+    molecule_job: &molecule_job
+      sources: [/srv/molecule-src]
+      excludes: [/srv/molecule-src/skip]
+      schedule: "*-*-* 03:00:00"
+      timeout: 10min
+      memory_max_mib: 512
+      retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+  tasks:
+    # Extra trailing newlines prove the role writes exactly one; the legacy key from
+    # prepare is present, so this also proves the vault key wins over adoption.
+    - name: Take the vault-managed key from prepare
+      ansible.builtin.slurp:
+        src: /root/molecule-storage-key
+      register: molecule_vault_key
+
+    - name: Take its public key
+      ansible.builtin.slurp:
+        src: /root/molecule-storage-key.pub
+      register: molecule_vault_pub
+
+    - name: Hand it to the role as the vault would
+      ansible.builtin.set_fact:
+        restic_storage_key: "{{ (molecule_vault_key.content | b64decode) ~ '\n\n' }}"
+      no_log: true
+
+    - name: Deploy three jobs through the role entry point (restic_jobs, as station-arch)
+      ansible.builtin.include_role:
+        name: restic
+      vars:
+        restic_jobs:
+          - <<: *molecule_job
+            name: ok
+            repository: /srv/molecule-repos/ok
+            password: molecule-restic-password-ok
+            fresh:
+              - { path: /srv/molecule-src, max_age_hours: 24 }
+          - <<: *molecule_job
+            name: broken
+            repository: /srv/molecule-repos/broken
+            password: molecule-restic-password-broken
+            sources: [/srv/molecule-missing]
+          - <<: *molecule_job
+            name: stale
+            repository: /srv/molecule-repos/stale
+            password: molecule-restic-password-stale
+            fresh:
+              - { path: /srv/molecule-stale, max_age_hours: 1 }
+
+          - <<: *molecule_job
+            name: gated
+            repository: /srv/molecule-repos/gated
+            password: molecule-restic-password-gated
+            skip_metered: true
+            metered_connections: ["My Phone", "Zoë’s \"iPhone\"", "Ünï \"q\" back\\slash"]
+
+          - <<: *molecule_job
+            name: onbat
+            repository: /srv/molecule-repos/onbat
+            password: molecule-restic-password-onbat
+            skip_on_battery: true
+
+    - name: Deploy two jobs through tasks_from job (as automation and media)
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: job
+      vars:
+        restic_job:
+          <<: *molecule_job
+          name: "{{ molecule_name }}"
+          repository: "/srv/molecule-repos/{{ molecule_name }}"
+          password: "molecule-restic-password-{{ molecule_name }}"
+      loop: [partial, slow]
+      loop_control:
+        loop_var: molecule_name
+
+    # The sftp job is never opened (no network): the validation and the connection
+    # files are the parts a local repository skips.
+    - name: Validate an sftp job the way a stack role's pre-validation does
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: validate_job
+      vars:
+        restic_job:
+          <<: *molecule_job
+          name: offsite
+          repository: "sftp:hetzner-storage:/molecule"
+          password: molecule-restic-password-offsite
+
+    - name: Deploy the sftp job as far as the unreachable Storage Box allows
+      block:
+        - name: Deploy the sftp job
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: job
+          vars:
+            restic_job:
+              <<: *molecule_job
+              name: offsite
+              repository: "sftp:hetzner-storage:/molecule"
+              password: molecule-restic-password-offsite
+
+        - name: Fail the test - the repository probe cannot reach a Storage Box here
+          ansible.builtin.fail:
+            msg: the sftp job opened a repository that does not exist
+      rescue:
+        - name: Assert the job stopped at the probe and named the public key to authorize
+          vars:
+            molecule_public_key: "{{ (molecule_vault_pub.content | b64decode).split()[:2] | join(' ') }}"
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == "Say which public key the Storage Box must authorize"
+              - "ansible_failed_result.msg is match('restic_storage_key: the repository probe failed over ssh')"
+              - ansible_failed_result.msg is search('authorized_keys')
+              - molecule_public_key in ansible_failed_result.msg
+
+    - name: Refuse a job whose repository does not exist, without the init flag
+      block:
+        - name: Deploy a job pointing at a missing repository
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: job
+          vars:
+            restic_init_repository: false
+            restic_job:
+              <<: *molecule_job
+              name: refused
+              repository: /srv/molecule-repos/refused
+              password: molecule-restic-password-refused
+
+        - name: Fail the test - the missing repository should have been refused
+          ansible.builtin.fail:
+            msg: a job was deployed against a repository that does not exist
+      rescue:
+        - name: Assert the refusal names the repository and the init flag
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is match('restic_job.repository:')
+              - ansible_failed_result.msg is search('no repository at /srv/molecule-repos/refused')
+              - "'restic_init_repository=true' in ansible_failed_result.msg"
+
+        - name: Record the refusal for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /var/lib/molecule-init-refused
+            force: false
+            mode: "0644"
+
+    # The previous install's sudoers file must survive while Ansible's own
+    # connection user (station-arch) has no general grant besides it. The play
+    # re-creates what the role removes, so the idempotence pass skips it.
+    - name: Guard the sudo grant of the account Ansible connects as
+      tags: [molecule-idempotence-notest]
+      block:
+        - name: Arrange the previous install's sudoers file, a command-limited grant and the account
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "/etc/sudoers.d/{{ item.name }}"
+            mode: "0440"
+            validate: /usr/sbin/visudo -cf %s
+          loop:
+            - { name: backup-user, content: "backup ALL=(root) NOPASSWD: /usr/bin/restic backup *\n" }
+            - { name: other-scoped, content: "backup ALL=(root) NOPASSWD: /usr/lib/ssh/sftp-server\n" }
+
+        - name: Point the backup account back at the legacy home
+          ansible.builtin.user:
+            name: backup
+            home: /opt/backup
+            create_home: true
+
+        - name: Retire the legacy tree as the backup user, with only a command-limited grant elsewhere
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: legacy
+          vars:
+            restic_connection_user: backup
+            restic_job_cfg: { name: lockout }
+
+        - name: Look at the sudoers file the first run had to keep
+          ansible.builtin.stat:
+            path: /etc/sudoers.d/backup-user
+          register: molecule_lockout_kept
+
+        - name: Record that it was kept
+          ansible.builtin.copy:
+            content: ""
+            dest: /var/lib/molecule-lockout-kept
+            force: false
+            mode: "0644"
+          when: molecule_lockout_kept.stat.exists
+
+        # The push-model file is itself a general grant here: sudo -l shows NOPASSWD: ALL, but that grant is the
+        # file about to be removed, so it must be kept.
+        - name: Arrange the previous install's sudoers file as a general grant
+          ansible.builtin.copy:
+            content: "backup ALL=(root) NOPASSWD: ALL\n"
+            dest: /etc/sudoers.d/backup-user
+            mode: "0440"
+            validate: /usr/sbin/visudo -cf %s
+
+        - name: Retire the legacy tree as the backup user, with the file as the only general grant
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: legacy
+          vars:
+            restic_connection_user: backup
+            restic_job_cfg: { name: lockout }
+
+        - name: Look at the self-granting sudoers file
+          ansible.builtin.stat:
+            path: /etc/sudoers.d/backup-user
+          register: molecule_self_grant_kept
+
+        - name: Record that it was kept
+          ansible.builtin.copy:
+            content: ""
+            dest: /var/lib/molecule-self-grant-kept
+            force: false
+            mode: "0644"
+          when: molecule_self_grant_kept.stat.exists
+
+        - name: Make the file command-limited again
+          ansible.builtin.copy:
+            content: "backup ALL=(root) NOPASSWD: /usr/bin/restic backup *\n"
+            dest: /etc/sudoers.d/backup-user
+            mode: "0440"
+            validate: /usr/sbin/visudo -cf %s
+
+        - name: Arrange a general passwordless grant for the backup account
+          ansible.builtin.copy:
+            content: "backup ALL=(ALL) NOPASSWD: ALL\n"
+            dest: /etc/sudoers.d/other-general
+            mode: "0440"
+            validate: /usr/sbin/visudo -cf %s
+
+        - name: Retire the legacy tree as the backup user, with a general grant elsewhere
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: legacy
+          vars:
+            restic_connection_user: backup
+            restic_job_cfg: { name: lockout }
+
+        - name: Read the backup account and the legacy home the guard must not have touched
+          ansible.builtin.command: "{{ item }}"
+          loop:
+            - getent passwd backup
+            - test -d /opt/backup
+          register: molecule_lockout_account
+          changed_when: false
+
+        - name: Record the account entry and that the connection user's home survived
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ item.dest }}"
+            force: false
+            mode: "0644"
+          loop:
+            - dest: /var/lib/molecule-lockout-account
+              content: "{{ molecule_lockout_account.results[0].stdout }}\n"
+            - { dest: /var/lib/molecule-lockout-home-kept, content: "" }
+
+        - name: Arrange the sudoers file again for the run as another user
+          ansible.builtin.copy:
+            content: "backup ALL=(root) NOPASSWD: /usr/bin/restic backup *\n"
+            dest: /etc/sudoers.d/backup-user
+            mode: "0440"
+            validate: /usr/sbin/visudo -cf %s
+
+        - name: Let the normal path restore Debian's stock account
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: legacy
+          vars:
+            restic_job_cfg: { name: lockout }
+
+    # /opt/backup with no push-model sudoers file is not the legacy install: it stays.
+    - name: Leave an unrelated /opt/backup alone
+      tags: [molecule-idempotence-notest]
+      block:
+        - name: Create an unrelated /opt/backup
+          ansible.builtin.file:
+            path: /opt/backup
+            state: directory
+            mode: "0755"
+
+        - name: Put a file in it
+          ansible.builtin.copy:
+            content: "not ours\n"
+            dest: /opt/backup/unrelated
+            mode: "0644"
+
+        - name: Run the legacy retirement on a host without the sudoers marker
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: legacy
+          vars:
+            restic_job_cfg: { name: unrelated }
+
+        - name: Look at the unrelated file
+          ansible.builtin.stat:
+            path: /opt/backup/unrelated
+          register: molecule_unrelated
+
+        - name: Record that it survived
+          ansible.builtin.copy:
+            content: ""
+            dest: /var/lib/molecule-unrelated-kept
+            force: false
+            mode: "0644"
+          when: molecule_unrelated.stat.exists
+
+        - name: Remove the unrelated tree so verify sees the retired state
+          ansible.builtin.file:
+            path: /opt/backup
+            state: absent
+
+    # A symlink at the cache path (planted by the restic user, or left by a mistake) must never be followed:
+    # the role may fail on it, but must not chown or chmod what it points to.
+    - name: Refuse to follow a symlink at the cache directory
+      tags: [molecule-idempotence-notest]
+      block:
+        - name: Arrange a victim directory and a symlink where the cache directory would go
+          ansible.builtin.shell: |
+            set -e
+            mkdir -p /srv/molecule-victim /srv/molecule-trap
+            chmod 0755 /srv/molecule-victim
+            chown root:root /srv/molecule-victim
+            ln -sfn /srv/molecule-victim /srv/molecule-trap/restic
+          changed_when: true
+
+        - name: Set up the host with the cache directory behind the symlink
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: host
+          vars:
+            restic_cache_dir: /srv/molecule-trap/restic
+      rescue:
+        - name: Note that the role stopped at the symlink
+          ansible.builtin.debug:
+            msg: "refused: {{ ansible_failed_result.msg }}"

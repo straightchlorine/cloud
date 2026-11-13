@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Managed by Ansible - Do not edit manually
 # Generic start/stop/restart/status/logs wrapper for a docker compose stack.
-# Installed as /usr/local/bin/manage-{{ manage_stack_name }}.
+# Installed as /usr/local/bin/manage-{{ common_manage_stack_name }}.
 
 set -euo pipefail
 
-STACK_HOME="{{ manage_stack_home }}"
-STACK_NAME="{{ manage_stack_name }}"
+STACK_HOME="{{ common_manage_stack_home }}"
+STACK_NAME="{{ common_manage_stack_name }}"
 COMMAND="${1:-help}"
 SERVICE="${2:-}"
 

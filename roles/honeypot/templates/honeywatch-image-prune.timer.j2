@@ -5,11 +5,11 @@ Documentation=https://github.com/straightchlorine/honeywatch
 # {{ ansible_managed }}
 
 [Timer]
-# Off the 03:30 backup and the Wednesday mmdb refresh so the daemon is not
-# busy with either while it deletes layers.
+# The schedule keeps clear of the backup and mmdb refresh so the docker daemon
+# is not busy with either while it deletes layers.
 OnCalendar={{ honeypot_image_prune_schedule }}
 RandomizedDelaySec={{ honeypot_image_prune_randomized_delay }}
-# Run a missed prune on next boot if the timer fired while powered off.
+# Persistent runs a missed prune on the next boot if the timer elapsed while the host was off.
 Persistent=true
 Unit=honeywatch-image-prune.service
 AccuracySec=15min

@@ -4,8 +4,8 @@
   become: true
   tasks:
     - name: Stat the per-case marker files converge wrote
-      # Converge and verify run as separate processes, so each case drops a
-      # marker file (in its rescue) instead of a set_fact - see converge.yml.
+      # Converge and verify are separate processes, so each case writes a marker file in its rescue.
+      # A set_fact would not reach this play.
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
@@ -15,9 +15,12 @@
         - /tmp/molecule-case4.passed
         - /tmp/molecule-case5.passed
         - /tmp/molecule-case6.passed
+        - /tmp/molecule-case7.passed
+        - /tmp/molecule-case8.passed
+        - /tmp/molecule-case9.passed
       register: automation_failfast_markers
 
-    - name: Assert all six fail-fast cases completed
+    - name: Assert all nine fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -40,6 +43,9 @@
           Case 4 - stack home under /root for a non-root user: FAILED as expected
           Case 5 - malformed Firefly static cron token (not 32 hex chars): FAILED as expected
           Case 6 - malformed Firefly APP_KEY (bare base64 output, no prefix): FAILED as expected
+          Case 7 - restic on without automation_restic_repository: FAILED as expected
+          Case 8 - restic on with automation_backup_enabled false: FAILED as expected
+          Case 9 - restic job checks on the job the role builds (short password): FAILED as expected
 
-          All six cases ran the real roles/automation/tasks/validate.yml end to end -
+          All nine cases ran the real roles/automation/tasks/validate.yml end to end -
           no hand-copied guards anywhere in this scenario.

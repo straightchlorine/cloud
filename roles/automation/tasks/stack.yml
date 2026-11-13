@@ -1,19 +1,11 @@
 ---
-# Secrets live only in the vault env dict below: common's build_docker_compose
-# renders them as a 0600 .env next to docker-compose.yml, interpolated via ${VAR}.
+# Secrets live only in the vault-backed env dict below.
+# The common build_docker_compose task renders them into a 0600 .env file that compose interpolates as ${VAR}.
 
 - name: Resolve the stack user's uid/gid on this host
-  # CWA honours PUID/PGID and must not run as root (root-owned library files
-  # break ingestion). Resolve the inventory's ansible_user here, not the facts:
-  # under become:true the ansible_user_uid/_dir facts reflect root.
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ ansible_user }}"
-
-- name: Publish the stack user's uid/gid for the compose services
-  ansible.builtin.set_fact:
-    automation_stack_uid: "{{ getent_passwd[ansible_user][1] }}"
-    automation_stack_gid: "{{ getent_passwd[ansible_user][2] }}"
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_user_ids
 
 - name: Create the stack data directories
   ansible.builtin.file:
@@ -27,11 +19,9 @@
     - firefly
 
 - name: Create data directories owned by Docker's userns-remap range
-  # Under userns-remap, container root is common_dockremap_uid/gid and can only
-  # chown ids that map into its own namespace. vaultwarden runs as that root
-  # outright, and mariadb chowns its datadir to the image's mysql user at
-  # startup - so these dirs must start owned by the remap range, including
-  # after a teardown that keeps the data.
+  # Under userns-remap, container root maps to common_dockremap_uid and can only chown ids inside its own namespace.
+  # Vaultwarden runs as that root, and mariadb chowns its data directory to the image's mysql user at startup.
+  # So these directories must be owned by the remap range, including after a teardown that keeps the data.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
@@ -45,22 +35,17 @@
     - mariadb
 
 - name: Create the Calibre data directories owned by the remap-mapped PUID/PGID
-  # Different owner on purpose: CWA's init chowns /config, /cwa-book-ingest and
-  # /calibre-library to abc (PUID/PGID) at every container start, and cps.py -
-  # running as abc - then reopens its SQLite databases per request. Unlike
-  # mariadb it holds no write fds across the day, so a recursive chown back to
-  # the remap base while the stack is live leaves every file writable only by
-  # container-root and each book page 500s on sqlite3 "attempt to write a
-  # readonly database" until the container restarts. Owning the dirs as the
-  # HOST-side mapping of PUID/PGID (dockremap base + stack uid) keeps a live
-  # abc writable, while a stopped/new container is unaffected: CWA's init
-  # re-chowns either way, since only ids inside the container's namespace are
-  # chownable from within it at all.
+  # The owner differs from the other directories because CWA chowns these paths to abc (PUID/PGID) at every container
+  # start.
+  # A recursive chown to the remap base while the stack runs would make the SQLite databases unwritable for abc.
+  # Book pages would then fail with "attempt to write a readonly database" until the container restarts.
+  # Owning the paths as the host-side mapping of PUID/PGID (remap base plus stack uid) keeps a running container
+  # writable.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/{{ item }}"
     state: directory
-    owner: "{{ (common_dockremap_uid | int) + (automation_stack_uid | int) }}"
-    group: "{{ (common_dockremap_gid | int) + (automation_stack_gid | int) }}"
+    owner: "{{ (common_dockremap_uid | int) + (common_stack_uid | int) }}"
+    group: "{{ (common_dockremap_gid | int) + (common_stack_gid | int) }}"
     mode: "0755"
     recurse: true
   become: true
@@ -70,10 +55,10 @@
     - calibre/library
 
 - name: Create the Firefly upload directory owned by the image's www-data
-  # fireflyiii/core runs php-fpm as uid 33 and never chowns its storage itself,
-  # so the host dir must be owned by dockremap + 33 (the host uid that maps to
-  # www-data inside the container), not literal 33. +33 is www-data on the
-  # image's Debian base; an Alpine variant would be +82.
+  # The fireflyiii/core image runs php-fpm as uid 33 and never chowns its storage.
+  # The host directory must therefore be owned by the remap base plus 33, the host uid that maps to www-data in the
+  # container.
+  # The offset 33 is www-data on the image's Debian base, and an Alpine variant would need a different offset.
   ansible.builtin.file:
     path: "{{ automation_data_path }}/firefly/upload"
     state: directory
@@ -96,10 +81,9 @@
     - "{{ automation_stack_home }}/scripts"
 
 - name: Install the mariadb tc.log-safe entrypoint wrapper
-  # Bind-mounted into mariadb (service_volumes) as its entrypoint - clears
-  # tc.log before handing off to the image's own docker-entrypoint.sh so its
-  # init/privilege-drop logic still runs unmodified (see mariadb's
-  # service_stop_grace_period/service_entrypoint comment for why).
+  # The mariadb service mounts this wrapper as its entrypoint.
+  # It removes tc.log and then hands off to the image's docker-entrypoint.sh, so the image's init and privilege drop
+  # still run.
   ansible.builtin.copy:
     content: |
       #!/bin/sh
@@ -124,9 +108,8 @@
       + [common_watchtower_compose_service, common_cadvisor_compose_service] }}
     compose_networks: "{{ automation_compose_networks }}"
     compose_volumes: "{{ automation_compose_volumes }}"
-    # firefly-cron is excluded: it is a sleep-sidecar (wget -> sleep 60s -> exit 0
-    # -> Docker restarts it), so State=running holds only ~60s of every ~62s
-    # cycle. Its health is checked by the last exit code in post_deploy_validate.
+    # The firefly-cron sidecar is excluded because it exits after every sleep and Docker restarts it.
+    # Its running state therefore flickers, so post_deploy_validate.yml checks its last exit code instead.
     compose_critical_services:
       - vaultwarden
       - firefly
@@ -138,28 +121,17 @@
       FIREFLY_STATIC_CRON_TOKEN: "{{ vault_firefly_static_cron_token }}"
       FIREFLY_DB_PASSWORD: "{{ vault_firefly_db_password }}"
       VAULTWARDEN_ADMIN_TOKEN: "{{ vault_vaultwarden_admin_token }}"
-      # Optional CWA metadata key: empty until vault_hardcover_token is set, so
-      # molecule/test deploys without the vault var still render.
+      # This optional CWA metadata key stays empty until vault_hardcover_token is set.
+      # That lets molecule and test deploys without the vault variable still render.
       HARDCOVER_TOKEN: "{{ vault_hardcover_token if vault_hardcover_token is defined else '' }}"
     start_stack: "{{ common_start_stack }}"
-  # No notify: compose up -d already recreates containers on file changes, so a
-  # restart handler would only double-restart the stack.
+  # No handler is notified because compose up -d already recreates containers when files change.
+  # A restart handler would restart the stack twice.
 
 - name: Install the stack management script
-  ansible.builtin.template:
-    src: "{{ role_path }}/../common/templates/manage-stack.sh.j2"
-    dest: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: manage_stack_script
   vars:
-    manage_stack_home: "{{ automation_stack_home }}"
-    manage_stack_name: "automation"
-
-- name: Symlink the management script into PATH
-  ansible.builtin.file:
-    src: "{{ automation_stack_home }}/scripts/manage-automation.sh"
-    dest: /usr/local/bin/manage-automation
-    state: link
-    force: true
-  become: true
+    common_manage_stack_home: "{{ automation_stack_home }}"
+    common_manage_stack_name: automation

@@ -1,8 +1,7 @@
 ---
-# Deploy the container-safe parts of the role, then run the REAL teardown with
-# its gate satisfied and prove nothing survives. The NVIDIA driver/toolkit are
-# deliberately out of scope here (not role-owned state, and not installable in a
-# container).
+# Deploys the container-safe parts of the role, then runs the real teardown with its gate satisfied.
+# The NVIDIA driver and toolkit stay out of scope.
+# The teardown leaves them alone and a container cannot install them.
 - name: Converge - gpu-qp teardown
   hosts: all
   become: true
@@ -20,10 +19,9 @@
         state: directory
         mode: "0755"
   tasks:
-    # ARRANGE phase, tagged molecule-idempotence-notest: the teardown below
-    # removes everything these create, so the idempotence rerun must skip them
-    # (re-running would re-create state and report changed). The system under
-    # test is the teardown, which stays untagged and must converge.
+    # The tasks tagged molecule-idempotence-notest only arrange state for the teardown below.
+    # A rerun would re-create what the teardown removed and report a change, so the idempotence run skips them.
+    # The teardown itself stays untagged and must converge.
     - name: Gather network facts
       ansible.builtin.include_role:
         name: common
@@ -42,8 +40,8 @@
       tags: [molecule-idempotence-notest]
 
     - name: Fixture the stack systemd unit
-      # Owned by docker_stack_service in a real deploy; stood up here so the
-      # teardown's unit removal is actually exercised.
+      # A real deploy creates this unit through docker_stack_service.
+      # The fixture gives the teardown's unit removal something to remove.
       ansible.builtin.copy:
         content: |
           [Unit]
@@ -53,8 +51,8 @@
       tags: [molecule-idempotence-notest]
 
     - name: Flush handlers between deploy and teardown
-      # On a real host these are separate playbook runs; a handler left pending
-      # would fire after the teardown removed its service.
+      # On a real host deploy and teardown are separate playbook runs.
+      # A handler left pending here would fire after the teardown removed its service.
       ansible.builtin.meta: flush_handlers
 
     - name: Run the real teardown with the gate satisfied

@@ -1,6 +1,5 @@
 ---
-# Business-level post-deploy checks over the real publish addresses: plain
-# HTTP on primary_ip - exactly what the central reverse proxy serves.
+# These checks use plain HTTP on primary_ip, which is exactly what the central reverse proxy serves.
 
 - name: Verify Vaultwarden answers on /alive
   ansible.builtin.uri:
@@ -14,9 +13,8 @@
   tags: [post_validation]
 
 - name: Verify Vaultwarden can write its data directory
-  # /alive only proves the HTTP listener is up, not that SQLite writes
-  # succeed - a host/container uid mismatch here failed silently for days
-  # (WAL file stopped advancing) while this endpoint kept reporting healthy.
+  # The /alive endpoint proves only that the HTTP listener is up, not that SQLite writes succeed.
+  # A host and container uid mismatch leaves the endpoint healthy while the WAL file stops advancing.
   ansible.builtin.command: >-
     docker compose -f {{ automation_stack_home }}/docker-compose.yml
     exec -T vaultwarden test -w /data
@@ -26,9 +24,8 @@
   tags: [post_validation]
 
 - name: Verify Firefly serves its web frontend
-  # Firefly runs its DB migrations on first boot (and after every image
-  # update), which can take several minutes on Pi-class hardware/SD storage -
-  # a short retry window here false-fails a healthy, still-migrating deploy.
+  # Firefly runs its database migrations on first boot and after every image update.
+  # Migrations can take minutes on Pi hardware with SD storage, so a short retry window would fail a healthy deploy.
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ automation_firefly_port }}/"
     method: GET
@@ -42,9 +39,9 @@
   tags: [post_validation]
 
 - name: Verify Firefly can write its upload directory
-  # The failure this guards is silent: attachments upload "fine", Firefly
-  # returns HTTP 200 on the attachment view and nothing lands on disk. Only
-  # the container's own view of the bind mount proves it.
+  # A write failure here is silent, because Firefly answers attachment requests with HTTP 200 while nothing lands on
+  # disk.
+  # Only the container's own view of the bind mount proves that it can write.
   ansible.builtin.command:
     cmd: >-
       docker compose -f {{ automation_stack_home }}/docker-compose.yml
@@ -68,11 +65,11 @@
   tags: [post_validation]
 
 - name: Verify Calibre-Web Automated can write its data mounts
-  # The UI check above only proves the Flask listener answers - cps.py opens
-  # its SQLite databases on every request, so a host/container uid mismatch
-  # turns each book page into a 500 ("attempt to write a readonly database")
-  # while "/" still redirects to the login page. Probe as the container's app
-  # user (abc honours PUID), not root: root writes through the mismatch.
+  # The UI check above proves only that the Flask listener answers, because cps.py opens its SQLite databases on every
+  # request.
+  # A host and container uid mismatch makes each book page fail with "attempt to write a readonly database" while "/"
+  # still redirects.
+  # The probe runs as the container's app user abc, which follows PUID, because root writes through the mismatch.
   ansible.builtin.command: >-
     docker compose -f {{ automation_stack_home }}/docker-compose.yml
     exec -T -u abc calibre-web-automated sh -c
@@ -83,9 +80,9 @@
   tags: [post_validation]
 
 - name: Verify MariaDB answers ping
-  # root@localhost has no known password (MARIADB_RANDOM_ROOT_PASSWORD is never
-  # captured), so authenticate as the vault-managed firefly user instead. MYSQL_PWD
-  # keeps the password out of the container's own process list.
+  # The root user has no known password because MARIADB_RANDOM_ROOT_PASSWORD is never captured.
+  # So the check authenticates as the vault-managed firefly user, and MYSQL_PWD keeps that password out of the process
+  # list.
   ansible.builtin.command: >-
     docker compose exec -T -e MYSQL_PWD={{ vault_firefly_db_password }}
     mariadb mariadb-admin -u firefly ping

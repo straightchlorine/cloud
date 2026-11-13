@@ -50,9 +50,10 @@ def cmd_reachable(args):
 # ------------------------------------------------------------------------ prune
 
 def cmd_prune(args):
-    """Drop rows whose file is gone (a track removed on purpose), and the album rows that
-    hold no track. Rows only: delete=False never touches a file, and with_album (the
-    default) removes an album row with its last item; empty album rows are dropped too."""
+    """Drop rows whose file is gone and the album rows that hold no track.
+
+    Only rows change, because delete=False never touches a file.
+    """
     lib = mc.open_library()
     items = list(lib.items())
     gone = [i for i in items if not os.path.exists(i.path)]
@@ -76,9 +77,12 @@ def cmd_prune(args):
 # ----------------------------------------------------------------------- regroup
 
 def cmd_regroup(_args):
-    """Give tracks with a release id and no album row their album row back. A release
-    that already has an album row takes the orphans into it; a folder's cover.jpg
-    becomes the art of a row that has none. No file and no tag changes."""
+    """Give tracks with a release id and no album row their album row back.
+
+    A release that already has an album row takes the orphans into it. A folder's cover.jpg becomes the art of a row
+    that has none.
+    No file and no tag changes.
+    """
     from beets.dbcore import MatchQuery
 
     lib = mc.open_library()
@@ -111,14 +115,14 @@ def cmd_regroup(_args):
 # -------------------------------------------------------------------------- plan
 
 def cmd_plan(args):
-    """The plan `media-sync --complete` acts on: lines of <release id> TAB <album> TAB
-    <path>. An album qualifies with one release id among its matched tracks, at least
-    three of them, and no more bare tracks than matched ones. A bare track is included
-    only if its title is a track of that release (fetched from MusicBrainz), so a bonus
-    track or another song under the same album tag stays out. A bare track whose title
-    a matched track of the album already has is a second copy of it (another download,
-    the other format): pinning it would put the same track into the album twice, so it
-    is left alone and counted on stderr."""
+    """The plan `media-sync --complete` acts on, as lines of <release id> TAB <album> TAB <path>.
+
+    An album qualifies with one release id among at least three matched tracks and no more bare tracks than matched
+    ones.
+    A bare track is included only if its title is a track of that release, so a bonus track or another song stays out.
+    A bare track that copies a matched track is left alone and counted on stderr, because pinning it would add the
+    track twice.
+    """
     lib = mc.open_library()
     mb = mc.MusicBrainz(args.mb_url, args.cache)
     copies = 0
@@ -223,12 +227,13 @@ def show_fix(kind, row, fixes):
 
 
 def cmd_fix_text(args):
-    """Decode the HTML-escaped letters of YouTube Music "Topic" uploads (see
-    media_common.unescape_text) in titles, artists, albums and album artists. Prints
-    each change and nothing else when there is none. Without --dry-run the new text is
-    written to the file's tags, the file moves to where the path format puts it, and an
-    album row changes with its tracks. A track's own album fields follow its album row,
-    so they are not reported twice."""
+    """Decode the HTML-escaped letters of YouTube Music uploads (media_common.unescape_text) in titles, artists and
+    albums.
+
+    It prints each change. Without --dry-run the text is written to the file's tags and the file moves to where the
+    path format puts it.
+    A track's own album fields follow its album row, so they are not reported twice.
+    """
     mc.write_overlay("pinned")
     lib = mc.open_beets()
     albums = {}

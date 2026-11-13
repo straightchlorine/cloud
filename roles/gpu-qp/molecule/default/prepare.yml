@@ -1,0 +1,7 @@
+---
+- name: Prepare platform prerequisites
+  hosts: all
+  become: true
+  tasks:
+    - name: Stub docker and docker.service for the real stack unit
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/molecule/fixtures/stub_docker.yml"

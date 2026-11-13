@@ -1,0 +1,47 @@
+---
+- name: Converge - honeypot container-safe task files
+  hosts: all
+  become: true
+  vars:
+    ntfy_server_url: "https://ntfy.example.test"
+    vault_honeypot_ntfy_token: "tk_molecule_test_token"
+    vault_honeypot_r2_bucket: "molecule-bucket"
+    vault_honeypot_r2_endpoint: "https://molecule.r2.cloudflarestorage.com"
+    vault_honeypot_r2_access_key_id: "molecule-access-key"
+    vault_honeypot_r2_secret_access_key: "molecule-secret-key"
+    vault_honeypot_age_recipient: "age1moleculetestrecipientvalue"
+    vault_honeypot_maxmind_account_id: "molecule-account"
+    vault_honeypot_maxmind_license_key: "molecule-license"
+    # The real Docker packages come from a CentOS 10 repo and need a daemon the container cannot run.
+    # The stub unit from prepare.yml stands in for it.
+    honeypot_docker_install_enabled: false
+  tasks:
+    - name: Configure the Docker daemon (common docker_rpm, merge mode)
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: docker
+
+    - name: Install the ntfy helper, handler unit and credentials
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: notify
+
+    - name: Install the backup timer job
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: backup
+
+    - name: Install the MaxMind refresh timer job
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: mmdb_refresh
+
+    - name: Install the image prune timer job
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: timer_job
+      vars:
+        honeypot_timer_job: image-prune
+
+    - name: Apply pending handlers
+      ansible.builtin.meta: flush_handlers

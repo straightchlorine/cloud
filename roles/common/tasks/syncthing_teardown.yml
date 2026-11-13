@@ -1,8 +1,7 @@
 ---
-# Reverse common/tasks/syncthing.yml. Only runs after a teardown playbook sets
-# teardown_confirmed (see playbooks/dns-teardown.yml). Removes the service,
-# the package and the apt repo/keys it was installed from - the host returns
-# to its pre-syncthing state.
+# This reverses syncthing.yml and runs only after a teardown playbook sets teardown_confirmed (see playbooks/dns-
+# teardown.yml).
+# It removes the service, the package, and the apt repository and keys.
 
 - name: Stop and disable Syncthing service
   ansible.builtin.systemd:
@@ -27,9 +26,8 @@
   become: true
 
 - name: Remove Syncthing apt repository
-  # The file syncthing.yml's apt_repository (filename: syncthing) writes.
-  # apt_repository itself refuses to run, even for state: absent, on a host
-  # without gpg or apt-key - which Debian 13 no longer ships.
+  # The file is removed directly because apt_repository refuses to run, even for state: absent, on a host without
+  # apt-key.
   ansible.builtin.file:
     path: /etc/apt/sources.list.d/syncthing.list
     state: absent
@@ -57,3 +55,15 @@
   ansible.builtin.apt:
     update_cache: true
   become: true
+
+- name: Verify the Syncthing artifacts are gone
+  ansible.builtin.include_tasks: teardown_verify_absent.yml
+  vars:
+    common_teardown_name: syncthing
+    common_teardown_paths:
+      - /etc/systemd/system/syncthing.service
+      - /etc/apt/sources.list.d/syncthing.list
+      - /etc/apt/keyrings/syncthing-archive-keyring.gpg
+      - /etc/apt/preferences.d/syncthing.pref
+      - /usr/bin/syncthing
+      - "{{ common_syncthing_home }}"

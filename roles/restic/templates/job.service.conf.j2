@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+[Unit]
+# An unmounted source or cache directory keeps the job from starting, so a catch-up run at boot waits for
+# the mounts. OnFailure= still fires, with no exit status, and restic-job notify reports "did not start".
+RequiresMountsFor={{ (restic_job_cfg.sources + [restic_cache_dir]) | join(' ') }}{{ '' if restic_job_sftp else ' ' ~ restic_job_cfg.repository }}
+
+[Service]
+TimeoutStartSec={{ restic_job_cfg.timeout }}
+MemoryMax={{ restic_job_cfg.memory_max_mib }}M
+ReadWritePaths={{ restic_cache_dir }}
+{% if not restic_job_sftp %}
+ReadWritePaths={{ restic_job_cfg.repository }}
+{% endif %}
+{% if restic_job_cfg.skip_metered or restic_job_cfg.skip_on_battery %}
+# Exit 1-254 skips the run without failing the unit; 255 or a signal fails it.
+ExecCondition=/usr/local/libexec/restic/restic-job gate %i
+{% endif %}

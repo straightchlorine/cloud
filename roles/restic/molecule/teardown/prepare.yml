@@ -1,0 +1,32 @@
+---
+- name: Prepare - a source tree, a repository parent and a kept key
+  hosts: all
+  become: true
+  tasks:
+    - name: Create the source tree and repository parent
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: /srv/molecule-src, mode: "0755" }
+        - { path: /srv/molecule-repos, mode: "1777" }
+        - { path: /srv/pre-parent, mode: "0755" }
+
+    - name: Give the cache directory's parent to another account, as /data/vault belongs to a user
+      ansible.builtin.file:
+        path: /srv/pre-parent
+        owner: nobody
+        group: nogroup
+
+    - name: Create a source file
+      ansible.builtin.copy:
+        content: "public\n"
+        dest: /srv/molecule-src/public
+        mode: "0644"
+
+    - name: Place a Storage Box key the teardown must keep
+      ansible.builtin.copy:
+        content: "not-a-real-key\n"
+        dest: /etc/ssh/restic_storage_key
+        mode: "0600"

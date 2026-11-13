@@ -1,0 +1,23 @@
+---
+# ansible-playbook -i inventory/production playbooks/restic-teardown.yml \
+#   --limit <your-test-host> -e restic_teardown_confirm=true
+# It keeps every repository and /etc/ssh/restic_storage_key, which it hands to root with mode 0400.
+# The guard gates on the confirm flag restic_teardown_confirm, in the shape shared by every teardown playbook.
+# See dns-teardown.yml.
+- name: Tear down the restic engine for repeatable testing
+  hosts: workstations:music:automation
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gate the teardown
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: restic
+
+    - name: Run the restic teardown
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: teardown
+      when: teardown_confirmed | default(false) | bool

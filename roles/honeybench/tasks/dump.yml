@@ -1,9 +1,8 @@
 ---
-# Runs as the connection user, after the checkout exists: bench.sh restore
-# reads the dump from the checkout root.
+# This file runs as the connection user after the checkout exists.
+# bench.sh restore reads the dump from the checkout root.
 - name: Copy the prod data dump
-  # Skipped when the file is already there with the same content (copy hashes
-  # it); the 75 MB transfer only happens for a new dump.
+  # Copy compares checksums, so an identical dump already on the host is not transferred again.
   ansible.builtin.copy:
     src: "{{ honeybench_dump_src }}"
     dest: "{{ honeybench_dump_dest }}"

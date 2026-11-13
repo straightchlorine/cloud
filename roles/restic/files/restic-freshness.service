@@ -1,0 +1,24 @@
+[Unit]
+Description=restic backup freshness check
+Wants=network-online.target
+After=network-online.target
+# A permanent ntfy failure would retry every RestartSec for ever.
+# The start limit stops that after about a day and leaves the unit failed.
+StartLimitIntervalSec=1d
+StartLimitBurst=90
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/restic/restic-job freshness
+# Exit 2 means the alert was delivered. The unit then shows in systemctl --failed and in
+# node_exporter's systemd collector without re-alerting.
+# Exit 1 means ntfy was unreachable and the unit is retried, so a boot-time catch-up before the link is up still lands.
+Restart=on-failure
+RestartSec=15min
+RestartPreventExitStatus=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/restic /var/lib/restic-alerts
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

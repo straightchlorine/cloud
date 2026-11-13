@@ -2,32 +2,8 @@
 - name: Install essential packages using common package management
   ansible.builtin.include_tasks: packages.yml
 
-- name: Configure fail2ban for SSH protection (systemd backend)
-  ansible.builtin.copy:
-    content: |
-      [sshd]
-      enabled = {{ common_fail2ban_enabled | ternary('true', 'false') }}
-      port = ssh
-      filter = sshd
-      backend = systemd
-      maxretry = {{ common_fail2ban_ssh_maxretry }}
-      bantime = {{ common_fail2ban_ssh_bantime }}
-    dest: /etc/fail2ban/jail.local
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  notify: Restart fail2ban
-
-- name: Start and enable fail2ban
-  ansible.builtin.systemd:
-    name: fail2ban
-    state: started
-    enabled: true
-  become: true
-  when:
-    - common_fail2ban_enabled
-    - not ansible_check_mode
+- name: Configure fail2ban for SSH protection
+  ansible.builtin.include_tasks: fail2ban.yml
 
 - name: Set timezone
   community.general.timezone:
@@ -43,11 +19,8 @@
     mode: "0644"
   become: true
 
-- name: Install the ntfy notification helper
-  ansible.builtin.include_tasks: ntfy_install.yml
-
-- name: Configure unattended-upgrades
-  ansible.builtin.include_tasks: auto_updates.yml
+- name: Install the ntfy helper and configure unattended-upgrades
+  ansible.builtin.include_tasks: base_reapply.yml
 
 - name: Deploy shared dotfiles
   ansible.builtin.include_tasks: dotfiles.yml

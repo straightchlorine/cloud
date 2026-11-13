@@ -1,13 +1,14 @@
 ---
 
 - name: Check Node Exporter health
-  # node_exporter listens on primary_ip only (see node_exporter.yml), so localhost refuses.
+  # node_exporter listens on primary_ip only, so a request to localhost is refused.
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ prometheus_exporters_node_exporter_port }}/metrics"
     method: GET
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
   register: prom_exp_node_health_check
+  # The report below shows an unhealthy status instead of aborting the run.
   failed_when: false
   when: prometheus_exporters_node_exporter_enabled
 
@@ -18,6 +19,7 @@
     timeout: "{{ prometheus_exporters_health_check_timeout }}"
     return_content: true
   register: prom_exp_pihole_health_check
+  # The report below shows an unhealthy status instead of aborting the run.
   failed_when: false
   when: prometheus_exporters_pihole_exporter_enabled
 
@@ -25,7 +27,7 @@
   ansible.builtin.stat:
     path: "{{ prometheus_exporters_node_exporter_textfile_dir }}/pi_hardware.prom"
   register: prom_exp_pi_hw_metrics_file
-  when: pi_hardware_metrics_enabled
+  when: prometheus_exporters_pi_hardware_metrics_enabled
 
 - name: Check textfile metrics freshness
   ansible.builtin.shell: |
@@ -42,7 +44,7 @@
     fi
   register: prom_exp_textfile_freshness
   changed_when: false
-  when: pi_hardware_metrics_enabled
+  when: prometheus_exporters_pi_hardware_metrics_enabled
 
 - name: Count available metrics
   ansible.builtin.shell: |
@@ -90,7 +92,7 @@
       {% endif %}
       {% endif %}
 
-      {% if pi_hardware_metrics_enabled %}
+      {% if prometheus_exporters_pi_hardware_metrics_enabled %}
       Pi Hardware Metrics:
       File exists: {{ '[OK] Yes' if prom_exp_pi_hw_metrics_file.stat.exists else '[FAIL] No' }}
       Freshness: {{ '[OK] Fresh' if prom_exp_textfile_freshness.stdout == 'fresh' else '[WARN] Stale/Missing' }}

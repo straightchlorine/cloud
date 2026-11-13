@@ -150,7 +150,7 @@ One per event, success or failure:
 | keep | `media-sync keep done` | files registered as-is and marked reviewed |
 | adopt / backfill | `media-sync adopt/backfill done` | tracks tracked by beets / tracks with lyrics |
 | local snapshot | `media stack backup successful` | including a note when no Navidrome backup existed yet |
-| restic | `restic backup successful` / `failed` | (every host's restic unit) |
+| restic | `restic media ok` / `ok with warnings` / `FAILED (...)` / `FAILED: did not start` | the last journal lines of the run; a freshness check at 12:00 sends `restic backups need attention` when a job has no good backup within its limit or was stopped mid-run |
 | yt-dlp + deno update | `yt-dlp update successful` / `failed` | |
 | Watchtower | `Watchtower updates on <host>` | image updated; Watchtower's own ntfy |
 | reboot | `reboot pending` | 12h ahead |
@@ -417,13 +417,14 @@ offsets from the keeper in seconds, reason) with the counts `twins_video`,
 ```bash
 media-import --library [<query>]            # on the media host
 pick fix [<query>]                          # the same, as `pick` on the host
-scripts/media/pick.sh fix media [<query>]   # from a workstation, over ssh
+roles/media/files/pick-core.sh fix media [<query>]   # from a workstation, over ssh
 ```
 
 `pick` (fzf helpers: `pick remove`, `pick album`, `pick fix`) is the same script on both sides. On the
 media host the role installs it as `/usr/local/bin/pick`, a wrapper that sets `PICK_LOCAL=1` so it runs
 everything locally and takes no host argument (`pick remove 'title:Song'`); from a workstation it
-takes the ssh alias first (`pick remove media 'title:Song'`).
+takes the ssh alias first (`pick remove media 'title:Song'`); run the repo's `roles/media/files/pick-core.sh`
+there, or link it onto PATH as `pick`.
 
 A menu over what the audit found, run with the host's python (sqlite on the library, no beets
 container per prompt), so each answer is instant. The queue goes duplicates first, then copies of
@@ -648,8 +649,9 @@ second run is quick.
 
 ## Configuration
 
-Required (host_vars): `media_library_path`, `restic_*`, and when enabled
-`media_backup_dir` / `vault_youtube_playlists`. See `host_vars/media.yml`.
+Required (host_vars): `media_library_path`, `media_restic_enabled` (with `media_restic_repository` /
+`media_restic_password` when on), and when enabled `media_backup_dir` / `vault_youtube_playlists`. See
+`host_vars/media.yml`.
 Role defaults: `defaults/main.yml`.
 
 ## Testing
@@ -662,17 +664,17 @@ molecule test -s teardown
 ```
 
 Molecule has no docker daemon, so it proves the templates render and carry the right
-text, not that the modes behave. `scripts/media/engine-test.sh` does: it renders the
+text, not that the modes behave. `roles/media/tests/engine-test.sh` does: it renders the
 real templates into a scratch host (its own beets-only compose file, fake
 `yt-dlp`, `ntfy-notify` and `sudo`) and runs every mode against the real beets image.
 It needs docker, ffmpeg, sqlite3 and the repo `.venv`; `NETWORK=0` skips what needs
 MusicBrainz. It takes a few minutes.
 
 ```bash
-scripts/media/engine-test.sh
+roles/media/tests/engine-test.sh
 ```
 
-`scripts/media/marker-self-test.sh` proves the reviewed-marker layer on a
+`roles/media/tests/marker-self-test.sh` proves the reviewed-marker layer on a
 deployed host: it imports a synthesised track both with and without the opt-in,
 checks the queries, the file tag, and the un-mark/`--adopt` recipes. It runs
 inside a throwaway container and writes only to that container's `/tmp`, so the
@@ -681,5 +683,5 @@ real library, `library.db` and `/config` are untouched:
 ```bash
 ssh <host> 'cd ~/stack && docker compose -f docker-compose.yml run --rm -T -i \
   --entrypoint /bin/sh beets -c "cat > /tmp/marker-self-test.sh; sh /tmp/marker-self-test.sh"' \
-  < scripts/media/marker-self-test.sh
+  < roles/media/tests/marker-self-test.sh
 ```

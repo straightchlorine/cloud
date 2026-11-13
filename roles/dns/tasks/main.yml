@@ -1,6 +1,6 @@
 ---
 
-# The os role must run first: validate.yml asserts on its os_family fact.
+# The os role must run first because validate.yml asserts on its os_family fact.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -28,221 +28,11 @@
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
 
-- name: Check the installed Pi-hole version
-  # A reinstall wipes /etc/pihole, so it only runs for a first install, a
-  # version change or an explicit request. A missing binary also lands here.
-  ansible.builtin.command: pihole -v -c
-  register: dns_pihole_installed_version
-  changed_when: false
-  failed_when: false
-  become: true
+- name: Install or update Pi-hole
+  ansible.builtin.include_tasks: install.yml
 
-- name: Check for an existing Pi-hole gravity database
-  ansible.builtin.stat:
-    path: /etc/pihole/gravity.db
-  register: dns_pihole_gravity
-  become: true
-
-- name: Decide whether Pi-hole needs (re)installing
-  ansible.builtin.set_fact:
-    dns_pihole_needs_install: >-
-      {{ dns_pihole_force_reinstall
-      or not dns_pihole_gravity.stat.exists
-      or (dns_pihole_installed_version.stdout | default(''))
-      is not search('Core version is ' ~ (dns_pihole_version | regex_escape) ~ '(?![0-9.])') }}
-
-- name: Deploy Pi-hole with rollback on failure
-  when: dns_pihole_needs_install
-  block:
-    - name: Check for an existing Pi-hole configuration
-      ansible.builtin.stat:
-        path: /etc/pihole
-      register: dns_pihole_existing
-      become: true
-
-    - name: Preserve existing Pi-hole configuration for rollback
-      # cp -a, not the copy module: pihole-FTL runs as the pihole user, so the
-      # snapshot has to keep ownership, modes and timestamps or the rescue
-      # block restores a directory FTL cannot write.
-      ansible.builtin.command: cp -a /etc/pihole /etc/pihole.backup
-      args:
-        creates: /etc/pihole.backup
-      become: true
-      when: dns_pihole_existing.stat.exists
-
-    - name: Clear existing Pi-hole configuration for a clean reinstall
-      # It's fully preserved in /etc/pihole.backup above (restored by the
-      # rescue block on failure). Leaving old contents in place instead would
-      # make the installer skip installDefaultBlocklists() (it only adds
-      # StevenBlack's list when adlists.list is absent) and reuse a stale
-      # gravity.db, silently leaving blocking non-functional.
-      ansible.builtin.file:
-        path: /etc/pihole
-        state: absent
-      become: true
-      when: dns_pihole_existing.stat.exists
-
-    - name: Clone Pi-hole repository for secure installation
-      ansible.builtin.git:
-        repo: "{{ dns_pihole_git_repo }}"
-        dest: /tmp/pi-hole-repo
-        version: "{{ dns_pihole_version }}"
-        depth: 1
-        force: true
-      become: true
-
-    - name: Create Pi-hole configuration directory
-      ansible.builtin.file:
-        path: /etc/pihole
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-      become: true
-
-    - name: Create Pi-hole setup vars file
-      ansible.builtin.template:
-        src: setupVars.conf.j2
-        dest: /etc/pihole/setupVars.conf
-        owner: root
-        group: root
-        mode: '0600'
-      become: true
-      notify: Restart pihole-FTL
-
-    - name: Install Pi-hole using verified repository
-      ansible.builtin.shell: |
-        cd "/tmp/pi-hole-repo/automated install/"
-        bash basic-install.sh --unattended
-      become: true
-      args:
-        # /usr/local/bin/pihole is installed early (installScripts()), long
-        # before FTL, gravity and the pihole.toml migration finish - using it
-        # as the completion marker would make a retry after a partial failure
-        # skip the installer entirely. gravity.db is written by runGravity(),
-        # one of the last steps, so it only exists once install truly succeeded.
-        creates: /etc/pihole/gravity.db
-      notify: Restart pihole-FTL
-
-    - name: Set Pi-hole web admin password
-      ansible.builtin.command:
-        argv: [pihole, setpassword, "{{ vault_pihole_webpassword }}"]
-      become: true
-      no_log: true
-
-    - name: Rebuild gravity now that FTL and DNS resolution have settled
-      # basic-install.sh's own runGravity() fires immediately after FTL's
-      # first restart, sometimes before DNS resolution has settled - that
-      # can silently produce an empty blocklist even though the installer
-      # reports success. Rerunning it here, once, has reliably fixed it.
-      ansible.builtin.command: pihole -g
-      become: true
-
-    - name: Clean up Pi-hole repository and rollback backup after success
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /tmp/pi-hole-repo
-        - /etc/pihole.backup
-      become: true
-
-  rescue:
-    - name: Pi-hole deployment failed - stopping service
-      # The installer can fail before FTL exists (e.g. its binary download
-      # 404s), so a missing unit is not an error here.
-      ansible.builtin.systemd:
-        name: pihole-FTL
-        state: stopped
-      become: true
-      failed_when: false
-
-    - name: Restore Pi-hole configuration from backup, or clear a failed fresh install
-      ansible.builtin.shell: |
-        if [ -d "/etc/pihole.backup" ]; then
-          rm -rf /etc/pihole
-          mv /etc/pihole.backup /etc/pihole
-        else
-          rm -rf /etc/pihole
-        fi
-      become: true
-      ignore_errors: true
-
-    - name: Start Pi-hole service after rollback
-      ansible.builtin.systemd:
-        name: pihole-FTL
-        state: started
-      become: true
-      failed_when: false
-
-    - name: Clean up Pi-hole repository after failed deployment
-      ansible.builtin.file:
-        path: /tmp/pi-hole-repo
-        state: absent
-      become: true
-      ignore_errors: true
-
-    - name: Notify ntfy of the failed deployment
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: ntfy_notify
-      vars:
-        common_ntfy_title: "Pi-hole deploy failed: {{ inventory_hostname }}"
-        common_ntfy_message: "Rollback was attempted. Check ansible-playbook output for the actual error."
-        common_ntfy_priority: "high"
-        common_ntfy_tags: "rotating_light"
-
-    - name: Fail with deployment error
-      ansible.builtin.fail:
-        msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."
-
-- name: Read the running Pi-hole DNS settings
-  # The installer reads these once; on an installed host they are applied here.
-  ansible.builtin.command: "pihole-FTL --config {{ item }}"
-  loop:
-    - dns.interface
-    - dns.upstreams
-  register: dns_pihole_running_config
-  changed_when: false
-  become: true
-  when: not dns_pihole_needs_install
-
-- name: Apply the DNS interface from host_vars
-  ansible.builtin.command:
-    argv: [pihole-FTL, --config, dns.interface, "{{ dns_pihole_interface }}"]
-  become: true
-  notify: Restart pihole-FTL
-  when:
-    - not dns_pihole_needs_install
-    - dns_pihole_running_config.results[0].stdout | trim != dns_pihole_interface
-
-- name: Apply the upstream DNS servers from host_vars
-  # IPv4 upstreams: the current list is compared by address, ignoring formatting.
-  ansible.builtin.command:
-    argv: [pihole-FTL, --config, dns.upstreams, "{{ dns_pihole_dns_servers | to_json }}"]
-  become: true
-  notify: Restart pihole-FTL
-  when:
-    - not dns_pihole_needs_install
-    - >-
-      dns_pihole_running_config.results[1].stdout | regex_findall('[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+') | sort
-      != dns_pihole_dns_servers | sort
-
-- name: Pin the web interface to ports 80/443
-  # The v6 installer falls back to 8080/8443 if 80/443 look busy during install,
-  # but the firewall, exporter and validation all expect 80. The regexp skips
-  # the dns.port line, which has no port-plus-flag value.
-  ansible.builtin.lineinfile:
-    path: /etc/pihole/pihole.toml
-    regexp: '^  port = "[0-9]+o.*'
-    line: '  port = "80o,[::]:80o,[::]:443os,443os"'
-  become: true
-  notify: Restart pihole-FTL
-
-- name: Flush handlers so FTL rebinds before validation
-  # Without this the restart fires at end of play, after validation has
-  # already waited on port 80.
-  ansible.builtin.meta: flush_handlers
+- name: Apply the Pi-hole DNS settings from host_vars
+  ansible.builtin.include_tasks: configure.yml
 
 - name: Sync the Pi-hole admin password to the vault
   ansible.builtin.include_role:
@@ -258,24 +48,13 @@
   when: dns_backup_enabled
 
 - name: Share the backup folder through Syncthing
-  # The flag is undefined under `--tags dns` (the fleet play that loads the common
-  # role's defaults is skipped) - acceptable cross-role flag default per CLAUDE.md.
-  when:
-    - dns_backup_enabled
-    - common_syncthing_enabled | default(false) | bool
-  block:
-    - name: Install Syncthing
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: syncthing
-
-    - name: Register the backup folder
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: syncthing_folder
-      vars:
-        common_syncthing_folder_id: "backup"
-        common_syncthing_folder_path: "{{ dns_backup_dir }}"
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: syncthing_share
+  vars:
+    common_syncthing_share_folders:
+      - {id: backup, path: "{{ dns_backup_dir }}"}
+  when: dns_backup_enabled
 
 - name: Configure firewall
   ansible.builtin.include_role:
@@ -283,8 +62,8 @@
   tags: [firewall, security]
 
 - name: Configure firewall for NTP
-  # Must run after the firewall role, which installs ufw. Chrony itself is
-  # installed and synced fleet-wide, earlier, in common/tasks/chrony.yml.
+  # This must run after the firewall role, which installs ufw.
+  # Chrony itself is installed earlier by common/tasks/chrony.yml.
   community.general.ufw:
     rule: allow
     port: "123"
@@ -295,25 +74,10 @@
   become: true
   when: common_ntp_server_enabled
 
-- name: Re-apply fleet notification helpers (ntfy + reboot)
-  # The dns teardown removes the common-role notification helpers (ntfy-notify,
-  # reboot-notify, /etc/ntfy) so a fresh test starts clean, and a dns-only
-  # redeploy (`--tags dns`) skips the fleet play that would re-install them -
-  # so this role re-applies them itself. Tagged [dns] so the includes run
-  # under `--tags dns`.
+- name: Re-apply the fleet notification helpers (ntfy + unattended-upgrades)
   ansible.builtin.include_role:
     name: common
-    tasks_from: ntfy_install
-  tags: [dns, common, base]
-
-- name: Re-apply unattended-reboot notification (common)
-  # Same rationale as the ntfy helpers above: reboot-notify and its cron install
-  # only when common_auto_updates_reboot_if_required is true. A no-op on a full
-  # site.yml run (the common role already did it); keeps a dns-only redeploy
-  # consistent.
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: auto_updates
+    tasks_from: base_reapply
   tags: [dns, common, base]
 
 - name: Run post-deployment validation

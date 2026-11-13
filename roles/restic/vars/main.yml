@@ -1,0 +1,36 @@
+---
+restic_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+
+# systemd splits RequiresMountsFor= on whitespace, starts a specifier at % and gives quotes and backslashes
+# a special meaning, so the patterns reject all of them.
+# The patterns end in \Z because Python's $ also accepts a trailing newline.
+restic_path_pattern: '^/[^\s%''"\\]*\Z'
+restic_sftp_repository_pattern: '^sftp:hetzner-storage:/[^\s%''"\\]*\Z'
+
+# The single list of what the engine installs, read by host.yml, teardown.yml and the molecule teardown verify.
+restic_engine_units:
+  - restic-job@.service
+  - restic-job@.timer
+  - restic-notify@.service
+  - restic-freshness.service
+  - restic-freshness.timer
+restic_engine_dirs:
+  - { path: /etc/restic, owner: root, group: restic, mode: "0750" }
+  - { path: /usr/local/libexec/restic, owner: root, group: root, mode: "0755" }
+  # This directory is world-readable because the media stack user reads <job>.ok mtimes for its apply gate.
+  - { path: /var/lib/restic, owner: restic, group: restic, mode: "0755" }
+  - { path: "{{ restic_cache_dir }}", owner: restic, group: restic, mode: "0700" }
+  # The freshness run's alert stamps are outside the restic-owned state directory, so the job's user cannot forge them.
+  - { path: /var/lib/restic-alerts, owner: root, group: root, mode: "0700" }
+
+# Only cron hosts: the wrapper's per-job logs and the freshness log. Root writes them, so they are not world-readable.
+restic_cron_dirs:
+  - { path: /var/log/restic, owner: root, group: root, mode: "0750" }
+
+# Runs restic-job exec as the unit's user; callers append <job> and the restic args.
+restic_exec_prefix: [runuser, -u, restic, --, /usr/local/libexec/restic/restic-job, exec]
+
+# restic prints the ssh client's stderr when the Storage Box refuses the key or cannot be reached.
+restic_ssh_error_pattern: 'Permission denied|publickey|ssh'

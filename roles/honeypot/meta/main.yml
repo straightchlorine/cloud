@@ -25,6 +25,6 @@ collections:
   - ansible.posix
   - community.general
 
-# No dependencies: common/firewall/prometheus-exporters are apt- and
-# ufw-based, and this host is a standalone CentOS VPS reached over the tailnet.
+# This host is a standalone CentOS VPS reached over the tailnet, and the firewall
+# and prometheus-exporters roles assume apt and ufw. The role includes common tasks directly instead.
 dependencies: []

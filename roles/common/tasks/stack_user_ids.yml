@@ -1,0 +1,16 @@
+---
+# Publishes common_stack_uid / common_stack_gid: the uid/gid of ansible_user on the host.
+# Looked up in passwd because under become the ansible_user_uid facts reflect root. Runs once per play
+# host, so the stack unit (needs the ids early) and stack.yml (standalone in molecule) can both call it.
+- name: Resolve the stack user's uid/gid
+  when: common_stack_uid is not defined
+  block:
+    - name: Look up the stack user in passwd
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ ansible_user }}"
+
+    - name: Publish the stack user's uid/gid for the compose services
+      ansible.builtin.set_fact:
+        common_stack_uid: "{{ getent_passwd[ansible_user][1] }}"
+        common_stack_gid: "{{ getent_passwd[ansible_user][2] }}"

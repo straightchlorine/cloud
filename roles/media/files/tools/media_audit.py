@@ -20,8 +20,8 @@ import types
 
 import media_common as mc
 
-# Results looked at per search (two per album): enough to show the editions, few
-# enough that a first audit of the media host (~70 groups) takes minutes, not hours.
+# Results requested per search, and each album makes two searches.
+# This is enough to show the editions, yet few enough that a first audit does not take hours.
 SEARCH_LIMIT = 3
 
 
@@ -41,8 +41,10 @@ def track_info(item):
 
 
 def candidate(release, items):
-    """A release as a choice for one album group: its summary, and which file goes to
-    which of its tracks (media_common.assign: the same rule the pin applies)."""
+    """A release as a choice for one album group: its summary and which file goes to which track.
+
+    The placement uses media_common.assign, the same rule the pin applies.
+    """
     tracks = mc.release_tracks(release)
     claims, skipped = mc.assign(items, tracks)
     out = mc.release_summary(release)
@@ -102,9 +104,10 @@ def read_tags(path):
 
 
 def unregistered(paths, items):
-    """Files on disk without a row, with the registered tracks they are copies of: same
-    artist, same recording title and same length (media_common.loose_copies). A same-titled
-    track a few seconds off is listed as `other_cut`. Reviewed tracks count too."""
+    """Files on disk without a row, with the registered tracks they copy (media_common.loose_copies).
+
+    A same-titled track that differs in length is listed as `other_cut`. Reviewed tracks count too.
+    """
     by_artist = {}
     for item in items:
         by_artist.setdefault(mc.artist_key(item), []).append(item)
@@ -127,8 +130,10 @@ def unregistered(paths, items):
 
 
 def downloads(root):
-    """Every audio file under the downloads directory the nightly passes left behind,
-    with its tags: what `media-import --library` offers to adopt."""
+    """Every audio file the nightly passes left in the downloads directory, with its tags.
+
+    These are the files `media-import --library` offers to adopt.
+    """
     paths = sorted(os.path.join(dirpath, name) for dirpath, _dirs, names in os.walk(root) for name in names
                    if not name.startswith(".") and name.lower().endswith(mc.AUDIO_EXTENSIONS))
     return [read_tags(path)[0] for path in paths]
@@ -170,8 +175,7 @@ def main(argv=None):
     paths = [line.rstrip("\n") for line in sys.stdin if line.strip()]
     loose = unregistered(paths, everything)
     leftovers = downloads(args.downloads)
-    # Reviewed tracks included: one release in many rows, or a track held twice, is
-    # wrong whether or not a person looked at the tags.
+    # Reviewed tracks are included, because one release in many rows is wrong even if a person checked the tags.
     spread = [{
         "release": mbid,
         "artist": mc.album_artist(members[0]),

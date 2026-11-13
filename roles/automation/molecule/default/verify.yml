@@ -13,7 +13,7 @@
         - "{{ automation_stack_home }}/.env"
         - /usr/local/bin/automation-syncthing-backup
         - "{{ automation_stack_home }}/scripts/manage-automation.sh"
-        - /tmp/stack.service.rendered
+        - /etc/systemd/system/stack.service
       register: automation_deployed_files
 
     - name: Stat the deployed files
@@ -25,7 +25,7 @@
         - /usr/local/bin/manage-automation
         - /usr/local/bin/automation-syncthing-backup
         - /tmp/molecule-automation-backup
-        - /tmp/stack.service.rendered
+        - /etc/systemd/system/stack.service
       register: automation_deployed_stats
 
     - name: Read root's crontab
@@ -48,19 +48,17 @@
           - "':8083:8083' in compose_file"
           - "':8084:8080' in compose_file"
           - "':8085:8080' in compose_file"
-          # Calibre's three separate binds (config/ingest/library) - CWA errors
-          # on nested binds
           - "'/cwa-book-ingest' in compose_file"
           - "'/calibre-library' in compose_file"
-          # Secrets only as ${VAR} placeholders - never inlined.
+          # Secrets must appear only as ${VAR} placeholders.
           - "'ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}' in compose_file"
           - "'DB_PASSWORD=${FIREFLY_DB_PASSWORD}' in compose_file"
-          # mariadb entrypoint demands a root-password policy on first init;
-          # root is unused (unix_socket maintenance, firefly-user backups).
+          # The mariadb entrypoint demands a root-password policy on first init.
+          # The root user is otherwise unused because checks and backups run as the firefly user.
           - "'MARIADB_RANDOM_ROOT_PASSWORD=1' in compose_file"
           - "'HARDCOVER_TOKEN=${HARDCOVER_TOKEN}' in compose_file"
           - "'molecule-test' not in compose_file"
-          # Watchtower label-enable policy on apps; mariadb has no label.
+          # The application services carry the watchtower label, and mariadb does not.
           - "'com.centurylinklabs.watchtower.enable=true' in compose_file"
         fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
         success_msg: "[OK] compose file has the 7 services, correct bindings and no inlined secrets"
@@ -171,14 +169,14 @@
           - "'config/*.db' in backup_script"
           - "'library/metadata.db' in backup_script"
           - "'calibre' in backup_script"
-          # A paused stack (restic holds it) must not hang the DB dump.
+          # A stuck compose exec must not hang the DB dump.
           - "'timeout 600' in backup_script"
           # Snapshots are built outside the Syncthing folder and renamed in
           # whole, so peers never receive half-written dumps.
           - "'mktemp -d' in backup_script"
           - "'mv \"$WORK\" \"$DEST/$STAMP\"' in backup_script"
           - "'$WORK/calibre-databases' in backup_script"
-          # 02:30, ahead of the restic timer whose unit pauses the stack.
+          # 02:30, ahead of the 03:00 restic job that ships the dumps.
           - automation_root_crontab.stdout is search('(?m)^30 0?2 \\* \\* \\* ')
         fail_msg: "backup script/cron wrong: {{ backup_script }}"
         success_msg: "[OK] backup script (0755, no embedded secrets) + root cron present"
@@ -246,9 +244,8 @@
       ansible.builtin.assert:
         that:
           - item.stat.isdir
-          # The converge fixture remap base is 10000 and its PUID/PGID is 0
-          # (ansible_user: root), so calibre's mapped base+uid lands on 10000
-          # too; firefly's www-data adds 33 to the base.
+          # The fixture remap base is 10000 and the PUID/PGID is 0 because ansible_user is root.
+          # So the calibre directories land on the base, while the firefly upload directory adds the www-data offset.
           - item.stat.uid == (10033 if item.item == 'firefly/upload' else 10000)
           - item.stat.gid == (10033 if item.item == 'firefly/upload' else 10000)
         fail_msg: "/mnt/data/{{ item.item }} owned by {{ item.stat.uid }}:{{ item.stat.gid }}"
@@ -277,3 +274,16 @@
           - "'exec docker-entrypoint.sh \"$@\"' in wrapper"
         fail_msg: "mariadb entrypoint wrapper wrong:\n{{ wrapper }}"
         success_msg: "[OK] mariadb wrapper clears tc.log and hands off to the image entrypoint"
+
+    - name: Check the stack unit state
+      ansible.builtin.command: systemctl {{ item }} stack
+      register: stack_unit_state
+      changed_when: false
+      failed_when: stack_unit_state.stdout | trim != item_expected[item]
+      vars:
+        item_expected: {is-active: active, is-enabled: enabled}
+      loop: [is-active, is-enabled]
+
+    - name: Confirm the stack unit started through the common role
+      ansible.builtin.debug:
+        msg: "[OK] stack.service is active and enabled (real docker_stack_service + stack_start, docker stubbed)"

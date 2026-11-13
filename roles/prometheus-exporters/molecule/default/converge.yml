@@ -11,25 +11,23 @@
     prometheus_exporters_node_exporter_enabled: true
     prometheus_exporters_node_exporter_port: 9100
     prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
-    pi_hardware_metrics_enabled: false
+    prometheus_exporters_pi_hardware_metrics_enabled: false
     prometheus_exporters_pihole_exporter_enabled: false
     prometheus_exporters_pihole_exporter_port: 9617
-    # pihole_exporter_teardown.yml's ufw delete must mirror firewall.yml's
-    # src-restricted rule add.
+    # The ufw delete in pihole_exporter_teardown.yml must mirror the source-restricted rule that firewall.yml adds.
     prometheus_exporters_firewall_source: "192.168.0.0/16"
   tasks:
-    # The real common setup: user, group, directories, packages, logrotate.
-    # include_role (not raw include_tasks) so common_setup.yml's templates
-    # resolve against the role's own role_path. Binary downloads and service
-    # starts are the container-incompatible parts of the role; the pihole
-    # exporter download is covered indirectly by the checksum-URL rendering.
+    # This runs the real common setup through include_role.
+    # That makes its templates resolve against the role's own role_path.
+    # Binary downloads and service starts are the parts of the role a container cannot run.
+    # The Pi-hole exporter download is covered only indirectly, through the rendering of its checksum URL.
     - name: Run the real common exporter setup
       ansible.builtin.include_role:
         name: prometheus-exporters
         tasks_from: common_setup
 
-    # Fixture: a prior Pi-hole Exporter install for the real teardown below
-    # to remove. One-shot, hence molecule-idempotence-notest.
+    # This fixture stands in for an earlier Pi-hole exporter install that the real teardown below removes.
+    # It is one-shot, hence the molecule-idempotence-notest tag.
     - name: Create fake Pi-hole Exporter artifacts to exercise the teardown
       ansible.builtin.copy:
         content: "fake binary for molecule test\n"
@@ -37,6 +35,7 @@
         mode: "0755"
       loop:
         - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
         - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
       tags: [molecule-idempotence-notest]
 
@@ -51,9 +50,8 @@
         mode: "0644"
       tags: [molecule-idempotence-notest]
 
-    # The real teardown, with its gate satisfied exactly like
-    # playbooks/dns-teardown.yml satisfies it - without teardown_confirmed
-    # the whole block silently skips and this scenario tests nothing.
+    # The real teardown gets its gate satisfied the way playbooks/dns-teardown.yml does it.
+    # Without teardown_confirmed the whole block silently skips and this scenario tests nothing.
     - name: Run the real pihole_exporter_teardown against the fake artifacts
       ansible.builtin.include_role:
         name: prometheus-exporters

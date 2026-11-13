@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: restic
+  namespace: homelab
+  author: Ansible Admin
+  description: The fleet's single restic engine - pinned binary, hardened systemd jobs
+  company: Local
+  license: MIT
+  min_ansible_version: '2.17'
+  platforms:
+    - name: Debian
+      versions: [bookworm, trixie]
+    - name: ArchLinux
+      versions: [all]
+  galaxy_tags: [backup, restic]
+dependencies: []

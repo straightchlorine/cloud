@@ -1,10 +1,10 @@
 ---
+# Tear down the automation stack.
 #   ansible-playbook -i inventory/production playbooks/automation-teardown.yml \
 #     --limit <your-test-host> -e automation_teardown_confirm=true
-#
-# Same pattern as playbooks/dns-teardown.yml: gate on this role's own flag and
-# refuse hosts marked teardown_protected, set teardown_confirmed, then run the
-# teardown manifest.
+# The guard gates on the confirm flag automation_teardown_confirm and refuses hosts marked teardown_protected.
+# It then sets teardown_confirmed, which every included teardown task file checks.
+# This shape is shared by every teardown playbook, see dns-teardown.yml.
 - name: Tear down the automation role for repeatable testing
   hosts: automation
   become: true
@@ -16,7 +16,8 @@
         tasks_from: teardown_guard
       vars:
         common_teardown_name: automation
-    - name: Run automation role teardown
+
+    - name: Run the automation teardown
       ansible.builtin.include_role:
         name: automation
         tasks_from: teardown

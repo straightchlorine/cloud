@@ -6,30 +6,31 @@
 # (registering files, pruning rows, regrouping albums, checkpoints), so each
 # exists exactly once. The passes that decide what to import live in media-sync.
 #
-# Nothing here starts a container at source time; media-status sources this too
-# and must stay a cheap, lock-free read.
+# Nothing here starts a container at source time, because media-status sources this
+# too and must stay a cheap, lock-free read. Avoid array-length expansions in this
+# template: their brace-hash would open a Jinja comment.
 
 LIB="{{ media_library_path }}"
 MEDIA_HOME="{{ media_home }}"
 DB="$LIB/beets/library.db"
 COMPOSE=(docker compose -f "$MEDIA_HOME/docker-compose.yml")
-# --entrypoint skips /init (and the beets web UI) so each run is a one-off that
-# exits; service_user sets the uid so beets' moves and tag writes stay owned by
-# the remapped stack user. PYTHONUNBUFFERED: without a TTY stdout is
-# block-buffered, so a long release pass looks dead while it works.
+# --entrypoint skips the image's /init, so each run is a one-off that exits. The
+# compose service runs beets as the stack user (service_user), which keeps moves and
+# tag writes owned by it. PYTHONUNBUFFERED is set because without a TTY stdout is
+# block-buffered, so a long release pass would look dead while it works.
 BEET=("${COMPOSE[@]}" run --rm -T -e PYTHONUNBUFFERED=1 \
     --entrypoint /lsiopy/bin/beet beets)
-# The same, but with a TTY: for the modes that prompt (used by media-sync).
+# The same, but with a TTY, for the modes that prompt (used by media-sync).
 # shellcheck disable=SC2034
 BEET_TTY=("${COMPOSE[@]}" run --rm -it -e PYTHONUNBUFFERED=1 \
     --entrypoint /lsiopy/bin/beet beets)
 # beets' own python, for the few things the CLI has no command for.
 BEET_PY=("${COMPOSE[@]}" run --rm -T --entrypoint /lsiopy/bin/python3 beets)
 # The role's python tools, as the beets container sees them (deployed to
-# $LIB/beets/tools). Each shell function below is a thin call into media_tools.py.
+# $LIB/beets/tools). Most shell functions below are thin calls into one of them.
 TOOLS=/config/tools
-# The library review's files (candidates, decisions, the MusicBrainz cache): on the
-# host $LIB/state/review, in the container /review.
+# The library review's files (candidates, decisions, the MusicBrainz cache) are
+# $LIB/state/review on the host and /review in the container.
 REVIEW=/review
 MB_URL="{{ media_musicbrainz_url }}"
 
@@ -49,11 +50,9 @@ notify() {
 
 count() { "${BEET[@]}" ls -f '$id' "$@" | wc -l; }
 
-# --- files and rows -------------------------------------------------------------
-
 # Host paths of every audio file under a directory (default: the whole music/).
-# One definition of "audio file", used by registration and by the dashboard
-# (media_common.AUDIO_EXTENSIONS lists the same extensions for the audit).
+# This is the one definition of "audio file" for registration and the dashboard.
+# media_common.AUDIO_EXTENSIONS lists the same extensions for the audit.
 audio_files() {  # [<host dir>]
     find "${1:-$LIB/music}" -type f ! -name '.*' \
         \( -iname '*.opus' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \
@@ -93,9 +92,9 @@ unregistered_files() {  # <container dir>
 register_paths() {  # <beets config>
     local cfg="$1" list registered
     registered="$(registered_paths)" || return 1
-    # No array-length expansions in a .j2 (their brace-hash opens a Jinja comment).
-    # Only files still on disk: a pin hands over the paths its files had BEFORE the
-    # import moved them, and a path that no longer exists is not "unregistered".
+    # Only files still on disk are kept: a pin hands over the paths its files had
+    # before the import moved them, and a path that no longer exists is not
+    # "unregistered".
     list="$(LC_ALL=C comm -23 <(LC_ALL=C sort -u) <(printf '%s\n' "$registered") |
         while IFS= read -r path; do [ ! -e "$LIB$path" ] || printf '%s\n' "$path"; done)"
     if [ -z "$list" ]; then
@@ -103,8 +102,8 @@ register_paths() {  # <beets config>
         return 0
     fi
     echo "to register: $(printf '%s\n' "$list" | wc -l) file(s)"
-    # Batches keep the argument list short and one broken file from costing the
-    # whole run; -d newline because paths hold spaces and quotes, not newlines.
+    # Batches keep the argument list short and stop one broken file from costing the
+    # whole run. The delimiter is a newline because paths hold spaces and quotes.
     printf '%s\n' "$list" |
         xargs -d '\n' -n 200 -- "${BEET[@]}" -c "$cfg" import
 }
@@ -132,9 +131,9 @@ regroup_albums() {
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" regroup
 }
 
-# A copy of library.db to fall back on. Plain cp is consistent here because the
-# caller holds the writer lock. Three are kept; never take one of a library that
-# is collapsed on purpose (mid-upgrade), or the good copy rotates away.
+# A copy of library.db to fall back on. Plain cp is consistent here because the caller
+# holds the writer lock. Three copies are kept, so never take one of a library that is
+# collapsed on purpose (mid-upgrade), or the good copy rotates away.
 checkpoint() {
     local f
     f="$LIB/beets/library.db-checkpoint-$(date +%Y%m%d-%H%M%S).bak"
@@ -175,15 +174,16 @@ musicbrainz_reachable() {
 #              with --id, so a lone candidate is accepted even when its track list
 #              or credits differ from the files; also the config pin_files reads)
 #
-# The prompting kinds let reviewed.py turn a "use as-is" answer into a marker.
+# The release and keep overlays also set reviewed.mark, so reviewed.py marks the
+# tracks that were kept as they are.
 overlay() {  # <release|keep|pinned>
     "${BEET_PY[@]}" "$TOOLS/media_tools.py" overlay "$1"
 }
 
 # Stamp rows added in the last 4 weeks as 29 days old, so `--retag` and the default
 # `--upgrade` scope (both `added:-4w..`) do not treat a rebuilt library as new
-# downloads. Database only; run it while media-sync holds the lock. The README
-# ("Settling a library") explains when.
+# downloads. It touches the database only and must run while media-sync holds the
+# lock. The "existing library" section of roles/media/README.md says when to use it.
 settle_library() {
     sqlite3 -cmd '.timeout 20000' "$DB" "
         update items set added = strftime('%s','now','-29 days') where added > strftime('%s','now','-28 days');
@@ -205,14 +205,12 @@ adopt_library() {
 }
 
 # Lyrics and ReplayGain for tracks that came in without them (slow; run under
-# tmux or --maintenance). media_backfill_exclude is a beets query - `^` negates -
-# that keeps a kind of file out of both, e.g. an audiobook.
+# tmux or --maintenance). media_backfill_exclude is a beets query (`^` negates)
+# that keeps a kind of file, such as an audiobook, out of both.
 backfill() {
     "${BEET[@]}" lyrics {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
     "${BEET[@]}" replaygain -w {{ media_backfill_exclude | quote if media_backfill_exclude else '' }}
 }
-
-# --- pinning a release onto files -------------------------------------------------
 
 # The files (container paths, one per line) a beets query selects, sorted.
 files_for_query() {  # <beets query...>
@@ -222,12 +220,13 @@ files_for_query() {  # <beets query...>
 # Give the files on stdin (container paths) the MusicBrainz release <id>.
 #
 # The release is applied to the files directly (see cmd_pin in media_tools.py and
-# the README); each file is matched to a track of the release by title.
+# the README), and each file is matched to a track of the release by title.
 #
 #   - a file whose title is not on the release is left as it is
 #   - a file whose track the album already holds (a copy) is left as it is
 #   - two files claiming one track: the closer in length takes it
 #   - the album row of the release is joined if there is one, created if not
+#   - an album row the pin leaves with no track is removed
 #
 # Matched files get the release's tags written and are moved to where the album
 # keeps its files; a new album also gets its cover art. Prints a summary and a
@@ -246,8 +245,9 @@ pin_files() {  # <release id>
     fi
 }
 
-# A new album row has no cover yet: fetch it, then embed it in the album's new files.
-# Best effort - a release with no art on the Cover Art Archive is not an error.
+# A new album row has no cover yet, so fetch it and embed it in the album's new files.
+# This is best effort, because a release with no art on the Cover Art Archive is not
+# an error.
 album_art() {  # <release id> <item id>...
     local id="$1" n
     shift
@@ -285,8 +285,9 @@ check_removed() {  # [--purge]
 }
 
 # The saved review decisions, applied in one container (see media_apply.py). Lines
-# starting with @ are for album_art; the rest is the report. Exit 3: refused, over
-# the per-run file limit.
+# starting with @ are for album_art, and the rest is the report. Exit 3 means the
+# apply was refused for being over the per-run file limit, and exit 4 that an earlier
+# apply did not finish.
 apply_decisions() {  # [--dry-run] [--force]
     "${BEET_PY[@]}" "$TOOLS/media_apply.py" apply --review "$REVIEW" \
         --max-files {{ media_apply_max_files }} "$@"
@@ -299,25 +300,22 @@ undo_apply() {  # <log file name>
 
 # An apply rewrites tags and moves files, so it runs only with a fresh restic snapshot
 # to fall back on, and never while restic is reading the library (a file moved
-# mid-backup can be in neither place in that snapshot). systemd knows both, for the
-# stack user too; --timestamp=unix because the default format ends in a zone name
-# date(1) is not sure to parse. A unit that has not run since boot has no exit time:
-# that counts as no snapshot.
+# mid-backup can be in neither place in that snapshot). systemd knows whether restic
+# is running; restic-job stamps <state dir>/<job>.ok each time a snapshot is saved.
 backup_gate() {
-    local unit="backup-{{ media_restic_service_name }}.service" state result ended age
+    local unit="restic-job@{{ media_restic_service_name }}.service" state stamp age
+    stamp="{{ media_restic_state_dir }}/{{ media_restic_service_name }}.ok"
     state="$(systemctl show -p ActiveState --value "$unit")"
     case "$state" in
         active | activating | deactivating | reloading)
             echo "the restic backup is running ($unit is $state)"
             return 1 ;;
     esac
-    result="$(systemctl show -p Result --value "$unit")"
-    ended="$(systemctl show --timestamp=unix -p ExecMainExitTimestamp --value "$unit")"
-    if [ "$result" != success ] || [ -z "$ended" ]; then
-        echo "no successful restic backup since boot ($unit: ${result:-no result})"
+    if [ ! -e "$stamp" ]; then
+        echo "no successful restic backup recorded ($stamp is missing)"
         return 1
     fi
-    age=$(( ($(date +%s) - ${ended#@}) / 3600 ))
+    age=$(( ($(date +%s) - $(stat -c %Y "$stamp")) / 3600 ))
     if [ "$age" -ge {{ media_apply_backup_max_age_hours }} ]; then
         echo "the last restic backup finished $age h ago (the limit is {{ media_apply_backup_max_age_hours }} h)"
         return 1

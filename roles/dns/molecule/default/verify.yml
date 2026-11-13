@@ -4,8 +4,8 @@
   become: true
   tasks:
     - name: Detect the container's primary interface
-      # Must match the converge discovery so the setupVars assertion can
-      # compare against the same interface the role was given.
+      # This must use the same discovery as converge.yml so the setupVars assertion compares the interface the role
+      # received.
       ansible.builtin.set_fact:
         molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
 
@@ -142,9 +142,9 @@
         success_msg: "[OK] Pi-hole setupVars template renders with populated values"
 
     - name: Assert chrony is enabled
-      # ActiveState is not asserted: containers lack CAP_SYS_TIME, so systemd
-      # skips the chrony unit (ConditionCapability) - it can never be active
-      # here, only on real hosts (see post_deploy_validate.yml for that).
+      # ActiveState is not asserted because containers lack CAP_SYS_TIME.
+      # Systemd then skips the chrony unit through ConditionCapability, so the unit can never be active here.
+      # The post_deploy_validate.yml file checks it on real hosts.
       ansible.builtin.systemd:
         name: chrony
       register: dns_chrony_state

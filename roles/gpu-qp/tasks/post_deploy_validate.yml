@@ -3,20 +3,16 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: compose_containers_check
+  # The common check task names its inputs without this role's prefix.
   vars:  # noqa: var-naming[no-role-prefix]
     compose_file_path: "{{ gpu_qp_home }}/docker-compose.yml"
     compose_owner: "{{ ansible_user }}"
     compose_critical_services: >-
       {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
-  # common_start_stack is owned by common, whose defaults are not loaded under
-  # `--tags gpu-qp`; the default mirrors common's own (CLAUDE.md Acceptable
-  # Default Patterns).
-  when: common_start_stack | default(true) | bool
   tags: [post_validation]
 
 - name: Run the GPU check
-  # `gpu-qp check` executes a circuit with device="GPU" inside the worker, so a
-  # silent CPU fallback cannot pass it - an exit code alone could.
+  # `gpu-qp check` runs a circuit with device="GPU" inside the worker, so a silent CPU fallback cannot pass.
   ansible.builtin.command:
     argv: [/usr/local/bin/gpu-qp, check]
   become: true
@@ -31,8 +27,8 @@
   tags: [post_validation]
 
 - name: Run a short GPU-accelerated VQE to prove the full path
-  # Through `gpu-qp run`, so the smoke test covers the path real runs take: the
-  # non-root user, the per-run directory, the report and run.json.
+  # Going through `gpu-qp run` makes the smoke test cover the path real runs take.
+  # That path includes the non-root user, the per-run directory, the report and run.json.
   ansible.builtin.command:
     argv:
       - /usr/local/bin/gpu-qp

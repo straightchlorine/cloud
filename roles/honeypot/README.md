@@ -102,11 +102,20 @@ docker compose -f /opt/honeywatch/docker-compose.prod.yml exec postgres \
     sh /docker-entrypoint-initdb.d/00-roles.sh
 ```
 
+## Backup versus roles/restic
+
+The Postgres backup (`pg_dumpall` -> gzip -> age -> rclone to Cloudflare R2) is
+a deliberate exception to `roles/restic`. The fleet restic repositories live on
+the LAN, and a public, internet-facing host must not hold credentials that
+reach them; here only an age public key and an R2 token that cannot delete or
+decrypt anything leave the host.
+
 ## Notifications
 
 Both timers report to ntfy: failures through
 `OnFailure=honeywatch-notify@%n.service`, successes from the scripts
-themselves. A backup or refresh that quietly stops running is otherwise
+themselves, all through the one helper `/usr/local/sbin/honeywatch-ntfy`
+(`files/honeywatch-ntfy.sh`). A backup or refresh that quietly stops running is otherwise
 indistinguishable from one that had nothing to do. `dnf-automatic.service`
 carries the same `OnFailure=` (drop-in `10-notify.conf`), so a failed unattended
 update run reports too. Notifications are best-effort (the notifier exits 0) - a
@@ -115,21 +124,29 @@ timer is not alerted on.
 
 ## Tests
 
-Only the `fail-fast-validation` scenario exists. CI runs it for honeypot on a
-Rocky 9 systemd image (a RedHat-family stand-in, because `validate.yml` asserts
-`os_family`). There is deliberately no `default` scenario: firewalld, sshd,
-auditd, SELinux and Docker cannot converge in an unprivileged container, and
-nothing it could prove is not already proven on the real host by
-`post_deploy_validate.yml`. `ansible-lint`, `yamllint` and `shellcheck` also
-cover the role.
+Two scenarios, both on a Rocky 9 systemd image in CI (a RedHat-family
+stand-in, because `validate.yml` asserts `os_family`):
+
+- `fail-fast-validation` runs the real `validate.yml` per case.
+- `default` converges the container-safe parts: the three timer jobs
+  (`timer_job.yml`), the ntfy helper and the Docker daemon configuration
+  (merge into an existing `daemon.json`, `Restart docker` handler from
+  `roles/common`, against a stub `docker.service`).
+
+firewalld, sshd, auditd, SELinux, sysctl, dnf-automatic and the real Docker
+packages are not covered: they cannot converge in an unprivileged container
+and are proven on the host by `post_deploy_validate.yml`. `ansible-lint`,
+`yamllint` and `shellcheck` also cover the role.
 
 ```sh
-just test honeypot fail-fast-validation
+just test honeypot default
 ```
 
-There is no `teardown.yml`. Undoing host hardening means restoring the default
-sshd, firewall and SELinux state on a machine that is exposed to the internet
-by design - a rebuild is the safe path, not a playbook.
+There is no `teardown.yml`, and the host carries `teardown_protected: true`
+in its host_vars so the shared teardown guard refuses it. Undoing host
+hardening means restoring the default sshd, firewall and SELinux state on a
+machine that is exposed to the internet by design - rebuild means reprovisioning
+the VPS, not running a playbook.
 
 ## Host state snapshot
 

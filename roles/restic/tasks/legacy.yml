@@ -1,0 +1,165 @@
+---
+# Retires this job's push-backup install.
+# It runs after the repository opens with the job's credentials and the new timer is enabled,
+# so protection never lapses.
+# Delete this file once every host has migrated.
+- name: Look for this job's legacy timer
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/backup-{{ restic_job_cfg.name }}.timer"
+  register: restic_legacy_timer
+
+- name: Stop and disable the legacy timer and service
+  # A running legacy backup may leave a stale lock; restic-job's unlock clears it.
+  ansible.builtin.systemd_service:
+    name: "backup-{{ restic_job_cfg.name }}.{{ item }}"
+    state: stopped
+    enabled: false
+  loop: [timer, service]
+  when: restic_legacy_timer.stat.exists
+
+- name: Find the legacy unit files, their backup-suffixed copies and the timer stamp
+  ansible.builtin.find:
+    paths: [/etc/systemd/system, /var/lib/systemd/timers]
+    patterns:
+      - "backup-{{ restic_job_cfg.name }}.service"
+      - "backup-{{ restic_job_cfg.name }}.timer"
+      - "backup-{{ restic_job_cfg.name }}.service.backup"
+      - "backup-{{ restic_job_cfg.name }}.timer.backup"
+      - "backup-{{ restic_job_cfg.name }}.service.*~"
+      - "backup-{{ restic_job_cfg.name }}.timer.*~"
+      - "stamp-backup-{{ restic_job_cfg.name }}.timer"
+  register: restic_legacy_files
+
+- name: Remove the legacy unit files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ restic_legacy_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: restic_legacy_units
+
+- name: Reload systemd after removing the legacy units  # noqa: no-handler
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: restic_legacy_units.changed
+
+- name: Clear the legacy service's failed state  # noqa: no-handler
+  # The unit may already be unloaded, so a non-zero rc is expected.
+  ansible.builtin.command:
+    argv: [systemctl, reset-failed, "backup-{{ restic_job_cfg.name }}.service"]
+  changed_when: true
+  failed_when: false
+  when: restic_legacy_units.changed
+
+- name: Look for the push-model sudoers file
+  # Its presence marks a host that really ran the push model, since /opt/backup alone could be anything.
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/backup-user
+  register: restic_legacy_sudoers
+
+- name: Move the legacy restic cache into the new cache directory
+  # The cache is keyed by repository id, so entries move as they are.
+  # mv copies across filesystems when the cache directory is on another one (station-arch: / to the RAID).
+  # The chown repairs entries that sudo restic wrote as root; -h and no -L, so a symlink is never followed.
+  # It runs before any restic-owned process exists, since the cache directory is new at this point.
+  ansible.builtin.shell: |
+    set -eu
+    for d in /opt/backup/cache/*/; do
+      [ -e "$d" ] || continue
+      t="{{ restic_cache_dir }}/$(basename "$d")"
+      [ -e "$t" ] || mv "$d" "$t"
+    done
+    chown -hR restic:restic "{{ restic_cache_dir }}"
+    rm -rf /opt/backup/cache
+  args:
+    removes: /opt/backup/cache
+  when: restic_legacy_sudoers.stat.exists
+
+- name: Look for legacy jobs still on this host
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "backup-*.timer"
+  register: restic_legacy_left
+
+- name: Say why the legacy tree stays
+  ansible.builtin.debug:
+    msg: >-
+      Keeping /opt/backup and /etc/sudoers.d/backup-user: other backup-*.timer units remain
+      ({{ restic_legacy_left.files | map(attribute='path') | join(', ') }}). They retire with their last job.
+  when:
+    - restic_legacy_sudoers.stat.exists
+    - restic_legacy_left.matched > 0
+
+- name: Retire the legacy tree, sudoers and account
+  when:
+    - restic_legacy_sudoers.stat.exists
+    - restic_legacy_left.matched == 0
+  block:
+    - name: Look for a general passwordless sudo grant for the backup account
+      # This is needed only when Ansible connects as backup, because removing its sudoers file
+      # without a second grant would lock the play out of root.
+      # The check is the capability itself: backup runs /usr/bin/true as root without a password. The old
+      # restic-only wildcard grant cannot allow that, so success means another general grant exists.
+      # A file that is itself a general grant cannot vouch for itself and is kept.
+      ansible.builtin.shell: |
+        ! grep -qE '(NOPASSWD:|,)[[:space:]]*ALL[[:space:]]*$' /etc/sudoers.d/backup-user || exit 1
+        runuser -u backup -- sudo -n -u root /usr/bin/true
+      args:
+        executable: /bin/bash
+      register: restic_legacy_other_sudo_grant
+      changed_when: false
+      failed_when: false  # rc 1 means no general grant; the next tasks read the result
+      when: restic_connection_user == 'backup'
+
+    - name: Remove the wildcard sudoers file
+      ansible.builtin.file:
+        path: /etc/sudoers.d/backup-user
+        state: absent
+      when: restic_connection_user != 'backup' or restic_legacy_other_sudo_grant.rc == 0
+
+    - name: Report the sudoers file Ansible still depends on
+      # The ignored failure only makes the kept file visible in the play output.
+      # The run must continue, because stopping would leave the host half-migrated.
+      ansible.builtin.fail:
+        msg: >-
+          Kept /etc/sudoers.d/backup-user: Ansible connects as backup and sudo shows no general
+          passwordless grant for it besides that file (the file itself may be one, and cannot vouch for itself).
+          Grant backup NOPASSWD: ALL elsewhere (or connect as another user), then delete the file by hand.
+      ignore_errors: true
+      when:
+        - restic_connection_user == 'backup'
+        - restic_legacy_other_sudo_grant.rc != 0
+
+    - name: Read the legacy backup account
+      ansible.builtin.command:
+        argv: [getent, passwd, backup]
+      register: restic_legacy_account
+      changed_when: false
+      failed_when: restic_legacy_account.rc not in [0, 2]
+
+    - name: Read the account Ansible connects as
+      ansible.builtin.command:
+        argv: [getent, passwd, "{{ restic_connection_user }}"]
+      register: restic_legacy_connection_account
+      changed_when: false
+      failed_when: restic_legacy_connection_account.rc not in [0, 2]
+
+    - name: Restore Debian's stock backup account
+      # The account is restored and never deleted, because on Debian it is the base-passwd uid-34 account.
+      # It is skipped on a host that Ansible reaches as backup, such as station-arch.
+      ansible.builtin.user:
+        name: backup
+        home: /var/backups
+        shell: /usr/sbin/nologin
+      when:
+        - ansible_os_family == 'Debian'
+        - restic_connection_user != 'backup'
+        - "':/opt/backup:' in restic_legacy_account.stdout"
+
+    - name: Remove the legacy tree (scripts, logs, keys, .ssh, tmp)
+      # The tree stays when it is the home of the account Ansible connects as.
+      ansible.builtin.file:
+        path: /opt/backup
+        state: absent
+      when: restic_legacy_connection_account.stdout is not match('^([^:]*:){5}/opt/backup:')

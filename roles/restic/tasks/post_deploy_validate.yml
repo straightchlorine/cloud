@@ -1,0 +1,120 @@
+---
+- name: Prove the systemd job
+  when: restic_scheduler == 'systemd'
+  block:
+    - name: Read the job's effective unit settings
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        argv:
+          - systemctl
+          - show
+          - "restic-job@{{ restic_job_cfg.name }}.service"
+          - -p
+          - LoadState,User,AmbientCapabilities,KillMode,KillSignal,MemoryMax,OnFailure,ReadWritePaths
+      register: restic_unit_props
+      changed_when: false
+
+    - name: Assert the job unit loads with its sandbox and limits
+      ansible.builtin.assert:
+        that:
+          - "'LoadState=loaded' in restic_unit_props.stdout_lines"
+          - "'User=restic' in restic_unit_props.stdout_lines"
+          - "'AmbientCapabilities=cap_dac_read_search' in restic_unit_props.stdout_lines"
+          - "'KillMode=mixed' in restic_unit_props.stdout_lines"
+          - "'KillSignal=2' in restic_unit_props.stdout_lines"
+          - "('MemoryMax=' ~ (restic_job_cfg.memory_max_mib * 1048576)) in restic_unit_props.stdout_lines"
+          - "('restic-notify@fail-' ~ restic_job_cfg.name ~ '.service') in restic_unit_props.stdout"
+          - "('ReadWritePaths=' ~ restic_cache_dir) in restic_unit_props.stdout"
+        fail_msg: "restic-job@{{ restic_job_cfg.name }}.service: {{ restic_unit_props.stdout }}"
+
+    - name: Read the job's timer state
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        argv:
+          - systemctl
+          - show
+          - "restic-job@{{ restic_job_cfg.name }}.timer"
+          - -p
+          - ActiveState,UnitFileState,NextElapseUSecRealtime,Requires
+      register: restic_timer_props
+      changed_when: false
+
+    - name: Assert the timer is armed and never Requires= the service
+      ansible.builtin.assert:
+        that:
+          - "'ActiveState=active' in restic_timer_props.stdout_lines"
+          - "'UnitFileState=enabled' in restic_timer_props.stdout_lines"
+          - "'NextElapseUSecRealtime=' not in restic_timer_props.stdout_lines"
+          - "('restic-job@' ~ restic_job_cfg.name ~ '.service') not in restic_timer_props.stdout"
+        fail_msg: "restic-job@{{ restic_job_cfg.name }}.timer: {{ restic_timer_props.stdout }}"
+
+- name: Prove the cron job
+  when: restic_scheduler == 'cron'
+  block:
+    - name: Read the job's cron file
+      ansible.builtin.slurp:
+        src: "/etc/cron.d/restic-{{ restic_job_cfg.name }}"
+      register: restic_cron_file
+
+    - name: Assert the cron file runs the wrapper as root on the schedule
+      ansible.builtin.assert:
+        that:
+          - >-
+            (restic_cron_file.content | b64decode) is search(
+            '(?m)^' ~ (restic_job_cfg.cron_schedule | regex_escape) ~ ' root /usr/local/libexec/restic/restic-job cron '
+            ~ restic_job_cfg.name ~ ' ')
+        fail_msg: "/etc/cron.d/restic-{{ restic_job_cfg.name }}: {{ restic_cron_file.content | b64decode }}"
+
+- name: Read the pinned binary's version
+  ansible.builtin.command: /usr/local/bin/restic version
+  register: restic_version_out
+  changed_when: false
+
+- name: Assert the pinned binary is the one on PATH
+  ansible.builtin.assert:
+    that: ("restic " ~ restic_binary_version ~ " ") in restic_version_out.stdout
+    fail_msg: "/usr/local/bin/restic reports {{ restic_version_out.stdout }}"
+
+- name: Prove the real host's cgroup limit and ntfy delivery
+  # A container has neither its own memory controller nor a reachable ntfy.
+  # Molecule proves the notifier path with a stub instead.
+  when: ansible_virtualization_type not in ['podman', 'docker', 'container', 'lxc']
+  block:
+    - name: Read the cgroup controllers
+      ansible.builtin.slurp:
+        src: /sys/fs/cgroup/cgroup.controllers
+      register: restic_cgroup_controllers
+      when: restic_scheduler == 'systemd'
+
+    - name: Assert MemoryMax can be enforced
+      # Raspberry Pi kernels boot with the memory controller off unless common/rpi_cgroups.yml enables it.
+      ansible.builtin.assert:
+        that: "'memory' in (restic_cgroup_controllers.content | b64decode).split()"
+        fail_msg: "cgroup memory controller missing: MemoryMax= would be ignored"
+      when: restic_scheduler == 'systemd'
+
+    - name: Send a test notification when the job's config changed  # noqa: no-handler
+      # Every alert path ends here, so a wrong URL, token or redirect fails now
+      # instead of on the night a backup fails.
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/ntfy-notify
+          - "{{ ansible_nodename }}: restic {{ restic_job_cfg.name }} deployed"
+          - "restic-job@{{ restic_job_cfg.name }} is armed; this message proves delivery."
+          - min
+          - white_check_mark
+      environment:
+        NTFY_STRICT: "1"
+      changed_when: false
+      when: restic_job_env.changed
+
+- name: List the latest snapshot as the restic user
+  # One call proves the password, the key, the pinned host key and the repository path.
+  ansible.builtin.command:
+    argv: >-
+      {{ restic_exec_prefix + [restic_job_cfg.name, 'snapshots', '--host', restic_job_cfg.host,
+         '--tag', restic_job_cfg.name, '--latest', '1', '--compact'] }}
+  register: restic_latest
+  changed_when: false
+
+- name: Report the history this job continues
+  ansible.builtin.debug:
+    msg: "{{ restic_latest.stdout_lines }}"

@@ -23,48 +23,12 @@
     daemon_reload: true
   become: true
 
-- name: Restart backup timer
+- name: Restart stack
   ansible.builtin.systemd:
-    name: "backup-{{ common_backup_service_name }}.timer"
+    name: "{{ common_stack_unit }}"
     state: restarted
-    enabled: true
     daemon_reload: true
   become: true
-
-- name: Restart docker compose stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ stack_home }}"
-    state: restarted
-  become_user: "{{ ansible_user }}"
-
-- name: Rollback docker compose stack
-  block:
-    - name: Stop current stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ stack_home }}"
-        state: absent
-      become: true
-      become_user: "{{ ansible_user }}"
-      # Ignore errors during rollback - container or compose file may not exist in failure state
-      ignore_errors: true
-
-    - name: Restore from backup if available
-      ansible.builtin.shell: |
-        if [ -f "{{ stack_home }}/docker-compose.yml.backup" ]; then
-          mv "{{ stack_home }}/docker-compose.yml.backup" "{{ stack_home }}/docker-compose.yml"
-        fi
-      become_user: "{{ ansible_user }}"
-      # Ignore errors - backup may not exist or file system may be in inconsistent state
-      ignore_errors: true
-
-    - name: Start restored stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ stack_home }}"
-        state: present
-      become: true
-      become_user: "{{ ansible_user }}"
-      # Ignore errors - compose file or dependencies may not be available after failed deployment
-      ignore_errors: true
 
 - name: Restart apt timers
   ansible.builtin.systemd:

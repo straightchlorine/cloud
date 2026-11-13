@@ -1,18 +1,18 @@
 ---
 # Host configuration for the public-facing honeywatch honeypot VPS. The application
-# stack is deployed by its own release workflow over SSH - this role owns only the
+# stack is deployed by the honeywatch release workflow, so this role owns only the
 # host it runs on.
 
 honeypot_config_dir: /etc/honeywatch
 honeypot_stack_dir: /opt/honeywatch
 
-# Bridge name the compose stack pins for its cowrie-ingress network
-# (com.docker.network.bridge.name). Asserted post-deploy with masquerade off, so
-# the public :22 path can never double as cowrie egress.
+# Bridge name the compose stack pins for its cowrie-ingress network.
+# The post-deploy check requires masquerade to be off on it, so the public
+# cowrie path cannot double as cowrie egress.
 honeypot_cowrie_ingress_bridge: br-cowrie-ing
 
 # --- Fail-fast validation -----------------------------------------------------
-# Consumed by validate.yml; the backup/mmdb lists are only required when the
+# validate.yml consumes these lists. The backup and mmdb lists apply only when the
 # matching feature is enabled.
 honeypot_required_variables:
   - honeypot_ssh_port
@@ -45,39 +45,28 @@ honeypot_base_packages:
   - tar
   - git
   - curl
-  # Backup pipeline: rclone streams to R2, age encrypts to the public recipient.
+  # The backup script uploads with rclone and encrypts with age.
   - rclone
   - age
 
 honeypot_tailscale_repo_baseurl: "https://pkgs.tailscale.com/stable/centos/10/$basearch"
 honeypot_tailscale_repo_gpgkey: "https://pkgs.tailscale.com/stable/centos/10/repo.gpg"
-honeypot_docker_repo_baseurl: "https://download.docker.com/linux/centos/10/$basearch/stable"
-honeypot_docker_repo_gpgkey: "https://download.docker.com/linux/centos/gpg"
-
-honeypot_docker_packages:
-  - docker-ce
-  - docker-ce-cli
-  - containerd.io
-  - docker-buildx-plugin
-  - docker-compose-plugin
 
 # --- sshd ---------------------------------------------------------------------
-# Cowrie owns the public 22/tcp; the real admin sshd moves to 2022/tcp, which
-# firewalld only exposes on the tailnet zone, on the tailnet address only.
+# Cowrie owns the public cowrie port, so the admin sshd listens on this one.
+# firewalld exposes it only in the tailnet zone.
 honeypot_ssh_port: 2022
 honeypot_ssh_allow_users:
   - deploy
   - admin
-# Bind the admin sshd to the tailnet address only, so the listener does not exist
-# off-tailnet even if the firewalld zone is misconfigured. Requires tailscaled to
-# have brought the address up first; 0.0.0.0 leaves firewalld as the only ACL.
+# Binding the admin sshd to the tailnet address keeps the listener off-tailnet even
+# if the firewalld zone is misconfigured. The address comes from the interface fact,
+# so tailscaled must have brought it up first. Setting 0.0.0.0 leaves firewalld as the only ACL.
 honeypot_ssh_listen_address: "{{ ansible_facts[honeypot_tailnet_interface]['ipv4']['address'] }}"
 
-# The drop-in is 45-honeypot-hardening.conf so it loads before 50-redhat.conf,
-# which would otherwise win (first value wins) for X11Forwarding/GSSAPIAuthentication.
-# Ciphers/MACs/KexAlgorithms/HostKeyAlgorithms are NOT set by the drop-in:
-# /etc/crypto-policies wins on EL, being included ahead of sshd_config.d. Change
-# the system crypto policy instead of adding dead directives here.
+# When false, the drop-in leaves Ciphers, MACs, KexAlgorithms and HostKeyAlgorithms unset.
+# On EL, /etc/crypto-policies is included ahead of sshd_config.d and the first value wins.
+# Change the system crypto policy instead of adding directives that have no effect.
 honeypot_ssh_manage_crypto_directives: false
 
 # --- firewalld ----------------------------------------------------------------
@@ -86,35 +75,33 @@ honeypot_tailnet_interface: tailscale0
 # Extra tailnet-only ports beyond the admin sshd (set in host_vars).
 honeypot_tailnet_extra_ports: []
 honeypot_cowrie_public_port: 22
-# Nothing but cowrie is exposed publicly; drop what the CentOS default zone ships.
+# Only cowrie is exposed publicly, so the public zone drops the services CentOS enables by default.
 honeypot_public_zone_removed_services:
   - dhcpv6-client
   - cockpit
-  # 22/tcp is added as an explicit port below; keeping the `ssh` service too
-  # would silently reopen whatever a future firewalld ships in that definition.
+  # firewalld.yml opens the cowrie port explicitly. Keeping the `ssh` service would also
+  # open whatever a future firewalld ships in that service definition.
   - ssh
 
 # --- Updates (dnf-automatic + opt-in full update) -----------------------------
-# Not `security`: CentOS Stream publishes no updateinfo (errata) metadata, so a
-# security-only run matches nothing and applies no updates at all. Stream is
-# all-or-nothing; validate.yml refuses `security` there.
+# CentOS Stream publishes no errata metadata, so a `security` run would match nothing
+# and apply no updates. validate.yml refuses `security` on Stream.
 honeypot_auto_updates_upgrade_type: default
-# Timer schedule and the when-needed trigger list: README "Automatic updates".
+# The timer schedule and the reboot triggers are in roles/honeypot/README.md under "Automatic updates".
 honeypot_auto_updates_reboot: when-needed
-# dnf-automatic already applies every update daily; a full update here can
-# also pull a kernel mid-play, so it stays opt-in. A kernel installed by that path
-# or by a manual `dnf update` is NOT rebooted into by dnf-automatic (its next run
-# has nothing to install) and needs a manual reboot.
+# dnf-automatic already applies every update, so a full update in the play is opt-in.
+# dnf-automatic reboots only after a run that installed a kernel itself.
+# A kernel from this path or from a manual `dnf update` therefore needs a manual reboot.
 honeypot_dnf_full_update: false
-# Packages a role pins to an exact version. Both update paths skip them, so they
-# move only when the pin is bumped (alloy_version).
+# Packages a role pins to an exact version, such as alloy via alloy_version.
+# Both update paths skip them, so they move only when the pin is bumped.
 honeypot_dnf_pinned_packages:
   - alloy
 
 # --- Kernel hardening ---------------------------------------------------------
-# user.max_user_namespaces = 0 blocks rootless/userns containers. Safe because
-# daemon.json runs rootful Docker without userns-remap; raise it before ever
-# enabling either.
+# user.max_user_namespaces = 0 blocks rootless containers and userns-remap.
+# This is safe because honeypot_docker_daemon_options runs rootful Docker without userns-remap.
+# Raise it before enabling either.
 honeypot_sysctl_settings:
   kernel.kptr_restrict: '2'
   kernel.dmesg_restrict: '1'
@@ -137,7 +124,10 @@ honeypot_sysctl_settings:
   net.ipv4.conf.all.log_martians: '1'
   net.ipv4.icmp_echo_ignore_broadcasts: '1'
   net.ipv4.icmp_ignore_bogus_error_responses: '1'
-  # IPv6 stays enabled - the tailnet is dual-stack (fd7a:115c:a1e0::/48).
+  # Lets a service bind the tailnet address before tailscaled has assigned it,
+  # for example Docker publishing a port at boot.
+  net.ipv4.ip_nonlocal_bind: '1'
+  # IPv6 stays enabled because the tailnet is dual-stack (fd7a:115c:a1e0::/48).
   net.ipv6.conf.all.disable_ipv6: '0'
   net.ipv6.conf.all.forwarding: '0'
   net.ipv6.conf.default.forwarding: '0'
@@ -166,17 +156,18 @@ honeypot_audit_watches:
   - {path: /var/lib/tailscale/, perms: wa, key: tailscale}
   - {path: /var/log/audit/, perms: wa, key: auditlog}
 
-# Rules enabled but still mutable; 2 would lock the configuration until reboot.
+# The value 1 enables auditing but keeps the rules changeable.
+# The value 2 would lock the configuration until reboot.
 honeypot_audit_enable_flag: 1
 
 # --- SELinux ------------------------------------------------------------------
-# Local module that lets the NoNewPrivileges=yes backup/mmdb units invoke docker.
+# Local policy module that lets the honeywatch timer units, which set NoNewPrivileges=yes, invoke docker.
 honeypot_selinux_module: honeywatch-nnp
 
 # --- Docker -------------------------------------------------------------------
 honeypot_docker_install_enabled: true
-# No userns-remap: it would rewrite ownership inside every bind mount the compose
-# stack uses.
+# Docker runs without userns-remap so bind-mounted host paths keep the uid that
+# owns them inside the containers.
 honeypot_docker_daemon_options:
   icc: false
   log-driver: json-file
@@ -188,24 +179,24 @@ honeypot_docker_daemon_options:
   selinux-enabled: true
 
 # --- Cowrie download volume cleanup -------------------------------------------
-# Cowrie caps each captured file at 10 MB but not the cumulative volume size.
+# Cowrie limits the size of each captured file but not the total size of the volume.
 honeypot_cowrie_downloads_path: /var/lib/docker/volumes/honeywatch_cowrie-state/_data/downloads
 honeypot_cowrie_downloads_max_age_days: 30
 honeypot_cowrie_downloads_max_file_size: 10M
 
 # --- Failure/success notifications --------------------------------------------
-# ntfy_server_url comes from group_vars/all/all.yml (fleet-wide).
+# ntfy_server_url is fleet-wide and set in inventory/production/group_vars/all/all.yml.
 honeypot_ntfy_topic: honeywatch
 honeypot_ntfy_url: "{{ ntfy_server_url }}/{{ honeypot_ntfy_topic }}"
 
 # --- Observability ------------------------------------------------------------
 # Grafana Alloy ships this host's journal to the fleet Loki; see roles/alloy.
 honeypot_alloy_enabled: true
-# The ingestor container writes ingestor.prom here; Alloy's textfile collector
-# reads it. Created by selinux.yml, before the honeywatch release mounts it.
+# The ingestor container writes its metrics files here and Alloy's textfile collector
+# reads them. selinux.yml creates the directory before the honeywatch release mounts it.
 honeypot_metrics_dir: /var/lib/honeywatch/metrics
-# Must match the uid:gid pinned in the honeywatch repo's ingestor/Dockerfile;
-# the bind mount has no userns remap, so the host dir must be owned by it.
+# Must match the uid:gid pinned in the honeywatch repo's ingestor/Dockerfile.
+# The bind mount has no userns remap, so the host directory must be owned by that id.
 honeypot_ingestor_uid: 1000
 
 # --- Encrypted Postgres backup ------------------------------------------------
@@ -219,9 +210,8 @@ honeypot_backup_age_recipient_file: /etc/honeywatch/backup.age.pub
 honeypot_backup_postgres_container: honeywatch-db
 honeypot_backup_postgres_user: honeywatch
 honeypot_backup_postgres_db: honeywatch
-# vault_honeypot_r2_bucket, vault_honeypot_r2_endpoint, vault_honeypot_r2_access_key_id,
-# vault_honeypot_r2_secret_access_key and vault_honeypot_age_recipient have no
-# defaults on purpose - validate.yml refuses to deploy without them.
+# The vault_honeypot_r2_* variables and vault_honeypot_age_recipient have no defaults
+# on purpose. validate.yml refuses to deploy without them.
 
 # --- MaxMind GeoLite2 refresh -------------------------------------------------
 honeypot_mmdb_enabled: true
@@ -232,12 +222,12 @@ honeypot_mmdb_geoip_volume: honeywatch_geoip-data
 honeypot_mmdb_ingestor_container: honeywatch-ingestor
 
 # --- Old release image prune --------------------------------------------------
-# Each release leaves a ~450 MB image per repo; only semver tags are pruned.
+# Each release leaves an older image behind in every repo. Only semver-tagged images are pruned.
 honeypot_image_prune_enabled: true
 honeypot_image_prune_repos:
   - ghcr.io/straightchlorine/honeywatch/api
   - ghcr.io/straightchlorine/honeywatch/ingestor
-# Newest tags kept per repo; at least 1 so a rollback image always remains.
+# Number of newest tags kept per repo. It must be at least 1 so the newest release image is never removed.
 honeypot_image_prune_keep: 3
 honeypot_image_prune_schedule: "Sun *-*-* 04:45:00 UTC"
 honeypot_image_prune_randomized_delay: 30min

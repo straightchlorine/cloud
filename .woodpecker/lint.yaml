@@ -1,7 +1,4 @@
 ---
-# Woodpecker CI — Linting, syntax checks, and validation
-# Runs once per push (no matrix), fast feedback
-
 when:
   event: [push, pull_request]
 
@@ -9,27 +6,31 @@ when:
 labels:
   platform: linux/amd64
 
+# Every ansible step runs in a fresh python image and installs the pinned toolchain from requirements.txt.
+# Local development uses the same file, so CI and `just lint` agree.
+variables:
+  - &ansible_env
+    ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
+    # This points ansible at the collections that the install-collections step puts in the workspace.
+    ANSIBLE_COLLECTIONS_PATH: ${CI_WORKSPACE}/collections
+    PIP_ROOT_USER_ACTION: ignore
+    PIP_NO_CACHE_DIR: "1"
+
 steps:
   - name: checkout
     image: woodpeckerci/plugin-git:2
     settings:
       depth: 1
 
-  # Woodpecker runs every step in its own container, so the only thing shared
-  # between steps is the workspace. Collections therefore go into ./collections,
-  # which ansible.cfg already lists first in collections_paths -- a
-  # container-local path (e.g. /root/.ansible) would be gone before the
-  # ansible-lint step starts.
+  # Woodpecker runs every step in its own container, so only the workspace is shared between steps.
+  # Collections therefore go into ./collections, which ansible.cfg lists first in collections_path.
+  # A container-local path such as /root/.ansible would be gone before the ansible-lint step starts.
   - name: install-collections
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-      # ansible.cfg uses the *ignored* `collections_paths` key (modern
-      # ansible-core reads `collections_path`), so point ansible at the
-      # workspace copies explicitly instead of relying on it.
-      ANSIBLE_COLLECTIONS_PATH: ${CI_WORKSPACE}/collections
+    image: python:3.13-slim
+    environment: *ansible_env
     commands:
-      # galaxy.ansible.com answers slowly/intermittently; retry before giving up.
+      - pip install -q -r requirements.txt
+      # galaxy.ansible.com answers slowly or intermittently, so the install is retried.
       - |
         for attempt in 1 2 3; do
           if ansible-galaxy collection install -r requirements.yml -p ./collections --force; then
@@ -41,45 +42,43 @@ steps:
         echo "> collection install failed after 3 attempts"
         exit 1
 
-  # ansible-lint auto-installs requirements.yml from Galaxy unless told not to,
-  # which is what used to time out here. The collections are already on disk
-  # (previous step), so lint offline and reuse them.
-  #
-  # The cytopia/ansible-lint image is not used: it is a 2022 build shipping
-  # ansible-lint 6.11.0 / ansible-core 2.14.2, whose rule set no longer matches
-  # this project (it flags e.g. meta-no-info / no-relative-paths) and whose core
-  # cannot support the pinned collections. Install the same ansible-lint as
-  # requirements.txt instead, so CI agrees with local `just lint`.
+  # ansible-lint would install requirements.yml from Galaxy itself, so it runs offline.
+  # It reuses the collections already on disk.
+  # The cytopia/ansible-lint image is not used because its rule set and ansible-core no longer match this project.
   - name: ansible-lint
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-      ANSIBLE_COLLECTIONS_PATH: ${CI_WORKSPACE}/collections
+    image: python:3.13-slim
+    environment: *ansible_env
     commands:
-      - pip install --no-cache-dir -q 'ansible-lint>=26.8.0'
+      - pip install -q -r requirements.txt
       - ansible-lint --offline roles/ playbooks/
 
   - name: yaml-lint
-    image: cytopia/yamllint:latest
+    image: python:3.13-slim
     commands:
+      - pip install -q yamllint==1.38.0
       - yamllint -c .yamllint .
 
+  - name: markdownlint
+    image: node:22-slim
+    commands:
+      - >-
+        npx --yes markdownlint-cli@0.39.0 '**/*.md'
+        --ignore .venv --ignore collections --ignore .ansible --ignore node_modules
+
   - name: shellcheck
-    image: koalaman/shellcheck-alpine:stable
+    image: koalaman/shellcheck-alpine:v0.11.0
     commands:
       - >-
         find . -name "*.sh" -not -path "./.git/*"
         -exec shellcheck {} \;
 
   - name: syntax-check
-    image: cytopia/ansible:latest-tools
-    environment:
-      ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-      ANSIBLE_COLLECTIONS_PATH: ${CI_WORKSPACE}/collections
+    image: python:3.13-slim
+    environment: *ansible_env
     commands:
+      - pip install -q -r requirements.txt
       - chmod 755 .
       # Globbed so renamed or new playbooks cannot drift out of the check.
       - >-
         ANSIBLE_ROLES_PATH="$(pwd)/roles" ansible-playbook --syntax-check
         playbooks/*.yml playbooks/backup/*.yml
-        $(ls *.yml | grep -vx requirements.yml)

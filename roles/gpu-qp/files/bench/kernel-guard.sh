@@ -6,9 +6,9 @@
 # running or that `gpu-qp resume` would pick up, with cells left. The risky window is the reboot
 # between a stop and the next resume, so STOPPED and INCOMPLETE runs count.
 #
-# Pending work: the pin kernel is the `kernel` of the oldest pending run's host record, else the one
-# bench/kernel.pin already names, else the running kernel. It needs /boot/vmlinuz-K and an NVIDIA DKMS
-# module for K, or nothing is touched (rc 1). Then
+# With pending work, the pin kernel K is the `kernel` of the oldest pending run's host record, else the
+# one bench/kernel.pin already names, else the running kernel. It needs /boot/vmlinuz-K and an NVIDIA DKMS
+# module for K, or nothing is touched (rc 1). Otherwise it does three things:
 #   - GRUB_DEFAULT in /etc/default/grub names K's menu entry (ids read from grub.cfg), with a marker
 #     comment, and update-grub runs only when that line changed;
 #   - /etc/apt/apt.conf.d/52gpu-qp-kernel-pin adds the kernel and driver packages to unattended-upgrades'
@@ -78,11 +78,11 @@ pin() {
   compgen -G "$R/lib/modules/$k/updates/dkms/nvidia.ko*" > /dev/null \
     || compgen -G "$R/lib/modules/$k/updates/dkms/nvidia-current.ko*" > /dev/null \
     || { err "cannot pin $k: no NVIDIA DKMS module under /lib/modules/$k/updates/dkms"; return 1; }
-  # fixed-string matches: the dots and plus signs of the release are not regex
   sub=$(grep -oE "'gnulinux-advanced-[^' ]+'" "$GRUB_CFG" 2> /dev/null | head -n 1 | tr -d "'")
   [ -n "$sub" ] || { err "cannot pin $k: no gnulinux-advanced submenu id in $GRUB_CFG"; return 1; }
   uuid=${sub#gnulinux-advanced-}
   entry=gnulinux-$k-advanced-$uuid
+  # The -F flag keeps the dots and plus signs of the release from acting as regex.
   grep -qF "'$entry'" "$GRUB_CFG" || { err "cannot pin $k: no menu entry $entry in $GRUB_CFG"; return 1; }
 
   set_default "GRUB_DEFAULT=\"$sub>$entry\" $MARK" || return 1

@@ -1,15 +1,17 @@
 ---
-# The mirror of the data-bearing half of the deploy: bench containers, their
-# data, the worktrees and the dump. Packages, Docker and the pinned tools stay
-# (reinstalling them is the slow part of a redeploy and they hold no campaign
-# state). So does the checkout: bench/results and bench/plans are untracked, so
-# deleting it would silently destroy the campaign's only record. Fetch or archive
-# them first if the host itself is going away. Gated by honeybench-teardown.yml.
+# This removes the data-bearing half of the deploy: bench containers, their data, the worktrees and the dump.
+# Packages, Docker and the pinned tools stay, because reinstalling them is the slow part of a redeploy.
+# The checkout stays too, because bench/results and bench/plans are untracked and hold the campaign's only record.
+# Fetch or archive them first if the host itself is going away.
+# The playbook honeybench-teardown.yml gates this file.
 - name: Refuse to run outside a confirmed teardown
-  ansible.builtin.assert:
-    that: teardown_confirmed | default(false) | bool
-    fail_msg: "Run this through playbooks/honeybench-teardown.yml."
-    quiet: true
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_gate
+    apply:
+      tags: [teardown]
+  vars:
+    common_teardown_name: honeybench
   tags: [teardown]
 
 - name: Check whether Docker is installed
@@ -31,6 +33,7 @@
   ansible.builtin.command: docker rm -f {{ item }}
   become: true
   changed_when: true
+  # The listing is skipped when Docker is absent, so its result then has no stdout_lines.
   loop: "{{ honeybench_bench_containers.stdout_lines | default([]) }}"
   when: honeybench_docker_bin.stat.exists
   tags: [teardown]
@@ -45,7 +48,7 @@
   tags: [teardown]
 
 - name: Remove the bench data, worktrees and dump
-  # Root-owned: the Postgres container writes the data directory as its own uid.
+  # Become is needed because the Postgres container writes the data directory as its own uid.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -56,8 +59,11 @@
   tags: [teardown]
 
 - name: Drop the stale worktree registrations
-  # The directories are gone; git still lists them until pruned.
-  ansible.builtin.command: git worktree prune
+  # The directories are gone, but git still lists them until pruned.
+  # Pruning drops only registrations whose directory is missing.
+  # Deleting .git/worktrees instead would orphan worktrees that still exist.
+  # The command module is needed because ansible.builtin.git has no prune.
+  ansible.builtin.command: git worktree prune  # noqa: command-instead-of-module
   args:
     chdir: "{{ honeybench_checkout_dir }}"
   become: false
@@ -73,20 +79,23 @@
   when: honeybench_docker_bin.stat.exists
   tags: [teardown]
 
-- name: Stat the removed paths
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - "{{ honeybench_worktree_dir }}"
-    - "{{ honeybench_dump_dest }}"
-  register: honeybench_left_paths
+- name: Assert the teardown left no bench containers behind
+  ansible.builtin.assert:
+    # The listing is skipped when Docker is absent, so the default makes that count as no containers.
+    that: honeybench_left_containers.stdout_lines | default([]) | length == 0
+    fail_msg: "Teardown left bench containers behind."
+    success_msg: "[OK] No bench containers remain."
   tags: [teardown]
 
-- name: Assert the teardown left no campaign state behind
-  ansible.builtin.assert:
-    that:
-      - honeybench_left_containers.stdout_lines | default([]) | length == 0
-      - honeybench_left_paths.results | selectattr('stat.exists') | list | length == 0
-    fail_msg: "Teardown left bench containers or directories behind."
-    success_msg: "[OK] No bench containers, worktrees or dump remain."
+- name: Assert the worktrees and dump are gone
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_verify_absent
+    apply:
+      tags: [teardown]
+  vars:
+    common_teardown_name: honeybench
+    common_teardown_paths:
+      - "{{ honeybench_worktree_dir }}"
+      - "{{ honeybench_dump_dest }}"
   tags: [teardown]

@@ -1,8 +1,6 @@
 ---
-# Handlers for prometheus-exporters role
-# Note: "Reload systemd" is defined in roles/common/handlers/main.yml - only
-# usable here because common's handlers are already loaded into the same
-# play (see playbooks/site.yml's "Configure all hosts" play).
+# The "Reload systemd" handler that the tasks notify lives in roles/common/handlers/main.yml.
+# It only works here because the common handlers are already loaded into the same play of playbooks/site.yml.
 
 - name: Restart node-exporter
   ansible.builtin.systemd:
@@ -23,7 +21,7 @@
     name: pi-hardware-metrics.service
     state: restarted
   become: true
-  when: pi_hardware_metrics_enabled
+  when: prometheus_exporters_pi_hardware_metrics_enabled
 
 - name: Restart pi-hardware-metrics-timer
   ansible.builtin.systemd:
@@ -31,4 +29,4 @@
     state: restarted
     enabled: true
   become: true
-  when: pi_hardware_metrics_enabled
+  when: prometheus_exporters_pi_hardware_metrics_enabled

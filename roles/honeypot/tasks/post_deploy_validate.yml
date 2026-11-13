@@ -14,8 +14,8 @@
   tags: [post_validation]
 
 - name: Assert the effective sshd policy matches the drop-in
-  # sshd -T is the merged, running truth; a drop-in that lost to an earlier
-  # file in sshd_config.d would still look correct on disk.
+  # sshd -T prints the merged effective configuration.
+  # A drop-in that lost to an earlier file in sshd_config.d would still look correct on disk.
   ansible.builtin.assert:
     that:
       - "'port ' ~ honeypot_ssh_port in honeypot_sshd_effective.stdout"
@@ -36,8 +36,8 @@
   tags: [post_validation]
 
 - name: Assert the tailnet zone is bound to the tailnet interface
-  # An inactive tailnet zone means the admin sshd is unreachable (fail-closed
-  # by design) - so it is a deploy failure, not a warning.
+  # An inactive tailnet zone leaves the admin sshd unreachable, which is the fail-closed design.
+  # That makes it a deploy failure, not a warning.
   ansible.builtin.assert:
     that:
       - honeypot_tailnet_interface in ansible_facts['interfaces']
@@ -74,10 +74,9 @@
   tags: [post_validation]
 
 - name: Read the cowrie ingress network configuration
-  # The public :22 path is DNATed onto this bridge; compose disables masquerade on
-  # it so the bridge can never double as cowrie egress. The stack deploys after
-  # this role, so an absent network (or daemon) is not a failure - a
-  # misconfigured one is, and the docker-info assert below covers a dead daemon.
+  # The public cowrie path is DNATed onto this bridge, and compose disables masquerade on it.
+  # The stack deploys after this role, so an absent network is not a failure but a misconfigured one is.
+  # The docker-info check below covers a dead daemon.
   ansible.builtin.command: >-
     docker network inspect honeywatch_cowrie-ingress --format
     '{{ '{{' }}index .Options "com.docker.network.bridge.name"{{ '}}' }}
@@ -89,8 +88,8 @@
   tags: [post_validation]
 
 - name: Assert the cowrie ingress bridge stays masquerade-free
-  # Masquerade must be explicitly disabled and the bridge name must match the
-  # pinned honeypot_cowrie_ingress_bridge - anything else fails the deploy.
+  # Masquerade must be explicitly disabled and the bridge name must match honeypot_cowrie_ingress_bridge.
+  # Anything else fails the deploy.
   ansible.builtin.assert:
     that:
       - honeypot_cowrie_ingress_network.stdout is match('^' ~ honeypot_cowrie_ingress_bridge ~ ' false$')
@@ -110,8 +109,8 @@
   tags: [post_validation]
 
 - name: Assert every configured audit watch is loaded
-  # auditctl -l reports directory watches without their trailing slash
-  # (`-w /etc/ssh/sshd_config.d`), so the comparison must strip it too.
+  # auditctl -l reports directory watches without their trailing slash, as in `-w /etc/ssh/sshd_config.d`.
+  # The comparison therefore strips the slash from the configured path too.
   ansible.builtin.assert:
     that:
       - item.path.rstrip('/') in honeypot_audit_loaded.stdout
@@ -165,34 +164,43 @@
             + (['honeywatch-image-prune.timer'] if honeypot_image_prune_enabled else []) }}"
   tags: [post_validation]
 
-- name: Read whether the dnf-automatic timer is enabled
-  ansible.builtin.command: systemctl is-enabled dnf-automatic.timer
-  changed_when: false
-  register: honeypot_dnf_timer_enabled
-  failed_when: honeypot_dnf_timer_enabled.stdout | trim != 'enabled'
+- name: Read the dnf-automatic timer and service state
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+  become: true
+  register: honeypot_dnf_units
+  loop: [dnf-automatic.timer, dnf-automatic.service]
   tags: [post_validation]
 
-- name: Read the dnf-automatic OnFailure handler
+- name: Confirm the dnf-automatic timer is enabled and the OnFailure handler is wired
   # Depends on the flush_handlers in main.yml so the drop-in is loaded.
-  ansible.builtin.command: systemctl show dnf-automatic.service -p OnFailure --value
-  changed_when: false
-  register: honeypot_dnf_onfailure
-  failed_when: "'honeywatch-notify@dnf-automatic.service' not in honeypot_dnf_onfailure.stdout"
+  ansible.builtin.assert:
+    that:
+      - honeypot_dnf_units.results[0].status.UnitFileState == 'enabled'
+      - "'honeywatch-notify@dnf-automatic.service' in honeypot_dnf_units.results[1].status.OnFailure"
+    quiet: true
   tags: [post_validation]
 
 - name: Dry-run dnf-automatic against the live repositories
-  # Proves automatic.conf parses and the enabled repos resolve; unreachable vendor
-  # repos are skipped by design (skip_if_unavailable).
+  # This proves automatic.conf parses and the enabled repos resolve.
+  # Unreachable vendor repos are skipped by design through skip_if_unavailable.
   ansible.builtin.command: dnf-automatic --no-installupdates --no-downloadupdates /etc/dnf/automatic.conf
   become: true
   changed_when: false
   tags: [post_validation]
 
+- name: Read the installed rpm packages
+  ansible.builtin.package_facts:
+    manager: rpm
+  when: honeypot_auto_updates_reboot == 'when-needed'
+  tags: [post_validation]
+
 - name: Confirm the kernel meta-package is installed for the when-needed reboot trigger
-  # dnf-automatic's reboot=when-needed matches the package name `kernel`; an image
-  # with only kernel-core would install kernels and never reboot into them.
-  ansible.builtin.command: rpm -q kernel
-  changed_when: false
+  # The dnf-automatic setting reboot=when-needed matches the package name `kernel`.
+  # An image with only kernel-core would install kernels and never reboot into them.
+  ansible.builtin.assert:
+    that: "'kernel' in ansible_facts.packages"
+    quiet: true
   when: honeypot_auto_updates_reboot == 'when-needed'
   tags: [post_validation]
 

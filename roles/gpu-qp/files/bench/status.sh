@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # status.sh: status of a benchmark run and the GPU worker, as a small terminal tool.
 #
-#   gpu-qp status [--run NAME] [--section[ topic]]... [--no-color] [phase...]
+#   gpu-qp status [--run NAME] [section flags...] [--no-color] [phase...]
 #
 # The run is --run NAME, else the one holding the bench lock, else bench/current. Sections
 # (default: host proc phases errors eta):
@@ -66,7 +66,7 @@ BENCH=$RUN_DIR
 [ ${#PHASES[@]} -eq 0 ] && read -ra PHASES < <(run_phases "$BENCH")
 
 want() { local x; for x in "${WANT[@]}"; do [ "$x" = "$1" ] && return 0; done; return 1; }
-# sub_want <topic> [topic...] — true when no topics given (all), or the topic is listed
+# sub_want TOPIC [SELECTED...]: true when no topics are selected (all) or SELECTED lists TOPIC.
 sub_want() {
   local topic=$1; shift
   [ $# -eq 0 ] && return 0
@@ -74,7 +74,7 @@ sub_want() {
   return 1
 }
 
-# --- colour (auto-off when piped, or NO_COLOR / --no-color) ---
+# Colour is off when stdout is not a terminal, or with NO_COLOR or --no-color.
 if [ -t 1 ] && [ -z "$NO_COLOR_SET" ] && [ -z "${NO_COLOR:-}" ]; then
   B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'
   CY=$'\033[36m'; GR=$'\033[32m'; YE=$'\033[33m'; RE=$'\033[31m'
@@ -90,7 +90,7 @@ hdr() {
   printf -v inner '%*s%s%*s' "$l" '' "$n" "$r" ''
   printf '\n%s[%s]%s\n' "$B$CY" "$inner" "$R"
 }
-# kv <label> <value> [colour]   — aligned two-column line
+# kv LABEL VALUE [COLOUR]: print an aligned two-column line.
 kv() {
   local label=$1 value=$2 colour=${3:-}
   if [ -n "$colour" ]; then
@@ -112,7 +112,7 @@ case $state in
     age=$(stalled_min "$BENCH") && line+="  stalled ${age}m"
     ;;
 esac
-# The host-wide power-off cap (stop --by), and every run queued behind another (resume).
+# The host-wide power-off cap (stop --by) ends the first line.
 if pidfile_alive "$GPU_QP_BENCH_ROOT/stop.by"; then
   read -r _ e _ < "$GPU_QP_BENCH_ROOT/stop.by"
   line+="  stop by $(date -d "@$e" '+%a %F %H:%M')"
@@ -122,6 +122,7 @@ printf '%s\n' "$line"
 if [ -r "$GPU_QP_BENCH_ROOT/kernel.pin" ] && read -r k pend < "$GPU_QP_BENCH_ROOT/kernel.pin"; then
   printf 'kernel pinned to %s (pending: %s)\n' "$k" "${pend// /, }"
 fi
+# One line per run that resume queued behind another run.
 for f in "$GPU_QP_BENCH_ROOT"/*/start.after; do
   if pidfile_alive "$f"; then
     read -r _ e _ < "$f"
@@ -165,8 +166,8 @@ if want proc; then
   rm -f /tmp/.qs.$$
 fi
 
-# Per-cell spools: one line per phase/lane, "<phase>/<lane>  <files> file(s)  <cell>(<n>) ...".
-# Read-only; prints nothing when no cell spooled.
+# Per-cell spools: one line per phase and lane, "<phase>/<lane>  <N> file(s) in <cell>(<n>) ...".
+# It prints nothing when no cell spooled.
 cell_spools() {
   local d n rel ph ln cell
   for d in "$BENCH"/*/*/*.gen/undelivered; do
@@ -181,8 +182,8 @@ cell_spools() {
     END{for(i=1;i<=k;i++) printf "%s  %d file(s) in%s\n", key[i], t[key[i]], c[key[i]]}'
 }
 
-# phase_lanes PHASE: "lane expected" per lane in table order, from the run's lib/lanes.tsv; without
-# the table (a legacy run) just the lanes found in state.tsv.
+# phase_lanes PHASE: "lane expected" per lane in table order, from the run's lib/lanes.tsv.
+# A run without that table gets just the lanes found in state.tsv.
 phase_lanes() {
   local cells
   if cells=$(python3 "$HERE/lanes.py" "$BENCH/lib/lanes.tsv" cells "$1" 2> /dev/null); then

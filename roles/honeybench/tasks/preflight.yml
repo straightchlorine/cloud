@@ -1,7 +1,7 @@
 ---
 - name: Confirm the host is CentOS Stream 10 or newer
-  # The Docker repo URL and the package set assume EL10. Gathered facts, not the
-  # os role's variables, so this runs under any tag selection.
+  # The Docker repository URL and the package set assume EL10.
+  # The check uses gathered facts and not the os role's variables, so it runs under any tag selection.
   ansible.builtin.assert:
     that:
       - ansible_facts['distribution_major_version'] is version('10', '>=')
@@ -31,14 +31,14 @@
 - name: Record the free space in bytes
   ansible.builtin.set_fact:
     honeybench_free_bytes: "{{ honeybench_df.stdout_lines[-1] | trim | int }}"
-    # Both halves must exist: a first run that died after Docker but before the
-    # checkout still needs the space, so it is still gated.
+    # A host counts as deployed only when both Docker and the checkout exist.
+    # A run that died between them still needs the space.
     honeybench_first_install: "{{ not (honeybench_earlier.results | selectattr('stat.exists') | list | length == 2) }}"
   tags: [preflight]
 
 - name: Refuse a first install where one bench database cannot fit
-  # Only on a first install: afterwards the free space is smaller because the
-  # role and the bench itself occupy it, which is not a reason to refuse a rerun.
+  # The check applies only to a first install, because afterwards the role and the bench occupy space themselves.
+  # That smaller free space is no reason to refuse a rerun.
   ansible.builtin.assert:
     that:
       - honeybench_free_bytes | int >= honeybench_min_free_bytes | int

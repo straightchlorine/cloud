@@ -1,4 +1,10 @@
 ---
+# Tear down the media stack.
+#   ansible-playbook -i inventory/production playbooks/media-teardown.yml \
+#     --limit <your-test-host> -e media_teardown_confirm=true
+# The guard gates on the confirm flag media_teardown_confirm and refuses hosts marked teardown_protected.
+# It then sets teardown_confirmed, which every included teardown task file checks.
+# This shape is shared by every teardown playbook, see dns-teardown.yml.
 - name: Tear down the media role for repeatable testing
   hosts: music
   become: true
@@ -10,7 +16,8 @@
         tasks_from: teardown_guard
       vars:
         common_teardown_name: media
-    - name: Run media role teardown
+
+    - name: Run the media teardown
       ansible.builtin.include_role:
         name: media
         tasks_from: teardown

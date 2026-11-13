@@ -4,7 +4,7 @@
   vars:
     timezone: UTC
     common_fail2ban_enabled: false
-    package_cache_valid_time: 3600
+    common_package_cache_valid_time: 3600
     common_packages:
       - curl
       - wget
@@ -22,10 +22,9 @@
     - name: Include network facts collection
       ansible.builtin.include_tasks: ../../tasks/network_facts.yml
 
-    # include_role (not a raw include_tasks path) so the role-relative
-    # `template: src: chrony.conf.j2` in chrony.yml resolves correctly.
-    # chrony.yml itself tags only its container-unsafe enable/start task
-    # molecule-idempotence-notest - don't blanket-tag the whole include.
+    # include_role is used because a raw include_tasks path would not resolve the role-relative chrony.conf.j2 template.
+    # Only the container-unsafe enable task in chrony.yml carries the molecule-idempotence-notest tag, so this
+    # include must not be tagged.
     - name: Run the real chrony setup and sync
       ansible.builtin.include_role:
         name: common
@@ -36,27 +35,64 @@
         name: "{{ timezone }}"
       become: true
 
-    # Catch undefined/misnamed template vars that would silently drop the
-    # notification instead of failing.
-    - name: Render the ntfy notification helper
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/ntfy-notify.j2"
-        dest: /tmp/ntfy-notify.rendered.sh
-        mode: "0755"
+    # This runs the same helpers that stack roles re-apply: ntfy-notify with its key file, unattended-upgrades
+    # and the reboot notice.
+    - name: Run the real base_reapply
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: base_reapply
+      vars:
+        common_auto_updates_reboot_if_required: true
 
-    # Render the API key file the same way ntfy_install.yml does, so verify.yml
-    # can assert the secret lives only there - never embedded in the script.
-    - name: Render the ntfy API key file
-      ansible.builtin.copy:
-        dest: /tmp/ntfy-api-key
-        content: "{{ vault_ntfy_api_key }}\n"
-        mode: "0600"
+    - name: Re-render the compose file with only one service
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: build_docker_compose
+      vars:
+        stack_name: molecule
+        compose_file_path: /opt/molecule-stack/docker-compose.yml
+        compose_file_owner: root
+        compose_file_group: root
+        compose_services:
+          - {service_name: kept, service_image: "busybox:1"}
 
-    - name: Render the reboot-pending notification script
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/reboot-notify.j2"
-        dest: /tmp/reboot-notify.rendered.sh
-        mode: "0755"
+    - name: Remove and verify a path list with the real teardown_paths
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_paths
+      vars:
+        common_teardown_name: molecule
+        common_teardown_paths:
+          - /tmp/molecule-teardown-file-1
+          - /tmp/molecule-teardown-file-2
+
+    - name: Teardown guard maps gpu-qp to gpu_qp_teardown_confirm
+      block:
+        - name: Run the real teardown_guard without the flag
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: teardown_guard
+          vars:
+            common_teardown_name: gpu-qp
+
+        - name: Fail the test - the guard should have refused
+          ansible.builtin.fail:
+            msg: "teardown_guard let gpu-qp through without gpu_qp_teardown_confirm"
+      rescue:
+        - name: Assert the refusal names the underscore flag
+          ansible.builtin.assert:
+            that:
+              - "'gpu_qp_teardown_confirm=true' in ansible_failed_result.msg"
+            fail_msg: "wrong refusal: {{ ansible_failed_result.msg | default('') }}"
+            success_msg: "[OK] teardown_guard refuses and names gpu_qp_teardown_confirm"
+
+    - name: Teardown guard accepts the documented flag
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: gpu-qp
+        gpu_qp_teardown_confirm: true
 
     - name: Confirm ntfy_notify fails fast when required vars are missing
       block:

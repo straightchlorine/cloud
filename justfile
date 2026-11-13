@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-roles := "common backup-system firewall dns automation backup monitoring media prometheus-exporters gpu-qp"
+roles := `ls -d roles/*/molecule | cut -d/ -f2 | tr '\n' ' '`
 
 _ok   := "[  OK  ]"
 _fail := "[ FAIL ]"
@@ -12,9 +12,7 @@ _run  := "[ RUN  ]"
 default:
     @just --list --unsorted
 
-# ---------- setup ----------
-
-# One-time environment setup (venv, deps, hooks, git config)
+# One-time environment setup (venv, deps, collections, hooks, git config)
 [group: 'setup']
 setup: _setup-venv _setup-deps _setup-collections _setup-hooks _setup-git-config
     @echo "{{ _ok }} Setup complete -- activate with: source .venv/bin/activate"
@@ -22,9 +20,8 @@ setup: _setup-venv _setup-deps _setup-collections _setup-hooks _setup-git-config
 [private]
 _setup-venv:
     @echo "{{ _run }} Creating virtual environment"
-    # Standard `python3 -m venv` bundles pip via ensurepip; if an existing venv
-    # lacks a pip console script (e.g. one created by uv with --no-pip), ensure
-    # pip is present so the later _setup-deps recipe works regardless.
+    # An existing venv may lack pip, for example one created by uv with --no-pip.
+    # Running ensurepip guarantees that the _setup-deps recipe can call `python -m pip`.
     @test -d .venv || python3 -m venv .venv
     @.venv/bin/python -m ensurepip --upgrade -q 2>/dev/null || true
     @echo "{{ _ok }} Virtual environment ready"
@@ -32,8 +29,7 @@ _setup-venv:
 [private]
 _setup-deps:
     @echo "{{ _run }} Installing Python dependencies"
-    # Use `python -m pip` rather than `.venv/bin/pip`: uv-created venvs may not
-    # have the unversioned `pip` console script, but `python -m pip` always works.
+    # Calling `python -m pip` avoids `.venv/bin/pip`, which uv-created venvs may not have.
     @.venv/bin/python -m pip install --upgrade pip wheel setuptools -q
     @.venv/bin/python -m pip install -r requirements.txt -q
     @echo "{{ _ok }} Python dependencies installed"
@@ -65,8 +61,6 @@ _setup-git-config:
     @git config --local branch.autoSetupMerge always
     @git config --local rebase.autoStash true
     @echo "{{ _ok }} Git config applied"
-
-# ---------- test ----------
 
 # Run molecule tests (all roles, or: just test <role> [scenario])
 [group: 'test']
@@ -107,7 +101,7 @@ syntax:
     set -euo pipefail
     echo "{{ _run }} Checking playbook syntax"
     failed=0
-    for pb in playbooks/*.yml playbooks/**/*.yml; do
+    for pb in playbooks/*.yml playbooks/*/*.yml; do
         [ -f "$pb" ] || continue
         if ansible-playbook --syntax-check "$pb" > /dev/null 2>&1; then
             echo "{{ _ok }} $pb"
@@ -118,8 +112,6 @@ syntax:
     done
     [ "$failed" -eq 0 ] || { echo "{{ _fail }} Syntax errors found"; exit 1; }
     echo "{{ _ok }} All playbooks valid"
-
-# ---------- lint ----------
 
 # Run all linters (ansible-lint + yamllint)
 [group: 'lint']
@@ -134,15 +126,13 @@ lint:
     echo "{{ _ok }} yamllint"
     echo "{{ _ok }} All linters passed"
 
-# ---------- deploy ----------
-
 # Deploy full infrastructure
 [group: 'deploy']
 [confirm("Deploy to ALL hosts. Continue?")]
 deploy:
     ansible-playbook playbooks/site.yml --ask-vault-pass
 
-# Deploy a specific service (e.g., just deploy-service automation-stack)
+# Deploy one playbook from playbooks/ (for example: just deploy-service media)
 [group: 'deploy']
 [confirm("Deploy this service. Continue?")]
 deploy-service playbook:

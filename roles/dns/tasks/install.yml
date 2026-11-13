@@ -1,0 +1,171 @@
+---
+# Installs Pi-hole when it is missing, at another version, or a reinstall is forced, with a
+# rollback of /etc/pihole on failure. Publishes dns_pihole_needs_install for configure.yml.
+- name: Check the installed Pi-hole version
+  ansible.builtin.command: pihole -v -c
+  register: dns_pihole_installed_version
+  changed_when: false
+  # A missing pihole binary must not fail the play, it just means a first install.
+  failed_when: false
+  become: true
+
+- name: Check for an existing Pi-hole gravity database
+  ansible.builtin.stat:
+    path: /etc/pihole/gravity.db
+  register: dns_pihole_gravity
+  become: true
+
+- name: Decide whether Pi-hole needs (re)installing
+  # A reinstall wipes /etc/pihole, so it only runs for a first install, a version change or a forced request.
+  ansible.builtin.set_fact:
+    dns_pihole_needs_install: >-
+      {{ dns_pihole_force_reinstall
+      or not dns_pihole_gravity.stat.exists
+      or (dns_pihole_installed_version.stdout | default(''))
+      is not search('Core version is ' ~ (dns_pihole_version | regex_escape) ~ '(?![0-9.])') }}
+
+- name: Deploy Pi-hole with rollback on failure
+  when: dns_pihole_needs_install
+  block:
+    - name: Check for an existing Pi-hole configuration
+      ansible.builtin.stat:
+        path: /etc/pihole
+      register: dns_pihole_existing
+      become: true
+
+    - name: Preserve existing Pi-hole configuration for rollback
+      # cp -a, not the copy module: pihole-FTL runs as the pihole user, so the
+      # snapshot has to keep ownership, modes and timestamps or the rescue
+      # block restores a directory FTL cannot write.
+      ansible.builtin.command: cp -a /etc/pihole /etc/pihole.backup
+      args:
+        creates: /etc/pihole.backup
+      become: true
+      when: dns_pihole_existing.stat.exists
+
+    - name: Clear existing Pi-hole configuration for a clean reinstall
+      # The rescue block restores /etc/pihole.backup if the install fails.
+      # Old contents must go because the installer adds its default blocklist only when adlists.list is absent.
+      # It would then reuse a stale gravity.db and leave blocking non-functional.
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: absent
+      become: true
+      when: dns_pihole_existing.stat.exists
+
+    - name: Clone Pi-hole repository for secure installation
+      ansible.builtin.git:
+        repo: "{{ dns_pihole_git_repo }}"
+        dest: /tmp/pi-hole-repo
+        version: "{{ dns_pihole_version }}"
+        depth: 1
+        force: true
+      become: true
+
+    - name: Create Pi-hole configuration directory
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      become: true
+
+    - name: Create Pi-hole setup vars file
+      ansible.builtin.template:
+        src: setupVars.conf.j2
+        dest: /etc/pihole/setupVars.conf
+        owner: root
+        group: root
+        mode: '0600'
+      become: true
+      notify: Restart pihole-FTL
+
+    - name: Install Pi-hole using verified repository
+      ansible.builtin.shell: |
+        cd "/tmp/pi-hole-repo/automated install/"
+        bash basic-install.sh --unattended
+      become: true
+      args:
+        # The pihole binary is installed early, long before FTL and gravity finish.
+        # Using it as the marker would make a retry after a partial failure skip the installer.
+        # gravity.db is written by one of the last installer steps, so it proves the install completed.
+        creates: /etc/pihole/gravity.db
+      notify: Restart pihole-FTL
+
+    - name: Set Pi-hole web admin password
+      ansible.builtin.command:
+        argv: [pihole, setpassword, "{{ vault_pihole_webpassword }}"]
+      become: true
+      no_log: true
+      changed_when: true
+
+    - name: Rebuild gravity now that FTL and DNS resolution have settled
+      # The installer runs gravity right after FTL's first restart, sometimes before DNS resolves.
+      # That can leave an empty blocklist even though the installer reports success.
+      # Running gravity once more here rebuilds it.
+      ansible.builtin.command: pihole -g
+      become: true
+      changed_when: true
+
+    - name: Clean up Pi-hole repository and rollback backup after success
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/pi-hole-repo
+        - /etc/pihole.backup
+      become: true
+
+  rescue:
+    - name: Pi-hole deployment failed - stopping service
+      # The installer can fail before FTL exists (e.g. its binary download
+      # 404s), so a missing unit is not an error here.
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: stopped
+      become: true
+      failed_when: false
+
+    - name: Restore Pi-hole configuration from backup, or clear a failed fresh install
+      ansible.builtin.shell: |
+        if [ -d "/etc/pihole.backup" ]; then
+          rm -rf /etc/pihole
+          mv /etc/pihole.backup /etc/pihole
+        else
+          rm -rf /etc/pihole
+        fi
+      become: true
+      changed_when: true
+      # Rollback: the host may be half-installed, so failures must not mask the original error.
+      failed_when: false
+
+    - name: Start Pi-hole service after rollback
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: started
+      become: true
+      # Rollback: the unit may not exist after a failed install.
+      failed_when: false
+
+    - name: Clean up Pi-hole repository after failed deployment
+      ansible.builtin.file:
+        path: /tmp/pi-hole-repo
+        state: absent
+      become: true
+      # Rollback: a cleanup failure must not mask the original error.
+      failed_when: false
+
+    - name: Notify ntfy of the failed deployment
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: ntfy_notify
+      vars:
+        common_ntfy_title: "Pi-hole deploy failed: {{ inventory_hostname }}"
+        common_ntfy_message: "Rollback was attempted. Check ansible-playbook output for the actual error."
+        common_ntfy_priority: "high"
+        common_ntfy_tags: "rotating_light"
+
+    - name: Fail with deployment error
+      ansible.builtin.fail:
+        msg: "Pi-hole deployment failed and rollback was attempted. Check the errors above."

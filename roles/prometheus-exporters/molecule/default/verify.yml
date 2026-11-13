@@ -89,6 +89,7 @@
         path: "{{ item }}"
       loop:
         - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
         - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
         - /etc/systemd/system/pihole-exporter.service
         - /tmp/pihole_exporter_checksum.txt

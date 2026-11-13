@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# supervise.sh (internal: `gpu-qp start` runs it, holding the bench lock on fd 9)
+# Internal: `gpu-qp start` runs this script and passes it the bench lock on fd 9.
 #
 # Runs the phases listed in <run>/phases back to back without anyone attached. Per phase: disk
 # floor check, build-cache prune, sampler, phase.sh, sampler stop, extraction. A failed phase does
@@ -8,7 +8,6 @@
 # Stop it with `gpu-qp stop` (stop.request: finish the in-flight cell) or `gpu-qp stop --now`.
 set -u
 
-# Sibling scripts live beside this file.
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=env.sh
 . "$HERE/env.sh"
@@ -70,7 +69,7 @@ FAILED=()
 run_phase() {
   local p=$1
   log "phase $p start $(ts)"
-  # Build cache filled the disk once (1.1 GB free before the final run); no builds run mid-phase.
+  # Pruning before each phase keeps a stale build cache from filling the disk, and no builds run mid-phase.
   log "prune $p: $(docker builder prune -f 2>&1 | tail -n 1)"
   log "sampler $p: $(bash "$HERE/sample.sh" start "$p" 2>&1)"
   CUR=$p

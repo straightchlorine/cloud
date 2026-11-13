@@ -91,63 +91,96 @@
         fail_msg: "chrony package not installed"
         success_msg: "[OK] chrony installed"
 
-    - name: Verify ntfy/reboot-notify scripts rendered
+    - name: Stat the deployed helpers and the API key file
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: common_rendered_files
+      register: common_deployed_files
       loop:
-        - /tmp/ntfy-notify.rendered.sh
-        - /tmp/reboot-notify.rendered.sh
+        - /usr/local/bin/ntfy-notify
+        - /usr/local/bin/reboot-notify
+        - /etc/ntfy/notify-api-key
 
-    - name: Assert ntfy/reboot-notify scripts exist and are non-empty
+    - name: Assert the helpers are executable and the key file is root-only
       ansible.builtin.assert:
         that:
           - item.stat.exists
           - item.stat.size > 0
-        fail_msg: "{{ item.item }} did not render"
-        success_msg: "[OK] {{ item.item }} rendered"
-      loop: "{{ common_rendered_files.results }}"
+          - item.stat.mode == ('0600' if item.item.endswith('notify-api-key') else '0755')
+        fail_msg: "{{ item.item }} missing, empty or wrong mode ({{ item.stat.mode | default('n/a') }})"
+        success_msg: "[OK] {{ item.item }} deployed"
+      loop: "{{ common_deployed_files.results }}"
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Read the rendered ntfy helper
+    - name: Read the deployed ntfy helper, key file and reboot-notify script
       ansible.builtin.slurp:
-        src: /tmp/ntfy-notify.rendered.sh
-      register: common_ntfy_notify_rendered
+        src: "{{ item }}"
+      register: common_deployed_content
+      loop:
+        - /usr/local/bin/ntfy-notify
+        - /etc/ntfy/notify-api-key
+        - /usr/local/bin/reboot-notify
 
-    - name: Assert the ntfy API key is NOT embedded in the helper script
+    - name: Assert the ntfy API key lives only in the key file
       ansible.builtin.assert:
         that:
-          - "'molecule-test-ntfy-key' not in (common_ntfy_notify_rendered.content | b64decode)"
-        fail_msg: "ntfy-notify.j2 still embeds vault_ntfy_api_key - key must live in a separate file"
-        success_msg: "[OK] ntfy-notify.j2 does not embed the API key"
-
-    - name: Read the rendered ntfy API key file
-      ansible.builtin.slurp:
-        src: /tmp/ntfy-api-key
-      register: common_ntfy_api_key_rendered
-
-    - name: Assert the API key lives in the separate key file
-      ansible.builtin.assert:
-        that:
-          - "'molecule-test-ntfy-key' in (common_ntfy_api_key_rendered.content | b64decode)"
-        fail_msg: "ntfy API key file did not receive vault_ntfy_api_key"
-        success_msg: "[OK] API key written to separate key file"
-
-    - name: Read the rendered reboot-notify script
-      ansible.builtin.slurp:
-        src: /tmp/reboot-notify.rendered.sh
-      register: common_reboot_notify_rendered
+          - "'molecule-test-ntfy-key' not in (common_deployed_content.results[0].content | b64decode)"
+          - "'molecule-test-ntfy-key' in (common_deployed_content.results[1].content | b64decode)"
+        fail_msg: "the vault_ntfy_api_key must be in /etc/ntfy/notify-api-key and never in the helper script"
+        success_msg: "[OK] the API key is in the separate key file only"
 
     - name: Assert reboot-notify calls the ntfy helper by bare name
       ansible.builtin.assert:
         that:
-          - "'ntfy-notify ' in (common_reboot_notify_rendered.content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify' not in (common_reboot_notify_rendered.content | b64decode)"
+          - "'ntfy-notify ' in (common_deployed_content.results[2].content | b64decode)"
+          - "'/usr/local/bin/ntfy-notify' not in (common_deployed_content.results[2].content | b64decode)"
         fail_msg: >-
           reboot-notify.j2 should call ntfy-notify by bare name (relies
           on the PATH cron entry in auto_updates.yml), not a hardcoded path.
-        success_msg: "[OK] reboot-notify.j2 calls ntfy-notify via PATH"
+        success_msg: "[OK] reboot-notify calls ntfy-notify via PATH"
+
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      register: common_root_crontab
+      changed_when: false
+
+    - name: Assert the PATH and reboot-notification cron entries
+      ansible.builtin.assert:
+        that:
+          - common_root_crontab.stdout is search('PATH=.?/usr/local/sbin:/usr/local/bin')
+          - "'/usr/local/bin/reboot-notify' in common_root_crontab.stdout"
+        fail_msg: "auto_updates cron entries missing: {{ common_root_crontab.stdout }}"
+        success_msg: "[OK] PATH and reboot-pending cron entries installed"
+
+    - name: Read the compose file the real converge re-rendered
+      ansible.builtin.slurp:
+        src: /opt/molecule-stack/docker-compose.yml
+      register: common_compose_file
+
+    - name: Assert the dropped service left the compose file
+      ansible.builtin.assert:
+        that:
+          - "'container_name: kept' in (common_compose_file.content | b64decode)"
+          - "'dropped' not in (common_compose_file.content | b64decode)"
+        fail_msg: "stale service survived: {{ common_compose_file.content | b64decode }}"
+        success_msg: "[OK] a service no longer declared was removed from the compose file"
+
+    - name: Stat the teardown_paths targets
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: common_teardown_targets
+      loop:
+        - /tmp/molecule-teardown-file-1
+        - /tmp/molecule-teardown-file-2
+
+    - name: Assert teardown_paths removed them
+      ansible.builtin.assert:
+        that: not item.stat.exists
+        fail_msg: "{{ item.item }} survived teardown_paths"
+        success_msg: "[OK] {{ item.item }} removed"
+      loop: "{{ common_teardown_targets.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Display verification results
       ansible.builtin.debug:

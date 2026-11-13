@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034  # RUN, RUN_DIR and BENCH_PROC_RE are read by the scripts that source this
-# env.sh: sourced by every bench helper. Reads the bench.env beside it (role values), sets the
-# overridable defaults and holds the run-resolution and lock helpers. Sets no shell options.
+# Sourced by every bench script. It reads the bench.env beside it, sets the overridable defaults
+# and holds the run-resolution and lock helpers. It sets no shell options.
 
 _ENV_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 [ -r "$_ENV_DIR/bench.env" ] || { echo "[FAIL] lib incomplete: no bench.env beside $_ENV_DIR/env.sh" >&2; exit 1; }
@@ -16,7 +16,8 @@ _ENV_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 : "${GPU_QP_STACK_WAIT_SEC:=120}" # per stack container: how long start waits for it to be healthy after a docker start
 export PYTHONDONTWRITEBYTECODE=1
 
-# Run helpers get their run from GPU_QP_RUN_DIR (exported by `start`). The old overrides are gone.
+# Run helpers get their run from GPU_QP_RUN_DIR, which `start` exports. A stale GPU_QP_BENCH or
+# GPU_QP_ROOT in the environment must not redirect a run, so both are dropped.
 for _v in GPU_QP_BENCH GPU_QP_ROOT; do
   if [ -n "${!_v:-}" ]; then
     echo "[env] $_v is ignored (use --run or GPU_QP_RUN; the checkout is GPU_QP_SOURCE)" >&2
@@ -24,7 +25,7 @@ for _v in GPU_QP_BENCH GPU_QP_ROOT; do
   fi
 done
 
-# Matches supervise, phase and lane, legacy and new names (same string as the deploy guard).
+# Matches supervise.sh, phase.sh and lane.sh, with or without a gpu-qp- prefix. tasks/guard.yml uses the same pattern.
 BENCH_PROC_RE='^bash .*/(gpu-qp-)?(supervise|phase|lane)\.sh'
 
 need_run_dir() {
@@ -66,8 +67,8 @@ valid_run_name() {
   case "$1" in pilot | current | out | lib) return 1 ;; esac
 }
 
-# One name per line, sorted: pilot (state.tsv straight under A A2 B C H S) and every directory
-# holding `phases` or <phase>/state.tsv. `current` is a link and is skipped.
+# One name per line, sorted: pilot (the bench root itself, when it holds phase dirs with a state.tsv)
+# and every directory holding `phases` or <phase>/state.tsv. `current` is a link and is skipped.
 known_runs() {
   local root=$GPU_QP_BENCH_ROOT d p
   {
@@ -152,8 +153,8 @@ lock_holder() {
   echo "${run:-unknown run}"
 }
 
-# done_state RUNDIR: the verdict in supervise.done as DONE FAILED BLOCKED STOPPED CLOSED, else INCOMPLETE.
-# Legacy runs hold a `SUPERVISE_DONE <ts>` line.
+# done_state RUNDIR: the verdict in supervise.done (DONE, FAILED, BLOCKED, STOPPED or CLOSED), else INCOMPLETE.
+# A pilot run holds a `SUPERVISE_DONE <ts>` line, which counts as DONE.
 done_state() {
   local word=''
   [ -r "$1/supervise.done" ] && read -r word _ < "$1/supervise.done"
@@ -192,8 +193,8 @@ state_counts() {
 # free_gb PATH prints the whole GB free on PATH's filesystem (0 when it cannot be read).
 free_gb() {
   local kb p=$1
-  # userns-remap: the docker root (/var/lib/docker/100000.100000) is unreadable to the bench user,
-  # so df the nearest parent it can stat; same filesystem unless the root is its own mount.
+  # With userns-remap the docker root is unreadable to the bench user, so df the nearest parent it can stat.
+  # That parent is on the same filesystem unless the root is its own mount.
   until kb=$(df -Pk -- "$p" 2> /dev/null | awk 'NR == 2 { print $4 }') && [ -n "$kb" ] || [ "$p" = / ]; do
     p=$(dirname -- "$p")
   done

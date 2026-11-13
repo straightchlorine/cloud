@@ -1,15 +1,16 @@
 ---
-# Teardown playbook for the gpu-qp role, following playbooks/dns-teardown.yml.
+# Tear down the gpu-qp stack.
 #   ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml \
 #     --limit gpu-station -e gpu_qp_teardown_confirm=true
+# The guard gates on the confirm flag gpu_qp_teardown_confirm and refuses hosts marked teardown_protected.
+# It then sets teardown_confirmed, which every included teardown task file checks.
+# This shape is shared by every teardown playbook, see dns-teardown.yml.
 - name: Tear down the gpu-qp role for repeatable testing
   hosts: gpu_qp
   become: true
   gather_facts: true
   tasks:
     - name: Gate the teardown
-      # Refuses any host marked teardown_protected, and sets the shared
-      # teardown_confirmed fact the role's teardown task file checks.
       ansible.builtin.include_role:
         name: common
         tasks_from: teardown_guard

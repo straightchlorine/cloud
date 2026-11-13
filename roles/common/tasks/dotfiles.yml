@@ -1,10 +1,7 @@
 ---
-# Shared dotfiles live at the repo root (dotfiles/), not in a role-owned
-# files/ dir, so they stay discoverable without digging into roles/.
-
 - name: Deploy tmux configuration
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../dotfiles/tmux.conf"
+    src: tmux.conf
     dest: "/home/{{ ansible_user }}/.tmux.conf"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"

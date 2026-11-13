@@ -1,88 +1,81 @@
 ---
-# Station-Arch Workstation Configuration
-# Standalone backup - handles its own backups independently
+teardown_protected: true
 device_role: workstation
 device_type: arch_linux
 
-# ============================================
-# BACKUP CONFIGURATION (Standalone Mode)
-# ============================================
+# Off-site backup through roles/restic, which playbooks/site.yml applies because no stack role owns this host.
+# The role writes the Storage Box key from restic_storage_key when it is set.
+# Otherwise place the key by hand at /etc/ssh/restic_storage_key, and authorize its public key on the Storage Box first.
+# restic_storage_key: "{{ vault_restic_storage_key_station_arch }}"
 
-# Mode: standalone (direct backup to Hetzner)
-backup_role: standalone
-
-# User and paths
-backup_user: backup
-backup_group: backup
-common_backup_base_path: /opt/backup
-
-# Restic configuration
-restic_version: "0.18.1"
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/station-arch"
-restic_password: "{{ vault_restic_station_arch_password }}"
-
-# Backup paths
-common_backup_paths:
-  - /etc
-  - /home
-  - /var/lib
-  - /data/ssd/code
-  - /data/vault/books
-  - /data/vault/code
-  - /data/vault/media/img
-  - /data/vault/media/misc
-  - /data/vault/organise
-
-# Exclude patterns
-backup_excludes:
-  - "**/.cache/**"
-  - "**/cache/**"
-  - "**/tmp/**"
-  - "/var/tmp/**"
-  - "/var/cache/**"
-  - "*.log.1*"
-  - "*.tmp"
-  - "**/logs/**"
-  - "/data/vault/code/.vault/leaks/"
-  - "/home/*/.local/share/Steam/steamapps/**"
-  - "/home/*/.local/share/anaconda/**"
-  - "/home/*/.local/share/matlab/**"
-  - "/home/*/building/**"
-  - "**/node_modules/**"
-  - "**/.git/**"
-  - "**/target/**"
-  - "**/build/**"
-  - "**/__pycache__/**"
-  - "*.iso"
-  - "*.img"
-  - "*.vmdk"
-
-# Retention policy
-retention_policy:
-  daily: 7
-  weekly: 2
-  monthly: 2
-  yearly: 1
-
-# Restic optimization (optimized for speed on powerful machine)
-restic_optimization:
-  read_concurrency: 8     # High for Ryzen 7 16-thread CPU
-  compression: auto
-  pack_size: 64           # Larger packs OK with 32GB RAM
-
-# Scheduling
-backup_schedule: "*-*-* 10:00:00"  # Daily at 10 AM
-backup_randomized_delay: "1800s"   # Random delay up to 30 min
-backup_timeout: 14400              # 4 hours timeout for large dataset
-
-# Optional: Memory limit (not needed on 32GB machine but can be set for safety)
-# restic_memory_limit: "4G"
-
-# Enable backup timer
-backup_enabled: true
-
-# Monitoring and health checks
-backup_monitoring: false
-
-# Backup service name (used for logging and identification)
-common_backup_service_name: "station-arch"
+# /var is its own small filesystem here, so the cache and the pack-file staging directory (TMPDIR) live on the RAID.
+# The units wait for that mount (RequiresMountsFor), so a catch-up run at boot cannot start before it is there.
+restic_cache_dir: /data/vault/.cache/restic
+restic_jobs:
+  - name: station-arch
+    repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/station-arch"
+    password: "{{ vault_restic_station_arch_password }}"
+    schedule: "*-*-* 10:00:00"
+    # One timeout covers the backup, forget, the weekly prune and the weekly partial data check.
+    # A prune that times out is retried on the next daily run.
+    timeout: 8h
+    memory_max_mib: 12288
+    # The freshness check alerts when the last good run is older than this.
+    # It runs daily at noon and shortly after boot.
+    # The large value keeps a Monday boot after a weekend off quiet until the catch-up run lands.
+    max_age_hours: 96
+    retention: { daily: 7, weekly: 2, monthly: 2, yearly: 1 }
+    sources:
+      - /etc
+      - /home
+      - /var/lib
+      - /data/ssd/uni
+      - /data/vault/books
+      - /data/vault/memory-vault
+      - /data/vault/backup
+    # Everything regenerable stays out, but .git stays in because unpushed history cannot be regenerated.
+    # Every restic run already passes --exclude-caches, which skips directories carrying a CACHEDIR.TAG.
+    excludes:
+      # Dependency directories and build output.
+      - "**/node_modules"
+      - "**/.venv"
+      - "**/venv"
+      - "**/__pycache__"
+      - "**/target"
+      - "**/*.wdb"
+      - "*.tmp"
+      # Caches, toolchains, package stores and games.
+      - "**/.cache"
+      - "/home/*/.npm"
+      - "/home/*/.local/share/pnpm"
+      - "/home/*/.local/go"
+      - "/home/*/.local/share/containers"
+      - "/home/*/.local/share/nvim"
+      - "/home/*/.rustup"
+      - "/home/*/.cargo/registry"
+      - "/home/*/.vite-plus"
+      - "/home/*/.pyenv/versions"
+      - "/home/*/.local/share/Steam/steamapps"
+      - "/home/*/.local/share/matlab"
+      - "/home/*/code/wke-bench/models"
+      - "/home/**/cache"
+      - "/home/**/tmp"
+      - "/home/**/logs"
+      - "/data/ssd/**/cache"
+      - "/data/ssd/**/tmp"
+      - "/data/ssd/**/logs"
+      - "/data/ssd/uni/masters/2_term/nlp/nlp-venv"
+      # Docker's images, layers and build cache are regenerable; its named volumes hold data and stay in.
+      # A userns-remapped daemon keeps the same layout under a <uid>.<gid> subdirectory.
+      - "/var/lib/docker/*"
+      - "!/var/lib/docker/volumes"
+      - "!/var/lib/docker/*.*"
+      - "/var/lib/docker/*.*/*"
+      - "!/var/lib/docker/*.*/volumes"
+      - "/var/lib/containers"
+      - "/var/lib/machines"
+      - "/var/lib/clamav"
+      - "/var/lib/texmf"
+      - "/var/lib/systemd/coredump"
+      # The leak archive is too large to ever send off-site.
+      - "/data/vault/backup/leaks"

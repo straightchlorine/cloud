@@ -1,0 +1,47 @@
+---
+# This is the host-dependent half of the sftp validation.
+# It requires a key that is vault-managed, already on the host, or adoptable from the legacy install.
+# It needs root, so unlike validate_job.yml it cannot run from a stack role's pre-validation play.
+- name: Check the vault-managed Storage Box key
+  # No no_log: the asserts evaluate to booleans and the fail_msg names no value, so
+  # the key never reaches the output while the message stays readable.
+  when: restic_storage_key | length > 0
+  block:
+    - name: Require a private key
+      ansible.builtin.assert:
+        that:
+          - restic_storage_key is string
+          - restic_storage_key is search('^-----BEGIN [A-Z ]*PRIVATE KEY-----\s*$', multiline=True)
+        fail_msg: >-
+          restic_storage_key: holds no -----BEGIN ... PRIVATE KEY----- line; it must be the
+          Storage Box private key
+        quiet: true
+
+    - name: Require a key that is not the vault.yml.example placeholder
+      ansible.builtin.assert:
+        that: restic_storage_key is not search('your-|placeholder|changeme', ignorecase=True)
+        fail_msg: "restic_storage_key: still a vault.yml.example placeholder"
+        quiet: true
+
+- name: Check the Storage Box key for an sftp job
+  when: restic_job_sftp
+  block:
+    - name: Look for the Storage Box key
+      ansible.builtin.stat:
+        path: /etc/ssh/restic_storage_key
+      register: restic_storage_key_before
+
+    - name: Look for the legacy Storage Box key
+      ansible.builtin.stat:
+        path: /opt/backup/.ssh/hetzner
+      register: restic_legacy_key_before
+
+    - name: Require a Storage Box key
+      ansible.builtin.assert:
+        that: >-
+          restic_storage_key | length > 0 or restic_storage_key_before.stat.exists
+          or restic_legacy_key_before.stat.exists
+        fail_msg: >-
+          /etc/ssh/restic_storage_key: missing, and no legacy /opt/backup/.ssh/hetzner to adopt;
+          place the Storage Box private key there or set restic_storage_key from the vault
+        quiet: true

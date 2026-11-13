@@ -1,33 +1,24 @@
 ---
-# Global exporter configuration
 prometheus_exporters_enabled: true
 prometheus_exporters_user: "prometheus"
 prometheus_exporters_group: "prometheus"
 prometheus_exporters_base_dir: "/opt/prometheus-exporters"
 prometheus_exporters_config_dir: "/etc/prometheus/exporters"
 
-# Architecture mapping for binary downloads
-prometheus_exporters_prometheus_arch_map:
-  x86_64: "amd64"
-  armv7l: "armv7"
-  aarch64: "arm64"
-
-# Node Exporter configuration
 prometheus_exporters_node_exporter_enabled: true
 prometheus_exporters_node_exporter_version: "1.12.1"
 prometheus_exporters_node_exporter_port: 9100
-node_exporter_install_method: "binary" # 'binary' or 'package'
+prometheus_exporters_node_exporter_install_method: "binary" # 'binary' or 'package'
 prometheus_exporters_node_exporter_binary_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{
   prometheus_exporters_node_exporter_version }}/node_exporter-{{
   prometheus_exporters_node_exporter_version }}.linux-{{
-  prometheus_exporters_prometheus_arch_map[ansible_architecture] }}.tar.gz
+  os_arch_download }}.tar.gz
 prometheus_exporters_node_exporter_checksum_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{
   prometheus_exporters_node_exporter_version }}/sha256sums.txt
 
-# Node Exporter advanced configuration
-node_exporter_enabled_collectors:
+prometheus_exporters_node_exporter_enabled_collectors:
   - systemd
   - textfile
   - filesystem
@@ -42,56 +33,40 @@ node_exporter_enabled_collectors:
   - uname
   - vmstat
 
-# Pi-specific hardware metrics
 prometheus_exporters_node_exporter_textfile_dir: "{{ prometheus_exporters_base_dir }}/textfiles"
-pi_hardware_metrics_enabled: true
+prometheus_exporters_pi_hardware_metrics_enabled: true
 prometheus_exporters_pi_hardware_metrics_script: "{{ prometheus_exporters_base_dir }}/scripts/pi_hardware_metrics.sh"
 prometheus_exporters_pi_hardware_metrics_interval: 30 # seconds
 
-# Pi-hole Exporter configuration
 prometheus_exporters_pihole_exporter_enabled: false # Enable only on DNS hosts
 prometheus_exporters_pihole_exporter_version: "v1.2.0"
 prometheus_exporters_pihole_exporter_port: 9617
 
-# eko/pihole-exporter publishes only a single "linux-arm" binary for every ARM
-# architecture plus "linux-amd64" (and a 386 we don't target) - there are NO
-# armv7/arm64 variants. Our generic prometheus_exporters_prometheus_arch_map
-# (armv7l -> armv7, aarch64 -> arm64) would therefore build a URL that 404s,
-# so ARM needs its own map here.
-prometheus_exporters_pihole_arch_map:
-  x86_64: "amd64"
-  armv7l: "arm"
-  aarch64: "arm"
+# eko/pihole-exporter publishes one "linux-arm" binary for every ARM architecture, plus "linux-amd64".
+# The os role's armv7 or arm64 download suffix would therefore build a URL that returns 404.
+prometheus_exporters_pihole_arch: "{{ 'arm' if os_is_arm else os_arch_download }}"
 
 prometheus_exporters_pihole_exporter_binary_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{
   prometheus_exporters_pihole_exporter_version }}/pihole_exporter-linux-{{
-  prometheus_exporters_pihole_arch_map[ansible_architecture] }}
+  prometheus_exporters_pihole_arch }}
 prometheus_exporters_pihole_exporter_checksum_url: >-
   https://github.com/eko/pihole-exporter/releases/download/{{
   prometheus_exporters_pihole_exporter_version }}/pihole_exporter-linux-{{
-  prometheus_exporters_pihole_arch_map[ansible_architecture] }}.sha256.txt
-# prometheus_exporters_pihole_exporter_target_host: must be set in host_vars - no default
+  prometheus_exporters_pihole_arch }}.sha256.txt
+# prometheus_exporters_pihole_exporter_target_host has no default and must be set in host_vars.
 prometheus_exporters_pihole_exporter_target_port: 80
 
-# Service discovery labels - ALL MUST be explicitly set in host_vars
-# prometheus_environment: must be set in host_vars - no default
-# prometheus_role: must be set in host_vars - no default
-# device_type: must be set in host_vars - no default
-prometheus_instance_labels:
-  environment: "{{ prometheus_environment }}"
-  role: "{{ prometheus_role }}"
-  device_type: "{{ device_type }}"
+# The service discovery labels prometheus_environment, prometheus_role and device_type have no defaults.
+# Every host must set them in host_vars.
 
-# Firewall configuration
 prometheus_exporters_ufw_enabled: true
-# prometheus_server_ip: must be set in host_vars - no default for security
+# prometheus_server_ip has no default, so that no address is opened by accident, and must be set in host_vars.
 
-# Health check configuration
 prometheus_exporters_health_check_enabled: true
-# Pi-hole exporter /metrics answers only after a full scrape (auth + several API
-# calls), which can take a while on weaker hosts.
+# The Pi-hole exporter /metrics answers only after a full scrape of several API calls.
+# That scrape can take a while on weaker hosts.
 prometheus_exporters_health_check_timeout: 30
-# Per-call limit for the exporter's own Pi-hole API requests; its 5s default
-# makes scrapes fail whenever FTL is briefly slow.
+# Limit for each Pi-hole API request the exporter makes.
+# A short limit makes scrapes fail whenever FTL is briefly slow.
 prometheus_exporters_pihole_exporter_api_timeout: "15s"

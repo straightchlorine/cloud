@@ -2,7 +2,6 @@
 inventory/production/group_vars/all/vault.yml
 inventory/production/host_vars/vault_*.yml
 
-# Ansible runtime
 *.log
 ansible.log
 *.retry
@@ -10,33 +9,32 @@ ansible.log
 .ansible/
 collections/
 
-# Python artifacts
 *.pyc
 __pycache__/
 .venv/
 venv/
 *.egg-info/
 
-# Molecule temp state
 .molecule/
 
-# Temporary files
 *.tmp
 
-# OS files
 .DS_Store
 Thumbs.db
 
-# Shell history and dotfiles
-.ash_history
-.gitconfig
 .gnupg/
-.profile
-.shrc
 .ssh/
 
-# Docs WIP
-docs/
+# Local tool caches
+.ruff_cache/
+.impeccable/
 
-# pip wheels downloaded next to the media tools (not part of the role)
+# Nix build output symlinks
+result
+result-*
+
+# Drafts that are not published.
+docs/wip/
+
+# Pip wheels downloaded next to the media tools are not part of the role.
 roles/media/files/tools/*.whl

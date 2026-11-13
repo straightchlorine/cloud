@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# Read-only snapshot of the honeypot host's current state, for porting the
-# hand-installed infra/centos setup into the honeypot Ansible role.
+# Read-only snapshot of the honeypot host's current state.
 #
-# Run ON THE HONEYPOT as root:  sudo ./collect-host-state.sh > state.txt
+# Run it on the honeypot as root:  sudo ./collect-host-state.sh > state.txt
 #
-# Touches nothing: every command is a query. Secrets are masked - env files
-# are printed as KEY=<set|empty> only, and the public IPv4/IPv6 of the box is
-# replaced with a placeholder so the output is safe to paste.
+# It touches nothing, because every command is a query.
+# Env files are printed as KEY=<set|empty> only, and the box's public IPv4 and IPv6 addresses are replaced with placeholders.
+# The output is therefore safe to paste.
 
 set -uo pipefail
 export LC_ALL=C
 
 hdr() { printf '\n\n===== %s =====\n' "$*"; }
-# Callers pass ONE shell-command string (pipes, redirects, && chains and quoted
-# args included), so evaluate the string explicitly. Using `eval "$@"` here
-# would re-join/re-split the arguments (SC2294) - `eval "$1"` states the
-# single-string contract and preserves whitespace and symbols exactly.
+# Callers pass one shell-command string, including its pipes, redirects and quoting.
+# `eval "$1"` states that single-string contract and preserves whitespace and symbols exactly.
+# `eval "$@"` would re-join and re-split the arguments, which shellcheck reports as SC2294.
 run() { printf '\n--- $ %s\n' "$1"; eval "$1" 2>&1 | sed 's/^/  /'; }
 
 # Print an env file's keys without their values.
@@ -153,7 +151,7 @@ run "df -hT"
 run "lsblk -f"
 run "free -h"
 } 2>&1 | {
-    # Mask the box's own public addresses so the dump is safe to paste.
+    # Mask the box's own public addresses and any long token-like strings.
     pub4=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 \
            | grep -Ev '^(10\.|127\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)' | head -1)
     pub6=$(ip -6 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 \

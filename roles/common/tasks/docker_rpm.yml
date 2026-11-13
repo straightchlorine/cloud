@@ -1,0 +1,80 @@
+---
+# Installs Docker CE on dnf hosts, while apt hosts use docker.yml.
+# common_docker_rpm_install:    false skips the repository and package install but still writes daemon.json.
+# common_docker_daemon_options: dictionary written to /etc/docker/daemon.json.
+# common_docker_daemon_merge:   true combines the options over the existing file so keys set elsewhere survive.
+#                               false overwrites the file.
+- name: Add the Docker repository
+  ansible.builtin.yum_repository:
+    name: docker-ce-stable
+    description: Docker CE stable
+    baseurl: "https://download.docker.com/linux/centos/10/$basearch/stable"
+    gpgkey: "https://download.docker.com/linux/centos/gpg"
+    gpgcheck: true
+    enabled: true
+  become: true
+  when: common_docker_rpm_install | bool
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+  become: true
+  when: common_docker_rpm_install | bool
+
+- name: Create the Docker configuration directory
+  # The docker-ce package does not ship /etc/docker; dockerd would create it on
+  # first start, which comes after the daemon.json below.
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Check for an existing Docker daemon configuration
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  become: true
+  register: common_docker_rpm_daemon_json
+  when: common_docker_daemon_merge | bool
+
+- name: Read the existing Docker daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  become: true
+  register: common_docker_rpm_daemon_json_content
+  when:
+    - common_docker_daemon_merge | bool
+    - common_docker_rpm_daemon_json.stat.exists
+
+- name: Configure the Docker daemon
+  # Merge mode writes the merged JSON alone and overwrite mode adds a trailing newline.
+  # Keeping each mode's format stable avoids a spurious file change and daemon restart.
+  vars:
+    common_docker_rpm_existing: >-
+      {{ (common_docker_rpm_daemon_json_content.content | b64decode | from_json)
+      if (common_docker_daemon_merge | bool and common_docker_rpm_daemon_json.stat.exists) else {} }}
+  ansible.builtin.copy:
+    content: "{{ common_docker_rpm_existing | combine(common_docker_daemon_options) | to_nice_json }}{{
+      '' if common_docker_daemon_merge | bool else '\n' }}"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  become: true
+  notify: Restart docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  become: true

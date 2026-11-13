@@ -5,7 +5,6 @@
 # Bypass (not recommended): git commit --no-verify
 
 repos:
-  # Ansible syntax check (local hook - fast, only checks playbooks)
   - repo: local
     hooks:
       - id: ansible-syntax-check
@@ -17,25 +16,9 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
-  # Note: ansible-lint is disabled in pre-commit because the codebase has
-  # extensive pre-existing architectural violations (var-naming, key-order,
-  # schema validation, etc.) that are outside the scope of formatter/linter
-  # configuration. The Ansible syntax check above already validates syntax.
-  # To enable, refactor the code to comply with ansible-lint rules or
-  # configure a comprehensive skip_list and exclude_paths in .ansible-lint
-  # - repo: https://github.com/ansible/ansible-lint.git
-  #   rev: v25.12.2
-  #   hooks:
-  #     - id: ansible-lint
-  #       name: Ansible lint
-  #       description: Lint Ansible playbooks and roles
-  #       entry: ansible-lint --offline
-  #       language: python
-  #       types: [yaml]
-  #       exclude: ^inventory/
-  #       additional_dependencies: [ansible-core, jinja2]
+  # ansible-lint is not a commit hook because it needs the installed collections and is too slow.
+  # It runs in CI (.woodpecker/lint.yaml) and in the pre-push stage (.pre-push-config.yaml).
 
-  # YAML linting (catches syntax errors)
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.37.1
     hooks:
@@ -46,7 +29,6 @@ repos:
         types: [yaml]
         exclude: ^inventory/
 
-  # Shell script validation (for your backup-standalone.sh.j2)
   - repo: https://github.com/shellcheck-py/shellcheck-py.git
     rev: v0.11.0.1
     hooks:
@@ -54,15 +36,14 @@ repos:
         name: ShellCheck
         description: Validate shell script syntax
         types: [shell]
-        exclude: '\.j2$'  # Skip Jinja2 templates (not valid bash yet)
+        exclude: '\.j2$'  # Jinja2 templates are not valid shell until rendered.
 
-  # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks.git
     rev: v6.0.0
     hooks:
       - id: check-yaml
         name: Check YAML syntax
-        args: ['--unsafe']  # Required for Ansible
+        args: ['--unsafe']  # Lets the parser accept Ansible's custom YAML tags.
       - id: check-json
         name: Check JSON syntax
       - id: check-added-large-files
@@ -77,9 +58,9 @@ repos:
         name: Fix end of file
       - id: detect-private-key
         name: Detect private keys
-        exclude: 'vault.yml|.vault'
+        # The restic molecule scenarios generate throwaway keys and assert on the PEM header text.
+        exclude: 'vault.yml|.vault|^roles/restic/molecule/(default/verify|fail-fast-validation/converge)\.yml$'
 
-  # Markdown and documentation
   - repo: https://github.com/igorshubovych/markdownlint-cli.git
     rev: v0.39.0
     hooks:
@@ -90,4 +71,3 @@ repos:
 
 default_language_version:
   python: python3
-  # Add others as needed

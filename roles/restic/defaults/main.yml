@@ -1,0 +1,49 @@
+---
+# Every host gets the pinned upstream release, because bookworm's 0.14.0 lacks --retry-lock (added in 0.16)
+# and exit codes 10, 11 and 12 (added in 0.17), which job.yml and restic-job depend on.
+# Each checksum is the sha256 of restic_<version>_linux_<arch>.bz2 from the release's SHA256SUMS.
+restic_binary_version: "0.19.1"
+restic_binary_sha256:
+  amd64: "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
+  arm64: "a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465"
+
+# Hosts with no owning stack role, such as station-arch, list their jobs here.
+# Stack roles instead call tasks_from: job with one job in restic_job.
+restic_jobs: []
+
+# Never set automatically, because a typo'd repository path would silently start an empty history.
+# Pass -e restic_init_repository=true for a brand-new repository.
+restic_init_repository: false
+
+# restic stages pack files in TMPDIR (<cache>/tmp). /tmp is tmpfs on Debian 13, where they would count against
+# MemoryMax and, on a Pi, exhaust RAM during the first full snapshot. A host whose /var is small points this at
+# a bigger filesystem; the unit then waits for that mount (RequiresMountsFor) and may write there.
+restic_cache_dir: /var/cache/restic
+
+# systemd hosts schedule jobs with timers. Any other host (OpenRC) schedules them with cron.d entries and
+# the log-file wrapper `restic-job cron`.
+restic_scheduler: "{{ 'systemd' if ansible_service_mgr == 'systemd' else 'cron' }}"
+# The init script of the cron daemon that reads /etc/cron.d (cronie on Gentoo, cron on Debian).
+restic_cron_service: cronie
+
+restic_job_defaults:
+  host: "{{ ansible_nodename }}"   # matches os.Hostname(), the host name existing snapshots carry
+  excludes: []
+  fresh: []
+  # Longer than a daily interval, so a job that misses one night is reported by the next 12:00 freshness check.
+  max_age_hours: 30
+  skip_metered: false
+  skip_on_battery: false
+  metered_connections: []
+
+# The account Ansible connects as. legacy.yml never strips the sudo grant or the account of this user.
+# Molecule overrides it because its connection user is root.
+restic_connection_user: "{{ ansible_user }}"
+
+# When empty, the key is hand-placed at /etc/ssh/restic_storage_key or adopted from the legacy /opt/backup/.ssh/hetzner.
+# A host_vars value of "{{ vault_restic_storage_key_<host> }}" makes the role write the key.
+# The key is set per host, so per-host Storage Box sub-accounts need no code change.
+restic_storage_key: ""
+
+# The weekly check of an sftp job alerts when less than this share of the Storage Box is free.
+restic_storage_min_free_percent: 15

@@ -42,7 +42,7 @@ vault_alertmanager_email: "admin@yourdomain.com"
 
 # Backup configuration
 vault_restic_monitoring_password: "32_character_secure_password"
-vault_backup_repository_base: "sftp:user@backup-server:/backups"
+vault_backup_repository_base: "/home/backup/restic-repos"
 ```
 
 ### Host Variables (host_vars/debian-monitoring.yml)

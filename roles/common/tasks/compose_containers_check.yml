@@ -44,6 +44,6 @@
     msg: >-
       WARNING: Docker reports "No memory limit support" on this host - the
       compose deploy.resources memory limits are silently discarded (each
-      container may use up to all free RAM). See roles/automation/README.md
-      "Resource limits vs. cgroup availability" for the check and fix.
-  when: "'No memory limit support' in (common_docker_warnings.stdout | default(''))"
+      container may use up to all free RAM). Enable the memory cgroup controller
+      (common_rpi_cgroup_memory_enabled) and reboot.
+  when: "'No memory limit support' in common_docker_warnings.stdout"

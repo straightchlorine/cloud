@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Export and restore the beets DB, Navidrome DB, secrets and download archive
-# between two host layouts. Run on the Pi as the stack user (uses sudo); the SSD
-# survives an SD wipe.
+# Export and restore the beets DB, Navidrome DB, secrets and download archive between two host layouts.
+# Run it on the Pi as the stack user, because it uses sudo.
+# The SSD survives an SD card wipe, so the export directory on it is safe.
 #
 #   1. old layout: migrate-legacy.sh export  (writes /mnt/data/migration; copy it off-Pi too)
 #   2. new layout: deploy with -e common_start_stack=false so Navidrome never starts,
@@ -12,20 +12,20 @@
 set -euo pipefail
 
 LIB="${LIB:-/mnt/data}"
-# The old layout keeps its stack home at ~/music-stack, the role's at ~/stack;
-# pick whichever exists, so `export` works on either.
+# The old layout keeps its stack home at ~/music-stack, while the role uses ~/stack.
+# The default picks whichever exists, so `export` works on either.
 OLD_STACK="${OLD_STACK:-$([ -d "$HOME/music-stack" ] && echo "$HOME/music-stack" || echo "$HOME/stack")}"
 STACK="${STACK:-$HOME/stack}"
 MIG="$LIB/migration"
 
 export_legacy() {
     command -v sqlite3 >/dev/null || sudo apt-get install -y sqlite3
-    # The library root is root-owned (it is a mount point): create the export dir
-    # with our own ownership so the copies below can be written without sudo.
+    # The library root is root-owned because it is a mount point.
+    # The export directory is created with our own ownership so the copies below need no sudo.
     sudo install -d -o "$(id -un)" -g "$(id -gn)" "$MIG"
 
-    # The old layout keeps beets under the stack home and the download archive at
-    # the data root; the role's layout keeps them in $LIB/beets and $LIB/state.
+    # The old layout keeps beets under the stack home and the download archive at the data root.
+    # The role's layout keeps them in $LIB/beets and $LIB/state.
     local beet_db="" archive="" path
     for path in "$OLD_STACK/config/beets/library.db" "$LIB/beets/library.db"; do
         if [ -f "$path" ]; then beet_db="$path"; break; fi
@@ -38,7 +38,7 @@ export_legacy() {
         if [ -f "$path" ]; then archive="$path"; break; fi
     done
 
-    # .backup is consistent against the running Navidrome.
+    # The sqlite .backup command gives a consistent copy while Navidrome is running.
     sudo sqlite3 -cmd '.timeout 10000' "$LIB/navidrome-data/navidrome.db" ".backup '$MIG/navidrome.db'"
     sqlite3 "$beet_db" ".backup '$MIG/beets-library.db'"
 
@@ -48,7 +48,7 @@ export_legacy() {
         echo "warning: no youtube-archive.txt found - the next sync would re-download everything" >&2
     fi
 
-    # The role persists the secret as a file; the old layout only had it in .env.
+    # The role persists the secret as a file, while the old layout kept it only in .env.
     if [ -f "$OLD_STACK/.navidrome_jwt_secret" ]; then
         install -m 0600 "$OLD_STACK/.navidrome_jwt_secret" "$MIG/navidrome_jwt_secret"
     else
@@ -84,7 +84,7 @@ restore_legacy() {
         exit 1
     fi
 
-    # Navidrome runs as the stack uid inside the userns-remapped container.
+    # Navidrome runs as the stack uid inside the userns-remapped container, so the files need the remapped owner.
     local remap_uid remap_gid
     remap_uid="$(awk -F: '/^dockremap:/{print $2}' /etc/subuid)"
     remap_gid="$(awk -F: '/^dockremap:/{print $2}' /etc/subgid)"
@@ -95,7 +95,7 @@ restore_legacy() {
         "$MIG/navidrome.db" "$LIB/navidrome-data/navidrome.db"
     install -m 0644 "$MIG/beets-library.db" "$LIB/beets/library.db"
     install -m 0644 "$MIG/youtube-archive.txt" "$LIB/state/youtube-archive.txt"
-    # The next deploy reads this into .env: existing logins stay valid.
+    # The next deploy reads this file into .env, so existing logins stay valid.
     install -m 0600 "$MIG/navidrome_jwt_secret" "$STACK/.navidrome_jwt_secret"
 
     cat <<EOF

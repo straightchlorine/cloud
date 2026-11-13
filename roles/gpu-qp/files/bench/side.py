@@ -3,7 +3,7 @@
 
 Usage: side.py check DIR     (via `gpu-qp side check DIR`)
 
-Renders DIR's compose config with compose/side.override.yml as project qpside-<name of DIR> and
+Renders DIR's compose config with DIR/compose/side.override.yml as project qpside-<name of DIR> and
 compares it with what the bench stack runs. Prints `FAIL<TAB>check<TAB>detail` per problem, `INFO`
 lines for protected images used without a build and `OK` when nothing is wrong; exit 1 on any
 FAIL. Secret values are never printed.

@@ -10,27 +10,24 @@ alloy_config_dir: /etc/alloy
 alloy_config_file: "{{ alloy_config_dir }}/config.alloy"
 alloy_env_file: /etc/sysconfig/alloy
 
-# The packaged unit runs as this user; it needs systemd-journal membership to
-# read the journal.
+# The packaged unit runs as this user, which needs systemd-journal membership to read the journal.
 alloy_user: alloy
 alloy_group: alloy
 
 alloy_listen_address: "127.0.0.1:12345"
 
-# The Hetzner node's tailnet address; the sinks are NodePorts there that exist
-# only for the tunnel (fleet clusters/hetzner/observability/nodeport-*.yaml).
-# Plain HTTP: WireGuard encrypts the hop, and neither sink takes credentials -
-# the Headscale ACL and the fleet's 100.64.0.0/10 NetworkPolicies are the gate.
+# The Hetzner node's tailnet address, where the sinks are NodePorts defined in the fleet repository
+# (clusters/hetzner/observability/nodeport-*.yaml).
+# The hop is plain HTTP because WireGuard encrypts it and neither sink takes credentials.
+# The Headscale ACL and the fleet's NetworkPolicies are the only gate.
 alloy_fleet_address: "100.64.0.25"
 
-# Must be the full push path (validate.yml enforces it).
+# This must be the full push path, which validate.yml enforces.
 alloy_loki_url: "http://{{ alloy_fleet_address }}:30310/loki/api/v1/push"
 
 # Static labels attached to every stream. `job` is what Grafana queries on.
 alloy_job_label: "systemd-journal"
 
-# Units worth shipping. Everything else on a honeypot host is either noise or
-# already captured by the application's own pipeline.
 alloy_journal_units:
   - sshd.service
   - firewalld.service
@@ -40,14 +37,12 @@ alloy_journal_units:
   - honeywatch-backup.service
   - honeywatch-mmdb-refresh.service
 
-# --- Metrics -------------------------------------------------------------
-# Requires a remote-write endpoint; with none, the scrape only fills the
-# agent's WAL and fails every push.
+# Metrics need a remote-write endpoint.
+# Without one, the scrape only fills the agent's write-ahead log and every push fails.
 alloy_metrics_enabled: false
 alloy_prometheus_url: "http://{{ alloy_fleet_address }}:30090/api/v1/write"
 alloy_scrape_interval: "60s"
-# Container metrics would need the docker socket or cgroup access; the node
-# exporter alone covers host health.
+# Container metrics would need the docker socket or cgroup access, so the node exporter alone covers host health.
 alloy_node_exporter_collectors:
   - cpu
   - diskstats
@@ -58,9 +53,9 @@ alloy_node_exporter_collectors:
   - systemd
   - uname
 
-# Absolute directory of *.prom files for the node exporter textfile collector
-# (needs alloy_metrics_enabled); empty leaves the collector off. The alloy user
-# must be able to read it.
+# Absolute directory of *.prom files for the node exporter textfile collector, which needs alloy_metrics_enabled.
+# An empty value leaves the collector off.
+# The alloy user must be able to read the directory.
 alloy_textfile_directory: ""
 
 alloy_required_variables:

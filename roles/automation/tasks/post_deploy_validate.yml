@@ -1,6 +1,6 @@
 ---
-# Proves the running stack, never side effects: container states first, then
-# real endpoint and write-access checks on the reverse-proxy-facing paths.
+# These checks prove the running stack directly, starting with container states and then endpoint and write-access
+# checks.
 
 - name: Verify the critical compose containers are running
   ansible.builtin.include_role:
@@ -9,8 +9,7 @@
   vars:  # noqa: var-naming[no-role-prefix]
     compose_file_path: "{{ automation_stack_home }}/docker-compose.yml"
     compose_owner: "{{ ansible_user }}"
-    # firefly-cron is excluded (see stack.yml) - its health is asserted right
-    # below by the last exit code, not by a running-state check.
+    # The firefly-cron sidecar is excluded, as in stack.yml, and its last exit code is checked below instead.
     compose_critical_services:
       - vaultwarden
       - firefly
@@ -18,11 +17,16 @@
       - watchtower
   tags: [post_validation]
 
+- name: Verify the cAdvisor metrics endpoint
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: verify_cadvisor_metrics
+  tags: [post_validation]
+
 - name: Verify the firefly-cron sidecar is not crash-looping
-  # firefly-cron is a sleep-sidecar by design: wget the cron endpoint, sleep 60s,
-  # exit 0, restart. The probe that matters is the LAST EXIT CODE - 0 means the
-  # cycle finished cleanly (a failed wget aborts with 8/4/1 before the sleep).
-  # Poll ~2 minutes so a sample taken mid-sleep still sees the last clean exit.
+  # The sidecar calls the cron endpoint, sleeps, exits with 0 and is restarted by Docker.
+  # An exit code of 0 means the cycle finished cleanly, because a failed wget exits non-zero before the sleep.
+  # The retries span about two minutes so that a sample taken mid-sleep still sees a clean exit.
   ansible.builtin.command: >-
     docker inspect firefly-cron
     --format '{{ '{{.State.Status}} {{.State.ExitCode}}' }}'

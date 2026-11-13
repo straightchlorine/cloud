@@ -22,8 +22,8 @@
   notify: Restart alloy
 
 - name: Allow Alloy to read the systemd journal
-  # The packaged unit runs as an unprivileged user; without this group the
-  # journal source starts cleanly and ships nothing.
+  # The packaged unit runs as an unprivileged user.
+  # Without this group the journal source starts cleanly and ships nothing.
   ansible.builtin.user:
     name: "{{ alloy_user }}"
     groups: systemd-journal
@@ -48,10 +48,9 @@
     owner: root
     group: "{{ alloy_group }}"
     mode: '0644'
-    # This version's CLI has no `validate` subcommand; `fmt` still has to parse
-    # the file to reformat it, so it fails the same way on real syntax errors.
-    # Deliberately no -t/-w: those would also fail on formatting-only
-    # differences, which isn't what this check is for.
+    # This version's CLI has no `validate` subcommand, but `fmt` must parse the file, so it fails on real syntax errors.
+    # The -t flag is left out because it also fails on formatting-only differences.
+    # The -w flag is left out because it would rewrite the file that Ansible then installs.
     validate: "alloy fmt %s"
   become: true
   notify: Restart alloy
@@ -67,8 +66,8 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Confirm Alloy is healthy
-  # Proves the agent parsed its config and is running, not merely that systemd
-  # started it - a bad component leaves the process up and the pipeline dead.
+  # This proves the agent parsed its config and is running, not merely that systemd started it.
+  # A bad component leaves the process up and the pipeline dead.
   ansible.builtin.uri:
     url: "http://{{ alloy_listen_address }}/-/ready"
     status_code: 200
@@ -79,8 +78,8 @@
   tags: [post_validation]
 
 - name: Confirm the fleet sinks are reachable over the tailnet
-  # Alloy stays ready while every push fails, so this is what proves the
-  # Headscale ACL, the NodePort and the fleet NetworkPolicy end to end.
+  # Alloy stays ready while every push fails, so only this proves the Headscale ACL,
+  # the NodePort and the fleet NetworkPolicy end to end.
   ansible.builtin.uri:
     url: "{{ item }}"
     status_code: 200
@@ -95,9 +94,9 @@
   tags: [post_validation]
 
 - name: Read the textfile collector status from the exporter
-  # The collector's own error gauge is the only place an unreadable directory
-  # shows up; Alloy stays ready and the pipeline just goes quiet. An empty
-  # directory scrapes clean, so this passes before the first .prom file exists.
+  # The collector's own error gauge is the only place an unreadable directory shows up.
+  # Alloy stays ready and the pipeline just goes quiet.
+  # An empty directory scrapes clean, so this passes before the first .prom file exists.
   ansible.builtin.uri:
     url: "http://{{ alloy_listen_address }}/api/v0/component/prometheus.exporter.unix.host/metrics"
     return_content: true

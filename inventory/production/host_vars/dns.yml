@@ -10,32 +10,32 @@ dns_pihole_dns_servers:
   - "192.168.20.1"
 
 common_auto_updates_reboot_if_required: true
-# First in the fleet's reboot window: DNS is back before the others boot.
+# This is the earliest reboot time in the fleet, so DNS is back before the other hosts reboot.
 common_auto_updates_reboot_time: "04:45"
 
 common_ntp_server_enabled: true
-# OPNsense runs NTP on the LAN; lowest-latency upstream.
+# OPNsense runs NTP on the LAN.
 common_ntp_upstream_server: "192.168.20.1"
 common_ntp_allowed_networks:
   - "{{ primary_network_cidr }}"
 
-common_firewall_ports:
+firewall_common_ports:
   - {port: 22, comment: "SSH"}
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}
   - {port: 53, comment: "Pi-hole DNS", proto: "tcp"}
   - {port: 80, comment: "Pi-hole Web Interface"}
-  # No blanket 123/udp: ufw is first-match, so an unrestricted allow would
-  # shadow the src-restricted NTP rule from common_ntp_allowed_networks.
+  # There is no blanket 123/udp rule, because ufw is first-match and it would shadow the source-restricted NTP rule.
+  # That rule comes from common_ntp_allowed_networks.
   - {port: 9100, comment: "Node Exporter"}
   - {port: 9617, comment: "Pi-hole Exporter"}
 
 prometheus_exporters_pihole_exporter_enabled: true
-# Primary IP so the exporter's hostname label is a real address, not 127.0.0.1.
+# The primary IP makes the exporter's hostname label a real address instead of 127.0.0.1.
 prometheus_exporters_pihole_exporter_target_host: "{{ primary_ip }}"
 
-# Omits the systemd collector: on this 416MB board its per-scrape cgroup walk
-# caused mid-stream connection resets from Prometheus.
-node_exporter_enabled_collectors:
+# The systemd collector is left out on this small board.
+# Its per-scrape cgroup walk caused connection resets from Prometheus.
+prometheus_exporters_node_exporter_enabled_collectors:
   - textfile
   - filesystem
   - cpu
@@ -51,21 +51,8 @@ node_exporter_enabled_collectors:
 
 prometheus_role: "dns"
 
-# Syncthing runs as the ssh user (zero), so the backup dir belongs to it.
+# Syncthing runs as the SSH user, so the backup directory belongs to that user.
 common_syncthing_enabled: true
 dns_backup_enabled: true
 dns_backup_dir: "/home/zero/syncthing/pihole-backup"
 dns_backup_owner: "zero"
-
-restic_enabled: true
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
-restic_password: "{{ vault_restic_dns_password }}"
-common_backup_directories:
-  - "/etc/pihole"
-  - "/etc/chrony"
-  - "/var/log/pihole"
-  - "/opt/pihole"
-backup_exclude_patterns:
-  - "*.tmp"
-  - "*.log.1*"
-  - "/var/log/pihole/pihole.log.*"

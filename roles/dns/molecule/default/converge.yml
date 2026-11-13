@@ -3,8 +3,7 @@
   hosts: all
   become: true
   vars:
-    # Mirrors the pi-dns host_vars, with public resolvers so the
-    # container's own resolver checks can actually resolve.
+    # These values mirror the dns host_vars, except for public resolvers that the container can actually reach.
     vault_pihole_webpassword: molecule-test-password
     dns_pihole_dns_servers:
       - 9.9.9.9
@@ -18,22 +17,19 @@
     dns_backup_retention: 14
     dns_backup_owner: molecule
   tasks:
-    # The container's interface name varies by driver/network (eth0, br0,
-    # ...), and validate.yml checks it really exists - so discover it like
-    # the role would on a real host instead of hardcoding one.
+    # The interface name varies by driver and network, and validate.yml checks that it exists.
+    # So the name is discovered here instead of hardcoded.
     - name: Detect the container's primary interface
       ansible.builtin.set_fact:
         dns_pihole_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
 
-    # main.yml's task files that are container-safe, in the same order the
-    # role runs them. include_role tasks_from runs the real task file with
-    # the role's defaults loaded. NOT included, deliberately:
-    #   - the Pi-hole install block (basic-install.sh needs a real host -
-    #     covered on the staging Pi by scripts/dns/validate-deploy.sh)
-    #   - storage.yml (detect_optional_drive would see and could format the
-    #     host's real block devices through the container's /sys)
-    #   - post_deploy_validate.yml (needs a running Pi-hole)
-    #   - the firewall includes (ufw cannot bind rules in a container)
+    # These are the container-safe task files from main.yml, in the order the role runs them.
+    # Using include_role with tasks_from runs the real task file with the role defaults loaded.
+    # install.yml is skipped because basic-install.sh needs a real host, so scripts/dns/validate-deploy.sh covers it.
+    # storage.yml is skipped because drive detection could format the host's real block devices through the
+    # container's /sys.
+    # post_deploy_validate.yml is skipped because it needs a running Pi-hole.
+    # The firewall tasks are skipped because ufw cannot bind rules in a container.
     - name: Run the real pre-deployment validation
       ansible.builtin.include_role:
         name: dns
@@ -54,9 +50,8 @@
         name: dns
         tasks_from: backup
 
-    # setupVars.conf.j2 is only deployed inside the container-incompatible
-    # install block above - render it here so a broken template variable
-    # still fails CI instead of silently writing a blank value on a real Pi.
+    # The role deploys setupVars.conf.j2 only inside install.yml, which this scenario skips.
+    # Rendering it here makes a broken template variable fail CI instead of writing a blank value on a real Pi.
     - name: Render the Pi-hole setup vars template
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"

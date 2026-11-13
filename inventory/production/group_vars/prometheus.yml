@@ -1,27 +1,8 @@
 ---
-# Prometheus exporters group variables
-
-# Global Prometheus configuration
-prometheus_exporters_enabled: true
+# This file holds only the values that differ from roles/prometheus-exporters/defaults/main.yml.
 prometheus_environment: "production"
 
-# Node Exporter (enabled on all hosts)
-prometheus_exporters_node_exporter_enabled: true
-node_exporter_install_method: "binary"
-
-# Pi Hardware Metrics (enabled on ARM hosts)
-pi_hardware_metrics_enabled: true
-
-# Service discovery labels
-prometheus_instance_labels:
-  environment: "{{ prometheus_environment }}"
-  site: "home-lab"
-  project: "raspberry-pi-cluster"
-
-# Firewall configuration
-prometheus_exporters_ufw_enabled: true
 prometheus_exporters_firewall_source: "{{ primary_network_cidr }}"
 
-# Health check configuration
-prometheus_exporters_health_check_enabled: true
+# This is shorter than the role default because the node exporters answer immediately.
 prometheus_exporters_health_check_timeout: 10

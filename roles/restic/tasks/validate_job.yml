@@ -1,0 +1,288 @@
+---
+# This runs before anything is created, so a bad job leaves the host untouched.
+# Stack roles run it from their pre-validation, so a bad job stops the fleet run before any role has deployed.
+# Every fail_msg starts with the field it names, and the fail-fast scenario matches that prefix.
+- name: Resolve the job
+  # Templated here, outside no_log, so an undefined variable inside restic_job (a stack
+  # role's missing repository) is named in the error.
+  ansible.builtin.assert:
+    that: (restic_job | combine({})) is mapping
+    fail_msg: "restic_job: needs a mapping"
+    quiet: true
+
+- name: Merge the restic job over its defaults
+  ansible.builtin.set_fact:
+    restic_job_cfg: "{{ restic_job_defaults | combine(restic_job) }}"
+  no_log: true  # carries the repository password
+
+- name: Check the required job fields
+  vars:
+    restic_job_missing: >-
+      {{ ['name', 'repository', 'password', 'sources', 'retention', 'timeout', 'memory_max_mib',
+          'schedule' if restic_scheduler == 'systemd' else 'cron_schedule']
+         | difference(restic_job_cfg.keys() | list) }}
+  ansible.builtin.assert:
+    that: restic_job_missing | length == 0
+    fail_msg: "restic_job: missing required field(s) {{ restic_job_missing | join(', ') }}"
+    quiet: true
+
+- name: Check the job name
+  ansible.builtin.assert:
+    that: restic_job_cfg.name is string and restic_job_cfg.name is match('^[a-z0-9][a-z0-9-]{0,31}\\Z')
+    fail_msg: "restic_job.name: '{{ restic_job_cfg.name }}' must match ^[a-z0-9][a-z0-9-]{0,31}$"
+    quiet: true
+
+- name: Check the repository
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.repository is string
+      - >-
+        restic_job_cfg.repository is match(restic_path_pattern)
+        or restic_job_cfg.repository is match(restic_sftp_repository_pattern)
+    fail_msg: >-
+      restic_job.repository: must be sftp:hetzner-storage:/<path> or an absolute local path,
+      without whitespace, quotes, backslashes or %
+    quiet: true
+
+- name: Note whether the repository is on the Storage Box
+  ansible.builtin.set_fact:
+    restic_job_sftp: "{{ restic_job_cfg.repository is match('^sftp:') }}"
+
+- name: Check the password length
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.password is string
+      - restic_job_cfg.password | length >= 16
+    fail_msg: "restic_job.password: shorter than 16 characters"
+    quiet: true
+
+- name: Check the password is not a placeholder
+  ansible.builtin.assert:
+    that: restic_job_cfg.password is not search('^your-|placeholder|changeme', ignorecase=True)
+    fail_msg: "restic_job.password: still a vault.yml.example placeholder"
+    quiet: true
+
+- name: Check the sources are a list
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.sources is sequence and restic_job_cfg.sources is not string
+      - restic_job_cfg.sources | length > 0
+    fail_msg: "restic_job.sources: needs a non-empty list"
+    quiet: true
+
+- name: Check the sources are absolute paths
+  ansible.builtin.assert:
+    that: restic_job_cfg.sources | reject('match', '^/') | list | length == 0
+    fail_msg: "restic_job.sources: every path must be absolute"
+    quiet: true
+
+- name: Check the sources hold nothing the unit's mount line cannot carry
+  ansible.builtin.assert:
+    that: restic_job_cfg.sources | reject('match', restic_path_pattern) | list | length == 0
+    fail_msg: "restic_job.sources: paths must not contain whitespace, quotes, backslashes or %"
+    quiet: true
+
+- name: Check the sources are unique
+  ansible.builtin.assert:
+    that: restic_job_cfg.sources | unique | length == restic_job_cfg.sources | length
+    fail_msg: "restic_job.sources: paths must be unique"
+    quiet: true
+
+- name: Check the excludes
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.excludes is sequence and restic_job_cfg.excludes is not string
+      - restic_job_cfg.excludes | select('search', '\n') | list | length == 0
+    fail_msg: "restic_job.excludes: needs a list of single-line restic patterns"
+    quiet: true
+
+- name: Check the metered-link switch
+  ansible.builtin.assert:
+    that: restic_job_cfg.skip_metered is boolean
+    fail_msg: "restic_job.skip_metered: needs true or false"
+    quiet: true
+
+- name: Check the battery switch
+  ansible.builtin.assert:
+    that: restic_job_cfg.skip_on_battery is boolean
+    fail_msg: "restic_job.skip_on_battery: needs true or false"
+    quiet: true
+
+- name: Check the metered connections
+  # Control characters would reach the gate as JSON escapes, such as \t for a tab, and never match.
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.metered_connections is sequence and restic_job_cfg.metered_connections is not string
+      - restic_job_cfg.metered_connections is not mapping
+      - restic_job_cfg.metered_connections | reject('string') | list | length == 0
+      - restic_job_cfg.metered_connections | select('match', '^[^\\x00-\\x1f\\x7f]+\\Z') | list | length
+        == restic_job_cfg.metered_connections | length
+    fail_msg: >-
+      restic_job.metered_connections: needs a list of non-empty single-line connection names
+      without control characters
+    quiet: true
+
+- name: Check the metered connections are not vault.yml.example placeholders
+  ansible.builtin.assert:
+    that: >-
+      restic_job_cfg.metered_connections
+      | select('search', '^your-|placeholder|changeme', ignorecase=True) | list | length == 0
+    fail_msg: "restic_job.metered_connections: still a vault.yml.example placeholder"
+    quiet: true
+
+- name: Check the metered connections are not silently ignored
+  ansible.builtin.assert:
+    that: restic_job_cfg.metered_connections | length == 0 or restic_job_cfg.skip_metered
+    fail_msg: "restic_job.metered_connections: has no effect unless skip_metered is true"
+    quiet: true
+
+- name: Check the freshness guards
+  # assert stops at the first false line, so the later lines only see mappings.
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.fresh is sequence and restic_job_cfg.fresh is not string
+      - restic_job_cfg.fresh | reject('mapping') | list | length == 0
+      - restic_job_cfg.fresh | rejectattr('path', 'defined') | list | length == 0
+      - restic_job_cfg.fresh | rejectattr('max_age_hours', 'defined') | list | length == 0
+      - restic_job_cfg.fresh | map(attribute='path') | reject('match', '^/[A-Za-z0-9._/@+-]*\\Z') | list | length == 0
+      - restic_job_cfg.fresh | map(attribute='max_age_hours') | reject('integer') | list | length == 0
+      - restic_job_cfg.fresh | map(attribute='max_age_hours') | select('lt', 1) | list | length == 0
+    fail_msg: "restic_job.fresh: needs a list of {path: /absolute/plain/path, max_age_hours: integer >= 1}"
+    quiet: true
+
+- name: Check the retention
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.retention is mapping
+      - restic_job_cfg.retention.keys() | sort == ['daily', 'monthly', 'weekly', 'yearly']
+      - restic_job_cfg.retention.values() | select('integer') | list | length == 4
+      - restic_job_cfg.retention.values() | select('lt', 0) | list | length == 0
+      - restic_job_cfg.retention.values() | sum > 0
+    fail_msg: "restic_job.retention: needs integer daily, weekly, monthly, yearly (>= 0, not all 0)"
+    quiet: true
+
+- name: Parse the schedule with systemd
+  ansible.builtin.command:
+    argv: [systemd-analyze, calendar, "{{ restic_job_cfg.schedule }}"]
+  register: restic_schedule_check
+  changed_when: false
+  failed_when: false  # the assert below reports it
+  when: restic_scheduler == 'systemd'
+
+- name: Check the schedule
+  ansible.builtin.assert:
+    that: restic_schedule_check.rc == 0
+    fail_msg: "restic_job.schedule: systemd cannot parse '{{ restic_job_cfg.schedule }}'"
+    quiet: true
+  when: restic_scheduler == 'systemd'
+
+- name: Check the cron schedule
+  # cronie ignores a cron.d file with one bad line without a word, so the job would silently never run.
+  # Names (jan, mon) are refused to keep the check to what is verified here: lists, ranges and steps of numbers.
+  vars:
+    restic_cron_fields: >-
+      {{ restic_job_cfg.cron_schedule.split(' ') if restic_job_cfg.cron_schedule is string else [] }}
+    restic_cron_term: '(\*|[0-9]+(-[0-9]+)?)(/[1-9][0-9]*)?'
+    restic_cron_low: [0, 0, 1, 1, 0]
+    restic_cron_high: [59, 23, 31, 12, 7]
+    restic_cron_out_of_range: >-
+      {%- set ns = namespace(bad=[]) -%}
+      {%- for f in restic_cron_fields -%}
+      {%- set i = loop.index0 -%}
+      {%- for n in f | regex_findall('[0-9]+') -%}
+      {%- if n | int < restic_cron_low[i] or n | int > restic_cron_high[i] -%}
+      {%- set ns.bad = ns.bad + [f] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ ns.bad | unique | join(',') }}
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.cron_schedule is string
+      - restic_cron_fields | length == 5
+      - >-
+        restic_cron_fields | reject('match', '^' ~ restic_cron_term ~ '(,' ~ restic_cron_term ~ ')*\\Z')
+        | list | length == 0
+      - restic_cron_out_of_range == ''
+    fail_msg: >-
+      restic_job.cron_schedule: needs five numeric cron fields (minute hour day month weekday) separated by
+      single spaces, each a list of *, n, n-m or a step /k, within their ranges;
+      got '{{ restic_job_cfg.cron_schedule }}'
+    quiet: true
+  when: restic_scheduler == 'cron'
+
+- name: Check the timeout
+  ansible.builtin.assert:
+    that: restic_job_cfg.timeout is string and restic_job_cfg.timeout is match('^[0-9]+(s|min|h)\\Z')
+    fail_msg: "restic_job.timeout: needs a systemd time span like 90min or 12h"
+    quiet: true
+
+- name: Check the memory limit
+  ansible.builtin.assert:
+    that: restic_job_cfg.memory_max_mib is integer and restic_job_cfg.memory_max_mib >= 128
+    fail_msg: "restic_job.memory_max_mib: needs an integer >= 128"
+    quiet: true
+
+- name: Check the snapshot host
+  ansible.builtin.assert:
+    that: restic_job_cfg.host is string and restic_job_cfg.host is match('^[A-Za-z0-9][A-Za-z0-9._-]*\\Z')
+    fail_msg: "restic_job.host: needs a hostname"
+    quiet: true
+
+- name: Check the freshness limit
+  ansible.builtin.assert:
+    that: restic_job_cfg.max_age_hours is integer and restic_job_cfg.max_age_hours >= 1
+    fail_msg: "restic_job.max_age_hours: needs an integer >= 1"
+    quiet: true
+
+- name: Check a gated job's freshness limit outlasts its 20 h backup interval
+  ansible.builtin.assert:
+    that: not (restic_job_cfg.skip_metered or restic_job_cfg.skip_on_battery) or restic_job_cfg.max_age_hours >= 24
+    fail_msg: >-
+      restic_job.max_age_hours: a skip_metered or skip_on_battery job backs up once per 20 h,
+      so the limit must be >= 24
+    quiet: true
+
+- name: Check the Storage Box connection for an sftp job
+  when: restic_job_sftp
+  block:
+    - name: Check the Storage Box host
+      ansible.builtin.assert:
+        that:
+          - restic_storage_host is defined
+          - restic_storage_host is string and restic_storage_host is match('^[A-Za-z0-9.-]+\\Z')
+          - restic_storage_host != 'backup-server.com'
+        fail_msg: >-
+          restic_storage_host: needs a hostname of letters, digits, dots and hyphens, not the
+          vault.yml.example placeholder (group_vars/all/backup.yml)
+        quiet: true
+
+    - name: Check the Storage Box user
+      ansible.builtin.assert:
+        that:
+          - restic_storage_user is defined
+          - restic_storage_user is string and restic_storage_user is match('^[A-Za-z0-9._-]+\\Z')
+        fail_msg: "restic_storage_user: needs a user name of letters, digits, dots, underscores and hyphens"
+        quiet: true
+
+    - name: Check the Storage Box port
+      # Vault values may arrive as strings.
+      ansible.builtin.assert:
+        that:
+          - restic_storage_port is defined
+          - (restic_storage_port | string) is match('^[0-9]+\\Z')
+          - (restic_storage_port | int) >= 1 and (restic_storage_port | int) <= 65535
+        fail_msg: "restic_storage_port: needs an integer from 1 to 65535"
+        quiet: true
+
+    - name: Check the pinned Storage Box host key
+      vars:
+        restic_known_hosts_prefix: "^\\[{{ restic_storage_host | regex_escape }}\\]:{{ restic_storage_port }} "
+      ansible.builtin.assert:
+        that:
+          - restic_known_hosts is defined
+          - restic_known_hosts is search(restic_known_hosts_prefix, multiline=True)
+        fail_msg: >-
+          restic_known_hosts: no line for [{{ restic_storage_host }}]:{{ restic_storage_port }};
+          add ssh-keyscan -p {{ restic_storage_port }} output checked against Hetzner's fingerprints
+        quiet: true

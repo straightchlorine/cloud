@@ -1,34 +1,16 @@
 #!/usr/bin/env bash
-# Check the disposable media host after media teardown; pairs with validate-deploy.sh.
-# Usage: ./scripts/media/validate-clean.sh [ansible-host-alias]
+# Run this after the media teardown to check the disposable media host. The counterpart is validate-deploy.sh.
+# Usage: ./scripts/media/validate-clean.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-pi-test-media}"
+HOST="${1:?Usage: ./scripts/media/validate-clean.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after media teardown =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
-
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_absent() {
-  if [ -e "$1" ]; then
-    note_left "$1 still exists"
-  else
-    note_ok "$1 absent"
-  fi
-}
+{
+  cat "$LIB"
+  cat <<'INNEREOF'
 
 echo "-- Media role state --"
 check_absent /usr/local/bin/manage-media
@@ -40,7 +22,7 @@ check_absent /usr/local/bin/media-syncthing-backup
 check_absent /usr/local/bin/yt-dlp-update
 check_absent /usr/local/bin/yt-dlp
 check_absent /etc/systemd/system/stack.service
-# Stack home lives under the SSH user's home.
+# The stack home lies under the SSH user's home.
 check_absent "$HOME/stack"
 
 if systemctl is-active --quiet stack 2>/dev/null; then
@@ -83,18 +65,13 @@ else
   note_ok "docker daemon unavailable on this host (nothing to check)"
 fi
 
-# Teardown deliberately keeps the library dir (user data).
+# The teardown deliberately keeps the library directory because it holds user data.
 if [ -d /mnt/data ]; then
   note_ok "/mnt/data present (data intentionally left)"
 else
   note_left "/mnt/data missing (expected to remain mounted)"
 fi
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "LEFTOVERS FOUND - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "Clean. The host is ready for a fresh media-role test."
+summary_clean "Clean. The host is ready for a fresh media-role test."
 INNEREOF
+} | ssh "$HOST" bash -s

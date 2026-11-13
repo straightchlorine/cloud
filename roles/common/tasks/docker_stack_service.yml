@@ -1,47 +1,47 @@
 ---
-# One-shot systemd unit that runs `docker compose up -d` at boot for a stack.
-# Callers pass stack_service_name/description/home_directory/user and optionally
-# stack_environment_vars. exec_* default to plain `docker compose <verb>`, run from
-# the stack home (WorkingDirectory); override stack_exec_start/stop/reload to pin an
-# explicit -f path.
-- name: Create systemd service for Docker stack auto-start
-  ansible.builtin.template:
-    src: "{{ role_path }}/../common/templates/systemd-service.j2"
-    dest: "/etc/systemd/system/{{ stack_service_name }}.service"
-    owner: root
-    group: root
-    mode: "0644"
-  vars:
-    service_description: "{{ stack_description }}"
-    service_requires: ["docker.service"]
-    service_after: ["docker.service", "network-online.target"]
-    common_service_wants: ["network.target"]
-    service_type: "oneshot"
-    common_remain_after_exit: "true"
-    common_working_directory: "{{ stack_home_directory }}"
-    service_user: "{{ stack_user }}"
-    service_group: "{{ stack_user }}"
-    service_environment: "{{ stack_environment_vars }}"
-    exec_start: "{{ stack_exec_start | default('/usr/bin/docker compose up -d') }}"
-    exec_stop: "{{ stack_exec_stop | default('/usr/bin/docker compose down') }}"
-    exec_reload: "{{ stack_exec_reload | default('/usr/bin/docker compose restart') }}"
-    syslog_identifier: "{{ stack_service_name }}"
-    common_timeout_start_sec: "0"
-    kill_mode: "none"
-    # Common security hardening
-    common_standard_output: "journal"
-    common_standard_error: "journal"
-    common_restart_policy: "on-failure"
-    common_restart_sec: "5"
-    common_wanted_by: "multi-user.target"
-    common_enable_security_hardening: true
-    common_no_new_privileges: "true"
-  become: true
-  notify: "Restart {{ stack_service_name }}"
+# Installs the one-shot `stack` unit that runs `docker compose up -d` at boot.
+# Skipped entirely when common_start_stack is false (a stack deployed without
+# being started must not come up on a stray reboot either).
+# common_stack_home:        compose project directory (WorkingDirectory, -f path)
+# common_stack_user:        user the unit runs as
+# common_stack_description: unit Description
+# common_stack_environment_vars: list of KEY=value strings for the unit
+# common_stack_restart_sec: RestartSec for the unit
+- name: Install and enable the stack systemd unit
+  when: common_start_stack | bool
+  block:
+    - name: Create systemd service for Docker stack auto-start
+      ansible.builtin.template:
+        src: systemd-service.j2
+        dest: "/etc/systemd/system/{{ common_stack_unit }}.service"
+        owner: root
+        group: root
+        mode: "0644"
+      vars:
+        service_description: "{{ common_stack_description }}"
+        service_requires: ["docker.service"]
+        service_after: ["docker.service", "network-online.target"]
+        common_service_wants: ["network.target"]
+        service_type: "oneshot"
+        common_remain_after_exit: "true"
+        common_working_directory: "{{ common_stack_home }}"
+        service_user: "{{ common_stack_user }}"
+        service_group: "{{ common_stack_user }}"
+        service_environment: "{{ common_stack_environment_vars }}"
+        exec_start: "/usr/bin/docker compose -f {{ common_stack_home }}/docker-compose.yml up -d"
+        exec_stop: "/usr/bin/docker compose -f {{ common_stack_home }}/docker-compose.yml down"
+        exec_reload: "/usr/bin/docker compose -f {{ common_stack_home }}/docker-compose.yml restart"
+        restart_sec: "{{ common_stack_restart_sec }}"
+        syslog_identifier: "{{ common_stack_unit }}"
+        common_timeout_start_sec: "0"
+        kill_mode: "none"
+        common_restart_policy: "on-failure"
+      become: true
+      notify: Restart stack
 
-- name: Enable Docker stack service for auto-start
-  ansible.builtin.systemd:
-    name: "{{ stack_service_name }}"
-    enabled: true
-    daemon_reload: true
-  become: true
+    - name: Enable Docker stack service for auto-start
+      ansible.builtin.systemd:
+        name: "{{ common_stack_unit }}"
+        enabled: true
+        daemon_reload: true
+      become: true

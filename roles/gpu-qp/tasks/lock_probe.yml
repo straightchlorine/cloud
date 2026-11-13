@@ -1,0 +1,20 @@
+---
+# Publishes gpu_qp_lock_held: true while a benchmark run holds the run-tree lock.
+- name: Look for the benchmark lock file
+  # Probing a missing file with flock would create it, leaving a root-owned .lock on a host that has none.
+  ansible.builtin.stat:
+    path: "{{ gpu_qp_bench_path }}/.lock"
+  register: gpu_qp_lock_stat
+
+- name: Probe the benchmark lock
+  ansible.builtin.command: "flock -n -s {{ gpu_qp_bench_path }}/.lock true"
+  register: gpu_qp_lock_probe
+  # Flock exits non-zero when a run holds the lock, and the fact below reads the exit code.
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when: gpu_qp_lock_stat.stat.exists
+
+- name: Publish whether a run holds the lock
+  ansible.builtin.set_fact:
+    gpu_qp_lock_held: "{{ gpu_qp_lock_stat.stat.exists and gpu_qp_lock_probe.rc != 0 }}"

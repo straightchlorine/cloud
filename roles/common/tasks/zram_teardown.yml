@@ -13,7 +13,8 @@
 
     - name: Check whether zram0 is still in use as swap
       # Stopping zramswap already swaps its device off; anything left is foreign.
-      ansible.builtin.shell: grep -q '^/dev/zram0 ' /proc/swaps
+      ansible.builtin.command:
+        argv: [grep, -q, '^/dev/zram0 ', /proc/swaps]
       register: common_zram_teardown_swap_active
       changed_when: false
       failed_when: false

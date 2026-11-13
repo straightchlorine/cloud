@@ -8,7 +8,8 @@ Deployed to /config/plugins/reviewed.py (see `pluginpath` in config.yaml). It re
   the file and read back by `--adopt` after a library rebuild. Navidrome shows it too.
 
 It only runs when the overlay sets `reviewed.mark: yes` (see interactive.yaml and the
-`media-sync --keep` overlay); the nightly sync and `--adopt` leave it off.
+release and keep overlays in media_common.OVERLAYS); the nightly sync and `--adopt`
+leave it off.
 """
 
 from beets import importer

@@ -29,35 +29,21 @@
         update_cache: true
       become: true
 
-    - name: Create keyrings directory
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: '0755'
-      become: true
+    - name: Read the dpkg architecture for the Docker repository line
+      ansible.builtin.command: dpkg --print-architecture
+      register: common_docker_dpkg_arch
+      changed_when: false
+      check_mode: false
 
-    - name: Add Docker's official GPG key
-      ansible.builtin.get_url:
-        url: https://download.docker.com/linux/debian/gpg
-        dest: /etc/apt/keyrings/docker.asc
-        mode: '0644'
-      become: true
-
-    - name: Add Docker repository to Apt sources
-      ansible.builtin.shell: |
-        set -o pipefail
-        ARCH=$(dpkg --print-architecture)
-        CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
-        echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] \
-        https://download.docker.com/linux/debian $CODENAME stable" | \
-        tee /etc/apt/sources.list.d/docker.list > /dev/null
-      args:
-        creates: /etc/apt/sources.list.d/docker.list
-
-    - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: true
-      become: true
+    - name: Add the Docker apt repository
+      ansible.builtin.include_tasks: apt_source.yml
+      vars:
+        common_apt_source_name: docker
+        common_apt_source_key_url: https://download.docker.com/linux/debian/gpg
+        common_apt_source_key_path: /etc/apt/keyrings/docker.asc
+        common_apt_source_line: >-
+          deb [arch={{ common_docker_dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable
 
     - name: Install Docker packages
       ansible.builtin.apt:
@@ -173,12 +159,13 @@
   changed_when: false
 
 - name: Test Docker installation with namespace mapping
+  # Pulls an image, so only a fresh install runs it.
   ansible.builtin.command: docker run --rm hello-world
-  register: common_docker_test
   become: true
   become_user: "{{ ansible_user }}"
   changed_when: false
+  when: common_docker_check.rc != 0
 
 - name: Enable Raspberry Pi cgroup memory controller
   ansible.builtin.include_tasks: rpi_cgroups.yml
-  when: common_rpi_cgroup_memory_enabled | default(true) | bool
+  when: common_rpi_cgroup_memory_enabled | bool

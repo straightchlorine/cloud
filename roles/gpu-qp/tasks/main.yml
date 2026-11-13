@@ -1,5 +1,5 @@
 ---
-# The os role must run first: validate.yml asserts on its os_family fact.
+# The os role runs first because validate.yml asserts on its os_family fact.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -16,8 +16,8 @@
   tags: [validation]
 
 - name: Refuse to deploy over a running benchmark
-  # Static import: the tags apply to the tasks inside, and `always` makes it run under every
-  # --tags. The escape is --skip-tags bench-guard.
+  # A static import applies the tags to the tasks inside, and `always` makes the guard run under every --tags.
+  # Skip it with --skip-tags bench-guard.
   ansible.builtin.import_tasks: guard.yml
   tags: [always, bench-guard]
 
@@ -26,6 +26,7 @@
     name: common
     tasks_from: packages
   vars:
+    # The common task files name their inputs without this role's prefix.
     role_specific_packages: "{{ gpu_qp_specific_packages }}"  # noqa: var-naming[no-role-prefix]
   tags: [packages]
 
@@ -41,11 +42,10 @@
   tags: [docker]
 
 - name: Install the NVIDIA container toolkit
-  # Must follow docker.yml: nvidia-ctk edits the daemon.json it wrote, and the
-  # task file restarts Docker itself when the running daemon lacks the runtime.
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: nvidia_container_toolkit
+  # This must follow the Docker setup because nvidia-ctk edits the daemon.json that setup wrote.
+  # The task file restarts Docker itself when the running daemon lacks the runtime.
+  # A static import lets the tags reach the tasks inside.
+  ansible.builtin.import_tasks: nvidia_container_toolkit.yml
   when: gpu_qp_container_toolkit_enabled
   tags: [docker, nvidia, toolkit]
 
@@ -55,20 +55,21 @@
   tags: [firewall, security]
 
 - name: Re-apply the shared dotfiles (tmux)
-  # A tag-scoped run (--tags gpu-qp) skips the site.yml base play that applies
-  # the common role, so this host re-applies the fleet dotfiles itself.
+  # A tag-scoped run such as --tags gpu-qp skips the site.yml base play that applies the common role.
+  # This task applies the fleet dotfiles on such a run.
   ansible.builtin.include_role:
     name: common
     tasks_from: dotfiles
   tags: [gpu-qp, common, base]
 
 - name: Prepare the data directories and the run wrapper
-  # Static import (unlike include_tasks, the tag reaches the tasks inside): --tags data runs them.
+  # A static import lets the tag reach the tasks inside, so --tags data runs them.
   ansible.builtin.import_tasks: data.yml
   tags: [data]
 
 - name: Hold the kernel and the NVIDIA stack while benchmark work is pending
-  # After data.yml, which installs the guard script. Static import: the tags reach the tasks inside.
+  # This must follow data.yml, which installs the guard script.
+  # A static import lets the tags reach the tasks inside.
   ansible.builtin.import_tasks: kernel_guard.yml
   tags: [kernel-guard, driver, nvidia]
 
@@ -76,46 +77,36 @@
   ansible.builtin.include_tasks: image.yml
   tags: [image, build]
 
-- name: Create Docker stack systemd service  # noqa: var-naming[no-role-prefix]
+- name: Create Docker stack systemd service
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_stack_service
   vars:
-    stack_service_name: "stack"
-    stack_description: "gpu-qp stack (quantum-pipeline GPU worker + nvidia exporter)"
-    stack_home_directory: "{{ gpu_qp_home }}"
-    stack_user: "{{ ansible_user }}"
-    stack_environment_vars:
+    common_stack_description: "gpu-qp stack (quantum-pipeline GPU worker + nvidia exporter)"
+    common_stack_home: "{{ gpu_qp_home }}"
+    common_stack_user: "{{ ansible_user }}"
+    common_stack_environment_vars:
       - "GPU_QP_HOME={{ gpu_qp_home }}"
-    # The shared unit retries every 5 s and gives up after 5 failures (StartLimitBurst) in 25 s, so a
-    # driver that is not ready at boot leaves the stack down for good. 30 s apart it never hits the limit.
-    restart_sec: "30"
-    # Explicit -f: the shared systemd template's WorkingDirectory guard is a
-    # known-open issue (see its header), so don't rely on the unit's cwd.
-    stack_exec_start: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml up -d"
-    stack_exec_stop: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml down"
-    stack_exec_reload: "/usr/bin/docker compose -f {{ gpu_qp_home }}/docker-compose.yml restart"
+    # A longer restart delay gives a driver that is not ready at boot more time
+    # before systemd's start limit stops the retries.
+    common_stack_restart_sec: "30"
   tags: [systemd, auto-start]
 
 - name: Deploy the gpu-qp stack
-  # Last on purpose: the driver, toolkit and firewall must be in place before
-  # the GPU containers are exposed.
+  # This runs last so that the driver, toolkit and firewall are in place before the GPU containers are exposed.
   ansible.builtin.include_tasks: stack.yml
   tags: [stack, deploy]
 
-- name: Activate the stack auto-start unit
-  # Starting now proves the boot path: RemainAfterExit runs ExecStart immediately.
-  ansible.builtin.systemd:
-    name: "stack"
-    state: started
-  become: true
+- name: Start the stack unit and flush handlers
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_start
   tags: [systemd, auto-start, stack]
-
-- name: Flush pending handlers before validation
-  # A changed unit notifies "Restart stack"; unflushed it would restart the
-  # stack after validation already passed.
-  ansible.builtin.meta: flush_handlers
 
 - name: Run post-deployment validation
   ansible.builtin.include_tasks: post_deploy_validate.yml
+  # common_start_stack belongs to common, whose defaults are not loaded when a tag-scoped run skips all common includes.
+  # The default mirrors the one in common, as CLAUDE.md allows for cross-role feature flags.
+  # A false value leaves the stack stopped, so its endpoints must not be probed.
+  when: common_start_stack | default(true) | bool
   tags: [post_validation]

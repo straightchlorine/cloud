@@ -1,16 +1,13 @@
 ---
-# Syncthing is the secondary off-box copy; restic stays primary.
-#
-# Contract:
-#   common_snapshot_name:       stack name (script, log and cron names)
-#   common_snapshot_stack_home: compose project dir (the script's cwd)
-#   common_snapshot_dest:       Syncthing-shared destination
-#   common_snapshot_owner:      user Syncthing runs as (owns the snapshots)
-#   common_snapshot_retention:  snapshot directories to keep
-#   common_snapshot_hour/_minute: cron time - finish before the restic timer
-#   common_snapshot_summary:    what the snapshot holds (ntfy text + --help)
-#   common_snapshot_steps:      shell snippets writing into $WORK, in order;
-#                               they may append caveats to $NOTES (ntfy text)
+# This Syncthing snapshot is the secondary off-box copy, and restic stays the primary backup.
+# common_snapshot_name:         stack name used in the script, log and cron names.
+# common_snapshot_stack_home:   compose project directory, used as the script's working directory.
+# common_snapshot_dest:         destination directory shared through Syncthing.
+# common_snapshot_owner:        user that Syncthing runs as, which owns the snapshots.
+# common_snapshot_retention:    number of snapshot directories to keep.
+# common_snapshot_hour and common_snapshot_minute: cron time, which should finish before the restic job.
+# common_snapshot_summary:      text describing the snapshot, used in the ntfy message and --help.
+# common_snapshot_steps:        shell snippets run in order that write into $WORK and may append caveats to $NOTES.
 
 - name: Validate the snapshot backup contract
   ansible.builtin.assert:

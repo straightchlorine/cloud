@@ -1,26 +1,17 @@
 ---
-# Backup Coordinator Configuration
-# Dell Wyse - handles backups for Raspberry Pis and small devices
+# This Dell Wyse coordinates the backups of the Raspberry Pis and other small devices.
 device_role: backup
 device_type: debian
 
-# ============================================
-# BACKUP CONFIGURATION (Coordinator Mode)
-# ============================================
-
-# Mode: coordinator (pulls backups from remote hosts via SSHFS)
+# The coordinator pulls backups from remote hosts over SSHFS.
 backup_role: coordinator
 
-# User and paths
 backup_user: backup
 backup_group: backup
 common_backup_base_path: /opt/backup
 
-# Restic configuration
-restic_version: "0.18.1"
 backup_restic_version: "0.18.1"
 
-# Backup targets - pulled by coordinator
 coordinator_targets:
   - service_name: dns
     hostname: pihole
@@ -96,8 +87,7 @@ coordinator_targets:
       read_concurrency: 2
       compression: auto
 
-  # service_name must match the inventory hostname (rclone config reads hostvars[service_name]).
-  # Key, repository and password keep the pi-music names to reuse the existing restic repo.
+  # The key, repository and password keep the pi-music names so the existing restic repository stays in use.
   - service_name: media
     hostname: media
     target_host: media
@@ -138,21 +128,8 @@ coordinator_targets:
       read_concurrency: 2
       compression: auto
 
-# Node exporter configuration
 prometheus_exporters_node_exporter_enabled: true
-node_exporter_port: 9100
-node_exporter_ufw_enabled: true
 
-# Firewall ports
-firewall_backup_ports:
-  - port: 9100
-    comment: "Prometheus Node Exporter"
-
-# Monitoring and health checks
 backup_monitoring: true
 
-# Backup service name (used for logging and identification)
 common_backup_service_name: "backup-coordinator"
-
-# Key rotation schedule
-backup_key_rotation_schedule: "monthly"

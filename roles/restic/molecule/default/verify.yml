@@ -1,0 +1,985 @@
+---
+- name: Verify - the deployed engine, run for real
+  hosts: all
+  become: true
+  vars:
+    molecule_nm: /org/freedesktop/NetworkManager
+    # Each line is "<object path> <property>|<reply>", where the reply is what busctl --json=short prints.
+    molecule_gate_cases:
+      - id: global-metered-yes
+        rc: 1
+        text: "skipped: NetworkManager reports a metered link (Metered=1)"
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":1}'
+      - id: global-metered-guess-yes
+        rc: 1
+        text: "skipped: NetworkManager reports a metered link (Metered=3)"
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":3}'
+      - id: listed-name-with-unicode-quote-and-backslash
+        rc: 1
+        text: 'skipped: connection ''Ünï "q" back\slash'' is listed as metered'
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+          - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1"]}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-11-wireless"}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Id|{"type":"s","data":"Ünï \"q\" back\\slash"}'
+      - id: no-active-connection
+        rc: 1
+        text: "skipped: no active network connection"
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+          - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":[]}'
+      - id: second-connection-on-a-metered-device
+        rc: 1
+        text: "skipped: link of 'Hotspot' is metered"
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":4}'
+          - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1",
+            "{{ molecule_nm }}/ActiveConnection/2"]}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-3-ethernet"}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Id|{"type":"s","data":"Home"}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/2"]}'
+          - '{{ molecule_nm }}/Devices/2 Metered|{"type":"u","data":4}'
+          - '{{ molecule_nm }}/ActiveConnection/2 Type|{"type":"s","data":"802-11-wireless"}'
+          - '{{ molecule_nm }}/ActiveConnection/2 Id|{"type":"s","data":"Hotspot"}'
+          - '{{ molecule_nm }}/ActiveConnection/2 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/3"]}'
+          - '{{ molecule_nm }}/Devices/3 Metered|{"type":"u","data":1}'
+      - id: only-a-docker-bridge
+        rc: 1
+        text: "skipped: no active network connection"
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+          - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1",
+            "{{ molecule_nm }}/ActiveConnection/2"]}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"bridge"}'
+          - '{{ molecule_nm }}/ActiveConnection/2 Type|{"type":"s","data":"loopback"}'
+      - id: all-unmetered
+        rc: 0
+        text: ""
+        replies:
+          - '{{ molecule_nm }} Metered|{"type":"u","data":4}'
+          - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1"]}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-3-ethernet"}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Id|{"type":"s","data":"Home"}'
+          - '{{ molecule_nm }}/ActiveConnection/1 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/2"]}'
+          - '{{ molecule_nm }}/Devices/2 Metered|{"type":"u","data":2}'
+  tasks:
+    - name: Start a trivial unit first (rootless or cgroup-broken sandboxes stop here)
+      ansible.builtin.command: >-
+        systemd-run --wait --collect -p User=nobody -p ProtectSystem=strict /bin/true
+      changed_when: false
+
+    - name: Read the pinned binary
+      ansible.builtin.command: /usr/local/bin/restic version
+      register: molecule_version
+      changed_when: false
+
+    - name: Stat the binary link and the per-job files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/restic
+        - /etc/restic/ok.password
+        - /etc/restic/ok.env
+        - /etc/ssh/restic_storage_key
+        - /srv/molecule-cache/restic/0123abcd/index
+      register: molecule_files
+
+    - name: Assert the binary, modes and adopted key
+      vars:
+        molecule_st: "{{ molecule_files.results | map(attribute='stat') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "'restic 0.19.1 ' in molecule_version.stdout"
+          - molecule_st[0].islnk
+          - molecule_st[1].mode == '0440' and molecule_st[1].pw_name == 'root' and molecule_st[1].gr_name == 'restic'
+          - molecule_st[2].mode == '0640' and molecule_st[2].gr_name == 'restic'
+          - molecule_st[3].mode == '0400' and molecule_st[3].pw_name == 'restic' and molecule_st[3].gr_name == 'restic'
+          - molecule_st[4].exists and molecule_st[4].pw_name == 'restic'
+
+    - name: Read the vault-managed key as deployed and as generated
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop: [/etc/ssh/restic_storage_key, /root/molecule-storage-key]
+      register: molecule_keys
+
+    - name: Derive the public key from the deployed key
+      ansible.builtin.command: ssh-keygen -y -f /etc/ssh/restic_storage_key
+      register: molecule_derived
+      changed_when: false
+
+    - name: Read the generated public key
+      ansible.builtin.slurp:
+        src: /root/molecule-storage-key.pub
+      register: molecule_pub
+
+    - name: Assert the vault key was written once-terminated and its public key derives
+      vars:
+        molecule_deployed: "{{ molecule_keys.results[0].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_deployed == molecule_keys.results[1].content | b64decode
+          - molecule_deployed is search('\A-----BEGIN OPENSSH PRIVATE KEY-----\n')
+          - molecule_deployed is search('[^\n]\n\Z')
+          - molecule_derived.stdout.split()[:2] == (molecule_pub.content | b64decode).split()[:2]
+      no_log: true
+
+    - name: Read the job environment
+      ansible.builtin.slurp:
+        src: /etc/restic/ok.env
+      register: molecule_env
+
+    - name: Assert the environment holds no secret, the retention flags and the fresh guard
+      vars:
+        molecule_env_text: "{{ molecule_env.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'molecule-restic-password-ok' not in molecule_env_text"
+          - "\"RESTIC_JOB_KEEP='--keep-daily 1'\" in molecule_env_text"
+          - "\"RESTIC_JOB_FRESH='/srv/molecule-src:24'\" in molecule_env_text"
+
+    - name: Stat the legacy artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/backup-ok.timer
+        - /etc/systemd/system/backup-ok.service
+        - /etc/systemd/system/backup-ok.service.1234.2026-01-01@00:00:00~
+        - /etc/systemd/system/backup-ok.service.backup
+        - /etc/systemd/system/backup-ok.timer.backup
+        - /etc/sudoers.d/backup-user
+        - /opt/backup
+      register: molecule_legacy
+
+    - name: Read the backup account
+      ansible.builtin.command: getent passwd backup
+      register: molecule_backup_user
+      changed_when: false
+
+    - name: Assert the legacy install is retired
+      ansible.builtin.assert:
+        that:
+          - molecule_legacy.results | selectattr('stat.exists') | list | length == 0
+          - "':/var/backups:/usr/sbin/nologin' in molecule_backup_user.stdout"
+
+    # The harness sends notifications to the journal, because the notify units have a private /tmp and a read-only /.
+    # A stub restic covers exit 3 and the long run.
+    # A probe instance runs inside the real sandbox.
+    - name: Create the harness drop-in directories
+      ansible.builtin.file:
+        path: "/etc/systemd/system/restic-job@{{ item }}.service.d"
+        state: directory
+        mode: "0755"
+      loop: [partial, slow, probe]
+
+    - name: Install the harness files
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - dest: /usr/local/bin/ntfy-notify
+          mode: "0755"
+          content: |
+            #!/bin/sh
+            logger -t molecule-ntfy "$1|$3"
+            logger -t molecule-ntfy-body "$1|$(printf '%s' "$2" | tr '\n' ' ')"
+        - dest: /usr/local/bin/restic-stub
+          mode: "0755"
+          content: |
+            #!/bin/sh
+            case " $* " in
+              *" unlock "*)
+                [ -r /run/molecule-unlock-rc ] && exit "$(cat /run/molecule-unlock-rc)"
+                f=/var/lib/restic/molecule-unlock-fails
+                if [ -r "$f" ] && [ "$(cat "$f")" -gt 0 ]; then
+                  echo $(( $(cat "$f") - 1 )) > "$f.new" && mv "$f.new" "$f"
+                  echo 'unlock: stubbed network failure' >&2
+                  exit 1
+                fi ;;
+            esac
+            case "$STUB_MODE: $* " in
+              *" prune "*) [ -e /run/molecule-prune-fails ] && { echo 'prune: stubbed failure' >&2; exit 1; } ;;
+            esac
+            case "$STUB_MODE: $* " in
+              partial:*" backup "*) /usr/local/bin/restic "$@" || exit; exit 3 ;;
+              slow:*" backup "*)
+                exec /usr/local/bin/restic backup --stdin-from-command --stdin-filename slow -- sleep 600 ;;
+            esac
+            exec /usr/local/bin/restic "$@"
+        - dest: /etc/systemd/system/restic-job@partial.service.d/zz-stub.conf
+          mode: "0644"
+          content: |
+            [Service]
+            Environment=RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=partial RESTIC_JOB_RETRY_SLEEP=1
+        - dest: /etc/systemd/system/restic-job@slow.service.d/zz-stub.conf
+          mode: "0644"
+          content: "[Service]\nEnvironment=RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=slow\n"
+        - dest: /etc/systemd/system/restic-job@probe.service.d/zz-probe.conf
+          mode: "0644"
+          content: |
+            [Service]
+            ExecStart=
+            ExecStart=/bin/sh -c 'grep CapEff /proc/self/status > /var/lib/restic/probe-caps; \
+              cat /srv/molecule-src/private/secret > /var/lib/restic/probe-read; \
+              touch /etc/probe-write /srv/molecule-src/probe-write 2> /var/lib/restic/probe-errors; exit 0'
+
+    - name: Load the harness drop-ins
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Run the ok job twice (forget then keeps one snapshot)
+      ansible.builtin.command: systemctl start restic-job@ok.service  # noqa: command-instead-of-module
+      loop: [1, 2]
+      changed_when: true
+
+    - name: List the ok job's snapshots
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec ok snapshots --json
+      register: molecule_snaps
+      changed_when: false
+
+    - name: List the latest snapshot's files
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec ok ls latest
+      register: molecule_ls
+      changed_when: false
+
+    - name: Stat the stamps
+      ansible.builtin.stat:
+        path: "/var/lib/restic/ok.{{ item }}"
+      loop: [ok, pruned, checked]
+      register: molecule_stamps
+
+    - name: Assert a real, scoped, capability-read snapshot
+      vars:
+        molecule_snap_list: "{{ molecule_snaps.stdout | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_snap_list | length == 1
+          - (molecule_snap_list | first).hostname == ansible_nodename
+          - "'ok' in (molecule_snap_list | first).tags"
+          - "'/srv/molecule-src/private/secret' in molecule_ls.stdout_lines"
+          - "'/srv/molecule-src/skip/excluded' not in molecule_ls.stdout_lines"
+          - molecule_stamps.results | selectattr('stat.exists') | list | length == 3
+
+    - name: Stat the weekly stamps and age them past their 7 d limit
+      ansible.builtin.shell: |
+        set -e
+        stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+        touch -d '8 days ago' /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+        stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+      register: molecule_stamps_before
+      changed_when: true
+
+    - name: Run the ok job with its weekly maintenance due
+      ansible.builtin.command: systemctl start restic-job@ok.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: Read the run's last summary line and the stamps
+      ansible.builtin.shell: |
+        set -o pipefail
+        journalctl -u restic-job@ok.service -o cat --no-pager | grep 'restic-job: done' | tail -n 1
+        stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+      args:
+        executable: /bin/bash
+      register: molecule_weekly
+      changed_when: false
+
+    - name: Assert prune and check ran and moved their stamps
+      vars:
+        molecule_aged: "{{ molecule_stamps_before.stdout_lines[2:4] | map('int') | list }}"
+        molecule_now: "{{ molecule_weekly.stdout_lines[1:3] | map('int') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "molecule_weekly.stdout_lines[0] == 'restic-job: done (backup,forget,prune,check)'"
+          - molecule_now[0] > molecule_aged[0] + 86400
+          - molecule_now[1] > molecule_aged[1] + 86400
+
+    - name: Run the partial job (stub exits 3 after a real snapshot)
+      ansible.builtin.command: systemctl start restic-job@partial.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: Run the jobs that must fail (missing source, stale fresh path)
+      ansible.builtin.command: "systemctl start restic-job@{{ item }}.service"  # noqa: command-instead-of-module
+      loop: [broken, stale]
+      register: molecule_failing
+      changed_when: true
+      failed_when: molecule_failing.rc == 0
+
+    - name: Run the sandbox probe
+      ansible.builtin.command: systemctl start restic-job@probe.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: Read each job's result
+      ansible.builtin.command: "systemctl show -p Result -p ExecMainStatus restic-job@{{ item }}.service"
+      loop: [partial, broken, stale]
+      register: molecule_results
+      changed_when: false
+
+    - name: Read the probe's findings
+      ansible.builtin.slurp:
+        src: "/var/lib/restic/probe-{{ item }}"
+      loop: [caps, read, errors]
+      register: molecule_probe
+
+    - name: Stat the probe's write attempt
+      ansible.builtin.stat:
+        path: /etc/probe-write
+      register: molecule_probe_write
+
+    - name: Assert exit mapping and the sandbox
+      vars:
+        molecule_r: "{{ molecule_results.results | map(attribute='stdout_lines') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "'Result=success' in molecule_r[0] and 'ExecMainStatus=3' in molecule_r[0]"
+          - "'Result=exit-code' in molecule_r[1] and 'ExecMainStatus=1' in molecule_r[1]"
+          - "'Result=exit-code' in molecule_r[2] and 'ExecMainStatus=1' in molecule_r[2]"
+          - "'0000000000000004' in (molecule_probe.results[0].content | b64decode)"
+          - (molecule_probe.results[1].content | b64decode) == 'root-only\n'
+          - (molecule_probe.results[2].content | b64decode) is search('Read-only file system')
+          - not molecule_probe_write.stat.exists
+
+    - name: Age the partial job's prune stamp and make the stub's prune fail
+      ansible.builtin.shell: |
+        set -e
+        touch -d '8 days ago' /var/lib/restic/partial.pruned
+        touch /run/molecule-prune-fails
+        stat -c %Y /var/lib/restic/partial.pruned
+      register: molecule_prune_stamp
+      changed_when: true
+
+    - name: Run the partial job with a failing prune
+      ansible.builtin.command: systemctl start restic-job@partial.service  # noqa: command-instead-of-module
+      register: molecule_prune_run
+      changed_when: true
+      failed_when: molecule_prune_run.rc == 0
+
+    - name: Read the failed run
+      ansible.builtin.shell: |
+        set -o pipefail
+        systemctl show -p Result -p ExecMainStatus restic-job@partial.service
+        stat -c %Y /var/lib/restic/partial.pruned
+        journalctl -u restic-job@partial.service -o cat --no-pager | grep 'restic-job: FAILED' | tail -n 1
+      args:
+        executable: /bin/bash
+      register: molecule_prune_failed
+      changed_when: false
+
+    - name: Let the stub's prune work again
+      ansible.builtin.file:
+        path: /run/molecule-prune-fails
+        state: absent
+
+    - name: Assert a failed prune fails the run and keeps the stamp due
+      ansible.builtin.assert:
+        that:
+          - "'Result=exit-code' in molecule_prune_failed.stdout_lines"
+          - "'ExecMainStatus=1' in molecule_prune_failed.stdout_lines"
+          - molecule_prune_failed.stdout_lines[2] == molecule_prune_stamp.stdout
+          - "molecule_prune_failed.stdout_lines[3] == 'restic-job: FAILED: prune failed'"
+
+    - name: Start the slow job without waiting
+      ansible.builtin.command: systemctl start --no-block restic-job@slow.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: Wait until the slow job holds its lock
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec slow list locks --no-lock
+      register: molecule_locks
+      until: molecule_locks.stdout_lines | length == 1
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: Stop the slow job mid-backup
+      ansible.builtin.command: systemctl stop restic-job@slow.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: List locks after the stop
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec slow list locks --no-lock
+      register: molecule_locks_after
+      changed_when: false
+
+    - name: Assert the SIGINT relay let restic delete its lock
+      ansible.builtin.assert:
+        that: molecule_locks_after.stdout | trim == ''
+
+    - name: Wait for the per-run notifications
+      ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+      register: molecule_ntfy
+      until: >-
+        'restic probe ok|low' in molecule_ntfy.stdout
+        and 'restic slow FAILED (exit-code/1)|high' in molecule_ntfy.stdout
+        and 'restic partial FAILED (exit-code/1)|high' in molecule_ntfy.stdout
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    - name: Read the failure bodies
+      ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+      register: molecule_bodies
+      changed_when: false
+
+    - name: Assert each failure body carries the run's own journal lines
+      ansible.builtin.assert:
+        that:
+          - >-
+            molecule_bodies.stdout is search('restic broken FAILED.*source missing: /srv/molecule-missing')
+          - molecule_bodies.stdout is search('restic stale FAILED.*not updated in the last 1 h')
+          - molecule_bodies.stdout is search('restic partial FAILED.*prune failed')
+
+    - name: Stat the slow job's interrupted marker
+      ansible.builtin.stat:
+        path: /var/lib/restic/slow.interrupted
+      register: molecule_marker
+
+    - name: Assert one notification per outcome and the marker cleared on delivery
+      ansible.builtin.assert:
+        that:
+          - "'restic ok ok|low' in molecule_ntfy.stdout"
+          - "'restic partial ok with warnings|default' in molecule_ntfy.stdout"
+          - "'restic broken FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+          - "'restic stale FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+          - "'restic partial FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+          - not molecule_marker.stat.exists
+
+    # The timer's 12:00 calendar trigger would otherwise start a second run
+    # while the manual one is read back, and a stopped timer cannot race it.
+    - name: Stop the freshness timer so only the manual run is observed
+      ansible.builtin.systemd:
+        name: restic-freshness.timer
+        state: stopped
+
+    - name: Age the ok job's stamp past its limit and leave an undelivered interruption
+      ansible.builtin.shell: |
+        set -e
+        touch -d '40 hours ago' /var/lib/restic/ok.ok
+        touch /var/lib/restic/partial.interrupted
+      changed_when: true
+
+    - name: Run the freshness check (exit 2 = alert delivered)
+      ansible.builtin.command: systemctl start restic-freshness.service  # noqa: command-instead-of-module
+      changed_when: true
+      failed_when: false
+
+    - name: Wait for the freshness alert
+      ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+      register: molecule_fresh
+      until: "'restic backups need attention|high' in molecule_fresh.stdout"
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    - name: Read the freshness alert body
+      ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+      register: molecule_fresh_body
+      changed_when: false
+
+    - name: Read the freshness result and the marker
+      ansible.builtin.command: systemctl show -p Result -p ExecMainStatus -p NRestarts restic-freshness.service
+      register: molecule_fresh_unit
+      changed_when: false
+
+    - name: Stat the delivered interruption marker
+      ansible.builtin.stat:
+        path: /var/lib/restic/partial.interrupted
+      register: molecule_partial_marker
+
+    - name: Assert freshness alerted once, failed visibly and cleared the marker
+      ansible.builtin.assert:
+        that:
+          # Each cause names only its own job, so neither scan can stand in for the other.
+          - >-
+            molecule_fresh_body.stdout is search('attention\\|No good backup within the limit: ok\\. ')
+          - >-
+            molecule_fresh_body.stdout is search('Stopped mid-run \\(shutdown or stop\\): partial\\. See journalctl')
+          - "'ExecMainStatus=2' in molecule_fresh_unit.stdout_lines"
+          - "'NRestarts=0' in molecule_fresh_unit.stdout_lines"
+          - not molecule_partial_marker.stat.exists
+
+    - name: Stat the Storage Box connection files and the refused job's repository
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/restic/ssh_config
+        - /etc/restic/known_hosts
+        - /srv/molecule-repos/refused/config
+        - /var/lib/molecule-init-refused
+      register: molecule_conn
+
+    - name: Read the ssh config and the pinned host keys
+      ansible.builtin.slurp:
+        src: "/etc/restic/{{ item }}"
+      loop: [ssh_config, known_hosts]
+      register: molecule_conn_text
+
+    - name: Assert the Storage Box connection is pinned and a missing repository was refused
+      vars:
+        molecule_st: "{{ molecule_conn.results | map(attribute='stat') | list }}"
+        molecule_ssh: "{{ molecule_conn_text.results[0].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_st[0].mode == '0640' and molecule_st[0].pw_name == 'root' and molecule_st[0].gr_name == 'restic'
+          - molecule_st[1].mode == '0644' and molecule_st[1].pw_name == 'root' and molecule_st[1].gr_name == 'root'
+          - molecule_ssh is search('^Host hetzner-storage$', multiline=True)
+          - molecule_ssh is search('^    HostName storage.example.test$', multiline=True)
+          - molecule_ssh is search('^    User u0$', multiline=True)
+          - molecule_ssh is search('^    Port 23$', multiline=True)
+          - molecule_ssh is search('^    IdentityFile /etc/ssh/restic_storage_key$', multiline=True)
+          - molecule_ssh is search('^    StrictHostKeyChecking yes$', multiline=True)
+          - molecule_ssh is search('^    UserKnownHostsFile /etc/restic/known_hosts$', multiline=True)
+          - molecule_ssh is search('^    GlobalKnownHostsFile /dev/null$', multiline=True)
+          - (molecule_conn_text.results[1].content | b64decode) ==
+            '[storage.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n'
+          - molecule_st[3].exists
+          - not molecule_st[2].exists
+
+    - name: Stat the sudoers files and the lockout markers
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/sudoers.d/backup-user
+        - /etc/sudoers.d/other-general
+        - /var/lib/molecule-lockout-kept
+        - /opt/backup
+        - /var/lib/molecule-lockout-home-kept
+        - /var/lib/molecule-unrelated-kept
+        - /var/lib/molecule-self-grant-kept
+      register: molecule_lockout
+
+    - name: Read the account entry recorded while the guard ran
+      ansible.builtin.slurp:
+        src: /var/lib/molecule-lockout-account
+      register: molecule_lockout_account
+
+    - name: Assert the sudo grant went only once another general grant existed, and the account and its home stayed
+      vars:
+        molecule_st: "{{ molecule_lockout.results | map(attribute='stat') | list }}"
+        molecule_entry: "{{ molecule_lockout_account.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_st[2].exists
+          - not molecule_st[0].exists
+          - molecule_st[1].exists
+          - not molecule_st[3].exists
+          - molecule_st[4].exists
+          - molecule_st[5].exists
+          - molecule_st[6].exists
+          - molecule_entry is match('backup:x:34:34:backup:/opt/backup:')
+
+    # The container has no NetworkManager, so the gate fails closed.
+    - name: Start the gated job, whose gate cannot reach NetworkManager
+      ansible.builtin.command: systemctl start restic-job@gated.service  # noqa: command-instead-of-module
+      changed_when: true
+
+    - name: Read the gated job's unit state, journal, stamp, repository and drop-ins
+      ansible.builtin.shell: |
+        set -o pipefail
+        systemctl show -p ActiveState -p Result -p ExecMainStatus restic-job@gated.service
+        journalctl -u restic-job@gated.service -o cat --no-pager | grep 'restic-job: skipped: ' || true
+        echo "snapshots=$(find /srv/molecule-repos/gated/snapshots -type f 2>/dev/null | wc -l)"
+        echo "ok-stamp=$(test -e /var/lib/restic/gated.ok && echo yes || echo no)"
+      args:
+        executable: /bin/bash
+      register: molecule_gated
+      changed_when: false
+
+    - name: Read the drop-ins and the metered list
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - cat /etc/systemd/system/restic-job@gated.service.d/job.conf
+        - cat /etc/systemd/system/restic-job@ok.service.d/job.conf
+        - stat -c '%a %U:%G' /etc/restic/gated.metered
+        - cat /etc/restic/gated.metered
+      register: molecule_gated_files
+      changed_when: false
+
+    - name: Assert the gate skipped the run without failing the unit
+      ansible.builtin.assert:
+        that:
+          - "'ActiveState=inactive' in molecule_gated.stdout_lines"
+          - "'Result=exec-condition' in molecule_gated.stdout_lines"
+          - "molecule_gated.stdout is search('restic-job: skipped: NetworkManager unreachable')"
+          - "'snapshots=0' in molecule_gated.stdout_lines"
+          - "'ok-stamp=no' in molecule_gated.stdout_lines"
+          - >-
+            'ExecCondition=/usr/local/libexec/restic/restic-job gate %i'
+            in molecule_gated_files.results[0].stdout_lines
+          - "'ExecCondition' not in molecule_gated_files.results[1].stdout"
+          - molecule_gated_files.results[2].stdout == '640 root:restic'
+          - >-
+            molecule_gated_files.results[3].stdout_lines
+            == ['My Phone', 'Zoë’s "iPhone"', 'Ünï "q" back\\slash']
+
+    - name: Plant a fresh good-run stamp and start the gated job again
+      ansible.builtin.shell: |
+        touch /var/lib/restic/gated.ok
+        systemctl start restic-job@gated.service
+        journalctl -u restic-job@gated.service -o cat --no-pager | grep 'restic-job: skipped: ' | tail -n 1
+      register: molecule_gated_fresh
+      changed_when: true
+
+    # systemd fires OnSuccess= for an ExecCondition skip (MONITOR_SERVICE_RESULT=exec-condition, no exit status).
+    - name: Wait until OnSuccess= ran the notifier for the skipped runs
+      ansible.builtin.command: journalctl -u restic-notify@ok-gated.service -o cat --no-pager
+      register: molecule_gated_notify
+      until: molecule_gated_notify.stdout is search('Finished restic-notify@ok-gated')
+      retries: 10
+      delay: 1
+      changed_when: false
+
+    - name: Read every ntfy line
+      ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+      register: molecule_gated_ntfy
+      changed_when: false
+
+    - name: Assert a fresh stamp skips first and a skipped run sends nothing
+      ansible.builtin.assert:
+        that:
+          - "molecule_gated_fresh.stdout_lines[-1] == 'restic-job: skipped: last good run is under 20 h old'"
+          - "'gated' not in molecule_gated_ntfy.stdout"
+
+    # The gate parses canned busctl replies, because the stub directory comes first in PATH.
+    - name: Create the busctl stub directory
+      ansible.builtin.file:
+        path: /usr/local/lib/molecule-stubs
+        state: directory
+        mode: "0755"
+
+    - name: Install the busctl stub
+      ansible.builtin.copy:
+        dest: /usr/local/lib/molecule-stubs/busctl
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # Argument 4 is the object path and argument 6 is the property.
+          awk -v k="$4 $6" '{ i = index($0, "|"); if (substr($0, 1, i - 1) == k) { print substr($0, i + 1); f = 1 } }
+            END { exit !f }' /run/molecule-nm-replies || { echo "Failed to get property $6" >&2; exit 1; }
+
+    - name: Run the gate as the restic user against each set of canned replies
+      ansible.builtin.shell: |
+        printf '%s\n' "$REPLIES" > /run/molecule-nm-replies
+        rm -f /var/lib/restic/gated.ok
+        out=$(runuser -u restic -- env PATH=/usr/local/lib/molecule-stubs:/usr/sbin:/usr/bin:/sbin:/bin \
+          /usr/local/libexec/restic/restic-job gate gated 2>&1)
+        echo "rc=$?"
+        echo "$out"
+      environment:
+        REPLIES: "{{ item.replies | join('\n') }}"
+      loop: "{{ molecule_gate_cases }}"
+      loop_control:
+        label: "{{ item.id }}"
+      register: molecule_gate
+      changed_when: false
+
+    - name: Assert each reply set was parsed to the right decision
+      ansible.builtin.assert:
+        that:
+          - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+          - item.item.text in item.stdout
+        fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+      loop: "{{ molecule_gate.results }}"
+      loop_control:
+        label: "{{ item.item.id }}"
+
+    - name: Point the gated job at the stub and let it run end to end on an unmetered link
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/restic-job@gated.service.d/zz-nm-stub.conf
+        mode: "0644"
+        content: |
+          [Service]
+          Environment=PATH=/usr/local/lib/molecule-stubs:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    - name: Start the gated job with all-unmetered replies and no good-run stamp
+      ansible.builtin.shell: |
+        systemctl daemon-reload
+        printf '%s\n' "$REPLIES" > /run/molecule-nm-replies
+        rm -f /var/lib/restic/gated.ok
+        systemctl start restic-job@gated.service
+        systemctl show -p Result -p ExecMainStatus restic-job@gated.service
+        echo "snapshots=$(find /srv/molecule-repos/gated/snapshots -type f | wc -l)"
+        echo "ok-stamp=$(test -e /var/lib/restic/gated.ok && echo yes || echo no)"
+      environment:
+        REPLIES: "{{ (molecule_gate_cases | last).replies | join('\n') }}"
+      register: molecule_gated_run
+      changed_when: true
+
+    - name: Assert the unmetered gated job backed up and stamped
+      ansible.builtin.assert:
+        that:
+          - "'Result=success' in molecule_gated_run.stdout_lines"
+          - "'ExecMainStatus=0' in molecule_gated_run.stdout_lines"
+          - "'snapshots=1' in molecule_gated_run.stdout_lines"
+          - "'ok-stamp=yes' in molecule_gated_run.stdout_lines"
+
+    # restic-job retries unlock on a flaky repository and fails at once on configuration errors.
+    - name: Run the partial job with unlock failing 2 times, 5 times, then exit 10 and exit 12
+      ansible.builtin.shell: |
+        rm -f /var/lib/restic/molecule-unlock-fails /run/molecule-unlock-rc
+        [ -z "$FAILS" ] || echo "$FAILS" > /var/lib/restic/molecule-unlock-fails
+        [ -z "$RC" ] || echo "$RC" > /run/molecule-unlock-rc
+        sleep 1
+        since=$(date '+%Y-%m-%d %H:%M:%S')
+        systemctl start restic-job@partial.service
+        echo "start-rc=$?"
+        systemctl show -p Result -p ExecMainStatus restic-job@partial.service
+        echo "left=$(cat /var/lib/restic/molecule-unlock-fails 2>/dev/null)"
+        journalctl -u restic-job@partial.service --since "$since" -o cat --no-pager
+      environment:
+        FAILS: "{{ item.fails }}"
+        RC: "{{ item.rc }}"
+      loop:
+        - { id: retry-then-success, fails: "2", rc: "", result: success, status: "3", retries: 2, left: "0",
+            text: "restic-job: done (backup" }
+        - { id: unreachable, fails: "5", rc: "", result: exit-code, status: "1", retries: 4, left: "0",
+            text: "restic-job: FAILED: repository unreachable (restic exit 1)" }
+        - { id: no-repository, fails: "", rc: "10", result: exit-code, status: "1", retries: 0, left: "",
+            text: "restic-job: FAILED: no repository at /srv/molecule-repos/partial" }
+        - { id: wrong-password, fails: "", rc: "12", result: exit-code, status: "1", retries: 0, left: "",
+            text: "restic-job: FAILED: wrong password for /srv/molecule-repos/partial" }
+      loop_control:
+        label: "{{ item.id }}"
+      register: molecule_unlock
+      changed_when: true
+
+    - name: Assert the retry count, the final state and the message of each unlock case
+      ansible.builtin.assert:
+        that:
+          - "('Result=' ~ item.item.result) in item.stdout_lines"
+          - "('ExecMainStatus=' ~ item.item.status) in item.stdout_lines"
+          - "('left=' ~ item.item.left) in item.stdout_lines"
+          - >-
+            item.stdout_lines | select('search', 'unlock failed') | list | length == item.item.retries
+          - item.item.text in item.stdout
+        fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+      loop: "{{ molecule_unlock.results }}"
+      loop_control:
+        label: "{{ item.item.id }}"
+
+    - name: Wait for the failure notifications of the unlock cases
+      ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+      register: molecule_unlock_bodies
+      until:
+        - molecule_unlock_bodies.stdout is search('restic partial FAILED.*repository unreachable')
+        - molecule_unlock_bodies.stdout is search('restic partial FAILED.*no repository at')
+        - molecule_unlock_bodies.stdout is search('restic partial FAILED.*wrong password for')
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    # The cache directory knob: the unit may write and waits for it, the env file stages pack files in it, and
+    # the default directory was never created.
+    - name: Read the cache directory, the drop-in, the env file and the engine's directories
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - stat -c '%a %U:%G' /srv/molecule-cache/restic /srv/molecule-cache/restic/tmp
+        - cat /etc/systemd/system/restic-job@ok.service.d/job.conf
+        - cat /etc/restic/ok.env
+        - systemctl show -p ReadWritePaths -p RequiresMountsFor restic-job@ok.service
+        - ls -d /var/cache/restic
+        - find /srv/molecule-cache/restic -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+      register: molecule_cache
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the unit and the env file use the configured cache directory
+      vars:
+        molecule_c: "{{ molecule_cache.results | map(attribute='stdout') | list }}"
+        molecule_c_dirs: "{{ molecule_cache.results[5].stdout_lines }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_cache.results[0].stdout_lines == ['700 restic:restic', '700 restic:restic']
+          - "'RequiresMountsFor=/srv/molecule-src /srv/molecule-cache/restic' in molecule_c[1]"
+          - "'ReadWritePaths=/srv/molecule-cache/restic' in molecule_c[1]"
+          - "'RESTIC_CACHE_DIR=/srv/molecule-cache/restic' in molecule_c[2]"
+          - "'TMPDIR=/srv/molecule-cache/restic/tmp' in molecule_c[2]"
+          - "'GOMEMLIMIT=409MiB' in molecule_c[2]"
+          - "'ReadWritePaths=/srv/molecule-cache/restic' in molecule_c[3]"
+          - molecule_cache.results[4].rc != 0
+          # The legacy cache entry, tmp and at least one repository cache written by a real run.
+          - "'0123abcd' in molecule_c_dirs"
+          - molecule_c_dirs | reject('in', ['0123abcd', 'tmp']) | list | length >= 1
+
+    # skip_on_battery: the gate reads a fake power_supply tree through the RESTIC_JOB_POWER_DIR seam.
+    # Only a battery that reports Discharging skips; a USB-C charger is type USB and never decides.
+    - name: Read the battery job's drop-in and env file
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - cat /etc/systemd/system/restic-job@onbat.service.d/job.conf
+        - cat /etc/restic/onbat.env
+      register: molecule_onbat
+      changed_when: false
+
+    - name: Run the gate as the restic user against fake power supplies
+      ansible.builtin.shell: |
+        set -e
+        d=$(mktemp -d)
+        for s in $SUPPLIES; do
+          n=${s%%:*}; rest=${s#*:}; mkdir -p "$d/$n"
+          echo "${rest%%:*}" > "$d/$n/type"
+          attr=${rest#*:}
+          [ "$attr" = - ] || echo "${attr#*=}" > "$d/$n/${attr%%=*}"
+        done
+        chmod -R a+rX "$d"
+        rm -f /var/lib/restic/onbat.ok
+        set +e
+        out=$(runuser -u restic -- env RESTIC_JOB_POWER_DIR="$d" \
+          /usr/local/libexec/restic/restic-job gate onbat 2>&1)
+        echo "rc=$?"
+        echo "$out"
+        rm -rf "$d"
+      environment:
+        SUPPLIES: "{{ item.supplies }}"
+      loop:
+        - { id: battery-discharging-usbc-offline, supplies: "BAT0:Battery:status=Discharging ucsi:USB:online=0",
+            rc: 1, text: "skipped: the battery is discharging (on battery)" }
+        - { id: battery-discharging-mains-offline, supplies: "BAT0:Battery:status=Discharging AC:Mains:online=0",
+            rc: 1, text: "skipped: the battery is discharging (on battery)" }
+        - { id: usbc-charger-charging, supplies: "BAT0:Battery:status=Charging ucsi:USB:online=1", rc: 0, text: "" }
+        - { id: battery-full, supplies: "BAT0:Battery:status=Full AC:Mains:online=1", rc: 0, text: "" }
+        - { id: battery-not-charging, supplies: "BAT0:Battery:status=Not_charging", rc: 0, text: "" }
+        - { id: desktop-without-battery, supplies: "AC:Mains:online=0", rc: 0, text: "" }
+        - { id: no-supply-at-all, supplies: "", rc: 0, text: "" }
+      loop_control:
+        label: "{{ item.id }}"
+      register: molecule_battery
+      changed_when: false
+
+    - name: Assert the battery decisions
+      ansible.builtin.assert:
+        that:
+          - "'ExecCondition=/usr/local/libexec/restic/restic-job gate %i' in molecule_onbat.results[0].stdout_lines"
+          - "'RESTIC_JOB_SKIP_ON_BATTERY=1' in molecule_onbat.results[1].stdout_lines"
+          - "'RESTIC_JOB_SKIP_METERED=0' in molecule_onbat.results[1].stdout_lines"
+          - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+          - item.item.text in item.stdout
+        fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+      loop: "{{ molecule_battery.results }}"
+      loop_control:
+        label: "{{ item.item.id }}"
+
+    # The directories the role makes, and the symlink it must not follow.
+    - name: Stat the cache parent, the alert directory and the symlink trap
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - stat -c '%a %U:%G' /srv/molecule-cache /var/lib/restic-alerts /srv/molecule-victim
+        - test -L /srv/molecule-trap/restic
+      register: molecule_dirs
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the missing parent is root's, the alert stamps are root-only and the symlink target is untouched
+      ansible.builtin.assert:
+        that:
+          - molecule_dirs.results[0].stdout_lines == ['755 root:root', '700 root:root', '755 root:root']
+          - molecule_dirs.results[1].rc == 0
+
+    # Storage Box space: the weekly check runs `sftp df` (stubbed through PATH) as the restic user and leaves a marker;
+    # the root freshness run sends the alert, once a day per condition, and reads only a well-formed marker.
+    - name: Install the sftp stub
+      ansible.builtin.copy:
+        dest: /usr/local/lib/molecule-stubs/sftp
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # The check reads its batch from stdin; the reply is chosen by /run/molecule-sftp.
+          cat > /dev/null
+          case "$(cat /run/molecule-sftp)" in
+            fail) echo "Connection closed" >&2; exit 1 ;;
+            garbage) echo "df: not supported" ;;
+            *) echo "        Size         Used        Avail       (root)    %Capacity"
+               echo "$(cat /run/molecule-sftp)" ;;
+          esac
+
+    - name: Run the storage check against each sftp reply, as the restic user
+      ansible.builtin.shell: |
+        printf '%s\n' "$REPLY" > /run/molecule-sftp
+        chmod 644 /run/molecule-sftp
+        out=$(runuser -u restic -- env PATH=/usr/local/lib/molecule-stubs:/usr/sbin:/usr/bin:/sbin:/bin \
+          /usr/local/libexec/restic/restic-job storage offsite 2>&1)
+        echo "rc=$?"
+        echo "marker=$(cat /var/lib/restic/offsite.storage 2>/dev/null || echo none)"
+        echo "$out"
+      environment:
+        REPLY: "{{ item.reply }}"
+      loop:
+        - { id: low-free, reply: "1000 900 100 (root) 90%", rc: 0, marker: "90 15", text: "Storage Box at 90% used" }
+        - { id: failed-df, reply: "fail", rc: 1, marker: "90 15", text: "sftp df failed: Connection closed" }
+        - { id: unreadable, reply: "garbage", rc: 1, marker: "90 15", text: "cannot read sftp df output" }
+        - { id: enough-free, reply: "1000 500 500 (root) 50%", rc: 0, marker: none, text: "" }
+        - { id: exactly-at-threshold, reply: "1000 850 150 (root) 85%", rc: 0, marker: none, text: "" }
+        - { id: just-below-threshold, reply: "1000 851 149 (root) 85%", rc: 0, marker: "85 15", text: "85% used" }
+      loop_control:
+        label: "{{ item.id }}"
+      register: molecule_storage
+      changed_when: false
+
+    - name: Assert the marker follows the free space, and a failing df changes nothing and does not break the caller
+      ansible.builtin.assert:
+        that:
+          - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+          - item.stdout_lines[1] == 'marker=' ~ item.item.marker
+          - item.item.text in item.stdout
+        fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+      loop: "{{ molecule_storage.results }}"
+      loop_control:
+        label: "{{ item.item.id }}"
+
+    - name: Run freshness with the low-space marker in place, twice
+      ansible.builtin.shell: |
+        printf '90 15\n' > /var/lib/restic/offsite.storage
+        rm -f /var/lib/restic-alerts/storage-offsite
+        /usr/local/libexec/restic/restic-job freshness
+        echo "rc1=$?"
+        /usr/local/libexec/restic/restic-job freshness
+        echo "rc2=$?"
+        sleep 1
+        echo "alerts=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box at 90% used|high')"
+        ls /var/lib/restic-alerts
+      register: molecule_storage_alert
+      changed_when: true
+
+    - name: Assert one high-priority Storage Box alert for two runs, and a stamp in the root directory
+      ansible.builtin.assert:
+        that:
+          - "'alerts=1' in molecule_storage_alert.stdout_lines"
+          - "'storage-offsite' in molecule_storage_alert.stdout_lines"
+          - "'rc1=2' in molecule_storage_alert.stdout_lines"
+
+    # The marker is written by the job's user, so root ignores anything but a regular file of two short numbers.
+    - name: Run freshness against hostile markers
+      ansible.builtin.shell: |
+        before=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box')
+        rm -f /var/lib/restic-alerts/storage-offsite /var/lib/restic/offsite.storage
+        out=""
+        case "$KIND" in
+          symlink)
+            printf '90 15\n' > /tmp/molecule-marker
+            ln -s /tmp/molecule-marker /var/lib/restic/offsite.storage ;;
+          text) printf 'Storage Box at 1%% $(touch /tmp/molecule-pwned)\n' > /var/lib/restic/offsite.storage ;;
+          long) head -c 5000 /dev/zero | tr '\0' 9 > /var/lib/restic/offsite.storage ;;
+          fifo) mkfifo /var/lib/restic/offsite.storage ;;
+        esac
+        out=$(timeout 20 /usr/local/libexec/restic/restic-job freshness 2>&1); echo "rc=$?"
+        sleep 1
+        after=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box')
+        echo "new-alerts=$((after - before))"
+        echo "$out" | grep -c 'ignoring'
+        test ! -e /tmp/molecule-pwned && echo not-executed
+        rm -f /var/lib/restic/offsite.storage /var/lib/restic-alerts/storage-offsite
+      environment:
+        KIND: "{{ item }}"
+      loop: [symlink, text, long, fifo]
+      register: molecule_hostile
+      changed_when: false
+
+    - name: Assert none of them produced an alert and each was reported as ignored
+      ansible.builtin.assert:
+        that:
+          - "'new-alerts=0' in item.stdout_lines"
+          - "'not-executed' in item.stdout_lines"
+          - "'1' in item.stdout_lines"
+        fail_msg: "{{ item.item }}: {{ item.stdout }}"
+      loop: "{{ molecule_hostile.results }}"
+      loop_control:
+        label: "{{ item.item }}"

@@ -1,14 +1,13 @@
 ---
 # Standalone deployment for the honeybench performance-bench VM.
 #
-# CentOS Stream 10 on a LAN hypervisor: the fleet-wide common/firewall roles are
-# apt- and ufw-based and are deliberately not applied here (site.yml excludes
-# the bench group from every `all` play).
+# The bench is CentOS Stream 10 on a LAN hypervisor, and the fleet-wide common and firewall roles are apt and ufw based.
+# They are not applied here because the base plays in site.yml target `fleet`, which excludes the bench group.
 #
 #   ansible-playbook playbooks/honeybench.yml
 #   ansible-playbook playbooks/honeybench.yml --tags validation   # checks only
 #
-# Optional: ship the prod data dump (host_vars/honeybench.yml pins its sha256):
+# To ship the production data dump, whose sha256 host_vars/honeybench.yml pins:
 #   ansible-playbook playbooks/honeybench.yml -e honeybench_dump_enabled=true
 
 - name: Deploy the honeybench performance-bench host

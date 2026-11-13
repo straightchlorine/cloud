@@ -158,10 +158,10 @@ common_syncthing_enabled: true
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/data/syncthing/backup"
 
-# Off-site restic backup (primary)
-restic_enabled: true
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
-restic_password: "{{ vault_restic_automation_password }}"
+# Off-site restic backup (roles/restic job "automation"); needs the 02:30 dumps above
+automation_restic_enabled: true
+automation_restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
+automation_restic_password: "{{ vault_restic_automation_password }}"
 ```
 
 ## Security

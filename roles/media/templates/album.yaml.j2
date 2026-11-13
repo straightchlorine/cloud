@@ -1,5 +1,6 @@
 # Merged over config.yaml by every album (release) import: the release pass of
-# `media-sync` and `media-import`, `media-sync --albums`, and `media-sync --upgrade`.
+# `media-sync` and `media-import`, `media-sync --albums`, and (through upgrade.yaml)
+# `media-sync --upgrade`.
 # beets matches each group of files sharing an album tag to a whole MusicBrainz
 # release, which gives album, albumartist and track-number tags and Cover Art Archive
 # art (fetchart only runs for releases). quiet and skip come from config.yaml.
@@ -7,27 +8,27 @@ import:
     singletons: no
 
 # A YouTube rip is one track taken out of a release, so the match must not be
-# penalised for what YouTube cannot know. Each weight zeroed here is such a component
-# (`data_source` is zeroed in config.yaml for the same reason); album name, artist,
-# track title and track length keep their defaults.
+# penalised for what YouTube cannot know. The weight zeroed here is such a component
+# (`data_source` is zeroed in config.yaml for the same reason), while album name,
+# artist, track title and track length keep their defaults.
 match:
     distance_weights:
         # One track of a 30-track release is a partial album, not 29 missing tracks.
         missing_tracks: 0
     preferred:
-        # Digital Media first, CD second, anything else last, so a cassette or vinyl
-        # reissue never wins.
+        # Digital Media ranks first and CD second, so a cassette or vinyl reissue is
+        # penalised against them.
         media: ['Digital Media', 'CD']
         # Prefer the earliest release of the group. Every pressing that contains the
         # track scores the same, so otherwise tracks of one album land on different
         # editions and split into several albums in Navidrome. It also keeps yt-dlp's
         # upload date out of the distance, so no `year: 0` override is needed.
         original_year: yes
-    # `unmatched_tracks` stays at its default (0.6) on purpose: a group with files the
+    # `unmatched_tracks` keeps its beets default on purpose: a group with files the
     # release lacks is a bad group (a playlist sharing one album tag), and the penalty
     # steers the match to the release that contains the files.
-    # The zero weight already drops `missing_tracks` from `Distance.keys()`, so the
-    # max-rec downgrade cannot fire; this pins it in case beets changes that.
+    # The zero `missing_tracks` weight already drops it from `Distance.keys()`, so the
+    # max-rec downgrade cannot fire. This pins it in case beets changes that.
     max_rec:
         missing_tracks: strong
 

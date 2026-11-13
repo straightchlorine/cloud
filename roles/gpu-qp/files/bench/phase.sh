@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# phase.sh <phase>
-#
-# Drives one phase of the rerun (brief 5.2). Per-lane stdout goes to <phase>/<lane>.driver.log;
-# the per-cell container output is already tee'd into <phase>/<lane>/<mol>_seed<S>.log.
+# Drives one phase as `phase.sh <phase>`. Per-lane stdout goes to <phase>/<lane>.driver.log.
+# lane.sh already tees the per-cell container output into <phase>/<lane>/<mol>_seed<S>.log.
 #
 #   A, A2: cpu-aer + gpu1 + gpu2 concurrently, then analytic.
 #   B:     each lane alone, in order analytic, gpu1, gpu2, cpu-aer.
@@ -15,7 +13,6 @@
 # Exits 1 when any lane did. A stop.request in the run dir skips the steps not yet started.
 set -u
 
-# Sibling scripts live beside this file.
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=env.sh
 . "$HERE/env.sh"

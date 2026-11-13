@@ -1,6 +1,5 @@
 ---
-# Also included directly by site.yml's pre-validation (not via main.yml), so it
-# re-runs os discovery itself - cheap and idempotent.
+# The site.yml pre-validation includes this file directly, without main.yml, so it runs the os discovery itself.
 
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
@@ -11,24 +10,19 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: unified_validation
+  # The common validation task names its inputs without this role's prefix.
   vars:  # noqa: var-naming[no-role-prefix]
     validation_context: "gpu-qp"
     validation_type: "full"
     validation_role: "gpu-qp"
+    validation_supported_os_families: [Debian]
     required_variables:
       - gpu_qp_cuda_arch
   tags: [validation]
 
-- name: Confirm the host runs a Debian-family OS
-  ansible.builtin.assert:
-    that: os_family == "Debian"
-    fail_msg: "gpu-qp requires a Debian-family OS; got {{ os_family }} ({{ os_name }} {{ os_version }})."
-    quiet: true
-  tags: [validation]
-
 - name: Confirm gpu_qp_cuda_arch is a known compute capability
-  # A wrong value builds a wheel that fails at runtime with "CUDA error: no kernel
-  # image is available" - catch it before the image build rather than after.
+  # A wrong value builds a wheel that fails at runtime with "CUDA error: no kernel image is available".
+  # Catching it here avoids finding out after the image build.
   ansible.builtin.assert:
     that:
       - gpu_qp_cuda_arch in gpu_qp_supported_cuda_arches
@@ -39,11 +33,12 @@
   tags: [validation]
 
 - name: Look for an NVIDIA PCI device
-  # Reads sysfs directly so it works before pciutils is installed.
+  # Reading sysfs directly works before pciutils is installed.
   ansible.builtin.shell:
     cmd: grep -ilx 0x10de /sys/bus/pci/devices/*/vendor
   register: gpu_qp_nvidia_devices
   changed_when: false
+  # Grep exits 1 without a match, and the assert below reports that with a clearer message.
   failed_when: false
   when: gpu_qp_require_nvidia_device
   tags: [validation]

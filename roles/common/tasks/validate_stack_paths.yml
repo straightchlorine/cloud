@@ -1,0 +1,26 @@
+---
+# Path checks shared by the compose stack roles.
+# validation_role:        role name, used in the refusal message
+# validation_data_paths:  list of stack paths whose parent directory must already exist
+# validation_stack_home_var: name of the stack-home variable; its value is refused under /root
+#                           for a non-root ansible_user
+- name: Check stack path parent directories exist
+  ansible.builtin.stat:
+    path: "{{ item | dirname }}"
+  register: common_stack_parent_check
+  failed_when: not common_stack_parent_check.stat.exists or not common_stack_parent_check.stat.isdir
+  loop: "{{ validation_data_paths }}"
+  tags: [validation]
+
+- name: Refuse a stack home under /root for a non-root stack user
+  # Usually means the stack home came from the ansible_user_dir/_id facts, which
+  # reflect root under become and land in a directory the stack owner cannot traverse.
+  ansible.builtin.fail:
+    msg: >-
+      {{ validation_role }}: {{ validation_stack_home_var }} ({{ vars[validation_stack_home_var] }})
+      resolves under /root, but ansible_user is '{{ ansible_user }}'. Derive it from the inventory's ansible_user
+      (/home/<user>/...), not from the ansible_user_dir/_id facts.
+  when:
+    - ansible_user is defined and ansible_user != 'root'
+    - vars[validation_stack_home_var] is match('/root(/|$)')
+  tags: [validation]

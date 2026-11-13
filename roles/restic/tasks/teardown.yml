@@ -1,0 +1,151 @@
+---
+# Removes the engine and every job from a disposable host. Repositories and
+# the Storage Box key (/etc/ssh/restic_storage_key) are kept.
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_gate
+  vars:
+    common_teardown_name: restic
+
+- name: Refuse a cache directory the role would not have created
+  # The removal below is recursive; the rule is the one validate.yml enforces.
+  ansible.builtin.assert:
+    that:
+      - restic_cache_dir is string
+      - restic_cache_dir is match('^(/[A-Za-z0-9._@+-]+)*/restic\\Z')
+      - restic_cache_dir is not search('(^|/)\\.\\.?(/|\\Z)')
+    fail_msg: "restic_cache_dir: last component must be exactly restic; refusing to remove {{ restic_cache_dir }}"
+    quiet: true
+
+- name: Find the deployed jobs
+  ansible.builtin.find:
+    paths: /etc/restic
+    patterns: "*.env"
+  register: restic_teardown_envs
+
+- name: Name the deployed jobs
+  ansible.builtin.set_fact:
+    restic_teardown_jobs: >-
+      {{ restic_teardown_envs.files | map(attribute='path') | map('basename')
+         | map('regex_replace', '\.env$', '') | list }}
+
+- name: Stop and disable the job timers
+  ansible.builtin.systemd_service:
+    name: "restic-job@{{ item }}.timer"
+    state: stopped
+    enabled: false
+  loop: "{{ restic_teardown_jobs }}"
+  when: restic_scheduler == 'systemd'
+
+- name: Stop the job services
+  ansible.builtin.systemd_service:
+    name: "restic-job@{{ item }}.service"
+    state: stopped
+  loop: "{{ restic_teardown_jobs }}"
+  when: restic_scheduler == 'systemd'
+
+- name: Look for the freshness timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/restic-freshness.timer
+  register: restic_teardown_freshness
+  when: restic_scheduler == 'systemd'
+
+- name: Stop and disable the freshness timer
+  ansible.builtin.systemd_service:
+    name: restic-freshness.timer
+    state: stopped
+    enabled: false
+  when:
+    - restic_scheduler == 'systemd'
+    - restic_teardown_freshness.stat.exists
+
+- name: Find the cron entries and the wrapper's rotated logs
+  ansible.builtin.find:
+    paths: [/etc/cron.d, /var/log/restic]
+    patterns: ["restic-*", "*.log", "*.log.1"]
+  register: restic_teardown_cron
+  when: restic_scheduler == 'cron'
+
+- name: Find the job drop-in directories
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "restic-job@*.d"
+    file_type: directory
+  register: restic_teardown_dropins
+
+- name: Look at /usr/local/bin/restic
+  ansible.builtin.stat:
+    path: /usr/local/bin/restic
+  register: restic_teardown_link
+
+- name: Look at the kept Storage Box key
+  ansible.builtin.stat:
+    path: /etc/ssh/restic_storage_key
+  register: restic_teardown_key
+
+- name: Hand the kept key to root before its owner and group are freed
+  # The next system account or group reuses a freed uid or gid.
+  # Without this step that account would be able to read the key.
+  ansible.builtin.file:
+    path: /etc/ssh/restic_storage_key
+    owner: root
+    group: root
+    mode: "0400"
+  when: restic_teardown_key.stat.exists
+
+- name: Name the engine's own files and directories
+  ansible.builtin.set_fact:
+    restic_teardown_artifacts: >-
+      {{ restic_engine_units | map('regex_replace', '^', '/etc/systemd/system/') | list
+         + restic_engine_dirs | map(attribute='path') | list
+         + (restic_cron_dirs | map(attribute='path') | list if restic_scheduler == 'cron' else []) }}
+
+- name: Remove the engine's files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ restic_teardown_artifacts + (restic_teardown_dropins.files | map(attribute='path') | list)
+       + (restic_teardown_cron.files | map(attribute='path') | list if restic_scheduler == 'cron' else [])
+       + (['/usr/local/bin/restic'] if restic_teardown_link.stat.exists and restic_teardown_link.stat.islnk else []) }}
+  register: restic_teardown_removed
+
+- name: Remove the restic user
+  ansible.builtin.user:
+    name: restic
+    state: absent
+
+- name: Remove the restic group
+  ansible.builtin.group:
+    name: restic
+    state: absent
+
+- name: Reload systemd after the removal  # noqa: no-handler
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when:
+    - restic_scheduler == 'systemd'
+    - restic_teardown_removed.changed
+
+- name: Verify the artifacts are gone
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_verify_absent
+  vars:
+    common_teardown_name: restic
+    common_teardown_paths: "{{ restic_teardown_artifacts }}"
+
+- name: List the remaining restic unit files
+  # rc 1 means no match, which is the expected result; the assert reads stdout.
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv: [systemctl, list-unit-files, "restic-*", --no-legend]
+  register: restic_teardown_units
+  changed_when: false
+  failed_when: restic_teardown_units.rc not in [0, 1]
+
+- name: Assert no restic unit file survives
+  ansible.builtin.assert:
+    that: restic_teardown_units.stdout | trim == ''
+    fail_msg: "restic units survived teardown: {{ restic_teardown_units.stdout }}"
+  when: restic_scheduler == 'systemd'

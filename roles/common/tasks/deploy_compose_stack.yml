@@ -1,15 +1,13 @@
 ---
-# One-shot "install a compose stack": render compose + .env, bring it up when
-# start_stack is true, and poll the critical services until they run. Callers pass
-# the whole compose contract (roles/automation/tasks/stack.yml is the canonical
-# call site). The up/poll tasks need a Docker daemon, so molecule runs with
-# start_stack: false and only the rendering half executes.
+# Renders the compose file and .env, brings the stack up when start_stack is true, and polls the critical services
+# until they run.
+# Callers pass all compose variables, and roles/automation/tasks/stack.yml is the reference call site.
+# The up and poll tasks need a Docker daemon, so molecule sets start_stack to false and only the rendering runs.
 
 - name: Render the compose file and environment
   ansible.builtin.include_tasks: build_docker_compose.yml
   vars:
-    # build_docker_compose's contract (owner/group of the compose file and
-    # its .env); the stack owner's primary group carries its login name here.
+    # The stack owner's primary group has the same name as its login, so one variable sets both.
     compose_file_owner: "{{ compose_owner }}"
     compose_file_group: "{{ compose_owner }}"
 
@@ -27,6 +25,7 @@
       community.docker.docker_compose_v2:
         project_src: "{{ compose_file_path | dirname }}"
         state: present
+        remove_orphans: true
       become: true
       become_user: "{{ compose_owner }}"
       when: start_stack | bool

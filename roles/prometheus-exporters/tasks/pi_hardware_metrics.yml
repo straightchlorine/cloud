@@ -22,10 +22,9 @@
     service_after: ["network.target"]
     service_type: "oneshot"
     service_user: "{{ prometheus_exporters_user }}"
-    # vcgencmd needs /dev/vchiq (root:video 0660).
+    # The video group is needed because vcgencmd uses /dev/vchiq, which is owned by root:video with mode 0660.
     service_group: "video"
     exec_start: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
-    remain_after_exit: "false"
     common_protect_system: "strict"
     common_protect_home: "yes"
     common_private_tmp: "yes"

@@ -1,50 +1,16 @@
 #!/usr/bin/env bash
-# Post-deploy check for a gpu-qp host; pairs with validate-clean.sh.
-# Usage: ./scripts/gpu-qp/validate-deploy.sh [ansible-host-alias]
+# Run this after a deploy to check a gpu-qp host. The counterpart is validate-clean.sh.
+# Usage: ./scripts/gpu-qp/validate-deploy.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-gpu-station}"
+HOST="${1:?Usage: ./scripts/gpu-qp/validate-deploy.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after gpu-qp deploy =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
-
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_present() {
-  if [ -e "$1" ]; then
-    note_ok "$1 present"
-  else
-    note_left "$1 missing"
-  fi
-}
-
-check_script() {
-  local path="$1"
-  local want_mode="${2:-}"
-  local got_mode
-  if [ ! -e "$path" ]; then
-    note_left "$path missing"
-    return
-  fi
-  got_mode="$(stat -L -c '%a' "$path" 2>/dev/null || echo "000")"
-  if [ "$got_mode" = "$want_mode" ]; then
-    note_ok "$path mode $want_mode"
-  else
-    note_left "$path mode is $got_mode (expected $want_mode)"
-  fi
-}
+{
+  cat "$LIB"
+  cat <<'INNEREOF'
 
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
@@ -52,7 +18,7 @@ if [ -z "$PRIMARY_IP" ]; then
 fi
 note_ok "primary IP detected: $PRIMARY_IP"
 
-# Mirrors the role's gpu_qp_home (/home/<ansible_user>/gpu-qp).
+# This is the role's gpu_qp_home, which lies under the SSH user's home.
 STACK_HOME="${HOME}/gpu-qp"
 
 echo "-- Services --"
@@ -81,13 +47,11 @@ fi
 echo "-- Stack files --"
 check_present "$STACK_HOME/docker-compose.yml"
 check_present "$STACK_HOME/data/molecules.json"
-for tool in gpu-qp; do
-  check_script "/usr/local/bin/$tool" 755
-done
+check_script /usr/local/bin/gpu-qp 755
 
 echo "-- GPU check --"
-# `gpu-qp check` is the single place that proves the GPU path, so this reports
-# its verdict rather than repeating it.
+# `gpu-qp check` is the single place that proves the GPU path.
+# This script reports its verdict instead of repeating the checks.
 if check_output="$(gpu-qp check 2>&1)"; then
   note_ok "gpu-qp check passed"
 else
@@ -115,11 +79,6 @@ else
   note_left "nvidia_gpu_exporter :9835/metrics not answering"
 fi
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "DEPLOYMENT CHECKS FAILED - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "All deployment checks passed. The GPU host is healthy."
+summary_deploy "All deployment checks passed. The GPU host is healthy."
 INNEREOF
+} | ssh "$HOST" bash -s

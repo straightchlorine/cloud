@@ -4,16 +4,18 @@
   become: true
   tasks:
     - name: Stat the per-case marker files converge wrote
-      # Converge and verify are separate processes, so results cross via marker files, not set_fact.
+      # Converge and verify are separate processes, so results cross through marker files instead of set_fact.
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
         - /tmp/molecule-case1.passed
         - /tmp/molecule-case2.passed
         - /tmp/molecule-case3.passed
+        - /tmp/molecule-case4.passed
+        - /tmp/molecule-case5.passed
       register: media_failfast_markers
 
-    - name: Assert all three fail-fast cases completed
+    - name: Assert all five fail-fast cases completed
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -33,6 +35,8 @@
           Case 1 - missing required variable (media_library_path): FAILED as expected
           Case 2 - stack home under /root for a non-root user: FAILED as expected
           Case 3 - placeholder playlist (vault_youtube_playlists): FAILED as expected
+          Case 4 - restic on without media_restic_repository: FAILED as expected
+          Case 5 - restic job checks on the job the role builds (short password): FAILED as expected
 
-          All three cases ran the real roles/media/tasks/validate.yml end
+          All five cases ran the real roles/media/tasks/validate.yml end
           to end - no hand-copied guards anywhere in this scenario.

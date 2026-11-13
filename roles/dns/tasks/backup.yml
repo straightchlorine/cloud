@@ -1,6 +1,5 @@
 ---
-# Secondary LOCAL Pi-hole backup into a Syncthing folder; restic is the
-# off-site copy. The target vars are asserted up front in validate.yml.
+# The target variables are asserted up front in validate.yml.
 
 - name: Install the nightly local snapshot backup
   ansible.builtin.include_role:
@@ -19,9 +18,8 @@
       # The FTL CLI export needs no API session, so no password lands in the script.
       - |
         (cd "$WORK" && pihole-FTL --teleporter)
-      # Query history is instance-local (docs/backup/restore.md): one rolling copy
-      # beside the dated snapshots, not one per retained day. sqlite .backup is
-      # consistent against the live FTL writer; the rename keeps it atomic.
+      # Query history is instance-local (docs/backup/restore.md), so one rolling copy sits beside the dated snapshots.
+      # The sqlite .backup command is consistent while FTL writes, and the final rename keeps the copy atomic.
       - |
         if [ -f /etc/pihole/pihole-FTL.db ]; then
             pihole-FTL sqlite3 /etc/pihole/pihole-FTL.db ".backup '$WORK/pihole-FTL.db'"
@@ -30,8 +28,8 @@
         fi
 
 - name: Remove the cron entry of the previous Pi-hole backup script
-  # The shared task names its entry "Pihole Syncthing local backup"; this one
-  # points at the same script path and would run it a second time.
+  # The shared task schedules its own entry named "Pihole Syncthing local backup".
+  # An entry left under the hyphenated name would run alongside it.
   ansible.builtin.cron:
     name: "Pi-hole Syncthing local backup"
     user: root

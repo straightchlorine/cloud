@@ -1,0 +1,24 @@
+---
+# The cron counterpart of restic-freshness.timer: after boot (OnBootSec=15min), and hourly instead of daily at 12:00,
+# so a laptop that is off at noon is still checked; freshness itself sends at most one alert a day per condition.
+- name: Schedule the freshness check
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    cron_file: restic-freshness
+    user: root
+    minute: "{{ item.minute | default(omit) }}"
+    hour: "{{ item.hour | default(omit) }}"
+    special_time: "{{ item.special_time | default(omit) }}"
+    # Exit 2 means the alert was delivered, so the status is not an error; the log keeps the output out of mail.
+    job: "{{ item.delay }}/usr/local/libexec/restic/restic-job freshness >>/var/log/restic/freshness.log 2>&1"
+  loop:
+    - { name: restic freshness after boot, special_time: reboot, delay: "sleep 900 && " }
+    - { name: restic freshness hourly, minute: "7", delay: "" }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Start the cron daemon at boot
+  ansible.builtin.service:
+    name: "{{ restic_cron_service }}"
+    enabled: true
+    state: started

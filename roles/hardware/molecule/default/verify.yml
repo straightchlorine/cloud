@@ -4,40 +4,40 @@
   gather_facts: true
   become: true
   vars:
-    # Must match converge.yml. Verify is a separate process, so converge's
-    # facts are gone and the read-only role is re-included below.
-    device_type: "{{ lookup('env', 'MOLECULE_DEVICE_TYPE') | default('rpi4b', true) }}"
+    # The facts the role sets live only in the process that ran it.
+    # Verify therefore runs the role itself, once per device_type.
+    hardware_expected:
+      rpi4b: rpi4
+      rpi3b: rpi3
+      rpizero2w: rpizero2w
+      debian: pc
+      debian_vm: pc
+      cloud_vm: pc
+      arch_linux: pc
   tasks:
-    - name: Re-run the hardware role in the verify process
-      ansible.builtin.include_role:
-        name: hardware
+    - name: Run the hardware role for every supported device_type
+      ansible.builtin.include_tasks: per_device.yml
+      loop: "{{ hardware_expected | dict2items }}"
+      loop_control:
+        loop_var: hardware_case
 
-    - name: Assert hardware facts are defined
-      # hardware_limits is per-service (hardware_limits.traefik.memory, etc,
-      # see hardware_profiles) - traefik is used here just because every
-      # platform profile defines it, not because it's special.
-      ansible.builtin.assert:
-        that:
-          - hardware_platform is defined
-          - hardware_details is defined
-          - hardware_limits is defined
-          - hardware_limits.traefik.memory is defined
-          - hardware_limits.traefik.cpus is defined
-        fail_msg: |
-          Hardware facts validation failed:
-          hardware_platform: {{ hardware_platform | default('UNDEFINED') }}
-          hardware_limits: {{ hardware_limits | default('UNDEFINED') }}
+    - name: Refuse an unlisted device_type with the list of valid ones
+      block:
+        - name: Run the hardware role with an unknown device_type
+          ansible.builtin.include_role:
+            name: hardware
+          vars:
+            device_type: toaster
 
-    - name: Verify hardware_platform is valid
-      ansible.builtin.assert:
-        that:
-          - hardware_platform in ['rpi4', 'rpi3', 'rpi2', 'rpizero2w', 'pc', 'unknown']
-        fail_msg: "Invalid hardware_platform: {{ hardware_platform }}"
-
-    - name: Display hardware detection results
-      ansible.builtin.debug:
-        msg: |
-          [OK] Hardware Detection:
-          - Platform: {{ hardware_platform }}
-          - Traefik memory limit: {{ hardware_limits.traefik.memory }}
-          - Traefik CPU limit: {{ hardware_limits.traefik.cpus }}
+        - name: Fail the test - the role should have refused
+          ansible.builtin.fail:
+            msg: "hardware accepted device_type toaster"
+      rescue:
+        - name: Assert the failure names the device_type and the valid ones
+          ansible.builtin.assert:
+            that:
+              - "'device_type' in ansible_failed_result.msg"
+              - "'toaster' in ansible_failed_result.msg"
+              - "'rpi3b' in ansible_failed_result.msg"
+            fail_msg: "wrong failure: {{ ansible_failed_result.msg | default('') }}"
+            success_msg: "[OK] an unknown device_type fails with the valid list"

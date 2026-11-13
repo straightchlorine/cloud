@@ -1,6 +1,6 @@
 #!/bin/bash
-# Hardware metrics node_exporter lacks (temperature, CPU frequency, memory,
-# disk and load come from its own collectors).
+# Writes the Pi hardware metrics that node_exporter lacks, such as throttling flags, core voltage and clocks.
+# Temperature, CPU frequency, memory, disk and load come from its own collectors.
 set -euo pipefail
 
 TEXTFILE_DIR="{{ prometheus_exporters_node_exporter_textfile_dir }}"
@@ -9,8 +9,8 @@ TEMP_FILE="$TEXTFILE_DIR/pi_hardware.prom.$$"
 
 mkdir -p "$TEXTFILE_DIR"
 
-# Value from "key=value<unit>", or nothing on error. Missing reads omit the
-# series: a fake 0 would look healthy.
+# Prints the number from a vcgencmd "key=value<unit>" reply, or nothing on error.
+# A missing read omits the series, because a fake 0 would look healthy.
 vc() {
     vcgencmd "$@" 2>/dev/null | sed -nE '/error/d; s/.*=(0x[0-9a-fA-F]+|[0-9.]+).*/\1/p' || true
 }
@@ -26,7 +26,7 @@ vc() {
     echo "hw_metrics_source_up{source=\"vcgencmd\"} $([ -n "$THROTTLED" ] && echo 1 || echo 0)"
 
     if [ -n "$THROTTLED" ]; then
-        # Bits 0-3: current state; bits 16-19: same flags since boot.
+        # Bits 0 to 3 hold the current state, and bits 16 to 19 hold the same flags since boot.
         echo "# HELP hw_throttled Throttling flag, 1 when set."
         echo "# TYPE hw_throttled gauge"
         for entry in 0:under_voltage 1:freq_capped 2:throttled 3:soft_temp_limit; do

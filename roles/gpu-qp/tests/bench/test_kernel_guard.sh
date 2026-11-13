@@ -23,7 +23,7 @@ default_line() { grep '^GRUB_DEFAULT=' "$R/etc/default/grub"; }
 has() { [ -e "$1" ] && echo yes || echo no; }
 sys_sum() { (cd "$T" && find sys bench/kernel.pin -type f -print0 2> /dev/null | sort -z | xargs -0 sha256sum | sha256sum); }
 
-# the real excerpt of the host's grub.cfg, the two installed kernels
+# An excerpt of a grub.cfg that lists two installed kernels.
 fresh_sys() {
   rm -rf "$R" "$B"/g* "$B/kernel.pin"
   mkdir -p "$R/boot/grub" "$R/etc/default" "$R/etc/apt/apt.conf.d"

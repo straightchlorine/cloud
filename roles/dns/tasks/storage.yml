@@ -1,9 +1,7 @@
 ---
-# Optional, non-destructive: use an attached-but-unused drive if one exists
-# (see roles/common/tasks/detect_optional_drive.yml for the detection). Only
-# journald is relocated off the SD card - Pi-hole's own DB paths are baked
-# into the installer and fragile to move. dns_backup_dir is a plain var if you
-# also want that on the drive.
+# Uses an attached but unused drive when one exists, as detected by roles/common/tasks/detect_optional_drive.yml.
+# Only journald is moved to the drive, because the Pi-hole database paths are fixed by the installer.
+# Point dns_backup_dir at the drive to keep the backups there as well.
 
 - name: Detect an optional attached drive
   ansible.builtin.include_role:
@@ -19,9 +17,8 @@
   when: common_optional_drive_present
   block:
     - name: Determine whether the drive needs (re)formatting
-      # "Has a filesystem" isn't enough - a foreign one we don't want (e.g. a
-      # leftover installer USB stick) would be reused as-is. Only treat the drive
-      # as ready if what's there matches what we actually want.
+      # Any existing filesystem is not enough, because a foreign one such as a leftover installer stick would be reused.
+      # The drive counts as ready only when its filesystem type matches dns_optional_drive_filesystem.
       ansible.builtin.set_fact:
         dns_optional_drive_needs_format: "{{ common_optional_drive_fstype != dns_optional_drive_filesystem }}"
 
@@ -42,9 +39,8 @@
         - not dns_optional_drive_format
 
     - name: Wipe any existing partition table before repartitioning
-      # Only reached with dns_optional_drive_format true - covers whole disks
-      # with stale/multi-partition tables and foreign filesystems, so sfdisk
-      # below starts from a truly blank device.
+      # This is reached only when dns_optional_drive_format is true.
+      # Wiping stale partition tables and foreign filesystems lets sfdisk start from a blank device.
       ansible.builtin.command: "wipefs -a {{ common_optional_drive_device }}"
       become: true
       changed_when: true
@@ -53,9 +49,9 @@
         - common_optional_drive_is_whole_disk
 
     - name: Create a single partition spanning the whole disk
-      # sfdisk over community.general.parted: util-linux is Essential on Debian,
-      # parted is not installed by default. "type=L" = plain Linux partition;
-      # omitting size makes it span the rest of the disk.
+      # This uses sfdisk instead of community.general.parted because util-linux is Essential on Debian and parted is
+      # not.
+      # The input `type=L` creates a Linux partition, and omitting a size makes it span the disk.
       ansible.builtin.command:
         cmd: "sfdisk {{ common_optional_drive_device }}"
         stdin: "type=L"
@@ -66,9 +62,8 @@
         - common_optional_drive_is_whole_disk
 
     - name: Wait for the kernel to expose the new partition device
-      # sfdisk doesn't guarantee the new /dev/sdaN node exists immediately -
-      # USB-attached drives on a Pi are known-flaky here. partprobe forces a
-      # re-read; the stat loop waits for the device file before formatting.
+      # The new partition device node may not exist immediately after sfdisk, especially on USB drives.
+      # The partprobe command forces a re-read, and the stat loop waits for the device file before formatting.
       when:
         - dns_optional_drive_needs_format
         - common_optional_drive_is_whole_disk
@@ -87,9 +82,8 @@
           delay: 1
 
     - name: Determine the partition to format and mount
-      # A '1' suffix only applies to a partition we just created. A whole disk
-      # that already matches our filesystem was formatted bare (no partition
-      # table), so the target there is the device itself.
+      # The '1' suffix applies only to a partition this role just created.
+      # A whole disk that already has the wanted filesystem was formatted bare, so the device itself is the target.
       ansible.builtin.set_fact:
         dns_optional_drive_target: >-
           {{ (common_optional_drive_device ~ '1')
@@ -129,7 +123,7 @@
         common_journald_path: "{{ dns_optional_drive_mount_path }}/journal"
 
 - name: Cap the journal size
-  # Runs with or without a drive: without one it bounds flash wear on the SD card.
+  # This runs with or without a drive, and without one it limits flash wear on the SD card.
   ansible.builtin.include_role:
     name: common
     tasks_from: journald_limits

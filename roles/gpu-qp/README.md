@@ -318,6 +318,39 @@ The pilot tree (`A A2 B C H S out`) stays in place and is the run `pilot`.
 | A bind-mount source that Docker creates itself is owned by the remapped root and unwritable for `--user` cells. The lanes create the per-cell directories as the calling user, but there is no general `mkdir` + `chmod 1777` helper, and no bounded route probe beyond the time limits on `gpu-qp pull`. | open |
 | No `--deadline` for a long convergence run. | graceful `gpu-qp stop` replaces it: the cell in flight finishes and the run resumes later |
 
+### Open work
+
+Carried over from the retired CLI plan; none changes argv, state rows or run ids.
+
+Resilience fixes not built yet (run after the first deploy of this layout, before a new run):
+
+- `lane.sh` builds cells and argv from `lanes.py` (`lanes.py row`) instead of its own case block; the golden
+  argv test must stay unchanged.
+- Containers named `qp-<run>-<phase>-<lane>` with label `qp.cell=<mol>_seed<S>`, so a killed lane cannot orphan a
+  container and a resume cannot start a second one on the same cell.
+- A TERM trap on the lane that `docker stop`s its container and writes no state row (`stop --now` is blunt today).
+- After a failed attempt, re-run the infrastructure preflight (docker, gpu, images, stack, disk) and wait instead of
+  marking every remaining cell failed during a Docker outage or driver update.
+- Torn `state.tsv` rows: add the missing newline before each append, require 7 fields in every reader.
+- Keep a retried cell's first log as `<cell>.log.attempt1`; log `KAFKA_SUSPECT` after three consecutive
+  done-unstreamed cells.
+
+Small known gaps:
+
+- `read_only_call` exempts only `matrix --list` and `sync --check`, so `gpu-qp build --help` refuses during a run;
+  `start/stop/fetch --help` exit 2; `runs` and `holder` ignore unknown flags.
+- `gpu-qp start S` without `--run` prints bare usage; it should say "start needs --run NAME".
+- `git_net` reports "route to origin down" only for a timeout (124); other git failures are git's own message.
+- `tests/bench/test_run.sh` line 50 expands the row count once (`wait_for 3 test "$(rows ...)" -ge 3`); wrap it in a
+  function.
+- The teardown bench gate checks the lock only; the deploy guard checks the lock and the bench processes.
+- `status --pipe/--airflow/--iceberg`: `docker exec` and `compose ps` have no per-call timeout.
+- `extract.py` deletes `out/iterations/iterations_run*.csv` before writing, and a graceful stop ends `phase.log`
+  with `PHASE_STOPPED`; a poller that greps `PHASE_DONE` waits forever (use `gpu-qp runs`).
+
+Outside the role (separate approval): `scripts/gpu-qp/validate-deploy.sh` (`gpu-qp status` rc 0, `gpu-qp runs`) and
+`validate-clean.sh` (`/usr/local/lib/gpu-qp` absent) still need updating for this layout.
+
 `dump_versions.py`, the plotting and the pollers live in the workstation's benchmark scripts, not in this role:
 the GPU host has no plotting stack.
 

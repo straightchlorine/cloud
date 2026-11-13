@@ -6,12 +6,11 @@
     state: started
   become: true
 
-# Do not add docker0/br-* to trusted: Docker 27+ manages its own docker zone and
-# a manual move raises ZONE_CONFLICT.
+# Do not move docker0 or br-* interfaces into another zone, such as trusted.
+# Docker manages its own firewalld zone for them, and a manual move raises ZONE_CONFLICT.
 - name: Install the tailnet zone definition
-  # The zone is declared as XML rather than assembled with --new-zone/--add-port:
-  # --new-zone NAME_CONFLICTs against this file. If tailscale0 is absent the zone
-  # is simply inactive - fail-closed.
+  # The zone is declared as XML because `firewall-cmd --new-zone` reports NAME_CONFLICT against this file.
+  # If the tailnet interface is absent the zone is inactive, which fails closed.
   ansible.builtin.template:
     src: tailnet.xml.j2
     dest: "/etc/firewalld/zones/{{ honeypot_tailnet_zone }}.xml"
@@ -30,8 +29,8 @@
     state: enabled
   become: true
 
-# Runs after the explicit 22/tcp above so the cowrie port is never momentarily
-# closed while the `ssh` service is withdrawn.
+# This runs after the explicit cowrie port above, so that port is never closed
+# while the `ssh` service is withdrawn.
 - name: Remove default services from the public zone
   ansible.posix.firewalld:
     zone: public

@@ -9,6 +9,16 @@
   become: true
   notify: Reload systemd (honeypot)
 
+- name: Install the ntfy helper script
+  # The honeywatch-notify@ unit and the backup and mmdb refresh scripts call this helper.
+  ansible.builtin.copy:
+    src: honeywatch-ntfy.sh
+    dest: /usr/local/sbin/honeywatch-ntfy
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
 - name: Install the ntfy notification credentials
   ansible.builtin.template:
     src: notify.env.j2

@@ -1,12 +1,11 @@
 ---
-# Performance bench host for the honeywatch sessions-list work: the toolchain
-# bench/ needs (Docker with systemd cgroups, uv, just, k6) plus a checkout of
-# the honeywatch repo. Running the bench stays a manual, per-campaign job -
-# see README.md.
+# This role prepares a performance bench host.
+# It installs the toolchain that honeywatch's bench/ needs and checks out the repo.
+# Running the bench stays a manual job per campaign, as README.md describes.
 
 # --- Fail-fast validation -----------------------------------------------------
-# Consumed by validate.yml; the dump list is only required when the dump is
-# deployed.
+# validate.yml consumes these lists.
+# The dump list is only required when the dump is deployed.
 honeybench_required_variables:
   - honeybench_user
   - honeybench_repo_url
@@ -20,36 +19,33 @@ honeybench_dump_required_variables:
 
 # --- Repository ---------------------------------------------------------------
 honeybench_repo_url: https://github.com/straightchlorine/honeywatch.git
-# Must contain bench/ (tooling is tracked, results/ and plans/ are not). A ref
-# without it fails the deploy rather than leaving an empty bench host.
+# The ref must contain bench/, because a ref without it fails the deploy instead of leaving an empty bench host.
 honeybench_repo_version: master
 
-# bench.sh derives the repo root from its own location and puts release
-# worktrees in ../honeywatch-wt, so the checkout and the worktree root are
-# siblings under the bench user's home.
+# bench.sh derives the repo root from its own location and puts release worktrees in ../honeywatch-wt.
+# The checkout and the worktree root are therefore siblings under the bench user's home.
 honeybench_home: "/home/{{ honeybench_user }}"
 honeybench_checkout_dir: "{{ honeybench_home }}/honeywatch"
 honeybench_worktree_dir: "{{ honeybench_home }}/honeywatch-wt"
-# bench.sh's default data directories (hw-bench-pg*) live here.
+# The default data directories of bench.sh (hw-bench-pg*) live here.
 honeybench_cache_dir: "{{ honeybench_home }}/.cache"
 
 # --- Prod data dump -----------------------------------------------------------
-# The dump holds unredacted attacker data (bench/.gitignore keeps it out of
-# git), so it is opt-in and copied from the controller with a verified checksum.
+# The dump holds unredacted attacker data, so it is opt-in.
+# It is copied from the controller with a verified checksum.
 honeybench_dump_enabled: false
 honeybench_dump_dest: "{{ honeybench_checkout_dir }}/honeywatch-prod-data.gz"
 
 # --- Disk ---------------------------------------------------------------------
-# One restored copy is about 2.7 GB and the toolchain and images about 1.5 GB,
-# so 6 GiB is the least that can hold one bench database. Two releases side by
-# side (the README's quick start) want the recommended 20 GiB.
+# One restored bench database is about 2.7 GB.
+# The minimum is the least free space that can hold one together with the toolchain.
+# Running two releases side by side needs the recommended amount.
 honeybench_min_free_bytes: 6442450944
 honeybench_recommended_free_bytes: 21474836480
 
 # --- Packages -----------------------------------------------------------------
-# All in the stock CentOS Stream 10 repos; no EPEL. There is deliberately no
-# full update and no dnf-automatic: kernel and cgroup version are part of every
-# run's recorded fingerprint, so the host must not change under a campaign.
+# The role runs no full update and no dnf-automatic on purpose.
+# Kernel and cgroup version are part of every run's recorded fingerprint, so the host must not change under a campaign.
 honeybench_packages:
   - git
   - jq
@@ -57,44 +53,35 @@ honeybench_packages:
   - rsync
   - tar
   - gzip
-  # iostat/sar for judging steal time and I/O wait during a run.
+  # sysstat provides iostat and sar, for judging steal time and I/O wait during a run.
   - sysstat
 
 # --- Docker -------------------------------------------------------------------
-honeybench_docker_repo_baseurl: "https://download.docker.com/linux/centos/10/$basearch/stable"
-honeybench_docker_repo_gpgkey: "https://download.docker.com/linux/centos/gpg"
-
-honeybench_docker_packages:
-  - docker-ce
-  - docker-ce-cli
-  - containerd.io
-  - docker-buildx-plugin
-  - docker-compose-plugin
+# False skips the Docker repository and package install, because molecule has no Docker daemon.
+honeybench_docker_install_enabled: true
 
 honeybench_docker_daemon_options:
-  # measure.py reads /sys/fs/cgroup/system.slice/docker-<id>.scope, which only
-  # exists with the systemd cgroup driver on cgroup v2. Pinned, not assumed.
+  # measure.py reads /sys/fs/cgroup/system.slice/docker-<id>.scope.
+  # That path only exists with the systemd cgroup driver on cgroup v2, so the driver is pinned and not assumed.
   exec-opts:
     - native.cgroupdriver=systemd
   log-driver: json-file
   log-opts:
     max-size: 10m
     max-file: '3'
-  # A daemon.json change restarts dockerd; this keeps a running bench container
-  # alive across it.
+  # A daemon.json change restarts dockerd, and live-restore keeps a running bench container alive across it.
   live-restore: true
-  # bench.sh publishes Postgres as `-p PORT:5432` with the password `bench` over
-  # an unredacted prod dump. Default publish address is loopback, so nothing
-  # is reachable off-host unless a run asks for it with an explicit -p <ip>:...
+  # bench.sh publishes Postgres as `-p PORT:5432` over an unredacted prod dump.
+  # A loopback default publish address keeps it off-host unless a run passes an explicit -p <ip>:...
   ip: 127.0.0.1
-  # bench.sh bind-mounts its data directory with :z, which this needs under Enforcing.
+  # bench.sh bind-mounts its data directory with :z, which needs SELinux support in the daemon under Enforcing.
   selinux-enabled: true
 
 # --- Pinned tools -------------------------------------------------------------
-# Verified binary downloads, unpacked under honeybench_tools_dir/<name>-<version>
-# and linked into /usr/local/bin, so a version bump leaves the old tree in place
-# and the link moves. Bump version, url and sha256 together (validate.yml checks
-# the version is in the url and the sha256 is well formed).
+# Binary downloads are verified, unpacked under honeybench_tools_dir/<name>-<version> and linked into /usr/local/bin.
+# A version bump therefore leaves the old tree in place and only moves the link.
+# Bump version, url and sha256 together.
+# validate.yml checks that the version is in the url and that the sha256 is well formed.
 honeybench_tools_dir: /opt/honeybench/tools
 honeybench_tools:
   - name: uv
@@ -120,5 +107,5 @@ honeybench_tools:
     version_args: version
 
 # --- Teardown -----------------------------------------------------------------
-# Container name prefix bench.sh uses (hw-bench-pg, hw-bench-pg-0.8.2, ...).
+# The container name prefix that bench.sh uses, as in hw-bench-pg.
 honeybench_container_prefix: hw-bench

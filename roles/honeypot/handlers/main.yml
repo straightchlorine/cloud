@@ -1,16 +1,15 @@
 ---
-# Declaration order is execution order at flush - firewalld must land first
-# so the tailnet zone (and its port permit) is already active before sshd
-# rebinds to it; sshd-then-firewalld would open a window where the admin
-# sshd is listening somewhere the firewall doesn't yet permit reaching.
+# Declaration order is execution order at flush.
+# firewalld must reload first so the tailnet zone and its port permit are active before sshd rebinds.
+# Reloading sshd first would leave a window where it listens on an address the firewall does not yet permit.
 - name: Reload firewalld
   ansible.builtin.command: firewall-cmd --reload
   changed_when: true
   become: true
 
 - name: Reload sshd
-  # reload, never restart: an aborted restart on a host whose only admin path
-  # is this sshd locks everyone out.
+  # Reload instead of restart, because an aborted restart would lock out everyone.
+  # This sshd is the host's only admin path.
   ansible.builtin.systemd_service:
     name: sshd
     state: reloaded
@@ -21,38 +20,17 @@
   changed_when: true
   become: true
 
-- name: Restart docker
-  # live-restore keeps the containers running across the daemon restart. icc,
-  # log-driver, selinux-enabled and no-new-privileges are not SIGHUP-reloadable.
-  ansible.builtin.systemd_service:
-    name: docker
-    state: restarted
-  become: true
-
 - name: Reload systemd (honeypot)
-  # Named distinctly from common's "Reload systemd" to avoid cross-role
-  # notify-by-name collisions.
+  # The name differs from common's "Reload systemd" so notifications cannot collide across roles.
   ansible.builtin.systemd_service:
     daemon_reload: true
   become: true
 
-# A running timer keeps its old next-elapse time after a daemon-reload alone; only
-# a restart applies an OnCalendar/RandomizedDelaySec change. Named distinctly from
-# common's "Restart backup timer", which targets a different unit.
-- name: Restart the honeywatch backup timer
+# A running timer keeps its old next-elapse time after a daemon-reload alone.
+# Only a restart applies a changed OnCalendar or RandomizedDelaySec.
+# timer_job.yml sets honeypot_timer_unit before notifying.
+- name: Restart honeywatch timer
   ansible.builtin.systemd_service:
-    name: honeywatch-backup.timer
-    state: restarted
-  become: true
-
-- name: Restart mmdb refresh timer
-  ansible.builtin.systemd_service:
-    name: honeywatch-mmdb-refresh.timer
-    state: restarted
-  become: true
-
-- name: Restart image prune timer
-  ansible.builtin.systemd_service:
-    name: honeywatch-image-prune.timer
+    name: "{{ honeypot_timer_unit }}"
     state: restarted
   become: true

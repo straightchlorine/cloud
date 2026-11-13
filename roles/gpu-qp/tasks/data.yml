@@ -17,8 +17,8 @@
     - "{{ gpu_qp_bench_path }}"
 
 - name: Create the benchmark lock
-  # Every opener of the lock is read-only, so root never creates it. preserve keeps the touch
-  # from reporting a change on every run.
+  # Every opener of the lock is read-only, so root never creates it.
+  # Preserving the times keeps the touch from reporting a change on every run.
   ansible.builtin.file:
     path: "{{ gpu_qp_bench_path }}/.lock"
     state: touch
@@ -71,8 +71,7 @@
     label: "{{ item.dest }}"
 
 - name: Find helper-directory entries the role does not install
-  # Pycache and files of earlier role versions: the directory must equal the manifest the
-  # dispatcher checks. Reports a change only when something is removed.
+  # The directory must equal the manifest the dispatcher checks, so stale files such as a pycache count as extras.
   ansible.builtin.find:
     paths: "{{ gpu_qp_lib_path }}"
     file_type: any
@@ -91,8 +90,7 @@
     label: "{{ item.path }}"
 
 - name: Install the gpu-qp host tool
-  # After the helpers: a half-finished deploy never leaves a new dispatcher (and manifest)
-  # over an old lib.
+  # This runs after the helpers so that a half-finished deploy never leaves a new dispatcher over an old lib.
   ansible.builtin.template:
     src: gpu-qp.sh.j2
     dest: /usr/local/bin/gpu-qp
@@ -102,8 +100,7 @@
   become: true
 
 - name: Install the validation matrix for gpu-qp matrix
-  # The case list and its one-case runner sit next to the compose file; the
-  # runner is templated for the stack paths.
+  # The case list sits next to the compose file, together with the runner for one case.
   ansible.builtin.copy:
     src: matrix-cases.tsv
     dest: "{{ gpu_qp_home }}/matrix-cases.tsv"
@@ -120,7 +117,7 @@
     mode: "0755"
 
 - name: Remove the per-command tools earlier role versions installed
-  # ponytail: migration only - drop once every host has run this once
+  # Migration cleanup that can be deleted once every host has run it.
   ansible.builtin.file:
     path: "/usr/local/bin/{{ item }}"
     state: absent

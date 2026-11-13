@@ -5,6 +5,7 @@
   tags: [validation]
 
 - name: Install UFW using common package management # noqa: var-naming[no-role-prefix]
+  # role_specific_packages is the input of common/packages, so it cannot carry the firewall_ prefix.
   ansible.builtin.include_role:
     name: common
     tasks_from: packages
@@ -16,7 +17,7 @@
   community.general.ufw:
     state: reset
   become: true
-  when: firewall_reset is defined and firewall_reset | bool
+  when: firewall_reset | bool
 
 - name: Reload systemd and ensure UFW is available
   ansible.builtin.systemd:
@@ -25,7 +26,7 @@
 
 - name: Apply UFW policies and rules
   become: true
-    # ufw lives in /usr/sbin, absent from non-login shells' PATH.
+  # ufw lives in /usr/sbin, absent from non-login shells' PATH.
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   block:
@@ -48,14 +49,13 @@
         port: "22"
         comment: "SSH access"
 
-    - name: Configure common firewall ports
+    - name: Configure the group-wide firewall ports
       community.general.ufw:
         rule: allow
         port: "{{ item.port | string }}"
         comment: "{{ item.comment if item.comment is defined else 'Service port' }}"
         proto: "{{ item.proto if item.proto is defined else 'tcp' }}"
-      loop: "{{ common_firewall_ports }}"
-      when: common_firewall_ports is defined and common_firewall_ports | length > 0
+      loop: "{{ firewall_common_ports }}"
 
     - name: Configure host-specific firewall ports
       community.general.ufw:
@@ -63,7 +63,6 @@
         port: "{{ item | string }}"
         comment: "{{ item }} service"
       loop: "{{ firewall_ports }}"
-      when: firewall_ports is defined and firewall_ports | length > 0
 
     - name: Configure advanced firewall rules
       community.general.ufw:
@@ -74,7 +73,6 @@
         dest: "{{ item.dest if item.dest is defined else omit }}"
         comment: "{{ item.comment if item.comment is defined else 'Custom rule' }}"
       loop: "{{ firewall_rules }}"
-      when: firewall_rules is defined and firewall_rules | length > 0
 
     - name: Enable UFW
       community.general.ufw:

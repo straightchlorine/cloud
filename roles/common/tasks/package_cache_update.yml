@@ -2,5 +2,6 @@
 - name: Update package cache
   ansible.builtin.apt:
     update_cache: true
-    cache_valid_time: "{{ package_cache_valid_time }}"
+    cache_valid_time: "{{ common_package_cache_valid_time }}"
+  become: true
   tags: [always, packages]

@@ -8,9 +8,9 @@
     domain_name: example.test
     media_home: /home/music/stack
     media_library_path: /mnt/music
-    restic_enabled: false
-    restic_repository: /tmp/test-restic
-    restic_password: molecule-test-restic-password
+    # This is the media host's board type, and its hardware profile sizes the navidrome container.
+    device_type: rpi3b
+    media_restic_enabled: false
     vault_watchtower_api_token: molecule-test-watchtower-token
     common_start_stack: false
     media_youtube_enabled: true
@@ -29,8 +29,7 @@
         - "{{ media_library_path }}"
 
     - name: Publish fixture userns-remap facts
-      # The uid must be inside the nested rootless-podman mapping (0-65536), or chown
-      # fails with EINVAL.
+      # The uid must sit inside the nested rootless-podman mapping, or chown fails with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"
@@ -49,12 +48,17 @@
       tags: [molecule-idempotence-notest]
 
   tasks:
-    # Deploy tasks skip idempotence: the teardown removes what they create,
-    # and the teardown is what must converge on a rerun.
+    # The deploy tasks skip the idempotence check because the teardown removes what they create.
+    # The teardown is the part that must converge on a rerun.
     - name: Gather network facts for dynamic configuration
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
+      tags: [molecule-idempotence-notest]
+
+    - name: Detect hardware for resource allocation
+      ansible.builtin.include_role:
+        name: hardware
       tags: [molecule-idempotence-notest]
 
     - name: Run the real stack deployment
@@ -63,7 +67,7 @@
         tasks_from: stack
       tags: [molecule-idempotence-notest]
 
-    # A container has no docker.service, so fake the unit the teardown removes.
+    # A container has no docker.service, so this task fakes the unit that the teardown removes.
     - name: Create the fake stack service unit
       ansible.builtin.copy:
         content: |
@@ -101,7 +105,7 @@
             that:
               - "'media teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
 
-    # docker compose down is skipped by the docker-info guard.
+    # The docker-info guard skips `docker compose down`, because the container has no Docker.
     - name: Run the media teardown
       ansible.builtin.include_role:
         name: media

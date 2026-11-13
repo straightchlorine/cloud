@@ -1,0 +1,92 @@
+---
+teardown_protected: true
+device_role: workstation
+device_type: gentoo
+
+# Off-site backup through roles/restic, which playbooks/site.yml applies because no stack role owns this host.
+# The host runs OpenRC, so the role schedules the job with a cron.d entry (restic_scheduler is derived from the
+# service manager) and logs to /var/log/restic/portable.log. Bootstrap: roles/restic/README.md, "Applying to portable".
+# Uncomment this once the vault holds vault_restic_storage_key_portable; until then the key is placed by hand
+# at /etc/ssh/restic_storage_key.
+# restic_storage_key: "{{ vault_restic_storage_key_portable }}"
+restic_jobs:
+  - name: portable
+    repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/portable"
+    password: "{{ vault_restic_portable_password }}"
+    # The wrapper starts hourly; the gate lets one backup through per 20 h, on the first run that is on AC
+    # and not on a metered link, so a laptop that is often unplugged or tethered still backs up soon after.
+    cron_schedule: "17 * * * *"
+    skip_on_battery: true
+    skip_metered: true
+    # Connection names (usually the SSID) of phone hotspots and other metered links NetworkManager does not flag.
+    metered_connections: "{{ vault_portable_metered_connections }}"
+    # About 43 GiB go up on the first run, over a home uplink; a run cut off by the timeout resumes on the next one.
+    timeout: 12h
+    # No cgroup on OpenRC: this only sets GOMEMLIMIT (80%), a soft ceiling for the Go runtime.
+    memory_max_mib: 2048
+    # A gated job backs up about once a day when it can, and the laptop may sit unplugged or tethered for a
+    # weekend, so alert only after three days. Validation requires at least 24 for a gated job.
+    max_age_hours: 72
+    # The same retention as station-arch.
+    retention: { daily: 7, weekly: 2, monthly: 2, yearly: 1 }
+    sources:
+      - /etc
+      - /boot
+      - /efi
+      - /root
+      - /usr/local
+      - /var/lib
+      - /var/db/pkg
+      - /var/spool
+      - /var/log
+      - /home/zweiss/.config
+      - /home/zweiss/.local/state
+      - /home/zweiss/.local/share/applications
+      - /home/zweiss/.local/share/fonts
+      - /home/zweiss/.local/share/dwarf-fortress
+      - /home/zweiss/.local/bin
+      - /home/zweiss/.oh-my-zsh
+      - /home/zweiss/.bashrc
+      - /home/zweiss/.bash_profile
+      - /home/zweiss/.zshenv
+      - /home/zweiss/.tmux.conf
+      - /home/zweiss/.gitconfig
+      - /home/zweiss/.gitignore
+      - /home/zweiss/.gitmodules
+      - /home/zweiss/.h2.server.properties
+      - /home/zweiss/.face.icon
+      - /home/zweiss/.ssh
+      - /home/zweiss/.gnupg
+      - /home/zweiss/.pki
+      - /home/zweiss/.kube
+      - /home/zweiss/.docker
+      - /home/zweiss/.oci
+      - /home/zweiss/.claude
+      - /home/zweiss/.claude.json
+      - /home/zweiss/.cline
+      - /home/zweiss/.copilot
+      - /home/zweiss/code
+      - /home/zweiss/automation
+      - /home/zweiss/portable-stack
+      - /home/zweiss/screenshots
+      - /home/zweiss/README.md
+      - /home/zweiss/LICENSE
+    # .git stays in code because unpushed history cannot be regenerated; what a build or install recreates does not.
+    # Every restic run already passes --exclude-caches, which skips directories carrying a CACHEDIR.TAG.
+    excludes:
+      - /home/zweiss/portable-stack/syncthing/data/immich
+      - /home/zweiss/portable-stack/syncthing/data/uni
+      - /home/zweiss/portable-stack/syncthing/data/pihole-backups
+      - /home/zweiss/portable-stack/syncthing/config/index-v2
+      - /var/lib/docker
+      - /var/lib/texmf
+      - /var/lib/mlocate
+      - /root/.npm
+      - /root/.cache
+      - /root/.MathWorks
+      - "/home/zweiss/code/**/node_modules"
+      - "/home/zweiss/code/**/.venv"
+      - "/home/zweiss/code/**/venv"
+      - "/home/zweiss/code/**/__pycache__"
+      - "/home/zweiss/code/**/target"
+      - "/home/zweiss/code/**/.cache"

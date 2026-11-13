@@ -4,8 +4,8 @@
   become: true
   tasks:
     - name: Install cron and iproute2
-      # The cron module needs the crontab binary (cron package); the
-      # teardown's listener checks need ss (iproute2).
+      # The cron module needs the crontab binary from the cron package.
+      # The teardown's listener checks need ss from iproute2.
       ansible.builtin.apt:
         name:
           - cron

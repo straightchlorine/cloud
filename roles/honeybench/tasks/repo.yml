@@ -1,9 +1,9 @@
 ---
-# Runs as the connection user (no become): the checkout, the worktrees and the
-# bench's own files must belong to the account that will run the bench.
+# This file runs as the connection user without become.
+# The checkout, the worktrees and the bench's own files must belong to the account that runs the bench.
 - name: Check out the honeywatch repository
-  # force stays false: a hand-edited tracked file fails the run instead of
-  # being overwritten. Untracked bench output (results/, plans/) is not touched.
+  # Force stays false, so a hand-edited tracked file fails the run instead of being overwritten.
+  # Untracked bench output such as results/ and plans/ is not touched.
   ansible.builtin.git:
     repo: "{{ honeybench_repo_url }}"
     dest: "{{ honeybench_checkout_dir }}"
@@ -34,6 +34,7 @@
     chdir: "{{ honeybench_checkout_dir }}"
   become: false
   changed_when: false
+  # Grep exits 1 without a match, which the assertion below reports with the missing pieces.
   failed_when: false
   check_mode: false
   register: honeybench_mod_bench

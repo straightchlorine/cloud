@@ -44,8 +44,8 @@ import sys
 import media_common as mc
 
 QUARANTINE = "/removed"
-# The marker reviewed.py writes (see that plugin): the flexible field the passes query,
-# and a comments prefix so the decision survives in the file.
+# The reviewed.py plugin writes the same marker: a flexible field that the passes query,
+# and a comments prefix that keeps the decision inside the file.
 REVIEWED, REVIEWED_PREFIX = "reviewed", "reviewed | "
 
 
@@ -59,8 +59,8 @@ def target_key(t):
     return ("id", t["id"]) if t.get("id") is not None else ("path", t["path"])
 
 
-# What a later decision about one of the targets leaves of a decision: these run on the
-# targets still unclaimed; merge, replace and adopt only make sense whole.
+# Actions that can run on just the targets no later decision claims.
+# Merge, replace and adopt only make sense on all of their targets.
 NARROWS = {"pin", "keep", "quarantine", "skip"}
 RANK = {"quarantine": 0, "replace": 0, "merge": 1, "pin": 1, "adopt": 1, "keep": 2, "register": 2, "skip": 2}
 
@@ -75,10 +75,11 @@ def narrowed(d, targets):
 
 
 def read_decisions(path):
-    """[{n, d, run, narrowed, result}] in file order: unreadable lines carry their result
-    already. `run` is the decision to carry out: `d`, or `d` narrowed to the targets no
-    later line names (`narrowed` is then (left, of)). One whose targets are all named
-    again later, or that cannot be narrowed, is "superseded"."""
+    """Entries [{n, d, run, narrowed, result}] in file order, with the result preset for unreadable lines.
+
+    `run` is `d` narrowed to the targets no later line names, and `narrowed` is then (left, of).
+    A decision whose targets are all named again later, or that cannot be narrowed, is "superseded".
+    """
     out = []
     with open(path, encoding="utf-8") as f:
         for n, line in enumerate(f, 1):
@@ -147,9 +148,10 @@ def stale(d, rows, by_path):
 # ----------------------------------------------------------------- the log
 
 class Log:
-    """The apply log: JSON lines, each flushed and synced before the change it
-    describes goes ahead, so a crash leaves at worst a record of a change not made
-    (which undo puts back harmlessly), never a change with no record."""
+    """The apply log of JSON lines, each synced to disk before the change it describes.
+
+    A crash therefore leaves at worst a record of a change not made, which undo puts back harmlessly.
+    """
 
     def __init__(self, path):
         self.path = path
@@ -176,11 +178,12 @@ class Log:
 # ----------------------------------------------------------------- actions
 
 def move_file(src, dst):
-    """Move a file, never over another one. Across mounts (/music and /removed are
-    separate in the container, where a rename fails with EXDEV) it copies to a
-    temporary name, syncs, checks the size, renames into place and only then removes
-    the source: a crash leaves the original, or two whole copies - never a short copy
-    standing where the file was, never no file."""
+    """Move a file, never over another one.
+
+    Across mounts a rename fails with EXDEV, so it copies to a temporary name, checks the size and renames it into
+    place.
+    The source is removed last, so a crash leaves the original or two whole copies, never a short copy.
+    """
     if os.path.lexists(dst):
         raise FileExistsError("%s exists; not moving %s over it" % (dst, src))
     os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -230,23 +233,25 @@ def release_info(releases, release):
 
 
 def movable(item, hold):
-    """Whether a row no decision named may be filed again with its album: not one that a
-    decision still to run names (that one checks the path it was written with, and a move
-    now would make it stale), and not an orphan whose file is gone (moving it would stop the
-    whole apply; the prune drops it). `hold` is the set of those row ids."""
+    """Whether a row no decision named may be moved along with its album.
+
+    A row that a decision still to run names stays, because that decision checks the path it was written with.
+    An orphan whose file is gone stays too, because moving it would stop the whole apply. `hold` holds the first kind
+    of row ids.
+    """
     return item.id not in hold and os.path.exists(item.path)
 
 
 def tidy_folders(lib, log, n, album, seqs, hold):
-    """Move every track of `album` to the folder the path format gives it. A pin moves its files
-    while the album rows it is about to empty still exist, and the path format's aunique
-    then files them under "Album [id]"; with those rows gone the same destination loses the
-    suffix. `seqs` maps the row ids already logged (a track is logged once) to their seq;
-    a track outside it that is not `movable` stays where it is."""
+    """Move every track of `album` to the folder the path format gives it.
+
+    A pin first moves its files while the rows it will empty still exist, so aunique files them under "Album [id]".
+    This moves them again once those rows are gone. `seqs` maps the row ids already logged to their seq, and a track
+    outside it that is not `movable` stays.
+    """
     from beets import util
 
-    # beets memoizes each album's aunique suffix per library object: the pin's own moves
-    # cached "[id]" for this album, and without a reset the destination would not change
+    # beets caches each album's aunique suffix per library object, so without a reset the cached "[id]" would stay.
     getattr(lib, "_memotable", {}).clear()
     for item in album.items():
         dest = item.destination()
@@ -261,9 +266,10 @@ def tidy_folders(lib, log, n, album, seqs, hold):
 
 
 def pin_items(lib, log, n, release, info, items, hold, forced=None):
-    """Give `items` the release (the pin's rules; `forced` names tracks by hand), logging
-    every row and file move, drop the album rows that leaves empty and file the album's
-    tracks again. Returns (report, files changed, shell lines)."""
+    """Give `items` the release, logging every row and file move, then drop emptied album rows and refile the tracks.
+
+    `forced` names tracks by hand. Returns (report, files changed, shell lines).
+    """
     album, mapping, skipped = mc.plan_pin(lib, info, items, forced)
     if not mapping:
         return "none of %d file(s) fit the release (%s)" % (
@@ -293,8 +299,7 @@ def do_pin(lib, log, n, d, rows, releases, hold):
 
 
 def mark_reviewed(item):
-    """The marker an interactive "use as-is" leaves (see reviewed.py): the flexible field
-    the passes query, and a comments prefix that survives in the file."""
+    """Mark a file reviewed in its flexible field and in its comments tag, as an interactive "use as-is" does."""
     item[REVIEWED] = "1"
     if not (item.comments or "").startswith(REVIEWED):
         item.comments = REVIEWED_PREFIX + item.comments if item.comments else REVIEWED
@@ -362,9 +367,8 @@ def do_replace(lib, log, n, d, rows, day):
     # the comments are logged for undo: a reviewed marker rewrites them in the file
     seq = log.begin(n, "register", path=loose["path"], comments=new.comments)
     new.add(lib)
-    # The new row stands in for the old one: the weekly retag window runs from "added",
-    # and a track a person marked reviewed stays marked, in the file too (a library
-    # rebuild reads the marker back from the comments).
+    # The new row takes over the old row's "added" time, which the retag window (added:-4w..) is measured from.
+    # A reviewed marker is copied too, and the file's comments carry it so a library rebuild can read it back.
     new.added = gone.added
     if gone.get(REVIEWED):
         mark_reviewed(new)
@@ -378,8 +382,10 @@ def do_replace(lib, log, n, d, rows, day):
 
 
 def do_adopt(lib, log, n, d, releases, hold):
-    """Register files from /downloads as reviewed and file them in the library; with a
-    release, pin them to it afterwards (a file whose title is not on it stays as adopted)."""
+    """Register files from /downloads as reviewed and file them in the library.
+
+    With a release they are pinned to it afterwards, and a file whose title is not on it stays as adopted.
+    """
     from beets import util
     from beets.library import Item
 
@@ -504,8 +510,7 @@ def cmd_apply(args):
             d, n = entry["run"], entry["n"]
             # rows the decisions still to run name: a tidy-up of an album leaves them where they are
             hold = {t["id"] for e in order[pos + 1:] for t in e["run"]["targets"] if t["id"] is not None}
-            # Checked again just before: an earlier decision of this run (a merge moving
-            # a whole album's files) may have changed what this one names.
+            # Read the rows only now, because an earlier decision of this run may have changed what this one names.
             now = {t["id"]: lib.get_item(t["id"]) for t in d["targets"] if t["id"] is not None}
             paths = {mc.path_of(i): i.id for i in lib.items()} if any(t["id"] is None for t in d["targets"]) else {}
             why = stale(d, {k: v for k, v in now.items() if v is not None}, paths)
@@ -570,8 +575,7 @@ def cmd_apply(args):
 # ----------------------------------------------------------------- undo
 
 def insert_with_id(lib, model, rid, before):
-    """Put a removed row back under its own id, so the decisions and logs that name it
-    still do. False when that id was handed to a new row since."""
+    """Put a removed row back under its own id, or return False when a new row has taken that id."""
     with lib.transaction() as tx:
         if tx.query("SELECT 1 FROM %s WHERE id = ?" % model._table, (rid,)):
             return False
@@ -584,8 +588,7 @@ def insert_with_id(lib, model, rid, before):
 
 
 def read_log(path):
-    """The log's steps by seq. A last line cut short (a crash while writing it) is
-    dropped: its change never went ahead."""
+    """The log's steps by seq, dropping a last line cut short because its change never went ahead."""
     steps = collections.OrderedDict()
     with open(path, encoding="utf-8") as f:
         lines = f.readlines()
@@ -676,13 +679,15 @@ def restore_comments(path, comments):
 
 
 def undo_adopt(lib, begin, done, moving, kept):
-    """Take an adopted file out of the library again: the row gone, the file back at its
-    /downloads path, its comments tag as it was. True when done."""
+    """Undo an adopt by removing the row, moving the file back to its /downloads path and restoring its comments tag.
+
+    Returns True when done.
+    """
     want = begin["path"]
     after = (done or {}).get("after")
-    # Where the file can be: filed after the adopt, never moved (its row still names the
-    # /downloads path until the move is stored), or at the move's logged target, which was
-    # free when logged. The target is last: it must never win over the file's own path.
+    # The file is either filed after the adopt, never moved (its row still names the /downloads path),
+    # or at the move's logged target, which was free when logged.
+    # The target comes last so that it never wins over the file's own path.
     spots = [as_text(p) for p in (after and mc.from_json(after["path"]), want, mc.from_json((moving or {}).get("to")))
              if p]
     here = next((p for p in spots if os.path.exists(p)), None)

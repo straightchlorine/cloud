@@ -13,6 +13,24 @@
     get_checksum: false
   register: common_compose_existing
 
+- name: Read the existing compose file
+  ansible.builtin.slurp:
+    src: "{{ compose_file_path }}"
+  register: common_compose_current
+  when: common_compose_existing.stat.exists
+
+- name: Remove services that are no longer declared
+  # Each service is a blockinfile block named by its marker; a dropped service would
+  # otherwise stay in the file forever.
+  ansible.builtin.blockinfile:
+    path: "{{ compose_file_path }}"
+    marker: "# {mark} {{ item }}"
+    state: absent
+  loop: >-
+    {{ (common_compose_current.content | b64decode | regex_findall('(?m)^# BEGIN (.+)$'))
+    | difference(compose_services | map(attribute='service_name') | list + ['networks', 'volumes']) }}
+  when: common_compose_existing.stat.exists
+
 - name: Generate Docker Compose file header
   ansible.builtin.copy:
     content: |

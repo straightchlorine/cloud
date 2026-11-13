@@ -1,44 +1,32 @@
 #!/usr/bin/env bash
-# Post-teardown check for a disposable automation test host.
-# Run after playbooks/automation-teardown.yml to confirm the box is clean enough for
-# a fresh automation-role test. Pairs with validate-deploy.sh (deployed host check).
+# Run this after playbooks/automation-teardown.yml to confirm the host is clean enough for a fresh automation-role test.
+# The deployed-host counterpart is validate-deploy.sh.
 # Usage: ./scripts/automation/validate-clean.sh <ansible-host-alias>
+# Optional overrides, exported before the call: STACK_HOME (default: ~/stack on the host), DATA_PATH
+# (/mnt/data), DOCKER_NETWORK (stack), COMPOSE_PROJECT (automation).
 set -euo pipefail
 
 HOST="${1:?Usage: ./scripts/automation/validate-clean.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after automation teardown =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
+{
+  cat "$LIB"
+  for v in STACK_HOME DATA_PATH DOCKER_NETWORK COMPOSE_PROJECT; do
+    [ -z "${!v:-}" ] || printf '%s=%q\n' "$v" "${!v}"
+  done
+  cat <<'INNEREOF'
 
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_absent() {
-  if [ -e "$1" ]; then
-    note_left "$1 still exists"
-  else
-    note_ok "$1 absent"
-  fi
-}
+: "${STACK_HOME:=$HOME/stack}" "${DATA_PATH:=/mnt/data}" "${DOCKER_NETWORK:=stack}" "${COMPOSE_PROJECT:=automation}"
 
 echo "-- Automation role state --"
 check_absent /usr/local/bin/automation-syncthing-backup
 check_absent /usr/local/bin/manage-automation
 check_absent /etc/systemd/system/stack.service
 check_absent /var/log/automation-syncthing-backup.log
-# Stack home follows the SSH user's home (automation_stack_home derives from ansible_user).
-check_absent "$HOME/stack"
+# The stack home follows the SSH user's home, because automation_stack_home derives from ansible_user.
+check_absent "$STACK_HOME"
 
 if systemctl is-active --quiet stack 2>/dev/null; then
   note_left "stack service still active"
@@ -46,7 +34,7 @@ else
   note_ok "stack service not active"
 fi
 
-# Syncthing fully torn down by the role's teardown include (common role).
+# The role's teardown includes the common role's Syncthing teardown, so Syncthing must be gone completely.
 check_absent /etc/systemd/system/syncthing.service
 check_absent /etc/apt/preferences.d/syncthing.pref
 check_absent /etc/apt/keyrings/syncthing-archive-keyring.gpg
@@ -61,12 +49,12 @@ fi
 
 echo "-- Docker state --"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx 'stack'; then
-    note_left "docker network stack still exists"
+  if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx "$DOCKER_NETWORK"; then
+    note_left "docker network $DOCKER_NETWORK still exists"
   else
-    note_ok "docker network stack removed"
+    note_ok "docker network $DOCKER_NETWORK removed"
   fi
-  running="$(docker ps -q --filter 'label=com.docker.compose.project=automation' 2>/dev/null | wc -l)"
+  running="$(docker ps -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" 2>/dev/null | wc -l)"
   if [ "$running" -gt 0 ]; then
     note_left "$running automation project containers still running"
   else
@@ -76,18 +64,13 @@ else
   note_ok "docker daemon unavailable on this host (nothing to check)"
 fi
 
-# Data dir is deliberately retained across a teardown (replicated user data).
-if [ -d /mnt/data ]; then
-  note_ok "/mnt/data present (data intentionally left)"
+# The data directory is deliberately kept across a teardown because it holds replicated user data.
+if [ -d "$DATA_PATH" ]; then
+  note_ok "$DATA_PATH present (data intentionally left)"
 else
-  note_left "/mnt/data missing (expected to remain mounted)"
+  note_left "$DATA_PATH missing (expected to remain mounted)"
 fi
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "LEFTOVERS FOUND - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "Clean. The host is ready for a fresh automation-role test."
+summary_clean "Clean. The host is ready for a fresh automation-role test."
 INNEREOF
+} | ssh "$HOST" bash -s

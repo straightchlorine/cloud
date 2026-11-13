@@ -3,9 +3,9 @@
 media_home: "/home/{{ ansible_user }}/stack"
 # media_library_path: required in host_vars (data path and SSD mount point).
 
-# sqlite3: beets DB snapshot; unzip: deno install; ffmpeg: yt-dlp's
-# extract-audio / embed-metadata / thumbnail-convert postprocessing (the beets
-# image ships its own ffmpeg for ReplayGain, but yt-dlp runs on the host).
+# The snapshot script needs sqlite3 and the deno install needs unzip.
+# Yt-dlp runs on the host and needs ffmpeg for its audio, metadata and thumbnail postprocessing.
+# The beets image ships its own ffmpeg.
 media_specific_packages:
   - sqlite3
   - unzip
@@ -13,30 +13,56 @@ media_specific_packages:
 
 media_navidrome_port: 4545
 media_subdomain_navidrome: "navidrome"
-# Runs before watchtower's 02:00 sweep so a backup predates any image upgrade
-# (navidrome migrations are one-way).
+# Runs before the watchtower sweep (common_watchtower_schedule), so a backup predates any image upgrade.
+# Navidrome migrations are one-way.
 media_navidrome_backup_schedule: "45 1 * * *"
 media_navidrome_backup_count: 7
 
-# Initial install only; the weekly self-update takes over. Deno is the JS runtime
-# yt-dlp needs for YouTube's challenges.
+# These versions apply to the initial install only, and the weekly self-update takes over afterwards.
+# Deno is the JavaScript runtime yt-dlp needs for YouTube's challenges.
 media_ytdlp_version: "2026.08.19"
 media_deno_version: "2.9.7"
 media_youtube_enabled: false
 
-# Beets query excluded from `media-sync --backfill` (e.g. audiobooks). Empty = whole library.
+# Beets query excluded from `media-sync --backfill`, for example audiobooks.
+# An empty value backfills the whole library.
 media_backfill_exclude: ""
 
-# The MusicBrainz web service the review tools (`media-sync --audit`, --complete's
-# plan) ask. The tests point it at a local fake serving fixture releases.
+# The MusicBrainz web service that the review tools ask, such as `media-sync --audit`.
+# The tests point it at a local fake that serves fixture releases.
 media_musicbrainz_url: "https://musicbrainz.org"
 
-# `media-sync --apply` (the review decisions, run weekly from cron): a run touching more files
-# than this is refused unless --force, and it waits for a restic backup no older than
-# the age below. The unit is backup-<name>.service, from the common restic_backup task.
+# `media-sync --apply` runs the review decisions weekly from cron.
+# It refuses a run that touches more files than the limit below unless --force is given.
+# It also waits for a restic backup no older than the age below.
+# The age comes from the job's last-good marker <media_restic_state_dir>/<name>.ok.
+# The job is restic-job@<name>.service from roles/restic, whose state directory is fixed.
+# The state directory is a variable only so tests/engine-test.sh can point it at a scratch directory.
 media_apply_max_files: 200
 media_apply_backup_max_age_hours: 36
 media_restic_service_name: "media"
+media_restic_state_dir: "/var/lib/restic"
+# The off-site job handed to roles/restic, with its repository and password set in host_vars.
+# Navidrome's live database is excluded because restic ships Navidrome's own backups instead.
+media_restic_job:
+  name: "{{ media_restic_service_name }}"
+  repository: "{{ media_restic_repository }}"
+  password: "{{ media_restic_password }}"
+  schedule: "*-*-* 03:00:00"
+  timeout: 12h
+  memory_max_mib: 512
+  retention: { daily: 7, weekly: 4, monthly: 6, yearly: 1 }
+  sources:
+    - "{{ media_home }}"
+    - "{{ media_library_path }}"
+  excludes:
+    - "{{ media_library_path }}/docker"
+    - "{{ media_library_path }}/journal"
+    - "{{ media_library_path }}/cache"
+    - "{{ media_library_path }}/backup-tmp"
+    - "{{ media_library_path }}/navidrome-data/navidrome.db*"
+    - "{{ media_library_path }}/navidrome-data/cache"
+    - "*.log"
 
 media_library_directories:
   - music
@@ -45,11 +71,10 @@ media_library_directories:
   - beets
   - cache
   - logs
-  # Quarantined files (`media-sync --apply`): moved here by date, never deleted.
+  # `media-sync --apply` moves quarantined files here by date and never deletes them.
   - removed
-  # Pipeline state (the yt-dlp download archive) - kept out of the /mnt/data
-  # root so the data path stays folders-only. Backed up by restic and the
-  # nightly snapshot (unlike cache/, which is excluded).
+  # Pipeline state such as the yt-dlp download archive lives here, so the library root holds only folders.
+  # Restic and the snapshot script back it up, unlike cache/, which restic excludes.
   - state
 
 media_ssd_format: false  # DESTRUCTIVE if true - wipes the detected drive
@@ -57,17 +82,17 @@ media_ssd_filesystem: "ext4"
 media_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 media_ssd_journald_enabled: true
 
-# Secondary local backup via Syncthing; the primary off-site backup is restic.
+# This is the secondary local backup, shared through Syncthing, and restic is the primary off-site backup.
 media_backup_enabled: false
 media_backup_owner: "{{ ansible_user }}"
 media_backup_retention: 14
-# Before the 03:00 restic timer, so restic ships tonight's snapshot too.
+# The snapshot runs before the restic job (media_restic_job.schedule), so restic ships tonight's snapshot too.
 media_backup_schedule_hour: "02"
 media_backup_schedule_minute: "30"
 
-# Resolvers handed to the beets container (see the service's service_dns). Quad9
-# (primary and secondary) as the fallback for a host that sets none; a host on a
-# LAN with its own resolvers overrides this in host_vars (the media host does).
+# Resolvers handed to the beets container through its service_dns.
+# The Quad9 addresses are the fallback for a host that sets none.
+# A host on a LAN with its own resolvers overrides this in host_vars.
 media_beets_dns:
   - 9.9.9.9
   - 149.112.112.112
@@ -86,7 +111,7 @@ media_compose_services:
       - host: "{{ media_navidrome_port }}"
         container: 4533
         bind_ip: "{{ primary_ip }}"
-    service_user: "{{ media_uid }}:{{ media_gid }}"
+    service_user: "{{ common_stack_uid }}:{{ common_stack_gid }}"
     service_environment:
       - "ND_MUSICFOLDER=/music"
       - "ND_DATAFOLDER=/data"
@@ -94,14 +119,13 @@ media_compose_services:
       - "ND_BASEURL=https://{{ media_subdomain_navidrome }}.{{ domain_name }}"
       - "ND_JWTKEY=${NAVIDROME_JWT_SECRET}"
       - "ND_AUTOIMPORTPLAYLISTS=false"
-      # Anonymous usage/telemetry is opt-out (EnableInsightsCollector, default
-      # true) - keep it disabled (navidrome.org anonymous-data-collection).
+      # Navidrome sends anonymous usage data unless the insights collector is disabled.
       - "ND_ENABLEINSIGHTSCOLLECTOR=false"
-      # The watcher picks up beets' moves; no scheduled scans needed.
+      # The file watcher picks up beets' moves, so no scheduled scan is needed.
       - "ND_SCANNER_WATCHERWAIT=10s"
       - "ND_SCANNER_SCANONSTARTUP=true"
       - "ND_SCANNER_PURGEMISSING=full"
-      # 0.63 enables public share links by default; keep them off.
+      # Navidrome enables public share links by default, so they are switched off.
       - "ND_ENABLESHARING=false"
       - "ND_BACKUP_PATH=/data/backups"
       - "ND_BACKUP_SCHEDULE={{ media_navidrome_backup_schedule }}"
@@ -135,18 +159,18 @@ media_compose_services:
 
   - service_name: beets
     service_image: "linuxserver/beets:latest"
-    # On-demand import tool, never running, so watchtower cannot see it:
-    # media-sync pulls the image before each run instead.
+    # Beets is an on-demand tool that is never running, so watchtower cannot see it.
+    # Media-sync pulls the image before each run instead.
     service_restart: "no"
     service_profiles:
       - tools
-    # userns_mode:host so beets runs as the real stack uid (= media_uid), the same
-    # uid yt-dlp writes downloads/ as. Userns-remapped, beets can read /downloads
-    # but not rename out of it ("Permission denied while moving"). The image's s6
-    # /init is bypassed (media-sync uses --entrypoint), so no SUID preinit runs.
-    # music/, beets/ and downloads/ are owned by the stack uid to match (see stack.yml).
+    # With userns_mode host, beets runs as the stack uid that yt-dlp also writes downloads/ as.
+    # A userns-remapped beets can read /downloads but cannot move files out of it.
+    # The error is "Permission denied while moving".
+    # The image's s6 init is bypassed because media-sync uses --entrypoint, so no SUID preinit runs.
+    # The stack uid therefore owns music/, beets/ and downloads/ (see stack.yml).
     service_userns_mode: "host"
-    service_user: "{{ media_uid }}:{{ media_gid }}"
+    service_user: "{{ common_stack_uid }}:{{ common_stack_gid }}"
     service_environment:
       - "TZ={{ timezone }}"
     service_volumes:
@@ -157,19 +181,17 @@ media_compose_services:
       - "{{ media_library_path }}/removed:/removed"
     service_networks:
       - stack
-    # Pinned on purpose: the host's resolver list (1s timeout, one attempt) lets a
-    # single hiccup fail every lookup while the pass keeps logging "Skipping." and
-    # looks healthy. media_beets_dns names the resolvers explicitly.
+    # The resolvers are pinned because the host's own list lets a single hiccup fail every lookup.
+    # The pass would then keep logging "Skipping." and look healthy.
     service_dns: "{{ media_beets_dns }}"
-    # Docker's per-container soft nofile default is 1024 regardless of the daemon's
-    # LimitNOFILE (which only becomes the hard limit), and a whole-library
-    # `beet import` uses ~2 descriptors per task, so it would hit EMFILE.
+    # A whole-library `beet import` opens many files at once and would hit Docker's default open-file limit.
+    # Both the soft and the hard limit are raised because the daemon's limit only sets the hard one.
     service_ulimits:
       nofile:
         soft: 65536
         hard: 65536
     service_resources:
-      # ReplayGain decodes every imported track with ffmpeg.
+      # The memory limit is sized for ReplayGain, which decodes every imported track with ffmpeg.
       limits:
         memory: 384M
         cpus: "2.0"

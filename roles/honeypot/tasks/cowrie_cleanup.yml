@@ -1,7 +1,6 @@
 ---
 - name: Install the cowrie download-volume cleanup job
-  # The filename must stay extension-free: run-parts silently skips anything in
-  # /etc/cron.daily containing a dot.
+  # The filename must stay free of dots, because run-parts silently skips any such file in /etc/cron.daily.
   ansible.builtin.template:
     src: honeywatch-cowrie-cleanup.j2
     dest: /etc/cron.daily/honeywatch-cowrie-cleanup

@@ -1,26 +1,14 @@
 ---
-# Global Backup Configuration
-# Shared variables for unified backup system
-
-# Backup user and group (common across all hosts)
 backup_user: backup
 backup_group: backup
 
-# Backup base path (already defined in all.yml, kept here for reference)
-# backup_base_path: /opt/backup
-
-# Restic version (consistent across all hosts)
-restic_version: "0.18.1"
-
-# Hetzner Storage Box connection details (from vault)
-# These must be defined in vault.yml:
-# - vault_backup_storage_host
-# - vault_backup_storage_user
-# - vault_backup_storage_port
-# - vault_backup_repository_base
-#
-# Example vault.yml:
-# vault_backup_storage_host: u12345.your-storagebox.de
-# vault_backup_storage_user: u12345
-# vault_backup_storage_port: 23
-# vault_backup_repository_base: /backup/restic-repos
+# The Hetzner Storage Box connection values come from the vault, see vault.yml.example.
+# One account is shared by every push host, so any host's key can delete every repository.
+# This risk is accepted in docs/backup/index.md.
+restic_storage_host: "{{ vault_backup_storage_host }}"
+restic_storage_user: "{{ vault_backup_storage_user }}"
+restic_storage_port: "{{ vault_backup_storage_port }}"
+# The pinned host keys live in the vault because each line names the Storage Box host.
+# Take them from ssh-keyscan against the storage port and compare them with Hetzner's published fingerprints.
+# Validation refuses sftp jobs until a line matches the storage host and port.
+restic_known_hosts: "{{ vault_backup_storage_known_hosts }}"

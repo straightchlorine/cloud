@@ -1,6 +1,6 @@
 ---
-# Restic owns off-site backups (restic_backup.yml); the local Syncthing backup
-# below replicates a MariaDB dump and a Vaultwarden snapshot off-box.
+# The local Syncthing backup below replicates a MariaDB dump and a Vaultwarden snapshot off the host.
+# The off-site backup is the restic job at the end of this file.
 
 - name: Install the nightly local snapshot backup
   ansible.builtin.include_role:
@@ -18,7 +18,7 @@
       MariaDB dump, Vaultwarden snapshot + attachments, the stack .env and the
       Calibre DB snapshots
     common_snapshot_steps:
-      # Scheduled before the restic timer, which pauses the compose project.
+      # The snapshot schedule is set so these dumps are finished before the restic job ships them.
       - |
         timeout 600 docker compose exec -T mariadb sh -c \
             'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction -u "$MARIADB_USER" "$MARIADB_DATABASE"' \
@@ -42,70 +42,31 @@
         fi
   when: automation_backup_enabled
 
-- name: Install Syncthing (common role, optional)
+- name: Share the live Calibre tree and the backup folder over Syncthing (optional)
   ansible.builtin.include_role:
     name: common
-    tasks_from: syncthing
-  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
-
-- name: Deploy the Calibre Syncthing ignore rules (optional)
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: syncthing_ignore
+    tasks_from: syncthing_share
   vars:
-    common_syncthing_folder_path: "{{ automation_data_path }}/calibre"
-    common_syncthing_folder_ignore: "{{ automation_syncthing_calibre_ignore }}"
-  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
+    common_syncthing_share_folders:
+      - id: calibre
+        path: "{{ automation_data_path }}/calibre"
+        type: sendonly
+        ignore: "{{ automation_syncthing_calibre_ignore }}"
+      - id: backup
+        path: "{{ automation_backup_dir }}"
+        type: sendonly
+  when: automation_backup_enabled
 
-- name: Share the live Calibre tree over Syncthing (optional)
+- name: Configure the off-site restic backup
+  # The stack is not paused for this job because the snapshot above writes consistent database dumps into
+  # automation_backup_dir.
+  # The fresh guard fails the job when no recent dump exists.
   ansible.builtin.include_role:
-    name: common
-    tasks_from: syncthing_folder
+    name: restic
+    tasks_from: job
+    apply:
+      tags: [backup]
   vars:
-    common_syncthing_folder_id: "calibre"
-    common_syncthing_folder_path: "{{ automation_data_path }}/calibre"
-    common_syncthing_folder_type: "sendonly"
-  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
-
-- name: Register the automation Syncthing backup folder
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: syncthing_folder
-  vars:
-    common_syncthing_folder_id: "backup"
-    common_syncthing_folder_path: "{{ automation_backup_dir }}"
-    common_syncthing_folder_type: "sendonly"
-  when: common_syncthing_enabled | default(false) | bool and automation_backup_enabled
-
-- name: Configure unified restic backup # noqa: var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: common
-    tasks_from: restic_backup
-  vars:
-    common_backup_service_name: "automation"
-    common_backup_paths:
-      - "{{ automation_stack_home }}"
-      - "{{ automation_data_path }}"
-    retention_policy:
-      daily: 14
-      weekly: 8
-      monthly: 12
-      yearly: 3
-    backup_exclude_patterns:
-      - "*.log"
-      - "tmp/*"
-      - "cache/*"
-      - "{{ automation_data_path }}/docker"
-      - "{{ automation_backup_dir }}"
-    backup_ssh_config: true
-    common_backup_exec_start_pre:
-      - >-
-        +/usr/sbin/runuser -u {{ ansible_user }} --
-        /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml pause
-    common_backup_exec_stop_post:
-      - >-
-        +/usr/sbin/runuser -u {{ ansible_user }} --
-        /usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml unpause
-  when: restic_enabled
-  tags:
-    - backup
+    restic_job: "{{ automation_restic_job }}"
+  when: automation_restic_enabled
+  tags: [backup]

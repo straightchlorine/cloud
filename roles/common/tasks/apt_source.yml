@@ -1,0 +1,40 @@
+---
+# Adds a third-party apt repository: signing key, one-line source file, cache refresh.
+# common_apt_source_name:     file stem under /etc/apt/sources.list.d (docker -> docker.list)
+# common_apt_source_key_url:  where the signing key is downloaded from
+# common_apt_source_key_path: where the key is stored; it is the source line's signed-by path
+# common_apt_source_line:     the complete `deb [...] <url> <suite> <component>` line
+- name: Create the keyring directory
+  ansible.builtin.file:
+    path: "{{ common_apt_source_key_path | dirname }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Download the repository signing key
+  ansible.builtin.get_url:
+    url: "{{ common_apt_source_key_url }}"
+    dest: "{{ common_apt_source_key_path }}"
+    mode: "0644"
+  become: true
+  register: common_apt_source_key
+  until: common_apt_source_key is succeeded
+  retries: 3
+  delay: 2
+
+- name: Write the apt source file
+  ansible.builtin.copy:
+    content: "{{ common_apt_source_line }}\n"
+    dest: "/etc/apt/sources.list.d/{{ common_apt_source_name }}.list"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: common_apt_source_file
+
+- name: Refresh the apt cache for the new source
+  # Not a handler: the caller installs from this source in the same play, before handlers run.
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+  when: common_apt_source_file is changed  # noqa: no-handler

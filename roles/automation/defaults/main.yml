@@ -1,10 +1,10 @@
 ---
-# Application images float on :latest under watchtower's labelled nightly sweep; mariadb is pinned.
+# The application images float on :latest and carry the watchtower label, while mariadb and the firefly-cron sidecar
+# are pinned.
 
-# Derived from the inventory's ansible_user, the control user that owns the stack
-# (as common_syncthing_home, stack_user and compose_owner do). Do NOT use the
-# ansible_user_dir / ansible_user_id FACTS here: under become:true they reflect
-# root and resolve to /root. Host_vars may override to pin a dedicated account.
+# These paths derive from the inventory's ansible_user, which owns the stack.
+# The ansible_user_dir and ansible_user_id facts must not be used, because under become they resolve to root.
+# A host_vars override can pin a dedicated account.
 automation_stack_home: "/home/{{ ansible_user }}/stack"
 automation_backup_owner: "{{ ansible_user }}"
 
@@ -20,29 +20,51 @@ automation_calibre_port: 8083
 automation_subdomain_vaultwarden: "vaultwarden"
 automation_subdomain_firefly: "firefly"
 
-# Request source allow-list for Firefly's TRUSTED_PROXIES - host-defined and
-# scoped to the tailnet/LAN.
-# automation_trusted_proxies: REQUIRED in host_vars - no default.
+# automation_trusted_proxies is Firefly's TRUSTED_PROXIES allow-list of request sources.
+# It has no default and must be set in host_vars, scoped to the tailnet or LAN.
 
-# Optional stack SSD: the stack data path, journald and Docker's data-root ride
-# a dedicated drive when one is present, and the stack simply on the SD card
-# when there is none.
-automation_ssd_format: false # DESTRUCTIVE if true - wipes the detected drive
+# The optional stack SSD holds the stack data path, journald and the Docker data-root when a dedicated drive is present.
+# Without a drive everything stays on the SD card.
+automation_ssd_format: false # True lets the role wipe the detected drive.
 automation_ssd_filesystem: "ext4"
 automation_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 automation_ssd_journald_enabled: true
 
-# Secondary local backup replicated by Syncthing; primary/off-site is restic.
-# automation_backup_dir / automation_backup_owner are set in host_vars.
+# This local backup is replicated by Syncthing, while restic provides the off-site copy.
+# The host_vars files set automation_backup_dir, and automation_backup_owner defaults to the stack user.
 automation_backup_enabled: false
 automation_backup_retention: 14
-# Finishes before restic timer - MariaDB is paused during restic backup, so exec
-# fails until the unpause.
+# The snapshot must finish before the schedule in automation_restic_job, which ships these dumps and fails when none
+# is fresh.
 automation_backup_schedule_hour: "02"
 automation_backup_schedule_minute: "30"
 
-# Live Calibre tree shared to other devices through its Syncthing folder, pointed
-# at the live tree.
+# This is the off-site job handed to roles/restic.
+# The host_vars files supply automation_restic_repository and automation_restic_password.
+automation_restic_job:
+  name: automation
+  repository: "{{ automation_restic_repository }}"
+  password: "{{ automation_restic_password }}"
+  schedule: "*-*-* 03:00:00"
+  timeout: 90min
+  memory_max_mib: 1024
+  retention: { daily: 14, weekly: 8, monthly: 12, yearly: 3 }
+  sources:
+    - "{{ automation_stack_home }}"
+    - "{{ automation_data_path }}"
+  # The dump directory's mtime changes only when a finished dump is moved in, so it measures the newest complete dump.
+  fresh:
+    - { path: "{{ automation_backup_dir }}", max_age_hours: 12 }
+  excludes:
+    - "*.log"
+    - "tmp/*"
+    - "cache/*"
+    - "{{ automation_data_path }}/docker"
+    - "{{ automation_data_path }}/backup-tmp"
+    # A dump still being built is moved into automation_backup_dir only when it is complete.
+    - "{{ automation_backup_dir | dirname }}/.automation-backup.*"
+
+# These Syncthing ignore patterns apply to the live Calibre tree that the calibre folder shares.
 automation_syncthing_calibre_ignore:
   - "// Derived / instance-local / transient - never exported. The databases"
   - "// come from backup/<stamp>/calibre-databases (snapshots) instead:"
@@ -153,9 +175,10 @@ automation_compose_services:
 
   - service_name: mariadb
     service_image: "mariadb:11.8.9"
-    # Longer grace period + wipe tc.log
+    # The longer stop grace period gives mariadb time to shut down, and the wrapper entrypoint removes tc.log.
     service_stop_grace_period: "60s"
-    # command: explicit - compose does not fall back to the image default CMD.
+    # The command is explicit because compose does not fall back to the image default CMD once the entrypoint is
+    # overridden.
     service_entrypoint:
       - "/usr/local/bin/mariadb-safe-entrypoint.sh"
     service_command:
@@ -195,14 +218,14 @@ automation_compose_services:
         container: 8083
         bind_ip: "{{ primary_ip }}"
     service_environment:
-      - "PUID={{ automation_stack_uid }}"
-      - "PGID={{ automation_stack_gid }}"
+      - "PUID={{ common_stack_uid }}"
+      - "PGID={{ common_stack_gid }}"
       - "TZ={{ timezone }}"
       - "NETWORK_SHARE_MODE=false"
       - "HARDCOVER_TOKEN=${HARDCOVER_TOKEN}"
     service_volumes:
       - "{{ automation_data_path }}/calibre/config:/config"
-      # Destructive: files dropped here are deleted after ingest.
+      # Files dropped into this directory are deleted after ingest.
       - "{{ automation_data_path }}/calibre/ingest:/cwa-book-ingest"
       - "{{ automation_data_path }}/calibre/library:/calibre-library"
     service_networks:
@@ -217,6 +240,5 @@ automation_compose_services:
         memory: 512M
         cpus: "0.5"
 
-# No named volumes - every service volume is a bind mount onto the data path
-# (automation_data_path; the SSD when the optional drive is present).
+# The stack declares no named volumes because every service volume is a bind mount under automation_data_path.
 automation_compose_volumes: []

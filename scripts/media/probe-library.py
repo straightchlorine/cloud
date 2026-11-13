@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Read-only probe of a media host's library, tags and pipeline state.
 
-Collects what the yt-dlp -> beets -> navidrome pipeline produced so
-the tagging/naming config can be tuned against real data. Writes nothing.
+Collects what the yt-dlp, beets and Navidrome pipeline produced, so the tagging and naming
+config can be tuned against real data. It writes nothing.
 
-Usage (from the repo root; the host needs python3 + ffprobe, both present):
+Usage (from the repo root; the host needs python3 and ffprobe):
     ssh media python3 - < scripts/media/probe-library.py > probe.txt
 Override paths with env vars on the remote side, e.g.
     ssh media MUSIC=/mnt/data/music python3 - < scripts/media/probe-library.py
@@ -39,7 +39,7 @@ def section(title):
 def run(cmd):
     try:
         return subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60).stdout.strip()
-    except Exception as exc:  # diagnostic only - never abort the probe
+    except Exception as exc:  # A failed diagnostic command must not abort the probe.
         return f"<{exc}>"
 
 
@@ -57,7 +57,8 @@ def norm_title(name):
 
 
 def ro_db(path):
-    # immutable=1: never takes a lock or writes a -wal/-shm, safe on a live DB.
+    # immutable=1 takes no lock and writes no -wal or -shm file, so the probe never touches a live database.
+    # Reads can be inconsistent if the database changes during the probe.
     return sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
 
 
@@ -111,7 +112,7 @@ for rel in sample:
                          capture_output=True, text=True, timeout=60).stdout
     try:
         probe = json.loads(out)
-        # Ogg/Opus keep tags on the audio stream, m4a/mp3 on the container.
+        # Ogg and Opus keep their tags on the audio stream, while m4a and mp3 keep them on the container.
         tags = {}
         for block in [probe["format"]] + probe["streams"]:
             tags.update({k.lower(): v for k, v in block.get("tags", {}).items()})
@@ -150,6 +151,7 @@ if os.path.exists(ARCHIVE):
 section("Beets library")
 if os.path.exists(BEETS_DB):
     db = ro_db(BEETS_DB)
+    # A lambda keeps this one-line query helper short, which is why E731 is ignored.
     q = lambda sql: db.execute(sql).fetchall()  # noqa: E731
     print("items:", q("select count(*) from items")[0][0],
           "| albums:", q("select count(*) from albums")[0][0],

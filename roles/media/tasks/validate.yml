@@ -1,6 +1,6 @@
 ---
-# site.yml includes this file directly, so it runs OS discovery itself.
-# No Docker probing here; Docker may not exist yet.
+# Site.yml includes this file directly, so it runs OS discovery itself.
+# It does not probe Docker, because Docker may not be installed yet.
 
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
@@ -19,12 +19,26 @@
       - domain_name
       - media_home
       - media_library_path
-      - restic_enabled
-      - restic_repository
-      - restic_password
+      - media_restic_enabled
+      - media_backup_enabled
+      - media_youtube_enabled
       - vault_watchtower_api_token
+    validation_supported_os_families: [Debian]
     vault_placeholders:
       - { var: "vault_watchtower_api_token", value: "your-watchtower-api-token" }
+  tags: [validation]
+
+- name: Validate the restic job this role builds
+  # Pre-validation runs before any role deploys.
+  # The job's own checks in the backup tasks run after the stack.
+  # A bad job would therefore leave the firewall and stack service unapplied.
+  # An undefined repository or password inside the job is named by the resulting error.
+  ansible.builtin.include_role:
+    name: restic
+    tasks_from: validate_job
+  vars:
+    restic_job: "{{ media_restic_job }}"
+  when: media_restic_enabled
   tags: [validation]
 
 - name: Require real YouTube playlists
@@ -40,38 +54,14 @@
   when: media_youtube_enabled | bool
   tags: [validation]
 
-- name: Confirm the host OS is supported
-  ansible.builtin.assert:
-    that:
-      - os_family == "Debian"
-    fail_msg: >-
-      media requires a Debian-family OS; got
-      {{ os_family | default('unknown') }}
-      ({{ os_name | default('?') }} {{ os_version | default('?') }}).
-    success_msg: >
-      [OK] Supported OS: {{ os_name }} {{ os_version }}
-      ({{ os_family }}).
-  tags: [validation]
-
-- name: Check stack path parent directories exist
-  ansible.builtin.stat:
-    path: "{{ item | dirname }}"
-  register: media_parent_path_check
-  failed_when: not media_parent_path_check.stat.exists or not media_parent_path_check.stat.isdir
-  loop:
-    - "{{ media_library_path }}"
-    - "{{ media_home }}"
-  tags: [validation]
-
-- name: Refuse media_home under /root for non-root user
-  # Usually means media_home came from the ansible_user_dir/_id facts, which
-  # reflect root under become.
-  ansible.builtin.fail:
-    msg: >-
-      media_home ({{ media_home }}) resolves under /root, but ansible_user is
-      '{{ ansible_user }}'. Derive it from the inventory's ansible_user
-      (/home/<user>/stack), not the ansible_user_dir/_id facts.
-  when:
-    - ansible_user is defined and ansible_user != 'root'
-    - media_home is match('/root(/|$)')
+- name: Validate the stack paths
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: validate_stack_paths
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_role: media
+    validation_data_paths:
+      - "{{ media_library_path }}"
+      - "{{ media_home }}"
+    validation_stack_home_var: media_home
   tags: [validation]

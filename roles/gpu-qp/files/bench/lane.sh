@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# lane.sh <phase> <lane>
+# Runs one lane of one phase of the thesis benchmark as `lane.sh <phase> <lane>`.
+# It is resumable: a cell whose row in <phase>/state.tsv is already `done` or `done-unstreamed` is
+# skipped. A cell that fails is retried once, then recorded `failed`, and the lane continues.
 #
-# Runs one lane of one phase of the thesis-benchmark rerun. Resumable: a cell whose row in
-# <phase>/state.tsv is already `done` or `done-unstreamed` is skipped. A cell that fails is
-# retried once, then recorded `failed` and the lane continues.
-#
-# Phases (brief 5.2): A = sto3g, 6 molecules x seeds 1,2,3, 1000 evals.
+# Phases:             A = sto3g, 6 molecules x seeds 1,2,3, 1000 evals.
 #                     B = sto3g, 6 molecules x seed 1, 200 evals.
 #                     C = cc-pvdz, H2 x seed 1, 1000 evals.
 #                     S = smoke: sto3g, H2 x seed 1, 20 evals (launcher test).
 #                     A2, H = convergence runs (see below).
-#                     C2, C2H = H2 cc-pvdz (20 qubits) to convergence, random / HF start.
+#                     C2, C2H = H2 cc-pvdz to convergence, random / HF start.
 # Lanes: cpu-aer (cpu image, --no-analytic), gpu1, gpu2 (--gpu), analytic (cpu image).
 #
 # state.tsv columns: lane  molecule  seed  status  exit  started  ended
@@ -57,8 +55,8 @@ esac
 # A2 and H stop on convergence, capped at 18,000 evaluations (2x the largest count seen in the
 # 2026-10 convergence run) so a cell can never run for days. H is the analytic lane started at
 # the Hartree-Fock point instead of a random point; it shows what the random-init plateau costs.
-# C2 and C2H redo the cc-pvdz H2 cell to convergence (the thesis run never converged), capped at
-# 24,000 evaluations; C2H is C2's analytic lane started at the Hartree-Fock point.
+# C2 and C2H run the cc-pvdz H2 cell to convergence, capped by their --max-evaluations value.
+# C2H is C2's analytic lane started at the Hartree-Fock point.
 INIT=random
 case "$PHASE" in
   A2) BUDGET=(--convergence --threshold 1e-6 --max-evaluations 18000) ;;
@@ -140,7 +138,6 @@ run_cell() {
   done
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$LANE" "$name" "$seed" "$status" "$rc" "$started" "$ended" >> "$STATE"
-  # [done] exit 0 | [done-unstreamed] VQE finished, Kafka refused the record, spooled | [failed]
   echo "[$status] $LANE $name seed=$seed exit=$rc"
 }
 

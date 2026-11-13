@@ -5,8 +5,9 @@ The lanes, their cells and budgets come from the run's lib/lanes.tsv (read throu
 Analytic lanes print n/a. Lanes with a convergence budget (conv:N) have no bound: they print the
 cells done and the mean time per cell. Fixed-budget lanes: per-evaluation seconds are measured
 from each finished cell as duration / <Iters. done rows>, so a cell that converged before the cap
-does not understate the per-eval cost. Cells not yet run are estimated from the thesis per-eval
-seconds, scaled by the observed/thesis ratio on the molecules that have finished in that lane.
+does not understate the per-eval cost. A molecule with a finished cell uses its observed seconds
+for the cells not yet run. The other molecules use the thesis seconds, scaled by the mean
+observed/thesis ratio of the lane.
 
 Usage: eta.py <run-dir> [phase]
 """

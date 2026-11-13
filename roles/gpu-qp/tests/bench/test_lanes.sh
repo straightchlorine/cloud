@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# lanes.py against the golden lane argv and step order (both taken from the old lane and phase
-# scripts), the expected cell counts and the frozen D1 table.
+# lanes.py against the golden lane argv and step order, the expected cell counts and a frozen
+# earlier copy of the table (fixtures/lanes-d1.tsv).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=lib.sh
@@ -10,14 +10,14 @@ setup_tree
 lanes() { python3 -I "$LIB/lanes.py" "$LIB/lanes.tsv" "$@"; }
 TAB=$'\t'
 
-# cells: the (phase, lane, molecule, seed) list of the golden argv, in per-lane order
+# The cells are the (phase, lane, molecule, seed) list of the golden argv, in per-lane order.
 want=$(sed -E "s/^(\\S+) (\\S+) .*--molecule-index ([0-9]+) --seed ([0-9]+).*/\\1\\t\\2\\t\\3\\t\\4/" \
   "$HERE/golden/argv.txt" | sort -s -t "$TAB" -k1,2)
 got=$(for p in $(lanes phases); do lanes cells "$p"; done | sort -s -t "$TAB" -k1,2)
 check "cells equal the golden argv" "$got" "$want"
 check "cells: golden has 195 cells" "$(printf '%s\n' "$want" | wc -l)" "195"
 
-# steps, prefixed with the phase, equal the old phase script's order
+# The steps, prefixed with the phase, equal golden/steps.tsv.
 got=$(for p in $(lanes phases); do lanes steps "$p" | sed "s/^/$p\\t/"; done)
 check "steps equal golden/steps.tsv" "$got" "$(cat "$HERE/golden/steps.tsv")"
 
@@ -38,7 +38,7 @@ for bad in "cells Z" "cells A nope" "steps Z" "lanes Z" "expect A Z" "row A anal
   check "rc 2 for: $bad" "$?" "2"
 done
 
-# the frozen D1 copy of the table keeps parsing with every subcommand
+# The frozen copy of the table keeps parsing with every subcommand.
 d1() { python3 -I "$LIB/lanes.py" "$HERE/fixtures/lanes-d1.tsv" "$@"; }
 check "d1: phases" "$(d1 phases)" "A A2 B C H S"
 check "d1: expect total" "$(d1 expect A A2 B C H S | tail -1)" "total${TAB}187"

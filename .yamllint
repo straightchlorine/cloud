@@ -1,8 +1,8 @@
 ---
 extends: default
 
-# Vendored collections (installed into ./collections) and the local venv are
-# not ours to lint; the CI lint step writes collections/ into the workspace.
+# Installed collections and the local virtual environments are not ours to lint.
+# The CI lint step installs the collections into the workspace.
 ignore: |
   .git/
   .venv/

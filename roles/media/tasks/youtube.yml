@@ -1,6 +1,6 @@
 ---
 - name: Resolve the yt-dlp release asset for this host
-  # Upstream asset names; an unlisted architecture fails here, not as a 404.
+  # The lookup fails on an unlisted architecture, so the failure is clear instead of a download 404.
   ansible.builtin.set_fact:
     media_ytdlp_asset: >-
       {{ {'aarch64': 'yt-dlp_linux_aarch64', 'armv7l': 'yt-dlp_linux_armv7l',
@@ -40,7 +40,7 @@
         media_ytdlp_release: "https://github.com/yt-dlp/yt-dlp/releases/download/{{ media_ytdlp_version }}"
 
     - name: Verify the checksums signature and the binary checksum
-      # Throwaway keyring: only the yt-dlp key can satisfy the signature.
+      # The keyring is throwaway, so only the key shipped with the release can satisfy the signature.
       ansible.builtin.shell: |
         set -euo pipefail
         export GNUPGHOME="$PWD/gnupg"
@@ -71,7 +71,7 @@
       when: media_ytdlp_tmp.path is defined
 
 - name: Install deno
-  # No armv7l build exists, so a 32-bit OS fails at the download.
+  # Deno publishes no armv7l build, so a 32-bit OS fails at the download.
   when: not media_deno_installed.stat.exists
   vars:
     media_deno_zip: >-
@@ -107,8 +107,8 @@
     - /usr/local/bin/deno
 
 - name: Configure the weekly yt-dlp + deno self-update
-  # YouTube breaks old releases within weeks. Runs before the nightly sync so
-  # it uses the new builds.
+  # YouTube breaks old yt-dlp releases within weeks, so the update must keep current.
+  # It runs before the nightly sync so that the sync uses the new builds.
   ansible.builtin.include_role:
     name: common
     tasks_from: app_update
@@ -123,9 +123,9 @@
     common_app_update_minute: "30"
 
 - name: Create the pipeline config and script directories
-  # main.yml runs this pipeline BEFORE stack.yml, which is what normally creates
-  # the stack home. On a fresh host those dirs don't exist yet, so create the
-  # ones this file writes into (file state=directory also makes media_home).
+  # main.yml runs this pipeline before stack.yml, which normally creates the stack home.
+  # On a fresh host these directories do not exist yet, so this task creates the ones this file writes into.
+  # Creating them also creates media_home.
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -159,7 +159,7 @@
   become: true
 
 - name: Schedule the pipeline runs
-  # Nightly sync finishes before the 02:30 snapshot and 03:00 restic run.
+  # The nightly sync starts early so that it finishes before the snapshot and the restic job.
   ansible.builtin.cron:
     name: "{{ item.name }}"
     weekday: "{{ item.weekday }}"
@@ -170,7 +170,7 @@
   become: true
   loop:
     - {name: "Media nightly sync", weekday: "*", hour: "1", minute: "0", args: ""}
-    # the review decisions after the 03:00 restic run and before the retag
+    # The weekly apply runs the review decisions after the restic job and before the retag.
     - {name: "Media weekly apply", weekday: "0", hour: "4", minute: "0", args: "--apply "}
     - {name: "Media weekly retag", weekday: "0", hour: "4", minute: "15", args: "--retag "}
   loop_control:

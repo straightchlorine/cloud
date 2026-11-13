@@ -1,0 +1,11 @@
+[Unit]
+Description=restic backup freshness check (after boot and daily)
+
+# OnBootSec runs the check after boot, which reports a run a shutdown interrupted.
+[Timer]
+OnBootSec=15min
+OnCalendar=*-*-* 12:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,73 @@
+---
+# This file must follow common/tasks/docker.yml because the registration edits the daemon.json that file wrote.
+
+- name: Install the NVIDIA container toolkit prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+  become: true
+
+- name: Add the NVIDIA container toolkit apt repository
+  # The repository URL ends in an architecture segment taken from ansible_architecture.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: apt_source
+  vars:
+    common_apt_source_name: nvidia-container-toolkit
+    common_apt_source_key_url: https://nvidia.github.io/libnvidia-container/gpgkey
+    common_apt_source_key_path: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    common_apt_source_line: >-
+      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
+      https://nvidia.github.io/libnvidia-container/stable/deb/{{ gpu_qp_nvidia_arch_map[ansible_architecture] }} /
+
+- name: Refresh the apt cache when it is stale
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: package_cache_update
+
+- name: Install the NVIDIA container toolkit
+  ansible.builtin.apt:
+    name: nvidia-container-toolkit
+    state: present
+  become: true
+
+- name: Read Docker's daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: gpu_qp_nvidia_daemon_json
+  # A missing daemon.json is expected, and the next task then registers the runtime.
+  failed_when: false
+  become: true
+
+- name: Register the nvidia runtime with Docker
+  # nvidia-ctk reports success on every run, so the task is guarded on the daemon.json contents.
+  # The command never reloads the daemon, so the restart task below does.
+  ansible.builtin.command:
+    cmd: nvidia-ctk runtime configure --runtime=docker
+  become: true
+  when: >-
+    gpu_qp_nvidia_daemon_json.content is not defined
+    or 'nvidia' not in (gpu_qp_nvidia_daemon_json.content | b64decode)
+  changed_when: true
+
+- name: Read the running Docker daemon's registered runtimes
+  ansible.builtin.command:
+    cmd: docker info --format '{{ '{{' }}json .Runtimes{{ '}}' }}'
+  register: gpu_qp_nvidia_docker_runtimes
+  changed_when: false
+  # A daemon that does not answer counts as missing the runtime, so the restart below runs.
+  failed_when: false
+  become: true
+
+- name: Restart Docker so a registered nvidia runtime becomes active
+  # The task is gated on the running daemon, not the file, because daemon.json can list nvidia
+  # while a daemon started before that write does not.
+  # Compose then fails with "could not select device driver \"nvidia\"".
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: "'nvidia' not in (gpu_qp_nvidia_docker_runtimes.stdout | default(''))"

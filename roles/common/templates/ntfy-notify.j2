@@ -24,13 +24,11 @@ fi
 
 API_KEY_FILE="/etc/ntfy/notify-api-key"
 
-# Fail silently when no API key is configured: the notification helpers
-# (pihole-update, reboot-notify, etc.) call us unconditionally as a
-# one-liner; if they were to exit with set -e they'd abort the whole task.
-# Exit 0 so notifications are simply no-ops on hosts without a configured
-# key. Uncomment the next two lines for diagnostics while debugging.
+# Callers invoke this helper unconditionally, so a missing key or a failed delivery must not abort them.
+# The script exits 0 in those cases.
+# NTFY_STRICT=1 turns both into exit 1 for callers such as the restic engine, whose alert must not be lost.
 if [ ! -r "$API_KEY_FILE" ]; then
-    # echo "ntfy-notify: cannot read API key file at $API_KEY_FILE" >&2
+  [ -z "${NTFY_STRICT:-}" ] || { echo "ntfy-notify: cannot read $API_KEY_FILE" >&2; exit 1; }
   exit 0
 fi
 
@@ -41,6 +39,14 @@ TAGS="${4:-}"
 
 API_KEY=$(head -c 4096 "$API_KEY_FILE")
 
-curl -s -H "Authorization: Bearer $API_KEY" \
-  -H "Title: $TITLE" -H "Priority: $PRIORITY" -H "Tags: $TAGS" \
-  -d "$MESSAGE" "{{ ntfy_server_url }}/{{ ntfy_topic }}" >/dev/null 2>&1 || true
+# The token goes through stdin (curl -K -), never argv, which every uid can
+# read in /proc. Only a 2xx counts: curl -f alone passes a 3xx redirect.
+CODE=$(printf 'header = "Authorization: Bearer %s"\n' "$API_KEY" |
+  curl -sS -K - --max-time 30 -o /dev/null -w '%{http_code}' \
+    -H "Title: $TITLE" -H "Priority: $PRIORITY" -H "Tags: $TAGS" \
+    --data-raw "$MESSAGE" "{{ ntfy_server_url }}/{{ ntfy_topic }}" 2>/dev/null)
+case "$CODE" in
+  2??) exit 0 ;;
+esac
+[ -z "${NTFY_STRICT:-}" ] || { echo "ntfy-notify: delivery failed (HTTP ${CODE:-none})" >&2; exit 1; }
+exit 0

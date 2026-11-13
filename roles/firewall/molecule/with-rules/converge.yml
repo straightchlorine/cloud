@@ -9,7 +9,7 @@
     firewall_policy_outgoing: allow
     firewall_policy_routed: deny
     firewall_logging: "medium"
-    common_firewall_ports:
+    firewall_common_ports:
       - port: 80
         comment: HTTP
         proto: tcp
@@ -57,7 +57,7 @@
           - Role: firewall
           - UFW installed at: {{ firewall_ufw_path.stdout }}
           - Firewall enabled: {{ firewall_enabled }}
-          - Common ports configured: {{ common_firewall_ports | length }}
+          - Common ports configured: {{ firewall_common_ports | length }}
           - Host-specific ports: {{ firewall_ports | length }}
           - Advanced rules: {{ firewall_rules | length }}
 

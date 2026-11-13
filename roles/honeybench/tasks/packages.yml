@@ -7,8 +7,8 @@
   tags: [packages]
 
 - name: Enable sysstat collection
-  # The 10-minute default is too coarse for a short run; use live `sar 1 N` or
-  # `iostat -x 1` for those. This gives the idle baseline between campaigns.
+  # The default collection interval is too coarse for a short run, so use live `sar 1 N` or `iostat -x 1` for those.
+  # The collection gives the idle baseline between campaigns.
   ansible.builtin.systemd_service:
     name: sysstat
     enabled: true

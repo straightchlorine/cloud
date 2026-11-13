@@ -1,0 +1,17 @@
+---
+- name: Schedule the job in cron
+  # The five fields are validated, so splitting on a single space is exact.
+  vars:
+    restic_cron_log: "/var/log/restic/{{ restic_job_cfg.name }}.log"
+    restic_cron_fields: "{{ restic_job_cfg.cron_schedule.split(' ') }}"
+  ansible.builtin.cron:
+    name: "restic {{ restic_job_cfg.name }}"
+    cron_file: "restic-{{ restic_job_cfg.name }}"
+    user: root
+    minute: "{{ restic_cron_fields[0] }}"
+    hour: "{{ restic_cron_fields[1] }}"
+    day: "{{ restic_cron_fields[2] }}"
+    month: "{{ restic_cron_fields[3] }}"
+    weekday: "{{ restic_cron_fields[4] }}"
+    # The wrapper logs by itself; this redirect only catches what it prints before it can open its log.
+    job: "/usr/local/libexec/restic/restic-job cron {{ restic_job_cfg.name }} >>{{ restic_cron_log }} 2>&1"

@@ -6,14 +6,14 @@
     # media_library_path is left out so case 1 sees it undefined.
     domain_name: example.test
     media_home: /home/music/stack
+    # A raw include_tasks loads no role defaults, so the flags that validate.yml requires are set here.
+    media_backup_enabled: false
     media_youtube_enabled: false
-    restic_enabled: false
-    restic_repository: /tmp/test-restic
-    restic_password: molecule-test-restic-password
+    media_restic_enabled: false
     vault_watchtower_api_token: molecule-test-watchtower-token
   pre_tasks:
     - name: Create path parent directories
-      # validate.yml checks parent dirs before the guards cases 2 and 3 test.
+      # Validate.yml checks the parent directories before the guards that cases 2 and 3 test.
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
@@ -23,8 +23,8 @@
         - /mnt
 
     - name: Create the non-root stack user
-      # Case 2 overrides ansible_user and the podman connection execs as that
-      # user, so it must exist or the tasks become UNREACHABLE.
+      # Case 2 overrides ansible_user, and the podman connection executes as that user.
+      # The user must exist, or the tasks become UNREACHABLE.
       ansible.builtin.user:
         name: media
         uid: 1000
@@ -42,7 +42,7 @@
             msg: "validate.yml did not fail fast on a missing media_library_path"
       rescue:
         - name: Assert failure was the missing media_library_path
-          # A looped fail's top-level msg is generic; per-item detail is in .results.
+          # The top-level msg of a looped fail is generic, and the per-item detail is in .results.
           ansible.builtin.assert:
             that:
               - ansible_failed_result.results is defined
@@ -54,7 +54,8 @@
             success_msg: "[OK] validate.yml correctly failed on the missing media_library_path variable"
 
         - name: Record case 1 as passed for verify.yml
-          # A file, not set_fact: verify runs in a separate process. force: false keeps idempotence.
+          # A marker file carries the result, because verify runs in a separate process and cannot see set_fact.
+          # The force: false option keeps the task idempotent.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case1.passed
@@ -69,7 +70,7 @@
             media_library_path: /mnt/music
             ansible_user: media
             media_home: /root/stack
-            # validate.yml is read-only, and the media user cannot sudo in the container.
+            # Validate.yml is read-only, and the media user cannot sudo in the container.
             ansible_become: false
 
         - name: Fail the test - the /root guard should have refused
@@ -120,5 +121,65 @@
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case3.passed
+            force: false
+            mode: "0644"
+
+    # Cases 4 and 5 cover the off-site restic job.
+    # The restic role's own checks run from this validate.yml, so a bad job stops the run before any role deploys.
+
+    - name: "Case 4: validate.yml refuses restic on without a repository"
+      block:
+        - name: Run the real validate.yml with media_restic_repository undefined
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: validate
+          vars:
+            media_library_path: /mnt/music
+            media_restic_enabled: true
+            media_restic_password: molecule-restic-password-media
+
+        - name: Fail the test - the missing repository should have been refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse case 4"
+      rescue:
+        - name: Assert the failure was the missing media_restic_repository
+          ansible.builtin.assert:
+            that:
+              - "'media_restic_repository' in ansible_failed_result.msg"
+              - "'undefined' in ansible_failed_result.msg"
+            fail_msg: "validate.yml failed for another reason: {{ ansible_failed_result }}"
+
+        - name: Record case 4 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case4.passed
+            force: false
+            mode: "0644"
+
+    - name: "Case 5: validate.yml runs the restic job checks on the job the role builds"
+      block:
+        - name: Run the real validate.yml with a too-short restic password
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: validate
+          vars:
+            media_library_path: /mnt/music
+            media_restic_enabled: true
+            media_restic_repository: /srv/molecule-restic/media
+            media_restic_password: short
+
+        - name: Fail the test - the short password should have been refused
+          ansible.builtin.fail:
+            msg: "validate.yml did not refuse case 5"
+      rescue:
+        - name: Assert the failure came from the restic job checks
+          ansible.builtin.assert:
+            that: "ansible_failed_result.msg is match('restic_job.password: shorter than 16')"
+            fail_msg: "validate.yml failed for another reason: {{ ansible_failed_result.msg | default('') }}"
+
+        - name: Record case 5 as passed for verify.yml
+          ansible.builtin.copy:
+            content: ""
+            dest: /tmp/molecule-case5.passed
             force: false
             mode: "0644"

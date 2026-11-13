@@ -1,0 +1,138 @@
+---
+# Deploys one job. Stack roles include this file with restic_job set.
+# For host_vars-driven hosts, main.yml loops restic_jobs through it.
+- name: Validate the restic host
+  ansible.builtin.include_tasks: validate.yml
+  when: restic_host_ready is not defined
+
+- name: Validate the job before anything is created
+  ansible.builtin.include_tasks: validate_job.yml
+
+- name: Validate the Storage Box key
+  ansible.builtin.include_tasks: validate_key.yml
+
+- name: Set up the restic host (once per run)
+  ansible.builtin.include_tasks: host.yml
+  when: restic_host_ready is not defined
+
+- name: Render the Storage Box ssh config
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: /etc/restic/ssh_config
+    owner: root
+    group: restic
+    mode: "0640"
+  when: restic_job_sftp
+
+- name: Pin the Storage Box host keys
+  ansible.builtin.copy:
+    content: "{{ restic_known_hosts }}"
+    dest: /etc/restic/known_hosts
+    owner: root
+    group: root
+    mode: "0644"
+  when: restic_job_sftp
+
+- name: Write the job's repository password
+  ansible.builtin.copy:
+    content: "{{ restic_job_cfg.password }}"
+    dest: "/etc/restic/{{ restic_job_cfg.name }}.password"
+    owner: root
+    group: restic
+    mode: "0440"
+  no_log: true
+
+- name: Write the job's environment
+  ansible.builtin.template:
+    src: job.env.j2
+    dest: "/etc/restic/{{ restic_job_cfg.name }}.env"
+    owner: root
+    group: restic
+    mode: "0640"
+  vars:
+    restic_job_kept: "{{ restic_job_cfg.retention | dict2items | selectattr('value', 'gt', 0) }}"
+    restic_job_keep: >-
+      {{ restic_job_kept | map(attribute='key') | map('regex_replace', '^', '--keep-')
+         | zip(restic_job_kept | map(attribute='value')) | map('join', ' ') | join(' ') }}
+    restic_job_fresh: >-
+      {{ restic_job_cfg.fresh | map(attribute='path')
+         | zip(restic_job_cfg.fresh | map(attribute='max_age_hours')) | map('join', ':') | join(' ') }}
+  register: restic_job_env
+
+- name: Write the job's source, exclude and metered-connection lists
+  ansible.builtin.copy:
+    content: "{{ (item.lines | join('\n') ~ '\n') if item.lines | length > 0 else '' }}"
+    dest: "/etc/restic/{{ restic_job_cfg.name }}.{{ item.ext }}"
+    owner: root
+    group: restic
+    mode: "0640"
+  loop:
+    - { ext: sources, lines: "{{ restic_job_cfg.sources }}" }
+    - { ext: excludes, lines: "{{ restic_job_cfg.excludes }}" }
+    - { ext: metered, lines: "{{ restic_job_cfg.metered_connections }}" }
+  loop_control:
+    label: "{{ item.ext }}"
+
+- name: Open the repository with the job's credentials
+  ansible.builtin.command:
+    argv: "{{ restic_exec_prefix + [restic_job_cfg.name, 'cat', 'config'] }}"
+  register: restic_repo_probe
+  changed_when: false
+  failed_when:
+    - restic_repo_probe.rc not in [0, 10]
+    - not (restic_job_sftp and restic_repo_probe.rc == 1
+           and restic_repo_probe.stderr is search(restic_ssh_error_pattern, ignorecase=True))
+
+- name: Note whether the probe failed over ssh
+  ansible.builtin.set_fact:
+    restic_probe_ssh_failed: >-
+      {{ restic_job_sftp and restic_repo_probe.rc == 1
+         and restic_repo_probe.stderr is search(restic_ssh_error_pattern, ignorecase=True) }}
+
+- name: Derive the public key of the Storage Box key
+  # The public key is the line the operator must authorize on the Storage Box.
+  ansible.builtin.command:
+    argv: [ssh-keygen, -y, -f, /etc/ssh/restic_storage_key]
+  register: restic_public_key
+  changed_when: false
+  failed_when: false  # a key ssh-keygen cannot read is reported in the next task
+  when: restic_probe_ssh_failed
+
+- name: Say which public key the Storage Box must authorize
+  ansible.builtin.fail:
+    msg: >-
+      restic_storage_key: the repository probe failed over ssh ({{ restic_repo_probe.stderr | trim }}).
+      {% if restic_public_key.rc == 0 %}
+      Add this public key to the Storage Box authorized_keys (Hetzner console, or
+      ssh-copy-id -p {{ restic_storage_port }} -s {{ restic_storage_user }}@{{ restic_storage_host }}
+      from a machine holding the key): {{ restic_public_key.stdout }}
+      {% else %}
+      /etc/ssh/restic_storage_key is not a usable private key: {{ restic_public_key.stderr | trim }}
+      {% endif %}
+  when: restic_probe_ssh_failed
+
+- name: Refuse to start a new history by accident
+  ansible.builtin.fail:
+    msg: >-
+      restic_job.repository: no repository at {{ restic_job_cfg.repository }}. Fix the path if
+      this job has history; for a brand-new repository re-run with -e restic_init_repository=true.
+  when:
+    - restic_repo_probe.rc == 10
+    - not (restic_init_repository | bool)
+
+- name: Initialize the new repository
+  ansible.builtin.command:
+    argv: "{{ restic_exec_prefix + [restic_job_cfg.name, 'init'] }}"
+  when: restic_repo_probe.rc == 10
+  changed_when: true
+
+- name: Schedule the job
+  # After the repository opened, so that nothing runs against a repository that does not exist.
+  ansible.builtin.include_tasks: "schedule_{{ restic_scheduler }}.yml"
+
+- name: Prove the job is deployed correctly
+  # Before the legacy retirement, so a broken deploy stops while the old backup still exists.
+  ansible.builtin.include_tasks: post_deploy_validate.yml
+
+- name: Retire this job's legacy setup
+  ansible.builtin.include_tasks: legacy.yml

@@ -1,22 +1,27 @@
 ---
-- name: Gather network facts
-  ansible.builtin.setup:
-    gather_subset:
-      - network
-      - hardware
+# Publishes primary_interface, primary_ip, primary_network_cidr and host_ip_cidr.
+# Skipped once they are set: every stack role includes this and the fact gather is slow on a Pi.
+- name: Publish the primary network facts
+  when: host_ip_cidr is not defined
+  block:
+    - name: Gather network facts
+      ansible.builtin.setup:
+        gather_subset:
+          - network
+          - hardware
 
-- name: Set primary network interface fact # noqa: var-naming[no-role-prefix]
-  ansible.builtin.set_fact:
-    primary_interface: "{{ ansible_default_ipv4.interface }}"
+    - name: Set primary network interface fact # noqa: var-naming[no-role-prefix]
+      ansible.builtin.set_fact:
+        primary_interface: "{{ ansible_default_ipv4.interface }}"
 
-- name: Set primary IP address fact # noqa: var-naming[no-role-prefix]
-  ansible.builtin.set_fact:
-    primary_ip: "{{ ansible_default_ipv4.address }}"
+    - name: Set primary IP address fact # noqa: var-naming[no-role-prefix]
+      ansible.builtin.set_fact:
+        primary_ip: "{{ ansible_default_ipv4.address }}"
 
-- name: Set network CIDR fact # noqa: var-naming[no-role-prefix]
-  ansible.builtin.set_fact:
-    primary_network_cidr: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }}"
+    - name: Set network CIDR fact # noqa: var-naming[no-role-prefix]
+      ansible.builtin.set_fact:
+        primary_network_cidr: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }}"
 
-- name: Set host IP with CIDR notation # noqa: var-naming[no-role-prefix]
-  ansible.builtin.set_fact:
-    host_ip_cidr: "{{ primary_ip }}/{{ ansible_default_ipv4.prefix }}"
+    - name: Set host IP with CIDR notation # noqa: var-naming[no-role-prefix]
+      ansible.builtin.set_fact:
+        host_ip_cidr: "{{ primary_ip }}/{{ ansible_default_ipv4.prefix }}"

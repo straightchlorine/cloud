@@ -1,8 +1,6 @@
 ---
-# cAdvisor is a shared common service - its compose definition and port live in
-# common defaults (common_cadvisor_compose_service / common_cadvisor_port). The
-# post-deploy /metrics check belongs here too so consuming roles (media,
-# automation) don't reference the common default from their own task scope.
+# The cAdvisor compose definition and port are in the common defaults.
+# This check lives here too, so consuming roles do not reference those defaults themselves.
 - name: Verify cAdvisor /metrics responds
   ansible.builtin.uri:
     url: "http://{{ primary_ip }}:{{ common_cadvisor_port }}/metrics"

@@ -1,12 +1,10 @@
 ---
-# Publish normalized os_* facts (OS + arch) so any role can validate the OS
-# and select the right binary/package architecture - read-only, idempotent.
+# Publishes os_* facts so other roles can validate the OS and select the matching binary architecture.
 
 - name: Ensure OS and architecture facts are available
+  # The role gathers facts itself, so it works whether or not the calling play set gather_facts.
   ansible.builtin.setup:
     gather_subset: ["!all", "min"]
-  # Always gathered here so the role is self-sufficient regardless of whether
-  # the calling play set gather_facts.
 
 - name: Reject unsupported OS families
   ansible.builtin.fail:
@@ -28,14 +26,14 @@
   ansible.builtin.set_fact:
     os_family: "{{ ansible_os_family }}"
     os_name: "{{ ansible_distribution }}"
-    os_version: "{{ ansible_distribution_major_version | default(ansible_distribution_version) }}"
-    os_codename: "{{ ansible_distribution_release | default('') }}"
+    os_version: "{{ ansible_distribution_major_version }}"
+    os_codename: "{{ ansible_distribution_release }}"
     os_is_debian: "{{ ansible_os_family == 'Debian' }}"
 
 - name: Publish normalized architecture facts
   ansible.builtin.set_fact:
     os_arch_machine: "{{ ansible_architecture }}"
-    os_arch_raw: "{{ ansible_machine | default(ansible_architecture) }}"
+    os_arch_raw: "{{ ansible_machine }}"
     os_arch_download: "{{ os_arch_download_map[ansible_architecture] }}"
     os_is_arm: "{{ ansible_architecture in os_arch_arm }}"
     os_is_64bit: "{{ ansible_architecture in os_arch_64bit }}"

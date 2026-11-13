@@ -1,65 +1,18 @@
 #!/usr/bin/env bash
-# Run after a successful site.yml deploy to confirm Pi-hole, exporters,
-# NTP, journald and firewall all work.
-# Usage: ./scripts/dns/validate-deploy.sh [ansible-host-alias]
+# Run this after a successful site.yml deploy to confirm that Pi-hole, the exporters, NTP, journald and the firewall work.
+# Usage: ./scripts/dns/validate-deploy.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-dns}"
+HOST="${1:?Usage: ./scripts/dns/validate-deploy.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after DNS deploy =="
 
-ssh "$HOST" bash -s <<'EOF'
-set -u
-fail=0
-pass=0
+{
+  cat "$LIB"
+  cat <<'EOF'
 
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_present() {
-  if [ -e "$1" ]; then
-    note_ok "$1 present"
-  else
-    note_left "$1 missing"
-  fi
-}
-
-# check_script <path> [expected-mode] - verifies a deployed script exists,
-# has an executable bit set, and (when expected-mode given) has exactly that
-# octal mode. Uses stat %a instead of [ -x ] to verify executable bits, since
-# 0700 scripts owned by root will fail the -x test for non-root users.
-check_script() {
-  local path="$1"
-  local want_mode="${2:-}"
-  local got_mode
-  if [ ! -e "$path" ]; then
-    note_left "$path missing"
-    return
-  fi
-  got_mode="$(stat -c '%a' "$path" 2>/dev/null || echo "000")"
-  if [ $(( 8#$got_mode & 0111 )) -ne 0 ] 2>/dev/null; then
-    note_ok "$path present + executable"
-  else
-    note_left "$path not executable (mode: $got_mode)"
-    return
-  fi
-  if [ -n "$want_mode" ]; then
-    if [ "$got_mode" = "$want_mode" ]; then
-      note_ok "$path mode $want_mode"
-    else
-      note_left "$path mode is $got_mode (expected $want_mode)"
-    fi
-  fi
-}
-
-# default-route source address, same as Ansible's primary_ip fact.
+# The default-route source address is the same value as Ansible's primary_ip fact.
 PRIMARY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n 1)"
 if [ -z "$PRIMARY_IP" ]; then
   PRIMARY_IP="$(hostname -I | awk '{print $1}')"
@@ -83,8 +36,8 @@ for svc in pihole-FTL pihole-exporter node-exporter chrony; do
     note_left "$svc not enabled"
   fi
 done
-# Syncthing is off on low-RAM hosts (dns_backup_enabled); only a unit that is
-# present but not running is a failure.
+# Syncthing is deployed only when dns_backup_enabled is true.
+# Only a unit that is present but not running is a failure.
 if systemctl cat syncthing.service >/dev/null 2>&1; then
   if systemctl is-active --quiet syncthing 2>/dev/null; then
     note_ok "syncthing active"
@@ -107,8 +60,8 @@ fi
 
 echo "-- Listening ports --"
 listeners="$( { ss -H -ltn; ss -H -lun; } 2>/dev/null || true )"
-# Trailing space bounds each port so "0.0.0.0:53 " doesn't match the
-# always-present mDNS listener on 5353 (ss separates local/peer addr).
+# The trailing space ends each port, so "0.0.0.0:53 " does not match the always-present mDNS listener on 5353.
+# The space works because ss separates the local and peer addresses with whitespace.
 for port_line in "0.0.0.0:53 " "[::]:53 " "0.0.0.0:80 " "[::]:80 " ":9617 " ":9100 "; do
   if printf '%s\n' "$listeners" | grep -qF -- "$port_line"; then
     note_ok "listening on ${port_line% }"
@@ -136,8 +89,8 @@ fi
 
 echo "-- Web + exporters --"
 if [ -n "$PRIMARY_IP" ]; then
-  # /admin/ redirects (302) to /admin/login in Pi-hole v6; follow like the
-  # role's uri-based post_deploy_validate, expecting final 200.
+  # Pi-hole v6 redirects /admin/ to /admin/login, so curl follows the redirect.
+  # The role's uri-based post_deploy_validate does the same and expects a final 200.
   web_code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "http://$PRIMARY_IP/admin/" 2>/dev/null || true)"
   if [ "$web_code" = "200" ]; then
     note_ok "Pi-hole web interface HTTP 200"
@@ -168,7 +121,7 @@ else
 fi
 
 echo "-- zram swap --"
-# zram is opt-in; like syncthing, only a present-but-inactive unit fails.
+# zram is opt-in through common_zram_enabled, so only a present but inactive unit fails, as with Syncthing.
 if systemctl cat zramswap.service >/dev/null 2>&1; then
   if systemctl is-active --quiet zramswap 2>/dev/null; then
     note_ok "zramswap active"
@@ -186,14 +139,14 @@ fi
 
 echo "-- Optional attached drive + journald --"
 drive_fs="$(findmnt -n -o FSTYPE /mnt/data 2>/dev/null || true)"
-# No USB/SATA disk means an SD-only host: skip mount/relocation checks, but
-# the journal size cap still applies.
+# A host without a USB or SATA disk runs from the SD card, so the mount and relocation checks are skipped.
+# The journal size cap is still checked.
 drive_candidate="$(lsblk -pdno NAME,TYPE 2>/dev/null |
   awk '$2 == "disk" && $1 ~ /^\/dev\/sd/ { print $1 }' | head -n 1)"
 if [ "$drive_fs" = "ext4" ]; then
   note_ok "/mnt/data mounted as ext4"
-  # findmnt shows the bind source as device-with-subpath (e.g.
-  # /dev/sda1[/journal]); just check /var/log/journal is its own mount.
+  # findmnt shows a bind source as the device plus a subpath, such as /dev/sda1[/journal].
+  # The check therefore only tests that /var/log/journal is its own mount.
   if findmnt -n /var/log/journal >/dev/null 2>&1; then
     note_ok "journald relocated (bind-mounted over /var/log/journal)"
   else
@@ -234,14 +187,12 @@ fi
 
 echo "-- Cron + artifacts --"
 root_cron="$(sudo -n crontab -l -u root 2>/dev/null || true)"
-for cron_job in "Weekly Pi-hole updates"; do
-  if printf '%s\n' "$root_cron" | grep -qF -- "$cron_job"; then
-    note_ok "cron present: $cron_job"
-  else
-    note_left "cron missing: $cron_job"
-  fi
-done
-# The local-backup cron exists only with dns_backup_enabled; key off the script.
+if printf '%s\n' "$root_cron" | grep -qF -- "Weekly Pi-hole updates"; then
+  note_ok "cron present: Weekly Pi-hole updates"
+else
+  note_left "cron missing: Weekly Pi-hole updates"
+fi
+# The local-backup cron exists only when dns_backup_enabled is true, so the check keys off the script.
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
   if printf '%s\n' "$root_cron" | grep -qF -- "Pihole Syncthing local backup"; then
     note_ok "cron present: Pihole Syncthing local backup"
@@ -254,8 +205,7 @@ if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
 else
   note_ok "no local-backup cron (dns_backup_enabled false)"
 fi
-# Reboot cron only exists on hosts that deploy reboot-notify
-# (common_auto_updates_reboot_if_required: true).
+# The reboot cron exists only on hosts that deploy reboot-notify, which needs common_auto_updates_reboot_if_required.
 if [ -e /usr/local/bin/reboot-notify ]; then
   if printf '%s\n' "$root_cron" | grep -qF -- "Reboot pending notification"; then
     note_ok "cron present: Reboot pending notification"
@@ -271,8 +221,8 @@ else
 fi
 
 check_script /usr/local/bin/pihole
-# Pi-hole v6 migrates setupVars.conf into pihole.toml at install; TOML is
-# the runtime config that must exist (setupVars.conf is transient).
+# Pi-hole v6 migrates setupVars.conf into pihole.toml at install.
+# The TOML file is the runtime config that must exist, while setupVars.conf is transient.
 check_present /etc/pihole/pihole.toml
 check_script /usr/local/bin/pihole-update 755
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
@@ -283,7 +233,7 @@ fi
 check_present /etc/logrotate.d/weekly-updates
 check_present /etc/logrotate.d/prometheus-exporters
 if [ -e /usr/local/bin/pihole-syncthing-backup ]; then
-  # dns_backup_dir varies by host (drive or home); read it from the script.
+  # The backup directory differs per host, so it is read from the deployed script.
   backup_dir="$(sed -nE 's/^DEST="([^"]+)"/\1/p' /usr/local/bin/pihole-syncthing-backup | head -n 1)"
   if [ -n "$backup_dir" ]; then
     check_present "$backup_dir"
@@ -294,9 +244,8 @@ fi
 
 echo "-- Notification helper + ntfy key (common role) --"
 check_script /usr/local/bin/ntfy-notify 755
-# reboot-notify is only deployed when common_auto_updates_reboot_if_required
-# is true (both dns hosts set it). The config value isn't readable over SSH,
-# so absence is judged against that known deploy intent: missing = FAIL.
+# reboot-notify is deployed only when common_auto_updates_reboot_if_required is true, which host_vars/dns.yml sets.
+# The variable is not readable over SSH, so a missing script is judged against that known intent and fails.
 if [ -e /usr/local/bin/reboot-notify ]; then
   check_script /usr/local/bin/reboot-notify 755
 else
@@ -316,27 +265,22 @@ else
 fi
 
 echo "-- Prometheus exporters --"
-# node-exporter is shared fleet state (remains after a dns teardown); the
-# pihole-exporter binary/config are dns-scoped and must be present after deploy.
+# The node exporter is shared fleet state that remains after a dns teardown.
+# The pihole exporter binary and config belong to dns and must be present after a deploy.
 for exp in \
   /opt/prometheus-exporters/bin/node_exporter \
   /opt/prometheus-exporters/bin/pihole_exporter; do
   check_script "$exp"
 done
-# pi_hardware_metrics.sh only on ARM (aarch64/armv7l) hosts; x86_64 test boxes
-# don't have it and shouldn't trigger a failure here.
+# The prometheus-exporters role installs pi_hardware_metrics.sh only on ARM hosts.
+# An x86_64 test box does not have it, and that must not count as a failure.
 if [ -e /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh ]; then
   check_script /opt/prometheus-exporters/scripts/pi_hardware_metrics.sh
 else
   note_ok "pi_hardware_metrics.sh absent (not applicable on this architecture)"
 fi
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "DEPLOYMENT CHECKS FAILED - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "All deployment checks passed. The host is healthy."
+summary_deploy "All deployment checks passed. The host is healthy."
 
 EOF
+} | ssh "$HOST" bash -s

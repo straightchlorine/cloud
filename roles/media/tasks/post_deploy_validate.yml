@@ -28,16 +28,15 @@
   tags: [post_validation]
 
 - name: Verify the cAdvisor metrics endpoint
-  # cAdvisor is a shared common service; its port (common_cadvisor_port) is in
-  # common's scope, so the check runs there rather than referencing the default
-  # from this role's task files.
+  # The cAdvisor service and its port, common_cadvisor_port, belong to the common role.
+  # The check therefore lives there instead of reading that port from this role.
   ansible.builtin.include_role:
     name: common
     tasks_from: verify_cadvisor_metrics
   tags: [post_validation]
 
 - name: Verify Navidrome can write its data directory
-  # A uid mismatch on the bind mount fails silently while HTTP stays healthy.
+  # A uid mismatch on the bind mount causes no HTTP error, so only a write test detects it.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     exec -T navidrome test -w /data
@@ -47,11 +46,10 @@
   tags: [post_validation]
 
 - name: Verify beets loads our config and plugins as the stack user
-  # Mirrors media-sync's invocation (--entrypoint skips /init and the web UI):
-  # proves /config is the config dir, the lyrics and replaygain plugins load,
-  # and ffmpeg is present. The last step imports the reviewed plugin the way
-  # beets would, because beets only *warns* when a plugin fails to load and
-  # carries on - so a broken reviewed.py would otherwise go unnoticed.
+  # The command mirrors media-sync, whose --entrypoint skips /init and the web UI.
+  # It proves that /config is the config directory, that the lyrics and replaygain plugins load,
+  # and that ffmpeg is present.
+  # The last step imports the reviewed plugin directly, because beets only warns when a plugin fails to load.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T --entrypoint /bin/sh beets -c
@@ -71,10 +69,9 @@
   tags: [post_validation]
 
 - name: Verify the reviewed plugin loads and reads its flag
-  # beets only *warns* when a plugin fails to load, and the reviewed hook reads
-  # `reviewed.mark` on every import with the flag absent (the nightly run,
-  # --adopt and the album pass never set it), so read it here the way the hook
-  # does: a missing key without the plugin's seeded default raises mid-import.
+  # The reviewed hook reads `reviewed.mark` on every import, including runs that never set the flag.
+  # Those runs are the nightly run, --adopt and the album pass.
+  # This task reads the key the way the hook does, because a missing seeded default would raise mid-import.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T --entrypoint /lsiopy/bin/python3 beets -c
@@ -92,16 +89,12 @@
   tags: [post_validation]
 
 - name: Verify the beets container can resolve MusicBrainz
-  # The one failure that looks like success: with no reachable resolver every
-  # lookup dies, the pass logs "Skipping." for thousands of files and matches
-  # nothing - 3913 such failures hid inside a run that otherwise looked healthy.
-  # Docker hands the container the host's resolver list through its embedded DNS,
-  # so a Pi-hole hiccup or a tailnet reshuffle is enough to break it. The role now
-  # pins public resolvers on the beets service (media_beets_dns); this asserts that
-  # lookups from inside the container actually answer. The pinned servers are not
-  # visible in the container's /etc/resolv.conf - on the stack's user-defined
-  # network that file only lists Docker's embedded resolver (127.0.0.11), which
-  # forwards to them - so the next task checks the compose file for them.
+  # Without a reachable resolver every lookup fails and the pass logs "Skipping." for each file.
+  # The run still looks healthy, so this task proves that lookups from inside the container answer.
+  # Docker passes the host's resolver list through its embedded DNS, so a Pi-hole or tailnet hiccup can break it.
+  # The role therefore pins public resolvers on the beets service (media_beets_dns).
+  # The container's /etc/resolv.conf shows only Docker's embedded resolver, which forwards to the pinned ones.
+  # The next task therefore checks the compose file for them.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml
     run --rm -T --entrypoint /lsiopy/bin/python3 beets -c
@@ -119,8 +112,8 @@
   tags: [post_validation]
 
 - name: Verify the beets service pins the configured resolvers
-  # --profile tools: beets is an on-demand service in that profile, and `config`
-  # leaves services of inactive profiles out of its output entirely.
+  # Beets is an on-demand service in the tools profile, and `config` omits services of inactive profiles.
+  # The default covers a beets service whose dns key is missing from the output.
   ansible.builtin.command: >-
     docker compose -f {{ media_home }}/docker-compose.yml --profile tools config --format json
   become: true

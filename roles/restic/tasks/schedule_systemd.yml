@@ -1,0 +1,38 @@
+---
+- name: Create the job's drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/restic-job@{{ restic_job_cfg.name }}.{{ item }}.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [service, timer]
+
+- name: Render the job's service drop-in
+  ansible.builtin.template:
+    src: job.service.conf.j2
+    dest: "/etc/systemd/system/restic-job@{{ restic_job_cfg.name }}.service.d/job.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd (restic)
+
+- name: Render the job's schedule
+  ansible.builtin.template:
+    src: job.timer.conf.j2
+    dest: "/etc/systemd/system/restic-job@{{ restic_job_cfg.name }}.timer.d/schedule.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: restic_timer_dropin
+  notify: Reload systemd (restic)
+
+- name: Load the job's drop-ins
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the job's timer
+  # Restarted only when the schedule changed, so a redeploy never moves it.
+  ansible.builtin.systemd_service:
+    name: "restic-job@{{ restic_job_cfg.name }}.timer"
+    enabled: true
+    state: "{{ 'restarted' if restic_timer_dropin.changed else 'started' }}"

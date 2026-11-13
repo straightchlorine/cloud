@@ -1,25 +1,13 @@
 ---
 galaxy_info:
-  namespace: local
   role_name: automation
-  author: Ansible Admin
-  description: Automation stack (vaultwarden, firefly, mariadb, watchtower) on a Docker host
-  company: Local
+  namespace: homelab
+  author: Piotr Krzysztof
+  description: Automation stack (vaultwarden, firefly, mariadb, calibre-web, watchtower) on a Docker host
   license: MIT
-  min_ansible_version: "2.12"
-
+  min_ansible_version: "2.17"
   platforms:
     - name: Debian
-      versions:
-        - bookworm
+      versions: [bookworm]
 
-  galaxy_tags:
-    - automation
-    - docker
-    - vaultwarden
-    - firefly
-
-collections:
-  - community.docker
-  - community.general
-  - ansible.posix
+dependencies: []

@@ -4,7 +4,7 @@
   become: true
   tasks:
     - name: Install cron, iproute2 and logrotate
-      # Not in the minimal test image; the role needs crontab, `ip` and /etc/logrotate.d.
+      # The role needs crontab, `ip` and /etc/logrotate.d, which the minimal test image lacks.
       ansible.builtin.apt:
         name:
           - cron
@@ -12,3 +12,6 @@
           - logrotate
         state: present
         update_cache: true
+
+    - name: Stub docker and docker.service for the real stack unit
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/molecule/fixtures/stub_docker.yml"

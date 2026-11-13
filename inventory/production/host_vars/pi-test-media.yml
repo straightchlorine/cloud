@@ -1,7 +1,7 @@
 ---
-device_type: rpi3b # adjust if your spare Pi is a different model
+device_type: rpi3b
 
-common_firewall_ports:
+firewall_common_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
 
@@ -9,23 +9,23 @@ firewall_rules:
   - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
   - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
 
-# Destructive: formats the attached drive on first deploy. Fine on a disposable box.
+# This formats the attached drive on the first deploy, which is acceptable on a disposable box.
 media_ssd_format: true
 media_library_path: "/mnt/data"
 
-common_start_stack: true
-# Must stay true so media-only redeploys re-apply reboot-notify.
+# Must stay true so that tag-scoped media redeploys re-apply the reboot notification.
 common_auto_updates_reboot_if_required: true
 
 prometheus_role: "music"
 
-# Pipeline enabled for testing: installs yt-dlp + deno, the media-sync script,
-# the nightly sync / weekly retag crons and the weekly yt-dlp self-update.
-# validate.yml refuses the deploy until vault_youtube_playlists holds a real
-# (non-placeholder) playlist URL.
+# The YouTube pipeline is enabled here for testing.
+# The media role's validate.yml refuses the deploy until vault_youtube_playlists holds a real playlist URL.
 media_youtube_enabled: true
 
-# Placeholder repo must never write into the production media backup.
-restic_enabled: false
-restic_repository: "sftp:hetzner-storage:unused-media-test-placeholder"
-restic_password: "unused-media-test-placeholder"
+# The role writes the Storage Box key from restic_storage_key when it is set.
+# Otherwise place the key by hand at /etc/ssh/restic_storage_key, and authorize its public key on the Storage Box first.
+# restic_storage_key: "{{ vault_restic_storage_key_pi_test_media }}"
+# Off-site backup stays off until needed and uses a throwaway repository, never the production one.
+# To enable it, set media_restic_enabled: true and deploy once with -e restic_init_repository=true.
+media_restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/pi-test-media"
+media_restic_password: "{{ vault_restic_pi_test_media_password }}"

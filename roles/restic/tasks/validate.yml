@@ -1,0 +1,88 @@
+---
+- name: Require a supported service manager and a scheduler it can run
+  ansible.builtin.assert:
+    that:
+      - ansible_service_mgr in ['systemd', 'openrc']
+      - restic_scheduler in ['systemd', 'cron']
+      - restic_scheduler == 'cron' or ansible_service_mgr == 'systemd'
+    fail_msg: >-
+      ansible_service_mgr: {{ ansible_service_mgr }}, restic_scheduler: {{ restic_scheduler }} - the engine
+      supports systemd hosts (timers) and OpenRC hosts (cron); restic_scheduler must be systemd or cron,
+      and systemd only on a systemd host
+    quiet: true
+
+- name: Require a cache directory that is safe to create and to remove
+  # The role chowns this directory to the restic user and the teardown removes it recursively, so its last component
+  # must be a directory of its own named restic, never a shared parent such as /data/vault.
+  ansible.builtin.assert:
+    that:
+      - restic_cache_dir is string
+      - restic_cache_dir is match('^(/[A-Za-z0-9._@+-]+)*/restic\\Z')
+      - restic_cache_dir is not search('(^|/)\\.\\.?(/|\\Z)')
+    fail_msg: >-
+      restic_cache_dir: needs an absolute path of letters, digits and . _ @ + - whose last component is exactly
+      restic (such as /var/cache/restic), without a trailing slash or . and .. components
+    quiet: true
+
+- name: Require a sane Storage Box free-space threshold
+  ansible.builtin.assert:
+    that: restic_storage_min_free_percent is integer and 1 <= restic_storage_min_free_percent <= 90
+    fail_msg: "restic_storage_min_free_percent: needs an integer from 1 to 90"
+    quiet: true
+
+- name: Require a cron service name
+  ansible.builtin.assert:
+    that: restic_cron_service is string and restic_cron_service is match('^[a-z][a-z0-9._-]*\\Z')
+    fail_msg: "restic_cron_service: needs the init script name of the cron daemon, such as cronie"
+    quiet: true
+  when: restic_scheduler == 'cron'
+
+- name: Look for the tools the cron wrapper runs
+  # command -v is a shell builtin, and a missing tool is reported by the assert below.
+  ansible.builtin.shell: "command -v {{ item }}"  # noqa: command-instead-of-shell
+  vars:
+    restic_cron_gated: >-
+      {{ (restic_jobs | selectattr('skip_metered', 'defined') | selectattr('skip_metered') | list | length > 0)
+         or (restic_job is defined and restic_job is mapping and restic_job.skip_metered is defined
+             and restic_job.skip_metered) }}
+  loop: "{{ ['flock', 'timeout', 'nice', 'ionice', 'setpriv', 'setsid', 'pkill', 'crontab']
+            + (['nmcli'] if restic_cron_gated | bool else []) }}"
+  register: restic_cron_tools
+  changed_when: false
+  failed_when: false  # the assert below names every missing tool at once
+  when: restic_scheduler == 'cron'
+
+- name: Require the cron wrapper's tools
+  vars:
+    restic_cron_missing: "{{ restic_cron_tools.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+  ansible.builtin.assert:
+    that: restic_cron_missing | length == 0
+    fail_msg: "cron wrapper tools: not found on PATH: {{ restic_cron_missing | join(', ') }}"
+    quiet: true
+  when: restic_scheduler == 'cron'
+
+- name: Require a supported architecture with a pinned checksum
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in restic_arch_map
+      - restic_binary_sha256[restic_arch_map[ansible_architecture]] is match('^[0-9a-f]{64}$')
+    fail_msg: >-
+      restic_binary_sha256: no checksum for ansible_architecture {{ ansible_architecture }}
+      (supported: {{ restic_arch_map.keys() | join(', ') }})
+    quiet: true
+
+- name: Validate the ntfy settings every restic host notifies through
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  # unified_validation's interface keys; they cannot carry the restic_ prefix.
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "restic"
+    validation_type: "full"
+    validation_role: "restic"
+    required_variables:
+      - ntfy_server_url
+      - ntfy_topic
+      - vault_ntfy_api_key
+    vault_placeholders:
+      - { var: "vault_ntfy_api_key", value: "your-ntfy-api-key" }

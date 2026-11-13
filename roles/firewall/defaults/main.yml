@@ -4,7 +4,11 @@ firewall_policy_incoming: deny
 firewall_policy_outgoing: allow
 firewall_policy_routed: deny
 
-# Host-specific ports in addition to common_firewall_ports
+# Resets UFW before applying. It is set per test run and never in production inventory.
+firewall_reset: false
+
+# Ports every host of a group opens (group_vars); firewall_ports adds host-specific ones.
+firewall_common_ports: []
 firewall_ports: []
 
 firewall_rules: []

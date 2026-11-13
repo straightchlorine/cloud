@@ -1,26 +1,15 @@
 ---
-# Not published to Galaxy; decorative fields (author, company, galaxy_tags) are
-# dropped - they serve no purpose for a private role.
 galaxy_info:
-  namespace: homelab
   role_name: common
-  description: Common tasks for Raspberry Pi homelab infrastructure
+  namespace: homelab
+  author: Piotr Krzysztof
+  description: Shared tasks for the Debian host roles
   license: MIT
-  min_ansible_version: "2.15"
-
+  min_ansible_version: "2.17"
   platforms:
     - name: Debian
-      versions:
-        - bookworm # Debian 12
-        - trixie # Debian 13
-
-    - name: Ubuntu
-      versions:
-        - jammy # Ubuntu 22.04 LTS
-        - noble # Ubuntu 24.04 LTS
-
-collections:
-  - ansible.utils
-  - community.general
+      versions: [bookworm, trixie]
+    - name: EL
+      versions: ['10']
 
 dependencies: []

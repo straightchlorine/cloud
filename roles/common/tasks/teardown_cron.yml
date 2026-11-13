@@ -6,7 +6,7 @@
   ansible.builtin.cron:
     name: "{{ item.name }}"
     user: "{{ item.user }}"
-    env: "{{ item.env | default(false) }}"
+    env: "{{ item.env if item.env is defined else false }}"
     state: absent
   loop: "{{ common_teardown_cron_jobs }}"
   loop_control:
@@ -27,9 +27,9 @@
       common_teardown_cron_jobs
       | selectattr('user', 'equalto', item.item)
       | map(attribute='name')
-      | select('in', item.stdout | default(''))
+      | select('in', item.stdout)
       | list | length == 0
-    fail_msg: "Cron entries survived the teardown for {{ item.item }}: {{ item.stdout | default('') }}"
+    fail_msg: "Cron entries survived the teardown for {{ item.item }}: {{ item.stdout }}"
     success_msg: "[OK] {{ item.item }} cron entries removed"
   loop: "{{ common_teardown_crontabs.results }}"
   loop_control:

@@ -1,36 +1,32 @@
 ---
-# Required in host_vars - no default, because a wrong value builds a wheel that
-# fails at runtime with "CUDA error: no kernel image is available":
-#   gpu_qp_cuda_arch   the card's compute capability: "6.1" Pascal, "7.5" Turing,
-#                      "8.6" Ampere, "8.9" Ada.
+# gpu_qp_cuda_arch has no default and must be set in host_vars to the card's compute capability.
+# A wrong value builds a wheel that fails at runtime with "CUDA error: no kernel image is available".
+# Pascal is "6.1", Turing "7.5", Ampere "8.6" and Ada "8.9".
 
-# Home derived from the inventory ansible_user, not ansible_user_dir (which
-# reflects root under become).
+# The home comes from the inventory ansible_user because ansible_user_dir reflects root under become.
 gpu_qp_home: "/home/{{ ansible_user }}/gpu-qp"
 gpu_qp_data_path: "{{ gpu_qp_home }}/data"
 gpu_qp_gen_path: "{{ gpu_qp_home }}/gen"
-# `gpu-qp build` writes one log per build here.
+# Directory where `gpu-qp build` writes one log per build.
 gpu_qp_log_path: "{{ gpu_qp_home }}/logs"
 # Benchmark run trees (data only): one directory per `gpu-qp start --run NAME`, plus the lock.
 gpu_qp_bench_path: "{{ gpu_qp_home }}/bench"
-# Disk floor in GB for the `start` preflight and before each phase (below it: blocked:disk).
+# Minimum free disk in GB for the `start` preflight and before each phase, below which the run is blocked:disk.
 gpu_qp_bench_min_free_gb: 10
-# `gpu-qp side check DIR` also wants this many GB beyond the floor free on / before a side stack builds.
+# Extra free GB on / beyond the floor that `gpu-qp side check DIR` requires before a side stack builds.
 gpu_qp_side_margin_gb: 5
-# Images a side checkout must not retag: a service that names one of these (or any ml-*) and has
-# a build: section fails `gpu-qp side check`. Space-separated.
+# Space-separated images a side checkout must not retag.
+# `gpu-qp side check` fails a service that has a build: section and names one of these or any ml-* image.
 gpu_qp_protected_images: "quantum-pipeline:cpu quantum-pipeline:gpu quantum-pipeline-spark:4.0.2-python3.12"
 
-# pciutils: lspci, for inspecting the GPU and passthrough by hand.
+# pciutils provides lspci, for inspecting the GPU and passthrough by hand.
 gpu_qp_specific_packages:
   - pciutils
 
 # --- GPU image -------------------------------------------------------------
-# build: clone the quantum-pipeline source and compile qiskit-aer for
-#        gpu_qp_cuda_arch only - a faster build than the published image's
-#        multi-generation one, and the way to test a branch.
-# pull:  use gpu_qp_image_pull_name. From 2.3.0 the published :gpu tag runs on
-#        every GPU from Pascal (6.1) on; older tags are Ampere (sm_86) only.
+# Mode "build" clones the quantum-pipeline source and compiles qiskit-aer for gpu_qp_cuda_arch only.
+# That is the way to test a branch, and it compiles faster than the published multi-generation image.
+# Mode "pull" uses gpu_qp_image_pull_name, whose :gpu tag runs on Pascal and newer from 2.3.0 on.
 gpu_qp_image_mode: "build"
 gpu_qp_image_repo: "https://github.com/straightchlorine/quantum-pipeline.git"
 # Branch of the first clone only; afterwards `gpu-qp pull` switches branches.
@@ -40,42 +36,40 @@ gpu_qp_image_name: "quantum-pipeline:gpu"
 gpu_qp_image_pull_name: "ghcr.io/straightchlorine/quantum-pipeline:gpu"
 gpu_qp_image_force_rebuild: false
 
-# Build args plus source revision of the last successful build. `gpu-qp build`
-# skips the build while it matches; a rebuild stays fast, since Docker's layer
-# cache is intact.
+# Records the build args and source revision of the last successful build.
+# `gpu-qp build` skips the build while the current values match it.
 gpu_qp_build_fingerprint_file: "{{ gpu_qp_home }}/.image-build.fingerprint"
 
-# Scanner `gpu-qp scan` runs - the Trivy version the CI's trivy-action pins, so a
-# host scan and the GitHub code-scanning alerts agree.
+# Trivy image that `gpu-qp scan` runs.
 gpu_qp_trivy_image: "aquasec/trivy:0.70.0"
 
-# The image compose runs, derived from the mode so the services don't branch.
+# The image compose runs, derived from the mode so the services need no branching.
 gpu_qp_active_image: >-
   {{ gpu_qp_image_pull_name if gpu_qp_image_mode == 'pull' else gpu_qp_image_name }}
 
 # --- NVIDIA driver ---------------------------------------------------------
-# Provider GPU images (NVIDIA NGC, most cloud vendor images) ship the driver and
-# only need the toolkit - set false there. On a plain OS image, true installs the
-# driver plus the kernel headers matching the running kernel and builds the DKMS
-# module.
+# Provider GPU images such as NVIDIA NGC ship the driver and only need the toolkit, so set false there.
+# On a plain OS image, true installs the driver and the matching kernel headers and builds the DKMS module.
 gpu_qp_driver_install: true
-# Debian's metapackage. Ubuntu names the driver per branch (nvidia-driver-550);
-# override in host_vars there. Provider GPU images ship the driver already, so
-# set gpu_qp_driver_install: false instead of listing packages.
+# NVIDIA publishes the container toolkit apt repository under a per-arch path.
+gpu_qp_nvidia_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+# This is Debian's metapackage, while Ubuntu names the driver per branch (nvidia-driver-550).
+# Override it in host_vars on Ubuntu.
 gpu_qp_driver_packages:
   - nvidia-driver
-# The running kernel's headers plus the headers metapackage of its flavour
-# (linux-headers-cloud-amd64 on a cloud kernel, never the plain -amd64 one), so a
-# kernel upgrade pulls matching headers and DKMS builds the module for it. Without
-# the metapackage an upgraded cloud kernel boots with no NVIDIA module. Debian
-# naming; override on Ubuntu.
+# The running kernel's headers plus the headers metapackage of its flavour, such as linux-headers-cloud-amd64.
+# The metapackage makes a kernel upgrade pull matching headers, so DKMS can build the module for it.
+# These are Debian package names, so override them on Ubuntu.
 gpu_qp_driver_headers_packages:
   - "linux-headers-{{ ansible_kernel }}"
   - "linux-headers-{{ ansible_kernel | regex_replace('^[^-]+-', '') }}"
 
-# While benchmark work is pending (a run `gpu-qp resume` would pick up, or running), a root timer holds the
-# host on the kernel the run started on and blocks unattended kernel and NVIDIA package updates; with no
-# work pending it undoes that. See "Kernel pin" in the README. false removes the timer and the pin.
+# While benchmark work is pending, a root timer pins the host to the kernel the run started on.
+# Pending means running, or a run that `gpu-qp resume` would pick up.
+# The pin also blocks unattended kernel and NVIDIA package updates.
+# With no work pending the timer lifts the pin. See "Kernel pin" in the README. False removes the timer and the pin.
 gpu_qp_kernel_guard: true
 
 # --- Containers ------------------------------------------------------------
@@ -84,13 +78,12 @@ gpu_qp_gpu_exporter_enabled: true
 gpu_qp_gpu_exporter_image: "utkuozdemir/nvidia_gpu_exporter:1.2.0"
 gpu_qp_gpu_exporter_port: 9835
 
-# validate.yml asserts a real NVIDIA device is present (vendor 0x10de). Turn this
-# off only to exercise the role's validation on a host without a GPU (molecule);
-# a real deploy must keep it on.
+# validate.yml asserts that a real NVIDIA device is present.
+# Turn this off only to run the role's validation on a host without a GPU, as molecule does.
 gpu_qp_require_nvidia_device: true
 
 # --- Simulation ------------------------------------------------------------
-# Which GPU the worker sees: "all", or a device index ("0"/"1") to pin one card.
+# Which GPU the worker sees: "all", or a device index such as "0" to pin one card.
 gpu_qp_worker_device: "all"
 gpu_qp_worker_memory_limit: "4G"
 gpu_qp_worker_cpu_limit: "2.0"
@@ -99,16 +92,14 @@ gpu_qp_worker_cpu_reservation: "0.5"
 
 gpu_qp_basis: "sto3g"
 gpu_qp_max_iterations: 100
-# Gradient-free: quantum-pipeline samples the objective (default_shots=1024), and
-# finite-difference gradients of a sampled energy are meaningless - it refuses a
-# gradient optimizer such as L-BFGS-B unless --exact is passed. COBYLA needs none.
+# COBYLA is gradient-free, which matters because quantum-pipeline samples the objective.
+# It refuses a gradient optimizer such as L-BFGS-B unless --exact is passed.
 gpu_qp_optimizer: "COBYLA"
-# Path inside the container (gpu_qp_data_path is mounted at
-# /usr/src/quantum_pipeline/data, the image's working directory).
+# Path inside the container, relative to the image's working directory where gpu_qp_data_path is mounted.
 gpu_qp_container_molecules_path: "data/molecules.json"
 
-# Rendered into gpu_qp_data_path/molecules.json; override in host_vars to run a
-# different molecule set. Schema per quantum-pipeline/data/molecules.json.
+# Rendered into gpu_qp_data_path/molecules.json, so override it in host_vars to run a different molecule set.
+# The schema follows data/molecules.json in the quantum-pipeline repository.
 gpu_qp_molecules:
   - symbols: ["H", "H"]
     coords: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
@@ -123,17 +114,17 @@ gpu_qp_molecules:
     units: "angstrom"
     masses: [6.94, 1.008]
 
-# post_deploy_validate proves the whole path with a short real GPU run.
+# post_deploy_validate runs a short real GPU simulation to prove the whole path.
 gpu_qp_smoke_test_enabled: true
 gpu_qp_smoke_test_molecule_index: 0
 gpu_qp_smoke_test_max_iterations: 2
 
-# teardown removes the wrapper, the stack and the locally built image (role-owned
-# state). Set true to keep the image across a teardown/redeploy cycle - rebuilding
-# it compiles qiskit-aer from source (~40 min).
+# Teardown removes the wrapper, the stack and the locally built image.
+# Set true to keep the image across a teardown and redeploy, because rebuilding it compiles qiskit-aer from source.
 gpu_qp_teardown_keep_image: false
-# teardown refuses while run trees exist under gpu_qp_bench_path (copy them off first:
-# gpu-qp fetch --run NAME --full). Set true to delete them with the rest.
+# Teardown refuses while run trees exist under gpu_qp_bench_path.
+# Copy them off first with `gpu-qp fetch --run NAME --full`.
+# Set true to delete them with the rest.
 gpu_qp_teardown_discard_bench: false
 
 gpu_qp_supported_cuda_arches:
@@ -146,9 +137,8 @@ gpu_qp_supported_cuda_arches:
   - "8.9"
   - "9.0"
 
-# Worker GPU reservation. `runtime:` is a legacy field that `docker compose run`
-# does not honor, so the device is requested through deploy.resources instead.
-# `count` is omitted when unpinned, which makes compose use every GPU on the host.
+# Worker GPU reservation, requested through deploy.resources because `docker compose run` ignores `runtime:`.
+# Count is omitted when the worker is not pinned, which makes compose use every GPU on the host.
 gpu_qp_worker_devices: >-
   {{ [{'driver': 'nvidia', 'capabilities': ['gpu']}]
      if gpu_qp_worker_device == 'all'
@@ -163,10 +153,8 @@ gpu_qp_compose_networks:
 
 gpu_qp_compose_volumes: []
 
-# Batch worker: not started by `up` (profiles: [batch]) - invoked on demand by
-# the gpu-qp-run wrapper or `docker compose run`. userns_mode: host because the
-# NVIDIA runtime cannot run inside Docker's userns-remap (the same reason
-# watchtower/cadvisor/beets set it).
+# The batch profile keeps `up` from starting this worker, so the gpu-qp-run wrapper or `docker compose run` starts it.
+# It uses the host user namespace because the NVIDIA runtime cannot run inside Docker's userns-remap.
 gpu_qp_compose_services:
   - service_name: quantum-pipeline-gpu
     service_image: "{{ gpu_qp_active_image }}"
@@ -188,8 +176,8 @@ gpu_qp_compose_services:
         memory: "{{ gpu_qp_worker_memory_reservation }}"
         cpus: "{{ gpu_qp_worker_cpu_reservation }}"
 
-# Persistent GPU metrics endpoint; scraped by Prometheus from the monitoring host
-# (firewall_rules in host_vars). It reports on every card, so it reserves them all.
+# Persistent GPU metrics endpoint that Prometheus scrapes from the monitoring host.
+# It reports on every card, so it reserves them all.
 gpu_qp_gpu_exporter_services:
   - service_name: nvidia-gpu-exporter
     service_image: "{{ gpu_qp_gpu_exporter_image }}"

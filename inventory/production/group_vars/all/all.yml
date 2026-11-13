@@ -1,76 +1,15 @@
 ---
-# Global configuration variables for all hosts
-
-# Common system settings
 timezone: Europe/Warsaw
 
-# Standardized Docker Compose version
-docker_compose_version: "v2.24.5"
-
-# Common security settings
-ssh_port: 22
-enable_ufw: true
-
-# Common package cache settings
-# apt update is heavy IO on weaker hosts; the nightly timer keeps lists fresh.
-package_cache_valid_time: 21600
-backup_retention_days: 30
-
-# Standardized backup configuration paths
+# playbooks/backup/deploy-coordinator.yml reads the base path.
+# roles/backup overrides the password file per target when it renders restic-init.sh.
 common_backup_base_path: "/opt/backup"
 common_backup_password_file: "{{ common_backup_base_path }}/restic-password"
 
-# Common filesystem utilities (used by all roles with storage)
-common_filesystem_utilities:
-  - parted
-  - e2fsprogs
-  - ntfs-3g
-  - exfat-fuse
-  - exfatprogs
-
-# Common System Packages
-common_packages:
-  - curl
-  - wget
-  - git
-  - htop
-  - btop
-  - vim
-  - tmux
-  - fzf
-  - mosh
-  - ufw
-  - fail2ban
-  # cron: the common role schedules jobs with ansible.builtin.cron, which needs
-  # the crontab binary; slim cloud/VPS images ship no cron daemon.
-  - cron
-  - logrotate
-  - rsync
-  - unzip
-  - ca-certificates
-  - gnupg
-  - lsb-release
-
-# Log Management
-log_rotation_days: 30
-log_compression: true
-
-# Security Configuration
-common_fail2ban_enabled: true
-common_fail2ban_ssh_maxretry: 3
-common_fail2ban_ssh_bantime: 600
-
-# Domain configuration (must be set in vault)
+# The domain comes from the vault.
 domain_name: "{{ vault_domain_name }}"
-letsencrypt_email: "{{ vault_letsencrypt_email }}"
 
-# ntfy notifications (self-hosted) - shared across all roles/hosts.
-# API key is a secret: vault_ntfy_api_key (see vault.yml.example).
+# The self-hosted ntfy server is shared by all roles and hosts.
+# Its API key is the secret vault_ntfy_api_key, see vault.yml.example.
 ntfy_server_url: "https://ntfy.codextechnologies.org"
 ntfy_topic: "local-infra"
-
-# Validation checks - these variables MUST be defined in host_vars
-required_vars:
-  - domain_name
-  - vault_domain_name
-  - vault_letsencrypt_email

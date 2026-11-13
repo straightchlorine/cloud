@@ -3,18 +3,16 @@
   hosts: all
   become: true
   vars:
-    # Mirrors host_vars/pi-automation.yml with fake secrets. ansible_user is
-    # pinned because the role's ownership/become wiring reads it directly.
+    # These values mirror host_vars/pi-automation.yml with fake secrets.
+    # The ansible_user value is pinned because the role's ownership and become wiring reads it directly.
     ansible_user: root
     timezone: UTC
     domain_name: example.test
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
-    # 32 chars - validate.yml refuses a malformed APP_KEY (Laravel's encrypter
-    # fatal "Unsupported cipher or incorrect key length" 500s every route).
+    # The validate.yml file refuses a malformed APP_KEY, and this key has the accepted raw length.
     vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
-    # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
-    # differently-sized static cron token with HTTP 500 on its cron endpoint).
+    # The validate.yml file accepts only a 32-character hex cron token, and this token matches.
     vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
     vault_firefly_db_password: molecule-test-db-password
     vault_vaultwarden_admin_token: molecule-test-admin-token
@@ -25,9 +23,7 @@
     automation_backup_enabled: true
     automation_backup_dir: /tmp/molecule-automation-backup
     automation_backup_owner: molecule
-    restic_enabled: false
-    restic_repository: /tmp/test-restic
-    restic_password: molecule-test-restic-password
+    automation_restic_enabled: false
     common_start_stack: false
   pre_tasks:
     - name: Create the stack-home parent (validate.yml asserts it exists)
@@ -37,29 +33,23 @@
         mode: "0755"
 
     - name: Publish fixture userns-remap facts
-      # docker.yml (deliberately excluded here) publishes these on a real
-      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
-      # the nested rootless-podman mapping (container uids 0-65536 only - the
-      # canonical dockremap base 165536 is outside it and chown fails with
-      # EINVAL).
+      # On a real host docker.yml publishes these facts, and the ownership tasks in stack.yml read them.
+      # The fixture value must sit inside the nested rootless-podman uid mapping.
+      # The canonical dockremap base lies outside that mapping, and chown would fail with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"
 
   tasks:
-    # main.yml's task files that are container-safe, in the same order the
-    # role runs them. include_role tasks_from runs the real task file with
-    # the role's defaults loaded. NOT included, deliberately:
-    #   - packages.yml include (apt installs the whole common list - slow,
-    #     covered on the staging Pi by scripts/automation/validate-deploy.sh)
-    #   - common optional_ssd (prepares/mounts the optional SSD - containers must
-    #     not touch the host's block devices)
-    #   - docker.yml (installs the Docker daemon; no docker-in-docker here -
-    #     start_stack is false so compose up is skipped too)
-    #   - docker_stack_service (the unit Requires=docker.service, which a
-    #     container lacks; the unit template is rendered standalone below)
-    #   - firewall (ufw cannot bind rules in a container)
-    #   - post_deploy_validate.yml (needs a running compose stack)
+    # These are the container-safe task files from main.yml, in the order the role runs them.
+    # Using include_role with tasks_from runs the real task file with the role defaults loaded.
+    # The common packages task is skipped because it is slow, and scripts/automation/validate-deploy.sh covers it on
+    # the staging Pi.
+    # The common optional_ssd task is skipped because a container must not touch the host's block devices.
+    # The docker.yml file is skipped because it installs the Docker daemon and the container has no Docker.
+    # Prepare stubs docker and docker.service instead, so the real stack unit still installs and starts below.
+    # The firewall tasks are skipped because ufw cannot bind rules in a container.
+    # post_deploy_validate.yml is skipped because it needs a running compose stack.
     - name: Gather network facts for dynamic configuration
       ansible.builtin.include_role:
         name: common
@@ -69,6 +59,17 @@
       ansible.builtin.include_role:
         name: automation
         tasks_from: validate
+
+    - name: Validate the stack with the off-site backup on (the restic job this role builds)
+      # The backup.yml run below keeps restic off because deploying the restic job needs systemd, which this image
+      # lacks.
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: validate
+      vars:
+        automation_restic_enabled: true
+        automation_restic_repository: /srv/molecule-restic/automation
+        automation_restic_password: molecule-restic-password-automation
 
     - name: Run the real stack deployment (compose + .env + manage script)
       ansible.builtin.include_role:
@@ -80,36 +81,22 @@
         name: automation
         tasks_from: backup
 
-    - name: Render the stack systemd unit
-      # docker_stack_service itself needs docker.service (excluded above) -
-      # render the unit here so a broken template variable still fails CI
-      # instead of silently writing a broken unit on a real Pi.
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../../common/templates/systemd-service.j2"
-        dest: /tmp/stack.service.rendered
-        mode: "0644"
+    - name: Install the real stack unit (docker is stubbed in prepare)
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: docker_stack_service
       vars:
-        service_description: "Automation Stack (molecule render)"
-        service_requires: ["docker.service"]
-        service_after: ["docker.service", "network-online.target"]
-        common_service_wants: ["network.target"]
-        service_type: "oneshot"
-        common_remain_after_exit: "true"
-        common_working_directory: "{{ automation_stack_home }}"
-        service_user: "{{ ansible_user }}"
-        service_group: "{{ ansible_user }}"
-        service_environment:
+        common_start_stack: true
+        common_stack_description: "Automation Stack (molecule)"
+        common_stack_home: "{{ automation_stack_home }}"
+        common_stack_user: "{{ ansible_user }}"
+        common_stack_environment_vars:
           - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
-        exec_start: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml up -d"
-        exec_stop: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml down"
-        exec_reload: "/usr/bin/docker compose -f {{ automation_stack_home }}/docker-compose.yml restart"
-        syslog_identifier: "stack"
-        common_timeout_start_sec: "0"
-        kill_mode: "none"
-        common_standard_output: "journal"
-        common_standard_error: "journal"
-        common_restart_policy: "on-failure"
-        common_restart_sec: "5"
-        common_wanted_by: "multi-user.target"
-        common_enable_security_hardening: true
-        common_no_new_privileges: "true"
+
+    - name: Start the unit and flush the "Restart stack" handler
+      # The stack_start task from common resolves the handler, and an unknown handler name fails the play.
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: stack_start
+      vars:
+        common_start_stack: true

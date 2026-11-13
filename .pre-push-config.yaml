@@ -1,10 +1,9 @@
 ---
-# Pre-push hooks - COMPREHENSIVE checks (can take 2-5 minutes)
+# These pre-push hooks are slower than the pre-commit ones.
 # Install: pre-commit install --hook-type pre-push -c .pre-push-config.yaml
 # Manual: pre-commit run --hook-stage push --all-files -c .pre-push-config.yaml
 
 repos:
-  # Playbook syntax validation for all playbooks
   - repo: local
     hooks:
       - id: ansible-playbook-syntax-all
@@ -15,7 +14,7 @@ repos:
         language: system
         pass_filenames: false
 
-  # Molecule smoke test - common role (the foundation everything depends on)
+  # The common role is the smoke test because the other roles build on it.
   - repo: local
     hooks:
       - id: molecule-test-common
@@ -25,7 +24,6 @@ repos:
         pass_filenames: false
         verbose: true
 
-  # Ansible-lint (catch regressions before they hit CI)
   - repo: local
     hooks:
       - id: ansible-lint-roles

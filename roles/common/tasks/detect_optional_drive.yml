@@ -1,14 +1,11 @@
 ---
-# Non-fatal detection of an unused, non-boot drive (may be unplugged, or
-# carry a stale partition table). Only real disks/partitions are considered
-# (no loop/rom/zram). Never mounts or formats - just sets facts:
-#   common_optional_drive_present        - bool
-#   common_optional_drive_device         - "/dev/sda" or "/dev/sda1" ("" if none found)
-#   common_optional_drive_is_whole_disk  - bool (bare disk, not a partition)
-#   common_optional_drive_has_filesystem - bool (false = needs formatting)
-#   common_optional_drive_fstype         - "" or whatever's there (callers should
-#                                          compare against what they want, not just
-#                                          has_filesystem, before mounting as-is)
+# Detects an unused, non-boot drive without failing when none is attached, and never mounts or formats it.
+# Callers should compare common_optional_drive_fstype with the filesystem they want before mounting a drive as-is.
+# common_optional_drive_present:        true when a candidate drive was found.
+# common_optional_drive_device:         the device path, an empty string when none was found.
+# common_optional_drive_is_whole_disk:  true for a bare disk, false for a partition.
+# common_optional_drive_has_filesystem: false means the drive needs formatting.
+# common_optional_drive_fstype:         the filesystem type found, or an empty string.
 
 - name: Detect an unused, non-boot drive
   ansible.builtin.shell:
@@ -20,9 +17,7 @@
           ['lsblk', '-J', '-o', 'NAME,TYPE,MOUNTPOINT,FSTYPE']))
 
       def in_use(dev):
-          # A disk counts as in use if it, or any partition on it, is
-          # mounted anywhere - including a stale multi-partition table where
-          # only one partition happens to be mounted.
+          # A disk is in use when it or any of its partitions is mounted, even on a stale partition table.
           if dev.get('mountpoint'):
               return True
           return any(in_use(child) for child in dev.get('children', []))
@@ -36,19 +31,18 @@
 
           children = dev.get('children', [])
           if len(children) == 1 and children[0].get('fstype'):
-              # Exactly one partition, already formatted - use it as-is.
+              # A single formatted partition is used as it is.
               candidate = dict(children[0])
               candidate['is_whole_disk'] = False
           else:
-              # No partition table, or a stale/unused one (zero partitions,
-              # multiple partitions, or a single unformatted one) - treat the
-              # whole disk as the candidate. "Formatting" it means wiping
-              # whatever partition table is there and creating one fresh
-              # partition, not reusing a leftover scrap partition.
+              # Any other layout makes the whole disk the candidate.
+              # Formatting it wipes the old partition table and creates one fresh partition.
               candidate = dict(dev)
               candidate['is_whole_disk'] = True
           break
 
+      candidate.setdefault('is_whole_disk', False)
+      candidate['fstype'] = candidate.get('fstype') or ''
       print(json.dumps(candidate))
       PYEOF
   changed_when: false
@@ -63,7 +57,7 @@
     common_optional_drive_present: "{{ 'name' in common_optional_drive }}"
     common_optional_drive_device: >-
       {{ '/dev/' + common_optional_drive.name if 'name' in common_optional_drive else '' }}
-    common_optional_drive_is_whole_disk: "{{ common_optional_drive.is_whole_disk | default(false) }}"
-    common_optional_drive_fstype: "{{ common_optional_drive.fstype | default('', true) }}"
+    common_optional_drive_is_whole_disk: "{{ common_optional_drive.is_whole_disk }}"
+    common_optional_drive_fstype: "{{ common_optional_drive.fstype }}"
     common_optional_drive_has_filesystem: >-
-      {{ (common_optional_drive.fstype | default('', true)) | length > 0 }}
+      {{ common_optional_drive.fstype | length > 0 }}

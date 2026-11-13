@@ -6,11 +6,9 @@
     exclude: "{{ honeypot_dnf_pinned_packages }}"
   become: true
   when: honeypot_dnf_full_update
-  tags: [packages]
 
 - name: Install EPEL
-  # rclone and age (the backup pipeline) live in EPEL, so it must be enabled
-  # before the base package list is resolved.
+  # rclone and age live in EPEL, so EPEL must be enabled before the base package list is resolved.
   ansible.builtin.dnf:
     name: epel-release
     state: present
@@ -23,10 +21,9 @@
   become: true
 
 - name: Remove fail2ban
-  # The jail banned in firewalld's public zone, but the admin sshd only accepts
-  # connections on tailscale0 (the tailnet zone), so it never blocked anything;
-  # the admin path is key-only sshd behind the Headscale ACL, and an effective
-  # jail would add a self-lockout risk. fail2ban-server takes its dependents too.
+  # The admin sshd accepts connections only on the tailnet interface, so a fail2ban jail protects nothing there.
+  # An effective jail would only add a self-lockout risk.
+  # Both package names are listed because removing fail2ban-server also removes its dependent packages.
   ansible.builtin.dnf:
     name: [fail2ban, fail2ban-server]
     state: absent

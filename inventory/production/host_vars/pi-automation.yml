@@ -1,64 +1,45 @@
 ---
 # Refused by the *-teardown playbooks; a staging host leaves this unset.
 teardown_protected: true
-# Raspberry Pi 4 (production automation host): vaultwarden, firefly + mariadb,
-# watchtower. TLS terminates at the central reverse proxy; services publish
-# plain HTTP on the host IP.
+# TLS terminates at the central reverse proxy, so the services publish plain HTTP on the host IP.
 
 device_type: rpi4b
-device_specs:
-  cpu: "ARM Cortex-A72 4-core 1.5GHz"
-  memory: "2GB"
-  architecture: "aarch64"
 
-# automation_data_path: SSD mount when a drive is present; journald and Docker's
-# data-root live under it too (both optional/auto-detected, mirroring DNS).
+# The data path is an SSD mount when a drive is present.
+# Journald and Docker's data-root move onto that drive as well.
 automation_data_path: "/mnt/data"
 
-automation_subdomain_vaultwarden: "vaultwarden"
-automation_subdomain_firefly: "firefly"
-
-# Only the CIDRs that actually send requests: the LAN reverse proxy (192.168.20.30)
-# and the tailnet. Without the proxy listed, Firefly ignores its X-Forwarded-Proto
-# and emits http:// URLs/CSP even though the client connected over real HTTPS.
+# These are the networks that send requests to Firefly: the LAN reverse proxy and the tailnet.
+# Without the proxy listed, Firefly ignores X-Forwarded-Proto and emits http:// URLs even over HTTPS.
 automation_trusted_proxies: "192.168.20.30/32,100.64.0.0/10"
 
-common_firewall_ports:
+firewall_common_ports:
   - {port: 22, comment: "SSH"}
   - {port: 8081, comment: "Vaultwarden"}
   - {port: 8082, comment: "Firefly III"}
   - {port: 8083, comment: "Calibre-Web"}
 
-# Watchtower's HTTP API can trigger image updates, not just read metrics -
-# scoped to the monitoring host only, unlike the LAN-wide ports above.
+# Watchtower's HTTP API can trigger image updates, not just read metrics.
+# These ports are therefore open to the monitoring host only, unlike the LAN-wide ports above.
 firewall_rules:
   - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
   - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
 
-# Stack-level
-common_start_stack: true
 common_auto_updates_reboot_if_required: true
 common_auto_updates_reboot_time: "05:00"
 
-# Prometheus labels
 prometheus_role: "automation"
 
-# Primary/off-site backup - restic.
-restic_enabled: true
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
-restic_password: "{{ vault_restic_automation_password }}"
-common_backup_tmp_dir: "{{ automation_data_path }}/backup-tmp"
-common_backup_directories:
-  - "{{ automation_stack_home }}"
-  - "{{ automation_data_path }}"
-backup_exclude_patterns:
-  - "*.tmp"
-  - "*.log.1*"
-  - "**/logs/*"
-common_backup_service_name: "automation"
+# Off-site backup through the roles/restic job named "automation".
+# The role writes the Storage Box key from restic_storage_key when it is set.
+# Otherwise place the key by hand at /etc/ssh/restic_storage_key, and authorize its public key on the Storage Box first.
+# restic_storage_key: "{{ vault_restic_storage_key_pi_automation }}"
+automation_restic_enabled: true
+automation_restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
+automation_restic_password: "{{ vault_restic_automation_password }}"
 
-# Secondary local backup: Syncthing replicates automation_backup_dir.
-# automation_backup_owner derives from ansible_user (the stack/Syncthing user).
+# Syncthing replicates automation_backup_dir as the secondary local backup.
+# The role defaults automation_backup_owner to ansible_user, which runs the stack and Syncthing.
 common_syncthing_enabled: true
 automation_backup_enabled: true
 automation_backup_dir: "/mnt/data/syncthing/backup"

@@ -1,45 +1,42 @@
 ---
 # Refused by the *-teardown playbooks; a staging host leaves this unset.
 teardown_protected: true
-# TLS terminates at the central reverse proxy, so navidrome serves plain HTTP.
+# TLS terminates at the central reverse proxy, so Navidrome serves plain HTTP.
 
 device_type: rpi3b
 
 media_library_path: "/mnt/data"
-# The audio Bible gains nothing from lyrics/ReplayGain and takes hours.
+# The audio Bible gains nothing from the lyrics and ReplayGain backfill, and it takes hours.
 media_backfill_exclude: '^artist:New International Version'
 
 media_youtube_enabled: true
 
-# The LAN resolvers this box already uses (Pi-hole, then the router). The beets
-# container gets exactly these, so a lookup that works from the host works from
-# the container, and a Pi-hole hiccup falls through to the router.
+# These are the LAN resolvers the host already uses, with the router as the fallback.
+# The beets container gets exactly these, so a lookup that works from the host also works from the container.
 media_beets_dns:
   - 192.168.20.10
   - 192.168.20.1
 
-common_firewall_ports:
+firewall_common_ports:
   - {port: 22, comment: "SSH"}
   - {port: 4545, comment: "Navidrome"}
 
-# Watchtower's HTTP API can trigger updates: monitoring host only.
+# Watchtower's HTTP API can trigger updates, so these ports are open to the monitoring host only.
 firewall_rules:
   - {port: 8084, proto: "tcp", src: "192.168.20.5", comment: "Watchtower metrics (Prometheus scrape)"}
   - {port: 8085, proto: "tcp", src: "192.168.20.5", comment: "cAdvisor metrics (Prometheus scrape)"}
 
-common_start_stack: true
 common_auto_updates_reboot_if_required: true
 common_auto_updates_reboot_time: "05:15"
 
 prometheus_role: "music"
 
-restic_enabled: true
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/music"
-restic_password: "{{ vault_restic_music_password }}"
-common_backup_tmp_dir: "{{ media_library_path }}/backup-tmp"
-# ~37 GB over a Pi 3 uplink: the common default (2h) kills the first full
-# snapshot (and any full re-read) mid-run. Nightly incrementals still finish fast.
-common_backup_timeout: "12h"
+# The role writes the Storage Box key from restic_storage_key when it is set.
+# Otherwise place the key by hand at /etc/ssh/restic_storage_key, and authorize its public key on the Storage Box first.
+# restic_storage_key: "{{ vault_restic_storage_key_media }}"
+media_restic_enabled: true
+media_restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/music"
+media_restic_password: "{{ vault_restic_music_password }}"
 
 common_syncthing_enabled: true
 media_backup_enabled: true

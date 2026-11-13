@@ -2,23 +2,19 @@
 - name: Converge - DNS Fail-Fast Validation
   hosts: all
   vars:
-    # Every required variable except dns_pihole_interface, so Case 1 leaves
-    # it genuinely undefined. Each case below then includes the REAL
-    # roles/dns/tasks/validate.yml with per-case vars - no hand-copied
-    # guards to keep in sync.
+    # Every required variable is set except dns_pihole_interface, so case 1 leaves it undefined.
+    # Each case includes the real roles/dns/tasks/validate.yml with its own variables.
     vault_pihole_webpassword: molecule-test-password
     dns_pihole_dns_servers:
       - "9.9.9.9"
     common_ntp_server_enabled: false
     common_ntp_upstream_server: pool.ntp.org
     common_ntp_allowed_networks: []
-    # Raw include_tasks loads no role defaults; mirror this one so the backup
-    # guard evaluates instead of erroring on an undefined flag.
+    # A raw include_tasks loads no role defaults, so this mirrors the default and lets the backup guard evaluate.
     dns_backup_enabled: false
   tasks:
-    # The container's interface name varies by driver/network; cases 2 and 3
-    # need a real one so they fail for the reason under test, not the
-    # interface check.
+    # The interface name varies by driver and network.
+    # Cases 2 and 3 need a real one so they fail for the reason under test and not at the interface check.
     - name: Detect the container's primary interface
       ansible.builtin.set_fact:
         molecule_primary_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
@@ -34,9 +30,8 @@
             msg: "validate.yml did not fail fast on a missing required DNS variable"
       rescue:
         - name: Assert the failure was for the missing dns_pihole_interface variable specifically
-          # A looped fail task's own top-level msg is the generic "One or more
-          # items failed" - the per-item detail lives in .results, so assert
-          # on that rather than on ansible_failed_result.msg directly.
+          # A looped fail task reports the generic message "One or more items failed" in its own msg.
+          # The per-item detail lives in .results, so the assertion reads that instead.
           ansible.builtin.assert:
             that:
               - ansible_failed_result.results is defined
@@ -48,9 +43,9 @@
             success_msg: "[OK] validate.yml correctly failed on the missing dns_pihole_interface variable"
 
         - name: Record case 1 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps the idempotence rerun unchanged.
+          # A marker file is used because converge and verify are separate processes, so set_fact would not reach
+          # verify.
+          # The force: false setting keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case1.passed
@@ -84,17 +79,16 @@
             success_msg: "[OK] validate.yml correctly failed on the placeholder vault_pihole_webpassword"
 
         - name: Record case 2 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps the idempotence rerun unchanged.
+          # A marker file is used because converge and verify are separate processes, so set_fact would not reach
+          # verify.
+          # The force: false setting keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case2.passed
             force: false
             mode: "0644"
 
-    # Case 3: the NTP-allowed-networks guard, driven through the real
-    # validate.yml (not a hand-copied reproduction).
+    # Case 3: the NTP-allowed-networks guard, driven through the real validate.yml.
     - name: "Case 3: validate.yml fails when NTP serving is enabled without allowed networks"
       block:
         - name: Run the real validate.yml with an empty common_ntp_allowed_networks
@@ -118,9 +112,9 @@
             success_msg: "[OK] validate.yml's NTP guard correctly failed on an empty common_ntp_allowed_networks"
 
         - name: Record case 3 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps the idempotence rerun unchanged.
+          # A marker file is used because converge and verify are separate processes, so set_fact would not reach
+          # verify.
+          # The force: false setting keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case3.passed
@@ -150,9 +144,9 @@
             success_msg: "[OK] validate.yml's interface guard correctly failed on a non-existent interface"
 
         - name: Record case 4 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps the idempotence rerun unchanged.
+          # A marker file is used because converge and verify are separate processes, so set_fact would not reach
+          # verify.
+          # The force: false setting keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case4.passed
@@ -185,9 +179,9 @@
             success_msg: "[OK] validate.yml's backup guard correctly failed on the missing dns_backup_dir"
 
         - name: Record case 5 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes - in-memory facts do not cross that
-          # boundary. force: false keeps the idempotence rerun unchanged.
+          # A marker file is used because converge and verify are separate processes, so set_fact would not reach
+          # verify.
+          # The force: false setting keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case5.passed

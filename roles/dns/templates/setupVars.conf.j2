@@ -1,6 +1,5 @@
-# v6 migration reads only these keys, writing them into pihole.toml.
-# The rest of v5's setupVars.conf has no v6 equivalent - see
-# https://github.com/pi-hole/FTL src/config/setupVars.c.
+# The Pi-hole v6 migration reads only these keys and writes them into pihole.toml.
+# Other setupVars.conf keys have no v6 equivalent, as src/config/setupVars.c in pi-hole/FTL shows.
 PIHOLE_INTERFACE={{ dns_pihole_interface }}
 {% for dns_server in dns_pihole_dns_servers %}
 PIHOLE_DNS_{{ loop.index }}={{ dns_server }}

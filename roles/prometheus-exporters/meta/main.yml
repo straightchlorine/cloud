@@ -1,35 +1,13 @@
 ---
-
 galaxy_info:
   role_name: prometheus_exporters
   namespace: homelab
-  author: Claude Code Assistant
-  description: Comprehensive Prometheus exporters for Raspberry Pi infrastructure
-  company: Infrastructure Automation
+  author: Piotr Krzysztof
+  description: Prometheus node, Pi hardware and Pi-hole exporters
   license: MIT
-  min_ansible_version: "2.14"
-
+  min_ansible_version: "2.17"
   platforms:
     - name: Debian
-      versions:
-        - bookworm
-    - name: Ubuntu
-      versions:
-        - "22.04"
-        - "24.04"
+      versions: [bookworm, trixie]
 
-  galaxy_tags:
-    - prometheus
-    - monitoring
-    - metrics
-    - exporters
-    - raspberry-pi
-    - pi-hole
-    - hardware
-
-dependencies:
-  - role: hardware
-    when: pi_hardware_metrics_enabled
-
-collections:
-  - community.general
+dependencies: []

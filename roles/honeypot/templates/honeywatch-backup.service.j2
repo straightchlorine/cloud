@@ -12,15 +12,15 @@ Type=oneshot
 User=root
 SyslogIdentifier=honeywatch-backup
 EnvironmentFile={{ honeypot_config_dir }}/backup.env
-# Supplies NTFY_URL/NTFY_TOKEN for the success notification; the failure side
-# goes through OnFailure above. The leading '-' keeps backups working on a host
-# with no ntfy configured.
+# Supplies NTFY_URL and NTFY_TOKEN for the success notification.
+# The failure side goes through OnFailure above.
+# The leading '-' keeps backups working on a host with no ntfy configured.
 EnvironmentFile=-{{ honeypot_config_dir }}/notify.env
 ExecStart=/usr/local/sbin/honeywatch-backup
 TimeoutStartSec={{ honeypot_backup_timeout_sec }}
 
-# Keep the blast radius small even though the unit runs as root (required to
-# talk to /var/run/docker.sock).
+# These options keep the blast radius small even though the unit runs as root.
+# Root is required to talk to /var/run/docker.sock.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
@@ -35,9 +35,7 @@ LockPersonality=yes
 RestrictNamespaces=yes
 RestrictRealtime=yes
 SystemCallArchitectures=native
-# AF_UNIX for the docker socket, AF_INET/6 for the R2 upload, AF_NETLINK for
-# glibc getaddrinfo. Without AF_NETLINK, resolution can fail - and then the
-# OnFailure notify cannot resolve its ntfy host either, turning a caught
-# failure into a silent one.
+# AF_UNIX is for the docker socket and AF_INET and AF_INET6 are for the R2 upload.
+# AF_NETLINK is for glibc name resolution, which the upload and the success notification need.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 MemoryDenyWriteExecute=yes

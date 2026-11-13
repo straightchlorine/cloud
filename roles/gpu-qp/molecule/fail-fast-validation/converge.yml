@@ -4,11 +4,10 @@
   become: true
   vars:
     ansible_user: root
-    # The device-presence check is a real-host gate; the cases below must fail
-    # for the variable/condition under test, not for a missing GPU.
+    # Skipping the device check keeps the cases below failing for the variable under test, not for a missing GPU.
     gpu_qp_require_nvidia_device: false
   tasks:
-    # Case 1: the required gpu_qp_cuda_arch is undefined (not in role defaults).
+    # Case 1: the required gpu_qp_cuda_arch is undefined, because the role defaults do not set it.
     - name: "Case 1: validate.yml fails when gpu_qp_cuda_arch is missing"
       block:
         - name: Run the real validate.yml with gpu_qp_cuda_arch undefined
@@ -21,8 +20,8 @@
             msg: "validate.yml did not fail fast on a missing gpu_qp_cuda_arch"
       rescue:
         - name: Assert the failure was for the missing gpu_qp_cuda_arch variable specifically
-          # A looped fail task's own top-level msg is the generic "One or more
-          # items failed" - the per-item detail lives in .results.
+          # The top-level msg of a looped fail task is the generic "One or more items failed".
+          # The per-item detail lives in .results.
           ansible.builtin.assert:
             that:
               - ansible_failed_result.results is defined
@@ -34,16 +33,15 @@
             success_msg: "[OK] validate.yml correctly failed on the missing gpu_qp_cuda_arch variable"
 
         - name: Record case 1 as passed for verify.yml
-          # A file, not set_fact: converge and verify are separate
-          # ansible-playbook processes. force: false keeps the idempotence rerun
-          # unchanged.
+          # A marker file carries the result because converge and verify are separate ansible-playbook processes.
+          # Setting force to false keeps the idempotence rerun unchanged.
           ansible.builtin.copy:
             content: ""
             dest: /tmp/molecule-case1.passed
             force: false
             mode: "0644"
 
-    # Case 2: a syntactically valid but unsupported compute capability.
+    # Case 2: a well-formed compute capability that the role does not support.
     - name: "Case 2: validate.yml fails when gpu_qp_cuda_arch is not a known capability"
       block:
         - name: Run the real validate.yml with gpu_qp_cuda_arch 5.0

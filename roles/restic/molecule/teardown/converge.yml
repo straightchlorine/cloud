@@ -1,0 +1,73 @@
+---
+- name: Converge - deploy a job, then run the real teardown
+  hosts: all
+  become: true
+  vars:
+    restic_connection_user: root  # molecule connects as root; production derives it from ansible_user
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: molecule-test
+    restic_init_repository: true
+    # The parent exists and belongs to someone else: the role must create only the restic directory inside it,
+    # and the teardown must remove only that directory.
+    restic_cache_dir: /srv/pre-parent/restic
+  tasks:
+    # ARRANGE phase: the teardown removes all of it, so idempotence skips it.
+    - name: Deploy one job
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: job
+      vars:
+        restic_job:
+          name: ok
+          repository: /srv/molecule-repos/ok
+          password: molecule-restic-password-ok
+          sources: [/srv/molecule-src]
+          schedule: "*-*-* 03:00:00"
+          timeout: 10min
+          memory_max_mib: 512
+          retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+      tags: [molecule-idempotence-notest]
+
+    - name: Flush deploy-phase handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Teardown refuses to run without the confirm fact
+      block:
+        - name: Run the restic teardown unconfirmed
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: teardown
+
+        - name: Fail if the unconfirmed teardown ran
+          ansible.builtin.fail:
+            msg: restic teardown ran without teardown_confirmed
+      rescue:
+        - name: Assert the refusal names teardown_confirmed
+          ansible.builtin.assert:
+            that: "'restic teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+
+    - name: Teardown refuses a cache directory that is not its own restic directory
+      block:
+        - name: Run the confirmed teardown with the shared parent as the cache directory
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: teardown
+          vars:
+            teardown_confirmed: true
+            restic_cache_dir: /srv/pre-parent
+
+        - name: Fail if the teardown accepted it
+          ansible.builtin.fail:
+            msg: restic teardown accepted a cache directory that is not named restic
+      rescue:
+        - name: Assert the refusal names the rule and nothing was removed
+          ansible.builtin.assert:
+            that: "ansible_failed_result.msg is match('restic_cache_dir: last component must be exactly restic')"
+
+    - name: Run the real restic teardown
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: teardown
+      vars:
+        teardown_confirmed: true

@@ -36,18 +36,51 @@ vault_ntfy_api_key: "your-ntfy-api-key"
 
 # Backup Configuration
 # Storage connection
-vault_backup_repository_base: "sftp:backup-user@backup-server.com:/backups"
+vault_backup_repository_base: "/home/backup/restic-repos"
 vault_backup_storage_host: "backup-server.com"
 vault_backup_storage_user: "backup-user"
 vault_backup_storage_port: 22
+# Output of: ssh-keyscan -p <port> <host>, as a known_hosts line with the [host]:port prefix
+vault_backup_storage_known_hosts: "[u12345.your-storagebox.de]:23 ssh-ed25519 AAAA...replace"
 
 # Per-service backup passwords (MUST be unique, 32+ characters each)
 # Validation: Minimum 32 characters
 # Generate: openssl rand -base64 32
 vault_restic_dns_password: "your-32-character-secure-restic-password"
 vault_restic_music_password: "your-32-character-secure-restic-password"
+vault_restic_station_arch_password: "your-32-character-secure-restic-password"
+vault_restic_portable_password: "your-32-character-secure-restic-password"
+vault_restic_pi_test_media_password: "your-32-character-secure-restic-password"
 vault_restic_automation_password: "your-32-character-secure-restic-password"
 vault_restic_monitoring_password: "your-32-character-secure-restic-password"
+
+# NetworkManager connection names (usually the SSID) of the metered links portable must not back up over
+vault_portable_metered_connections:
+  - "your-phone-hotspot-name"
+
+# Optional per-host Storage Box private key (roles/restic restic_storage_key). A host opts in
+# from its host_vars with: restic_storage_key: "{{ vault_restic_storage_key_<host> }}"
+# Generate: ssh-keygen -t ed25519 -N '' -f key; authorize key.pub on the Storage Box
+vault_restic_storage_key_station_arch: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  your-storage-box-private-key-replace
+  -----END OPENSSH PRIVATE KEY-----
+vault_restic_storage_key_portable: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  your-storage-box-private-key-replace
+  -----END OPENSSH PRIVATE KEY-----
+vault_restic_storage_key_pi_automation: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  your-storage-box-private-key-replace
+  -----END OPENSSH PRIVATE KEY-----
+vault_restic_storage_key_media: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  your-storage-box-private-key-replace
+  -----END OPENSSH PRIVATE KEY-----
+vault_restic_storage_key_pi_test_media: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  your-storage-box-private-key-replace
+  -----END OPENSSH PRIVATE KEY-----
 
 # ==============================================================================
 # OPTIONAL VARIABLES - Only required for specific features
@@ -59,12 +92,14 @@ vault_youtube_playlists:
   - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
 
 # SMTP Alerting (monitoring)
-# Required only if: alerting enabled
+# Required only if: alerting enabled (read by host_vars/debian-monitoring.yml)
 vault_smtp_host: "smtp.gmail.com"
 vault_smtp_port: 587
-vault_smtp_username: "alerts@yourdomain.com"
-vault_smtp_password: "your-smtp-app-password"
 vault_alertmanager_email: "admin@yourdomain.com"
+
+# Hardcover metadata key for Calibre-Web-Automated (automation role).
+# Optional: CWA runs without it. Uncomment to enable.
+# vault_hardcover_token: "your-hardcover-api-token"
 
 # Honeypot VPS (honeywatch)
 # Cloudflare R2 backup target. Token scope: Object Read & Write (Read is needed

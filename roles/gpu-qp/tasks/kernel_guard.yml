@@ -1,5 +1,5 @@
 ---
-# After data.yml: the timer runs kernel-guard.sh from the installed helper directory.
+# This file must follow data.yml because the timer runs kernel-guard.sh from the installed helper directory.
 
 - name: Install the kernel guard units
   ansible.builtin.template:
@@ -51,11 +51,13 @@
     enabled: false
     state: stopped
   become: true
+  # The timer unit does not exist on a host that never deployed the guard.
   failed_when: false
   when: not gpu_qp_kernel_guard
 
 - name: Undo the kernel pin
-  # The guard's own unpin: apt config, kernel.pin, and GRUB_DEFAULT only when it carries the marker.
+  # The guard's own unpin removes the apt config and kernel.pin.
+  # It resets GRUB_DEFAULT only when that line carries the guard's marker.
   ansible.builtin.command:
     cmd: bash {{ gpu_qp_lib_path }}/kernel-guard.sh --unpin
     removes: "{{ gpu_qp_lib_path }}/kernel-guard.sh"

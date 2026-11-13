@@ -1,0 +1,50 @@
+---
+- name: Converge - the real restic role on the cron scheduler, local repositories
+  hosts: all
+  become: true
+  vars:
+    # A systemd host that asks for cron: everything the role does for an OpenRC host except the init script.
+    restic_scheduler: cron
+    restic_cron_service: cron
+    restic_connection_user: root
+    vault_ntfy_api_key: molecule-test-ntfy-key
+    ntfy_server_url: "https://ntfy.example.test"
+    ntfy_topic: molecule-test
+    restic_init_repository: true
+    molecule_job: &molecule_job
+      sources: [/srv/molecule-src]
+      excludes: [/srv/molecule-src/skip]
+      timeout: 10min
+      memory_max_mib: 512
+      retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+  tasks:
+    - name: Deploy four jobs through the role entry point
+      ansible.builtin.include_role:
+        name: restic
+      vars:
+        restic_jobs:
+          - <<: *molecule_job
+            name: cr
+            repository: /srv/molecule-repos/cr
+            password: molecule-restic-password-cr
+            cron_schedule: "*/30 8-18 * * 1-5"
+          - <<: *molecule_job
+            name: crgate
+            repository: /srv/molecule-repos/crgate
+            password: molecule-restic-password-crgate
+            cron_schedule: "17 * * * *"
+            skip_metered: true
+            skip_on_battery: true
+            metered_connections: ["My Phone", "Zoë’s \"iPhone\"", "Ünï \"q\" back\\slash", "Lab: Guest"]
+          - <<: *molecule_job
+            name: crbroken
+            repository: /srv/molecule-repos/crbroken
+            password: molecule-restic-password-crbroken
+            cron_schedule: "0 3 * * 0"
+            sources: [/srv/molecule-missing]
+          - <<: *molecule_job
+            name: crslow
+            repository: /srv/molecule-repos/crslow
+            password: molecule-restic-password-crslow
+            cron_schedule: "5,35 * 1,15 * *"
+            timeout: 2s

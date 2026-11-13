@@ -59,7 +59,7 @@ vault_backup_storage_user: "backup-user"
 vault_backup_storage_port: 22
 
 # Repository base path
-vault_backup_repository_base: "sftp:backup-user@backup-server.com:/backups"
+vault_backup_repository_base: "/home/backup/restic-repos"
 
 # Service-specific passwords (32+ characters minimum)
 vault_restic_dns_password: "..."

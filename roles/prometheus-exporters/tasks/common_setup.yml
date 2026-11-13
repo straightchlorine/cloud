@@ -32,6 +32,11 @@
     - "{{ prometheus_exporters_config_dir }}"
     - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
 
+- name: Refresh the apt cache when it is stale
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: package_cache_update
+
 - name: Install required packages for exporters
   ansible.builtin.apt:
     name:
@@ -41,14 +46,6 @@
       - gzip
       - jq
     state: present
-    update_cache: true
-  become: true
-
-- name: Create systemd service template directory
-  ansible.builtin.file:
-    path: /etc/systemd/system
-    state: directory
-    mode: '0755'
   become: true
 
 - name: Set up logrotate for exporter logs

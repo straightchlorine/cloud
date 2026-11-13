@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# media-import - the interactive half of the pipeline. A wrapper: every pass,
-# overlay and beets invocation lives in media-sync (see its header), so there is
-# nothing to keep in sync here. Needs a terminal.
+# media-import - the interactive half of the pipeline. Apart from --library and
+# --quarantine it is a wrapper: every pass, overlay and beets invocation lives in
+# media-sync (see its header), so there is nothing to keep in sync here. Needs a
+# terminal.
 #
 #   media-import [<dir>]            a review session: the release pass asks per
 #                                   file (pick a candidate by number, E to search
@@ -24,7 +25,7 @@
 #
 # Answering "use as-is" marks the track reviewed (see reviewed.py), so no later
 # `--upgrade`/`--retag` re-matches something you chose to keep as it is.
-# Ctrl-C stops it cleanly; nothing is half-applied.
+# Ctrl-C stops it cleanly.
 set -euo pipefail
 
 # The library review runs on the host's python, not in a beets container: it reads
@@ -38,7 +39,7 @@ case "${1:-}" in
         [ "$1" = --library ] || cmd=quarantine
         shift
         review_args=(--review "$LIB/state/review" --db "$DB" --music "$LIB/music")
-        # the apply's file limit, so the end-of-session summary can say when --force is needed
+        # The apply's file limit lets the end-of-session summary say when --force is needed.
         [ "$cmd" = quarantine ] || review_args+=(--mb-url "$MB_URL" --downloads "$LIB/downloads"
             --max-files {{ media_apply_max_files }})
         exec python3 "$LIB/beets/tools/media_review.py" "$cmd" "${review_args[@]}" "$@" ;;

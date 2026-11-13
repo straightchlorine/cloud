@@ -14,11 +14,10 @@ platforms:
 provisioner:
   name: ansible
   env:
-    # CI/local both run `cd roles/<role> && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/prometheus-exporters - one level up
-    # is roles/, letting validate.yml's include_role of common resolve.
-    # Without it the include_role itself errors, and a scenario that accepts
-    # ANY failure would pass for that wrong reason.
+    # Molecule runs from the role directory, so MOLECULE_PROJECT_DIRECTORY is roles/prometheus-exporters.
+    # Its parent is roles/, which lets the include_role of common in validate.yml resolve.
+    # Without that, the include_role itself would error.
+    # A scenario that accepts any failure would then pass for the wrong reason.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 
 verifier:

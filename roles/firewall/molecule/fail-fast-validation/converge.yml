@@ -3,12 +3,8 @@
   hosts: all
   vars:
     timezone: UTC
-    # Intentionally omit required variables:
-    # - firewall_enabled
-    # - firewall_policy_incoming
-    # - firewall_policy_outgoing
-    # - firewall_policy_routed
-    # This tests that role handles missing configuration gracefully
+    # The firewall policy variables are left undefined on purpose.
+    # The block below only installs ufw and never includes the role, so it does not exercise the role's validation.
   tasks:
     - name: Test firewall without required variables
       block:

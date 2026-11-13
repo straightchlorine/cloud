@@ -1,7 +1,6 @@
 ---
-# The NVIDIA driver and container toolkit are deliberately left in place - they
-# are host prerequisites, not role-owned state. The stack, the wrapper, its helper
-# directory and the local image are what this removes.
+# This leaves the NVIDIA driver and container toolkit in place because they are host prerequisites.
+# It removes the stack, the wrapper, its helper directory and the local image.
 
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.include_role:
@@ -37,6 +36,7 @@
     state: absent
   become: true
   become_user: "{{ ansible_user }}"
+  # An image that is still in use must not abort the teardown.
   failed_when: false
   when: not gpu_qp_teardown_keep_image
 
@@ -46,6 +46,7 @@
     state: absent
   become: true
   become_user: "{{ ansible_user }}"
+  # An image that is still in use must not abort the teardown.
   failed_when: false
 
 - name: Verify the gpu-qp artifacts are gone

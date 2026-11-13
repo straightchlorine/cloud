@@ -9,15 +9,16 @@
     - /boot/cmdline.txt
   register: common_rpi_cmdline_stats
   when:
-    - (ansible_facts['os_family'] | default(ansible_os_family)) == "Debian"
-    - (device_type | default('')).startswith('rpi') or (hardware_platform | default('')).startswith('rpi')
+    - ansible_facts['os_family'] == "Debian"
+    # device_type is host_vars input and absent in standalone runs; every Pi type starts with rpi.
+    - device_type is defined
+    - device_type is match('rpi')
 
 - name: Resolve active cmdline.txt path
   ansible.builtin.set_fact:
     common_rpi_cmdline_path: >-
-      {{ (common_rpi_cmdline_stats.results | default([])
-         | selectattr('stat.exists', 'defined')
-         | selectattr('stat.exists') | map(attribute='item') | list | first) | default('') }}
+      {{ (common_rpi_cmdline_stats.results | selectattr('stat.exists')
+         | map(attribute='item') | list + ['']) | first }}
   when:
     - common_rpi_cmdline_stats is defined
     - not common_rpi_cmdline_stats is skipped
@@ -44,7 +45,7 @@
     dest: "{{ common_rpi_cmdline_path }}"
     owner: root
     group: root
-    mode: "0755"
+    mode: "0644"
     # No `backup: true`: cmdline.txt lives on the vfat boot partition, and
     # Ansible's backup name embeds a timestamp with ':' - illegal on vfat, so
     # the copy fails with [Errno 22] Invalid argument. Content is rebuilt from

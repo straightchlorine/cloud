@@ -1,8 +1,6 @@
 ---
-# Woodpecker CI — Molecule tests
-# Depends on lint passing first — won't run if lint fails
-# Per-role images: Debian 13 for the apt-based fleet roles, Rocky 9 for the
-# dnf-based honeypot.
+# Debian 13 is the image for the apt-based fleet roles.
+# Rocky 9 is the image for the dnf-based honeypot and honeybench roles.
 
 depends_on:
   - lint
@@ -24,15 +22,24 @@ labels:
   platform: linux/amd64
 
 matrix:
-  # Only roles whose molecule scenarios exercise the real task files run in CI:
-  # fixture-based scenarios burn runner resources without catching regressions.
-  # Add a role here once its scenarios follow docs/testing/molecule-standard.md.
+  # Only roles whose scenarios exercise the real task files run here.
+  # Fixture-based scenarios burn runner time without catching regressions.
+  # Add a role once its scenarios follow docs/testing/molecule-standard.md.
+  # The firewall role stays out because its scenarios are still tautological.
+  # A scenario the runner cannot host carries a molecule/<scenario>/ci-skip file holding the reason.
+  # The loop prints that reason and moves on.
   ROLE:
+    - common
+    - os
+    - hardware
+    - prometheus-exporters
     - dns
     - automation
     - media
     - honeypot
+    - honeybench
     - gpu-qp
+    - restic
 
 steps:
   - name: checkout
@@ -41,7 +48,7 @@ steps:
       depth: 1
 
   - name: molecule-test
-    image: quay.io/podman/stable:latest
+    image: quay.io/podman/stable:v5.8.9
     pull: true
     privileged: true
     backend_options:
@@ -56,10 +63,10 @@ steps:
     commands:
       - dnf install -y python3 python3-pip git containers-common
       - mkdir -p /etc/containers
-      # vfs copies every image layer in full (~6 GB for the Debian 13 image); two
-      # such steps at once push the node into DiskPressure and get evicted
-      # (exit 137). Native overlay cannot sit on the step's own overlay rootfs,
-      # but the workspace volume under /woodpecker is a plain host directory.
+      # The vfs storage driver copies every image layer in full, about 6 GB for the Debian 13 image.
+      # Two such steps at once push the node into DiskPressure and get evicted with exit 137.
+      # Native overlay cannot sit on the step's own overlay rootfs.
+      # The workspace volume under /woodpecker is a plain host directory, so it can.
       - |
         cat > /etc/containers/storage.conf << 'CONF'
         [storage]
@@ -71,16 +78,19 @@ steps:
         [containers]
         utsns = "private"
         CONF
-      - pip install 'ansible-core>=2.17,<2.22' 'molecule>=26.8.0' 'molecule-plugins[podman]>=26.7.15' 'netaddr>=1.3.0'
+      - pip install -r requirements.txt
       - ansible-galaxy collection install -r requirements.yml
-      # honeypot is the RedHat-family exception (Rocky 9).
+      # The honeypot and honeybench roles target RedHat-family hosts, so they use the Rocky 9 image.
       - |
-        if [ "${ROLE}" = "honeypot" ]; then
-          export MOLECULE_IMAGE="docker.io/geerlingguy/docker-rockylinux9-ansible:latest"
-        else
-          export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest"
-        fi
+        case "${ROLE}" in
+          honeypot|honeybench) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-rockylinux9-ansible:latest" ;;
+          *) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest" ;;
+        esac
         cd roles/${ROLE}
         for dir in molecule/*/; do
+          if [ -f "${dir}ci-skip" ]; then
+            echo "SKIP $(basename "$dir"): $(cat "${dir}ci-skip")"
+            continue
+          fi
           molecule test -s "$(basename "$dir")" || exit 1
         done

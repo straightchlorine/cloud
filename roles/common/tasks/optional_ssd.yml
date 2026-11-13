@@ -14,7 +14,7 @@
 - name: Set SSD presence
   ansible.builtin.set_fact:
     common_ssd_present: >-
-      {{ common_ssd_mounted or (common_optional_drive_present | default(false)) }}
+      {{ common_ssd_mounted or common_optional_drive_present }}
 
 - name: Report running on the SD card
   ansible.builtin.debug:
@@ -29,8 +29,8 @@
     - not common_ssd_mounted
   block:
     - name: Determine whether the drive needs formatting
-      # The explicit wipe opt-in is needed because a reused drive already
-      # carrying our filesystem would otherwise never be reformatted.
+      # common_ssd_format forces a wipe, because a drive that already has the wanted filesystem would
+      # otherwise never be reformatted.
       ansible.builtin.set_fact:
         common_ssd_needs_format: >-
           {{ (common_optional_drive_fstype != common_ssd_filesystem)
@@ -87,8 +87,8 @@
         - common_optional_drive_is_whole_disk
 
     - name: Determine the partition to format and mount
-      # The '1' suffix only applies to a partition we just created; a whole disk
-      # that already matched our filesystem was formatted bare, so use the device.
+      # The '1' suffix applies only to a partition that formatting creates on a whole disk.
+      # A whole disk that already has the wanted filesystem is used as the bare device.
       ansible.builtin.set_fact:
         common_ssd_target: >-
           {{ (common_optional_drive_device ~ '1')
@@ -120,8 +120,8 @@
       become: true
 
     - name: Force a Docker restart after a fresh SSD format
-      # dockerd keeps writing into subdirectories of a wiped and remounted
-      # data-root that no longer exist; state: started would not restart it.
+      # After the data-root is wiped and remounted, dockerd still writes to subdirectories that no longer exist.
+      # The service is already running, so state: started would not restart it.
       ansible.builtin.debug:
         msg: "Fresh SSD format - Docker will be restarted to reinitialize its data-root"
       changed_when: true
@@ -137,8 +137,7 @@
     - common_ssd_journald_enabled | bool
 
 - name: Move Docker's data-root onto the SSD
-  # common/docker.yml only sets data-root when this fact is defined.
-  # The common_ prefix is intentional: the variable belongs to the common role.
+  # common/docker.yml sets data-root only when this fact is defined.
   ansible.builtin.set_fact:
     common_docker_data_root: "{{ common_ssd_mount_path }}/docker"
   when: common_ssd_present

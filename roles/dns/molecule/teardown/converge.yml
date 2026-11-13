@@ -3,13 +3,13 @@
   hosts: all
   become: true
   vars:
+    # The role's Syncthing teardown resolves common_syncthing_home from ansible_user.
+    ansible_user: root
     vault_pihole_webpassword: molecule-test-password
     vault_ntfy_api_key: molecule-test-ntfy-key
     ntfy_server_url: "https://ntfy.example.test"
     ntfy_topic: "molecule-test"
-    # Public resolver: the teardown restores a plain resolv.conf from these
-    # servers and then verifies resolution - a LAN address would never
-    # resolve from CI.
+    # The teardown writes these servers into resolv.conf and then checks resolution, so they must be reachable from CI.
     dns_pihole_dns_servers:
       - 9.9.9.9
     common_ntp_upstream_server: pool.ntp.org
@@ -21,14 +21,10 @@
     dns_backup_owner: molecule
     common_auto_updates_reboot_if_required: true
   tasks:
-    # Deploy side: the container-safe parts of a real dns deploy, plus the
-    # common helpers the role re-applies after a teardown (so the teardown
-    # has the real things to remove - real scripts, real cron entries).
-    # All tagged molecule-idempotence-notest: this is the scenario's ARRANGE
-    # phase - the teardown below removes everything it creates, so the
-    # idempotence rerun must skip it (re-running it would re-create state
-    # and report changed, failing the run; the system under test here is
-    # the teardown, which stays untagged and must converge).
+    # The deploy tasks run the container-safe parts of a real dns deploy plus the common helpers.
+    # The teardown then has real scripts and cron entries to remove.
+    # They all carry molecule-idempotence-notest because they only arrange state for the teardown.
+    # A rerun would recreate what the teardown removed and report changes, while the untagged teardown must converge.
     - name: Deploy the real chrony setup
       ansible.builtin.include_role:
         name: common
@@ -59,17 +55,15 @@
         tasks_from: auto_updates
       tags: [molecule-idempotence-notest]
 
-    # Run the deploy-phase handlers (e.g. Restart chrony) now, while their
-    # services still exist. On a real host deploy and teardown are separate
-    # playbook runs; in this scenario they share one play, and a handler
-    # left pending here would fire after the teardown purged chrony.
+    # The deploy handlers, such as Restart chrony, must run while their services still exist.
+    # A real host runs deploy and teardown as separate playbooks, but here they share one play.
+    # A handler left pending would fire after the teardown purged chrony.
     - name: Flush deploy-phase handlers
       ansible.builtin.meta: flush_handlers
       tags: [molecule-idempotence-notest]
 
-    # Fixture side: minimal stand-ins for what the Pi-hole installer would
-    # have created (basic-install.sh cannot run in a container). One-shot,
-    # hence molecule-idempotence-notest.
+    # These fixtures are minimal stand-ins for what the Pi-hole installer creates, because it cannot run in a container.
+    # They are one-shot, hence molecule-idempotence-notest.
     - name: Create the fake Pi-hole config directory
       ansible.builtin.file:
         path: /etc/pihole
@@ -115,6 +109,17 @@
         system: true
       tags: [molecule-idempotence-notest]
 
+    - name: Create a foreign zram unit fixture
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Foreign zram fixture
+          [Service]
+          ExecStart=/bin/true
+        dest: /etc/systemd/system/foreign-zram.service
+        mode: "0644"
+      tags: [molecule-idempotence-notest]
+
     - name: Teardown refuses to run without the confirm fact
       block:
         - name: Run the dns teardown unconfirmed
@@ -131,30 +136,12 @@
             that:
               - "'dns teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
 
-    # The real teardown, exactly as playbooks/dns-teardown.yml would run it
-    # after setting teardown_confirmed. Its own trailing self-verification
-    # (artifacts gone, no listeners on 53/80) runs as part of this include.
+    # This runs the teardown as playbooks/dns-teardown.yml does after setting teardown_confirmed.
+    # It also tears down Syncthing and zram.
+    # Its final self-verification of removed artifacts and free Pi-hole ports runs as part of this include.
     - name: Run the real dns role teardown
       ansible.builtin.include_role:
         name: dns
         tasks_from: teardown
-      vars:
-        teardown_confirmed: true
-
-    - name: Create a foreign zram unit fixture
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Foreign zram fixture
-          [Service]
-          ExecStart=/bin/true
-        dest: /etc/systemd/system/foreign-zram.service
-        mode: "0644"
-      tags: [molecule-idempotence-notest]
-
-    - name: Run the real zram teardown
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: zram_teardown
       vars:
         teardown_confirmed: true

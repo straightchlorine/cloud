@@ -8,11 +8,9 @@
     domain_name: example.test
     vault_domain_name: example.test
     vault_letsencrypt_email: test@example.test
-    # 32 chars - validate.yml refuses a malformed APP_KEY (Laravel's encrypter
-    # fatal "Unsupported cipher or incorrect key length" 500s every route).
+    # The validate.yml file refuses a malformed APP_KEY, and this key has the accepted raw length.
     vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
-    # 32 hex chars - validate.yml refuses anything else (Firefly rejects a
-    # differently-sized static cron token with HTTP 500 on its cron endpoint).
+    # The validate.yml file accepts only a 32-character hex cron token, and this token matches.
     vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
     vault_firefly_db_password: molecule-test-db-password
     vault_vaultwarden_admin_token: molecule-test-admin-token
@@ -23,7 +21,7 @@
     automation_backup_enabled: true
     automation_backup_dir: /tmp/molecule-automation-backup
     automation_backup_owner: molecule
-    restic_enabled: false
+    automation_restic_enabled: false
     common_start_stack: false
   pre_tasks:
     - name: Create the stack-home parent (validate.yml asserts it exists)
@@ -33,20 +31,17 @@
         mode: "0755"
 
     - name: Publish fixture userns-remap facts
-      # docker.yml (deliberately excluded here) publishes these on a real
-      # host; stack.yml's ownership tasks read them. The fixture uid must sit inside
-      # the nested rootless-podman mapping (container uids 0-65536 only - the
-      # canonical dockremap base 165536 is outside it and chown fails with
-      # EINVAL).
+      # On a real host docker.yml publishes these facts, and the ownership tasks in stack.yml read them.
+      # The fixture value must sit inside the nested rootless-podman uid mapping.
+      # The canonical dockremap base lies outside that mapping, and chown would fail with EINVAL.
       ansible.builtin.set_fact:
         common_dockremap_uid: "10000"
         common_dockremap_gid: "10000"
 
   tasks:
-    # Deploy side (the ARRANGE phase): the container-safe parts of a real deploy,
-    # so the teardown has real things to remove. Tagged molecule-idempotence-notest
-    # because the teardown removes what this creates; the system under test is the
-    # teardown, which must converge on a rerun.
+    # The deploy tasks run the container-safe parts of a real deploy, so the teardown has real things to remove.
+    # They carry molecule-idempotence-notest because the teardown removes what they create.
+    # The untagged teardown is the system under test and must converge on a rerun.
     - name: Gather network facts for dynamic configuration
       ansible.builtin.include_role:
         name: common
@@ -65,9 +60,8 @@
         tasks_from: backup
       tags: [molecule-idempotence-notest]
 
-    # Fixture: what docker_stack_service would have created on a real host (a
-    # container has no docker.service, so the unit is faked here only to give
-    # the teardown a real unit file to stop and remove).
+    # On a real host docker_stack_service creates this unit, but a container has no docker.service.
+    # The fake unit only gives the teardown a unit file to stop and remove.
     - name: Create the fake stack service unit
       ansible.builtin.copy:
         content: |
@@ -98,9 +92,8 @@
             that:
               - "'automation teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
 
-    # The real teardown, as playbooks/automation-teardown.yml runs it once
-    # teardown_confirmed is set. Its own self-verification runs as part of this
-    # include; docker compose down is skipped by the docker-info guard.
+    # This runs the teardown as playbooks/automation-teardown.yml does once teardown_confirmed is set.
+    # Its self-verification runs as part of this include, and the docker info guard skips docker compose down.
     - name: Run the real automation role teardown
       ansible.builtin.include_role:
         name: automation

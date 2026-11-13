@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Honeywatch MaxMind GeoLite2 refresh: fetches fresh City + ASN databases into the
-# `geoip-data` docker volume, restarts the ingestor so it reopens its readers, and
+# Honeywatch MaxMind GeoLite2 refresh: fetches fresh City and ASN databases into the
+# GEOIP_VOLUME docker volume, restarts the ingestor so it reopens its readers, and
 # re-resolves stored IPs against the new data.
 #
-# Invoked by honeywatch-mmdb-refresh.timer, not directly. Env comes from
-# /etc/honeywatch/maxmind.env (MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY,
-# HONEYWATCH_DIR, GEOIP_VOLUME, INGESTOR_CONTAINER).
+# The script is invoked by honeywatch-mmdb-refresh.timer, not directly. Its environment comes from
+# /etc/honeywatch/maxmind.env, which sets MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY,
+# HONEYWATCH_DIR, GEOIP_VOLUME and INGESTOR_CONTAINER.
 
 set -euo pipefail
 
@@ -23,24 +23,14 @@ for v in "${required[@]}"; do
     fi
 done
 
-# Success notification. Failure is already covered by the unit's
-# OnFailure=honeywatch-notify@%n.service; this is the matching "it worked"
-# side, because a refresh that silently stops running is indistinguishable
-# from one that never had anything to do. Best-effort by design: a broken
-# ntfy must never turn a good refresh into a failed unit.
+# The unit's OnFailure handler covers failures, but a refresh that silently stops
+# running is indistinguishable from one that never had anything to do, so success is reported too.
+# This is best-effort, because a broken ntfy must never turn a good refresh into a failed unit.
 notify_success() {
-    [ -n "${NTFY_URL:-}" ] || return 0
     local host
     host=$(hostname -s)
-    set -- --silent --fail --max-time 10 \
-        -H "Title: honeywatch: mmdb refresh ok on ${host}" \
-        -H "Tags: white_check_mark,globe_with_meridians"
-    if [ -n "${NTFY_TOKEN:-}" ]; then
-        set -- "$@" -H "Authorization: Bearer ${NTFY_TOKEN}"
-    fi
-    curl "$@" \
-        -d "host=${host} - GeoLite2 City+ASN refreshed; ${reclassify_summary}" \
-        "$NTFY_URL" >/dev/null 2>&1 || true
+    /usr/local/sbin/honeywatch-ntfy "honeywatch: mmdb refresh ok on ${host}" "white_check_mark,globe_with_meridians" \
+        "host=${host} - GeoLite2 City+ASN refreshed; ${reclassify_summary}"
 }
 
 FETCH_SCRIPT="${HONEYWATCH_DIR}/scripts/fetch-mmdb.sh"
@@ -49,9 +39,8 @@ if [ ! -x "$FETCH_SCRIPT" ]; then
     exit 1
 fi
 
-# Resolve the host path of the named volume. `docker volume inspect`
-# returns the mountpoint regardless of whether any container is
-# currently using it.
+# Resolve the host path of the named volume.
+# `docker volume inspect` returns the mountpoint whether or not a container uses the volume.
 mountpoint=$(docker volume inspect "$GEOIP_VOLUME" --format '{{.Mountpoint}}' 2>/dev/null || true)
 if [ -z "$mountpoint" ]; then
     echo "honeywatch-mmdb-refresh: docker volume '$GEOIP_VOLUME' not found; bring the stack up at least once first" >&2
@@ -76,11 +65,10 @@ if command -v chcon >/dev/null 2>&1; then
     chcon -Rt container_file_t "$mountpoint" || true
 fi
 
-# Reopen readers against the new mmdb. Restart by container_name with
-# plain `docker restart` rather than `docker compose restart` - the
-# latter parses the entire compose file and would fail when
-# API_VERSION / INGESTOR_VERSION env vars aren't present in this
-# systemd unit's environment (same reasoning as honeywatch-backup).
+# Restarting the ingestor makes it reopen its readers against the new mmdb files.
+# Plain `docker restart` by container name is used instead of `docker compose restart`,
+# which parses the whole compose file and fails without API_VERSION and INGESTOR_VERSION
+# in this unit's environment.
 if docker inspect -f '{{.State.Running}}' "$INGESTOR_CONTAINER" 2>/dev/null | grep -q true; then
     echo "honeywatch-mmdb-refresh: restarting ${INGESTOR_CONTAINER}"
     docker restart "$INGESTOR_CONTAINER" >/dev/null
@@ -88,16 +76,15 @@ else
     echo "honeywatch-mmdb-refresh: ${INGESTOR_CONTAINER} not running; new mmdb will be picked up on next start"
 fi
 
-# Re-resolve every stored source/destination IP against the fresh mmdb, otherwise
-# only IPs seen after the restart benefit. Safe alongside the live ingestor: it
-# only writes geo_locations, from a separate process with its own empty cache.
+# Re-resolve every stored source and destination IP against the fresh mmdb.
+# Otherwise only IPs seen after the restart benefit.
 reclassify_summary="skipped (ingestor not running)"
 if docker inspect -f '{{.State.Running}}' "$INGESTOR_CONTAINER" 2>/dev/null | grep -q true; then
     echo "honeywatch-mmdb-refresh: re-resolving stored IPs against the fresh mmdb"
     if reclassify_out=$(docker exec "$INGESTOR_CONTAINER" python -m src.reclassify_geoip 2>&1); then
         printf '%s\n' "$reclassify_out"
-        # The CLI's closing line is "done: looked_up=.. changed=.. ..." - carry
-        # it into the notification so the operator sees what actually moved.
+        # The notification carries the CLI's closing line, which starts with "done:",
+        # so the operator sees what actually changed.
         reclassify_summary=$(printf '%s\n' "$reclassify_out" | sed -n 's/.*\(done: .*\)/\1/p' | tail -n 1)
         : "${reclassify_summary:=completed}"
     else

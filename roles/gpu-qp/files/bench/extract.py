@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the thesis benchmark tables from the lane logs (brief section 7).
+"""Extract the thesis benchmark tables from the lane logs.
 
 One log file = one run, at <bench>/<phase>/<lane>/<molecule>_seed<S>.log, as written by
 lane.sh. Emits:
@@ -11,11 +11,10 @@ Usage: extract.py <run-dir> <out-dir>
 Phases are the directories of the run holding a state.tsv. Exits 1 when one of them has no cell log.
 
 Notes:
-  * backend_type comes from the log/dump: 'statevector_analytic' when the analytic line is
-    present, 'GPU' when backend_config.gpu, else 'CPU'.
-  * nfev == number of recorded objective calls == number of `Iters. done` rows (the solver
-    prints one row per call). nit is not in the log (the truncated path returns None) and is
-    emitted empty.
+  * backend_type comes from the log and the dump: 'statevector_analytic' when the analytic line
+    is present, 'GPU' when the log shows a GPU estimator or backend_config.gpu is set, else 'CPU'.
+  * nfev is the number of `Iters. done` rows, because the solver prints one row per objective
+    call. nit is not in the log and is emitted empty.
 """
 
 from __future__ import annotations
@@ -115,7 +114,7 @@ def build_run(log_path: Path, bench_root: Path, run_id: int) -> tuple[dict, list
     seed = int(seed_s)
 
     rows, s = parse_log(log_path)
-    # run_configs lives in <cell>.gen/ (per-cell gen mount); earlier runs used <cell>.d/
+    # run_configs lives in <cell>.gen/, the per-cell gen mount. A log without that directory falls back to <cell>.d/.
     cell = log_path.parent / f'{log_path.stem}.gen'
     cfg = load_dump(cell if cell.is_dir() else log_path.parent / f'{log_path.stem}.d')
 
@@ -188,8 +187,7 @@ def main(argv: list[str]) -> int:
     for old in (out / 'iterations').glob('iterations_run*.csv'):
         old.unlink()
 
-    # run_id is the ordinal in the sorted glob, counted before the filter (plot.py and the verify
-    # scripts join on it through the iteration file names).
+    # run_id is the ordinal in the sorted glob, counted before the filter, and it names the iteration files.
     phases = {d.name for d in bench.iterdir() if (d / 'state.tsv').is_file()}
     runs: list[dict] = []
     for run_id, log in enumerate(sorted(bench.glob('*/*/*_seed*.log')), start=1):

@@ -1,12 +1,12 @@
 ---
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-dns_pihole_version: "v6.4.3"  # Pin to verified release; override per host in host_vars.
-# A version change or this flag wipes /etc/pihole and reinstalls; settings made in
-# the web interface are lost (restore from the nightly Teleporter snapshot).
+dns_pihole_version: "v6.4.3"  # Pinned release; a host_vars override is allowed.
+# A version change or this flag wipes /etc/pihole and reinstalls.
+# Settings made in the web interface are lost, so restore them from the nightly Teleporter snapshot.
 dns_pihole_force_reinstall: false
-# vault_pihole_webpassword: MUST be set in vault/host_vars - no default.
+# vault_pihole_webpassword has no default and must be set in the vault or host_vars.
 dns_pihole_interface: "{{ primary_interface }}"
-# dns_pihole_dns_servers: MUST be set in host_vars - no default.
+# dns_pihole_dns_servers has no default and must be set in host_vars.
 
 dns_pihole_packages:
   - git
@@ -14,22 +14,21 @@ dns_pihole_packages:
   - ca-certificates
   - dnsutils
 
-# Pi-hole itself; Debian package updates are fleet-wide via the common role.
+# These settings schedule the Pi-hole update only, because the common role handles Debian package updates.
 dns_auto_updates_enabled: true
 dns_auto_update_time: "2:00"
 dns_auto_update_day: "Monday"
 
-# Local Syncthing backup (Teleporter + FTL DB); primary/off-site is restic.
+# The local Syncthing backup holds a Teleporter archive and the FTL database, while restic is the off-site copy.
 dns_backup_enabled: false
 dns_backup_retention: 14
 dns_backup_schedule_hour: "3"
 dns_backup_schedule_minute: "30"
-# Must be set in host_vars:
-# dns_backup_dir:   Syncthing-shared folder
-# dns_backup_owner: the Syncthing user
+# dns_backup_dir (the Syncthing-shared folder) and dns_backup_owner (the Syncthing user)
+# have no defaults and must be set in host_vars when the backup is enabled.
 
-# Optional attached drive - opt in per host; no-op if none is found (see storage.yml).
+# The optional attached drive is opt-in per host, and storage.yml does nothing when no drive is found.
 dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"
-dns_optional_drive_format: false  # DESTRUCTIVE if true - opt in per host
+dns_optional_drive_format: false  # True lets the role wipe the drive.
 dns_optional_drive_journald_enabled: true

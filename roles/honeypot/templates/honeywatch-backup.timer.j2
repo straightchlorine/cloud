@@ -5,11 +5,11 @@ Documentation=https://github.com/straightchlorine/honeywatch
 # {{ ansible_managed }}
 
 [Timer]
-# Absolute UTC time so DST shifts do not move the run.
+# The schedule is in UTC so daylight saving shifts do not move the run.
 OnCalendar={{ honeypot_backup_schedule }}
-# Spread runs so several honeypots sharing a bucket do not PUT at the same second.
+# The random delay spreads runs so several honeypots sharing a bucket do not upload at the same second.
 RandomizedDelaySec={{ honeypot_backup_randomized_delay }}
-# Run a missed backup on next boot if the timer fired while powered off.
+# Persistent runs a missed backup on the next boot if the timer elapsed while the host was off.
 Persistent=true
 Unit=honeywatch-backup.service
 AccuracySec=15min

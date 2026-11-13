@@ -1,9 +1,7 @@
 ---
-# NTP: chrony.yml syncs the clock on every fleet host (the CentOS honeypot is
-# excluded from the fleet base play). common_ntp_upstream_server is optional - set
-# it in host_vars only when a low-latency local source is known to run NTP.
-# common_ntp_server_enabled/allowed_networks gate this host advertising as an NTP
-# server (chrony.conf.j2 `allow` + a role-owned firewall rule).
+# The chrony task syncs the clock on every fleet host.
+# These two variables gate whether this host also serves NTP to other hosts.
+# Serving adds the `allow` lines in chrony.conf.j2 and needs a matching firewall rule from the owning role.
 common_ntp_server_enabled: false
 common_ntp_allowed_networks: []
 
@@ -12,37 +10,35 @@ common_fail2ban_enabled: true
 common_fail2ban_ssh_maxretry: 3
 common_fail2ban_ssh_bantime: 600
 
-# Unattended-upgrades (every host). Automatic-Reboot is off by default -
-# opt in per host. 05:00 clears the 03:00 restic window (2h timeout); stagger
-# per host so DNS is back before the others boot.
+# Automatic reboot is off by default and each host opts in.
+# The default reboot time leaves room for a nightly restic run, and an interrupted run is reported by restic-job
+# freshness.
+# Hosts override the time so that DNS is back up before the others reboot.
 common_auto_updates_reboot_if_required: false
 common_auto_updates_reboot_time: "05:00"
-# Runs before the 02:00 app-update and 03:00-05:00 backup slots; Debian's default
-# daytime dpkg run stalls small hosts.
+# Runs at night because Debian's default daytime dpkg run stalls small hosts.
+# It must finish before the app-update and backup jobs start.
 common_auto_updates_run_time: "01:00"
 
-# Common System Packages (can be overridden in group_vars)
+# An apt cache younger than this many seconds is not refreshed again.
+common_package_cache_valid_time: 21600
+
 common_packages:
   - curl
   - wget
   - git
   - htop
-  # btop: nicer live system monitor (CPU/mem/net/disk) for the Pi hosts
   - btop
   - vim
   - tmux
-  # fzf: scripts/media/pick.sh (album assignment, quarantine removal)
+  # roles/media/files/pick-core.sh uses fzf for album assignment and quarantine removal.
   - fzf
-  # mosh: interactive sessions that survive a flaky wifi hop
   - mosh
-  # kitty-terminfo: kitty sends TERM=xterm-kitty over ssh, and without its entry
-  # tmux refuses to start ("missing or unsuitable terminal")
+  # Kitty sends TERM=xterm-kitty over ssh, and tmux refuses to start without this terminfo entry.
   - kitty-terminfo
   - ufw
   - fail2ban
-  # cron: the role schedules jobs with ansible.builtin.cron (auto_updates,
-  # app_update, snapshot), which needs the crontab binary. Raspberry Pi OS and
-  # full Debian ship it; slim cloud/VPS images do not.
+  # The ansible.builtin.cron jobs need the crontab binary, which slim cloud images do not ship.
   - cron
   - logrotate
   - rsync
@@ -51,21 +47,20 @@ common_packages:
   - gnupg
   - lsb-release
 
-# Common Storage Configuration
-common_filesystem_utilities:
-  - e2fsprogs
-  - parted
-  - dosfstools
+common_log_rotation_days: 30
+common_log_compression: true
 
-# SSD configuration defaults
 common_ssd_filesystem: "ext4"
 common_ssd_mount_options: "defaults,noatime,errors=remount-ro"
 common_ssd_format: false
 
 # Stack management
 common_start_stack: true
+# The systemd unit name that docker_stack_service, stack_start, teardown_stack_service and the "Restart stack"
+# handler share.
+common_stack_unit: stack
+common_stack_restart_sec: "5"
 
-# Systemd service defaults
 common_remain_after_exit: "false"
 common_standard_output: "journal"
 common_standard_error: "journal"
@@ -88,38 +83,26 @@ common_zram_priority: 100
 # systemd's default cap is 10% of the filesystem, i.e. gigabytes of flash writes.
 common_journald_system_max_use: "50M"
 
-# Backup integration defaults
-common_backup_nice_level: 19
-common_backup_io_class: "idle"
-common_backup_schedule: "*-*-* 03:00:00"
-common_backup_randomized_delay: "1800s"
-common_backup_timeout: "2h"
-common_backup_tmp_dir: "{{ common_backup_base_path }}/tmp"
-
-# Port connectivity testing
-common_firewall_ports: []
-
-# Docker service defaults
 common_service_restart: "always"
+# docker-service.yml.j2 fills these into any healthcheck key a compose service leaves out.
+common_service_healthcheck_defaults:
+  interval: 30s
+  timeout: 10s
+  retries: "3"
+  start_period: 40s
 
-# Syncthing installation (optional, fleet-wide file sharing).
-# Set common_syncthing_enabled=true in host_vars to install Syncthing on all hosts.
-# Teardown is triggered by a teardown playbook's confirm flag (teardown_confirmed
-# fact), not a separate syncthing flag - see playbooks/dns-teardown.yml.
+# Setting common_syncthing_enabled to true installs Syncthing on the host.
+# Teardown has no flag of its own and runs when a teardown playbook sets teardown_confirmed (see playbooks/dns-
+# teardown.yml).
 common_syncthing_enabled: false
 common_syncthing_home: "/home/{{ ansible_user }}/.config/syncthing"
 
-# Hardware detection (device_type -> hardware_platform -> resource limits)
-# lives in the standalone 'hardware' role - see
-# roles/hardware/defaults/main.yml (hardware_profiles).
-
-# Only updates containers labelled com.centurylinklabs.watchtower.enable=true, so
-# pinned images stay put. Needs common_watchtower_env_vars in the stack .env.
+# Watchtower updates only containers labelled com.centurylinklabs.watchtower.enable=true, so pinned images stay put.
+# It needs common_watchtower_env_vars in the stack .env.
 #
-# The HTTP API port below is published for Prometheus, and by default Watchtower
-# skips its (rename-based) self-update whenever it has a published port - the new
-# container would collide with the old one's port. WATCHTOWER_EPHEMERAL_SELF_UPDATE
-# swaps in a short-lived orchestrator container instead, so self-update works anyway.
+# By default Watchtower skips its own update when it has a published port, because the renamed new container would
+# collide on that port.
+# WATCHTOWER_EPHEMERAL_SELF_UPDATE avoids this by updating through a short-lived helper container.
 common_watchtower_port: 8084
 common_watchtower_schedule: "0 0 2 * * *"
 common_watchtower_compose_service:
@@ -135,9 +118,7 @@ common_watchtower_compose_service:
     - "WATCHTOWER_SCHEDULE={{ common_watchtower_schedule }}"
     - "WATCHTOWER_CLEANUP=true"
     - "WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL}"
-    # The machine's own hostname (fact), not the inventory alias: the title reads
-    # "Watchtower updates on <hostname>", and pi-test-media is "rpi", pi-automation
-    # is "automation".
+    # The machine's own hostname is used instead of the inventory alias, and it differs from the alias on some hosts.
     - "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ ansible_facts['hostname'] }}"
     - "WATCHTOWER_NO_STARTUP_MESSAGE=true"
     - "WATCHTOWER_HTTP_API_ENDPOINTS=health,metrics"
@@ -156,20 +137,20 @@ common_watchtower_compose_service:
       cpus: "0.1"
 common_watchtower_env_vars:
   WATCHTOWER_API_TOKEN: "{{ vault_watchtower_api_token }}"
-  # shoutrrr's ntfy URL carries the token as the basic-auth PASSWORD (a
-  # username is rejected with 40301). Empty URL = watchtower is silent.
+  # The shoutrrr ntfy URL carries the token as the basic-auth password, and ntfy rejects it when sent as a username.
+  # An empty URL keeps Watchtower silent.
   WATCHTOWER_NOTIFICATION_URL: >-
     {{ 'ntfy://:' ~ vault_ntfy_api_key ~ '@' ~
     (ntfy_server_url | regex_replace('^https?://', '')) ~ '/' ~ ntfy_topic
     if vault_ntfy_api_key is defined else '' }}
 
-# Scraped by Prometheus from the monitoring host only (firewall_rules in host_vars).
+# Only the monitoring host may scrape this port, which each host's firewall_rules in host_vars enforce.
 common_cadvisor_port: 8085
 common_cadvisor_compose_service:
   service_name: cadvisor
-  # Patch releases only; bump the minor by hand.
+  # The minor version is bumped by hand, so only patch releases arrive without review.
   service_image: "ghcr.io/google/cadvisor:0.60"
-  # Needs docker.sock access, as watchtower does.
+  # cAdvisor reads the Docker socket, like Watchtower does, so it needs the host user namespace.
   service_userns_mode: "host"
   service_command:
     - "--housekeeping_interval=10s"
@@ -180,12 +161,12 @@ common_cadvisor_compose_service:
     - host: "{{ common_cadvisor_port }}"
       container: 8080
       bind_ip: "{{ primary_ip }}"
-  # data-root fact exists only with the SSD; else Docker's default path.
+  # The data-root fact exists only on hosts that set up the SSD, and other hosts use Docker's default path.
   service_volumes:
     - "/:/rootfs:ro"
     - "/var/run:/var/run:ro"
     - "/sys:/sys:ro"
-    - "{{ common_docker_data_root | default('/var/lib/docker') }}:/var/lib/docker:ro"
+    - "{{ common_docker_data_root if common_docker_data_root is defined else '/var/lib/docker' }}:/var/lib/docker:ro"
     - "/dev/disk:/dev/disk:ro"
   service_networks:
     - stack
@@ -198,8 +179,3 @@ common_cadvisor_compose_service:
     reservations:
       memory: 64M
       cpus: "0.05"
-
-# NVIDIA publishes the container toolkit apt repository under a per-arch path.
-common_nvidia_arch_map:
-  x86_64: "amd64"
-  aarch64: "arm64"

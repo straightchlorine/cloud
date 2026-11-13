@@ -1,11 +1,11 @@
 ---
-# Fixed by the role, not host settings (hence vars, not defaults).
+# These values are fixed by the role and are not host settings, so they live in vars and not in defaults.
 
-# Where the bench helpers are installed. Run trees under gpu_qp_bench_path are data only.
+# Directory where the bench helpers are installed, separate from the run trees under gpu_qp_bench_path.
 gpu_qp_lib_path: /usr/local/lib/gpu-qp
 
-# The helpers copied from files/bench/. bench.env and override.yml are templates and not listed.
-# The install loop, the stale-file purge, the dispatcher's manifest and molecule read this.
+# The helpers copied from files/bench/, without the templates bench.env and override.yml.
+# The install loop, the stale-file purge, the dispatcher's manifest and molecule all read this list.
 gpu_qp_bench_files:
   - cli.sh
   - env.sh

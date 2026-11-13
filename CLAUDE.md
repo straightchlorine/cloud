@@ -8,11 +8,17 @@ existing violations should be fixed when encountered.
 
 ```
 inventory/production/   hosts.yml, group_vars/, host_vars/, vault.yml.example
-playbooks/              site.yml (fleet), per-stack plays, dns-teardown.yml
-roles/                  common dns os hardware firewall backup backup-system
-                        monitoring prometheus-exporters automation media
-scripts/                per-role host check scripts (scripts/dns/validate-*.sh)
-docs/                   flat topic docs + docs/testing/ section
+playbooks/              site.yml (fleet), per-stack plays, per-role *-teardown.yml,
+                        backup/ (legacy coordinator play)
+roles/                  common os hardware firewall prometheus-exporters  (base)
+                        dns automation media gpu-qp monitoring            (stacks)
+                        restic backup                                     (backup)
+                        honeypot honeybench alloy                         (dnf hosts)
+scripts/                per-role host tooling: validate-clean.sh / validate-deploy.sh
+                        (scripts/dns, automation, media, gpu-qp), media pipeline
+                        helpers and tests, honeypot/restic helpers
+docs/                   flat topic docs + sections testing/, backup/, monitoring/;
+                        docs/wip/ holds gitignored drafts
 .woodpecker/            lint.yaml, test.yaml
 ```
 
@@ -35,8 +41,13 @@ file holds the standards it builds on.
 - **Single Source of Truth**: Common functionality must be centralized in shared roles
 - **DRY Principle**: Never duplicate code, tasks, or configuration
 - **Common Roles**: Use `roles/common/tasks/` for shared functionality (Docker,
-  packages, network facts, backup, syncthing, ntfy, board tuning - Wi-Fi power
-  save, zram, journald limits, etc.)
+  packages, network facts, syncthing, ntfy, board tuning - Wi-Fi power
+  save, zram, journald limits, etc.). `roles/common/README.md` lists every
+  task file with its `common_*` inputs; read it before writing a new helper
+- **Task inputs**: common task contracts use `common_*` variables (for
+  example `common_package_cache_valid_time`, `common_stack_uid` /
+  `common_stack_gid` published by `stack_user_ids.yml`); the firewall role's
+  per-host port list is `firewall_common_ports`
 - **Consolidated Templates**: Reuse templates and configuration patterns across roles
 - **Cross-role invocation**: Roles invoke common tasks with role-specific
   variables via `include_role: name=common tasks_from=<task>`
@@ -141,7 +152,7 @@ inventory/production/
   hosts.yml                       # Host definitions and group membership
   group_vars/
     all/all.yml                   # Global: domain, timezone, docker version
-    all/backup.yml                # Global: backup user, restic version
+    all/backup.yml                # Global: backup user, Storage Box connection
     services.yml                  # Service hosts: common systemd, backup, SSD
     prometheus.yml                # Monitored hosts: exporter config
     vault.yml.example             # Template for the vault-encrypted file
@@ -153,6 +164,9 @@ inventory/production/
     debian-monitoring.yml         # Monitoring-specific: grafana, prometheus
     backup_wyse.yml               # Coordinator-specific: backup targets
     station-arch.yml              # Workstation
+    gpu-station.yml               # GPU research host (gpu-qp)
+    centos-honeypot.yml           # Honeypot VPS
+    honeybench.yml                # Benchmark VM
 ```
 
 ## Acceptable Default Patterns
@@ -277,39 +291,43 @@ common builder:
 
 ## Backup Integration
 
-Wire any new service into the backup system by setting these variables in host_vars:
+`roles/restic` is the single restic engine: one hardened template unit
+(`restic-job@<job>`), one script, per-job data in `/etc/restic/<job>.*`.
+A stack role wires its data in by passing one job:
 
 ```yaml
-# Required
-backup_service_name: "my-service"
-restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/my-service"
-restic_password: "{{ vault_restic_my_service_password }}"
-backup_paths:
-  - "{{ my_service_stack_home }}"
-  - "{{ my_service_data_path }}"
-
-# Optional
-backup_schedule: "*-*-* 02:00:00"
-backup_exclude_patterns:
-  - "*.tmp"
-restic_memory_limit: "1G"
-```
-
-Then include the backup task in your role:
-
-```yaml
-- name: Configure backup
+- name: Configure the off-site restic backup
   ansible.builtin.include_role:
-    name: common
-    tasks_from: restic_backup
+    name: restic
+    tasks_from: job
+    apply:
+      tags: [backup]                           # include_role tags do not reach inner tasks
   vars:
-    common_backup_service_name: "{{ backup_service_name }}"
-    common_backup_paths: "{{ backup_paths }}"
+    restic_job:
+      name: my-service                         # unit instance, --tag, legacy backup-<name>
+      repository: "{{ my_service_restic_repository }}"
+      password: "{{ my_service_restic_password }}"   # vault_restic_my_service_password
+      schedule: "*-*-* 03:00:00"
+      timeout: 2h
+      memory_max_mib: 1024
+      retention: { daily: 14, weekly: 8, monthly: 12, yearly: 3 }
+      sources: ["{{ my_service_stack_home }}", "{{ my_service_data_path }}"]
+      excludes: ["*.log"]
+      fresh: [{ path: "{{ my_service_dump_dir }}", max_age_hours: 12 }]  # optional
+  when: my_service_restic_enabled
+  tags: [backup]
 ```
 
-This creates: password file, backup script, init script, systemd service+timer.
+Hosts with no owning stack role list jobs in host_vars `restic_jobs` and
+get the role from a play (station-arch: `workstations` in site.yml). A new
+repository needs `-e restic_init_repository=true` once; nothing else ever
+creates one. Each run notifies via ntfy; `restic-freshness.timer` alerts after
+boot and daily when a job has no good snapshot within `max_age_hours` or was
+interrupted; prune and `check` run weekly. Inspect or restore with
+`restic-job exec <job> snapshots|restore ...`. Job schema and operator
+commands: `roles/restic/README.md`.
 
-Coordinator-backed hosts (remote targets) are added to `backup_coordinator_targets`
+Coordinator-backed hosts (remote targets) are added to `coordinator_targets`
 in the coordinator's host_vars instead (see docs/backup/index.md).
 
 ---
@@ -325,7 +343,7 @@ device_type: "rpi4b"
 
 # Enable exporters as needed
 prometheus_exporters_node_exporter_enabled: true
-pi_hardware_metrics_enabled: false                   # Only for ARM hosts
+prometheus_exporters_pi_hardware_metrics_enabled: false  # Only for ARM hosts
 prometheus_exporters_pihole_exporter_enabled: false  # Only for DNS hosts
 ```
 
@@ -373,9 +391,14 @@ fixture-based scenarios; rebuild before extending them.
 
 ### CI (Woodpecker on Codeberg)
 
-1. **lint.yaml** -- every push: ansible-lint, yamllint, shellcheck, syntax checks
-2. **test.yaml** -- Molecule under Podman; matrix currently runs only `dns`.
-   Re-add each role to `.woodpecker/test.yaml` as its tests are rebuilt.
+1. **lint.yaml** -- every push: ansible-lint, yamllint, markdownlint, shellcheck, syntax checks
+2. **test.yaml** -- Molecule under Podman; every scenario of each matrix role
+   runs (`dns`, `automation`, `media`, `honeypot`, `honeybench`, `gpu-qp`,
+   `restic`, `common`, `os`, `hardware`, `prometheus-exporters`; Rocky 9 image
+   for `honeypot` and `honeybench`). A scenario a runner cannot host carries a
+   `ci-skip` file with the reason. `firewall` stays out (tautological
+   scenarios). Add each further role to `.woodpecker/test.yaml` as its tests
+   are rebuilt.
 
 - Failures must fail the pipeline -- no `|| true` on molecule steps
 - Line length limit: 120 characters (enforced by yamllint)
@@ -439,7 +462,7 @@ Checklist for adding a new service role:
 5. **Add to playbooks/site.yml** with appropriate tags
 6. **Add Molecule scenarios** per docs/testing/molecule-standard.md, then add
    the role to the matrix in `.woodpecker/test.yaml`
-7. **Wire backup** via the `restic_backup` common task
+7. **Wire backup** by passing a job to `include_role: restic tasks_from: job` (with `apply: tags`)
 8. **Wire monitoring** by adding to the `prometheus` group
 
 ### Adding New Hosts

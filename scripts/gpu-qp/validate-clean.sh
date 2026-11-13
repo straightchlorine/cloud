@@ -1,40 +1,21 @@
 #!/usr/bin/env bash
-# Usage: ./scripts/gpu-qp/validate-clean.sh [ansible-host-alias]
+# Run this after the gpu-qp teardown to confirm the host is clean. The counterpart is validate-deploy.sh.
+# Usage: ./scripts/gpu-qp/validate-clean.sh <ansible-host-alias>
 set -euo pipefail
 
-HOST="${1:-gpu-station}"
+HOST="${1:?Usage: ./scripts/gpu-qp/validate-clean.sh <ansible-host-alias>}"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/host-check.sh"
 
 echo "== Checking $HOST after gpu-qp teardown =="
 
-ssh "$HOST" bash -s <<'INNEREOF'
-set -u
-fail=0
-pass=0
-
-note_ok() {
-  echo "[OK]   $1"
-  pass=$((pass + 1))
-}
-
-note_left() {
-  echo "[FAIL] $1"
-  fail=$((fail + 1))
-}
-
-check_absent() {
-  if [ -e "$1" ]; then
-    note_left "$1 still exists"
-  else
-    note_ok "$1 absent"
-  fi
-}
+{
+  cat "$LIB"
+  cat <<'INNEREOF'
 
 echo "-- gpu-qp role state --"
-for tool in gpu-qp; do
-  check_absent "/usr/local/bin/$tool"
-done
+check_absent /usr/local/bin/gpu-qp
 check_absent /etc/systemd/system/stack.service
-# Stack home lives under the SSH user's home.
+# The stack home lies under the SSH user's home.
 check_absent "$HOME/gpu-qp"
 
 if systemctl is-active --quiet stack 2>/dev/null; then
@@ -65,18 +46,13 @@ else
   note_ok "docker daemon unavailable on this host (nothing to check)"
 fi
 
-# The driver and container toolkit are host prerequisites, deliberately kept.
+# The teardown deliberately keeps the driver and container toolkit because they are host prerequisites.
 if command -v nvidia-smi >/dev/null 2>&1; then
   note_ok "nvidia-smi still present (driver intentionally kept)"
 else
   note_ok "no nvidia-smi on this host (driver was not installed here)"
 fi
 
-echo
-echo "== Summary: $pass passed, $fail failed =="
-if [ "$fail" -gt 0 ]; then
-  echo "LEFTOVERS FOUND - inspect the [FAIL] lines above."
-  exit 1
-fi
-echo "Clean. The host is ready for a fresh gpu-qp deploy."
+summary_clean "Clean. The host is ready for a fresh gpu-qp deploy."
 INNEREOF
+} | ssh "$HOST" bash -s

@@ -1,7 +1,6 @@
 ---
-# Reverse the media role so a disposable test Pi can be re-tested from a
-# near-clean state. User data under media_library_path is intentionally left
-# in place.
+# This teardown leaves user data under media_library_path in place on purpose.
+# A disposable test Pi can therefore be redeployed from a near-clean state.
 
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.include_role:
@@ -26,45 +25,23 @@
     common_teardown_cron_jobs:
       - { name: "PATH", user: "{{ ansible_user }}", env: true }
       - { name: "Media nightly sync", user: "{{ ansible_user }}" }
+      - { name: "Media weekly apply", user: "{{ ansible_user }}" }
       - { name: "Media weekly retag", user: "{{ ansible_user }}" }
       - { name: "Media Syncthing local backup", user: root }
       - { name: "Weekly yt-dlp updates", user: root }
 
-- name: Remove the role file artifacts
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
-    - /usr/local/bin/manage-media
-    - /usr/local/bin/media-sync
-    - /usr/local/bin/media-import
-    - /usr/local/bin/media-status
-    # Retired (folded into `media-sync --albums`): still removed so a host
-    # deployed before the refactor cannot keep a symlink to an unmanaged script.
-    - /usr/local/bin/media-import-album
-    - /usr/local/bin/beet
-    - /usr/local/bin/yt-dlp
-    - /usr/local/bin/deno
-    - "{{ media_home }}"
-    - /usr/local/bin/media-syncthing-backup
-    - /usr/local/bin/yt-dlp-update
-    - /var/log/media-syncthing-backup.log
-
 - name: Tear down Syncthing
-  # Unconditional: the install is opt-in per host (common_syncthing_enabled),
-  # but a re-test host can carry Syncthing from an earlier run whose flag no
-  # longer matches the current inventory. Every task here is idempotent (apt
-  # state=absent, file state=absent, unit stop with failed_when:false), so
-  # always running it is safe and guarantees no Syncthing leftovers remain.
+  # The teardown is unconditional although the install is opt-in through common_syncthing_enabled.
+  # A re-test host can carry Syncthing from an earlier run whose flag no longer matches the inventory.
+  # The teardown tasks are idempotent, so running them always is safe and leaves no Syncthing behind.
   ansible.builtin.include_role:
     name: common
     tasks_from: syncthing_teardown
 
-- name: Verify the media artifacts are gone
+- name: Remove the media artifacts and verify they are gone
   ansible.builtin.include_role:
     name: common
-    tasks_from: teardown_verify_absent
+    tasks_from: teardown_paths
   vars:
     common_teardown_name: media
     common_teardown_paths:
@@ -72,14 +49,14 @@
       - /usr/local/bin/media-sync
       - /usr/local/bin/media-import
       - /usr/local/bin/media-status
+      # `media-sync --albums` covers this command.
+      # It is still removed so that a host deployed earlier cannot keep a symlink to an unmanaged script.
       - /usr/local/bin/media-import-album
       - /usr/local/bin/beet
-      - /usr/local/bin/media-syncthing-backup
       - /usr/local/bin/yt-dlp
       - /usr/local/bin/deno
+      - /usr/local/bin/yt-dlp-update
+      - /usr/local/bin/media-syncthing-backup
+      - /var/log/media-syncthing-backup.log
       - /etc/systemd/system/stack.service
       - "{{ media_home }}"
-      - /etc/systemd/system/syncthing.service
-      - /etc/apt/preferences.d/syncthing.pref
-      - /etc/apt/keyrings/syncthing-archive-keyring.gpg
-      - /usr/bin/syncthing

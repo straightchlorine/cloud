@@ -1,5 +1,4 @@
 ---
-# Debian packages are handled fleet-wide by common auto_updates.yml, not here.
 
 - name: Configure the weekly Pi-hole update
   ansible.builtin.include_role:

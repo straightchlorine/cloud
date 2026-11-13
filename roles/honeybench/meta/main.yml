@@ -18,7 +18,6 @@ galaxy_info:
     - docker
     - centos
 
-# No dependencies: the common role's package and firewall tasks are apt- and
-# ufw-based, and this host is a standalone CentOS VM. validate.yml invokes the
-# os and common roles by name, as the honeypot role does.
+# The role declares no dependencies because the package and firewall tasks of the common role are apt- and ufw-based.
+# This host is a standalone CentOS VM, and validate.yml invokes the os and common roles by name.
 dependencies: []

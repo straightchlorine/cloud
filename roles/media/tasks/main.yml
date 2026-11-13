@@ -49,7 +49,7 @@
 
 - name: Include backup configuration
   ansible.builtin.include_tasks: backup.yml
-  when: media_backup_enabled or restic_enabled
+  when: media_backup_enabled or media_restic_enabled
   tags: [backup]
 
 - name: Configure firewall
@@ -57,42 +57,30 @@
     name: firewall
   tags: [firewall, security]
 
-- name: Re-apply the shared ntfy helper
-  # --tags media skips the site.yml base play that installs this.
+- name: Re-apply the fleet notification helpers (ntfy + unattended-upgrades)
   ansible.builtin.include_role:
     name: common
-    tasks_from: ntfy_install
+    tasks_from: base_reapply
   tags: [media, common, base]
 
-- name: Re-apply unattended-upgrades and the reboot notification
-  # Same tag-scoped gap as the ntfy helper above.
+- name: Resolve the stack user's uid/gid for the unit environment
   ansible.builtin.include_role:
     name: common
-    tasks_from: auto_updates
-  tags: [media, common, base]
+    tasks_from: stack_user_ids
+  tags: [systemd, auto-start]
 
-- name: Create Docker stack systemd service  # noqa: var-naming[no-role-prefix]
+- name: Create Docker stack systemd service
   ansible.builtin.include_role:
     name: common
     tasks_from: docker_stack_service
   vars:
-    stack_service_name: "stack"
-    stack_description: "Media Stack (navidrome, cadvisor)"
-    stack_home_directory: "{{ media_home }}"
-    stack_user: "{{ ansible_user }}"
-    # Explicit -f: the shared systemd template's WorkingDirectory guard is a
-    # known-open issue (see its header), so don't rely on the unit's cwd.
-    stack_environment_vars:
+    common_stack_description: "Media Stack (navidrome, cadvisor)"
+    common_stack_home: "{{ media_home }}"
+    common_stack_user: "{{ ansible_user }}"
+    common_stack_environment_vars:
       - "MEDIA_LIBRARY_PATH={{ media_library_path }}"
-      - "PUID={{ media_uid }}"
-      - "PGID={{ media_gid }}"
-    stack_exec_start: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml up -d"
-    stack_exec_stop: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml down"
-    stack_exec_reload: "/usr/bin/docker compose -f {{ media_home }}/docker-compose.yml restart"
-  # common_start_stack=false renders the stack without starting it - the
-  # migration restore window (migrate-legacy.sh restore refuses while Navidrome
-  # runs). Skip the unit entirely then, so nothing auto-starts on a stray reboot.
-  when: common_start_stack | bool
+      - "PUID={{ common_stack_uid }}"
+      - "PGID={{ common_stack_gid }}"
   tags: [systemd, auto-start]
 
 - name: Include the YouTube -> beets pipeline
@@ -101,30 +89,22 @@
   tags: [youtube]
 
 - name: Deploy the stack
-  # Last on purpose: host-side controls (firewall, backup, ntfy) must exist before services are exposed.
+  # This task runs last on purpose.
+  # Host-side controls such as the firewall must exist before services are exposed.
   ansible.builtin.include_tasks: stack.yml
   tags: [stack, deploy]
 
-- name: Activate the stack auto-start unit
-  # Starting now proves the boot path: RemainAfterExit runs ExecStart immediately.
-  # Skipped when common_start_stack=false, so `-e common_start_stack=false`
-  # (migration restore) really leaves the stack down.
-  ansible.builtin.systemd:
-    name: "stack"
-    state: started
-  become: true
-  when: common_start_stack | bool
+- name: Start the stack unit and flush handlers
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_start
   tags: [systemd, auto-start, stack]
 
-- name: Flush pending handlers before validation
-  # A changed unit notifies "Restart stack"; unflushed, it would restart the stack after validation.
-  ansible.builtin.meta: flush_handlers
-
 - name: Run post-deployment validation
-  # Validate only what should be running: post_deploy_validate asserts the stack
-  # containers/endpoints, so with common_start_stack=false (stack intentionally
-  # down) it must be skipped - else a down-deploy fails on services it was told
-  # not to start.
   ansible.builtin.include_tasks: post_deploy_validate.yml
-  when: common_start_stack | bool
+  # The common_start_stack flag belongs to common.
+  # Common's defaults are not loaded when a tag-scoped run skips every common include.
+  # The default mirrors common's own, as CLAUDE.md allows for cross-role feature flags.
+  # A deploy with the flag false leaves the stack stopped, so its endpoints must not be probed.
+  when: common_start_stack | default(true) | bool
   tags: [post_validation]

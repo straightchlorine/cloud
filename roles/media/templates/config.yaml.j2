@@ -17,9 +17,9 @@ import:
     log: /config/import.log
 
 # A new item has no data source, so it always differs from the MusicBrainz candidate
-# and takes a fixed ~0.11 penalty, enough to push a perfect match past
-# `strong_rec_thresh` (0.04) and get it skipped in quiet mode. Zero the `data_source`
-# weight (the key is `data_source`, not `source`); ambiguous candidates stay below the bar.
+# and takes a fixed penalty of about 0.11. That is enough to push a perfect match past
+# `strong_rec_thresh` and get it skipped in quiet mode. Zeroing the `data_source`
+# weight avoids that, and the key is `data_source`, not `source`.
 match:
     distance_weights:
         data_source: 0
@@ -30,9 +30,9 @@ paths:
     singleton: $artist/$title
     comp: Compilations/$album%aunique{}/%if{$track,$track }$title
 
-plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed
-# reviewed.py marks a "use as-is" answer; it only runs when an overlay sets
+# The reviewed plugin marks a "use as-is" answer, and only runs when an overlay sets
 # `reviewed.mark: yes`.
+plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed
 pluginpath: /config/plugins
 
 lyrics:
@@ -48,16 +48,15 @@ replaygain:
     backend: ffmpeg
     threads: 2
 
-# Acoustic fingerprinting (Chromaprint/AcoustID, resolved through MusicBrainz):
-# matches by how the audio sounds, so popular tracks resolve even when the text
-# tags alone yield no autotagger candidate. Requires fpcalc + pyacoustid (both
-# ship in the linuxserver/beets image); imports get slower (fingerprinting is
-# CPU-heavy on a Pi).
+# Acoustic fingerprinting (Chromaprint/AcoustID, resolved through MusicBrainz) matches
+# by how the audio sounds, so popular tracks resolve even when the text tags give no
+# candidate. It needs fpcalc and pyacoustid, which the linuxserver/beets image ships.
+# Fingerprinting is CPU-heavy on a Pi, so imports are slower.
 chroma:
     auto: yes
 
-# Genres from Last.fm (whitelist-filtered). force: yes replaces yt-dlp's useless
-# "Music" genre with real ones; count keeps a few, comma-separated.
+# Genres come from Last.fm, filtered by the whitelist. `force: yes` replaces yt-dlp's
+# generic "Music" genre, and `count` caps how many genres are kept.
 lastgenre:
     auto: yes
     force: yes

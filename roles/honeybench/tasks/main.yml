@@ -7,8 +7,8 @@
       tags: [honeybench, validation]
   tags: [honeybench, validation]
 
-# Before anything is installed: a full disk halfway through a docker-ce install
-# is much harder to diagnose than a refusal here.
+# This runs before anything is installed.
+# A full disk halfway through a docker-ce install is harder to diagnose than a refusal here.
 - name: Check the release and that the disk can hold a bench database
   ansible.builtin.include_tasks:
     file: preflight.yml
@@ -23,9 +23,9 @@
       tags: [honeybench, packages]
   tags: [honeybench, packages]
 
-# Right after git is installed and before the slow installs: a ref without the
-# bench tooling is the likeliest first-deploy failure, and should not cost a
-# Docker install to find out.
+# The checkout runs right after git is installed and before the slow installs.
+# A ref without the bench tooling is the likeliest first-deploy failure.
+# It should not cost a Docker install to find out.
 - name: Check out the honeywatch repository and confirm it carries bench/
   ansible.builtin.include_tasks:
     file: repo.yml
@@ -54,7 +54,7 @@
       tags: [honeybench, dump]
   tags: [honeybench, dump]
 
-# Post-deploy assertions must see the daemon restart from a daemon.json change.
+# The post-deploy assertions must see the daemon restart that a daemon.json change triggers.
 - name: Apply pending handlers before post-deployment validation
   ansible.builtin.meta: flush_handlers
   tags: [honeybench, post_validation]

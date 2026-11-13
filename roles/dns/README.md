@@ -47,7 +47,7 @@ vault_pihole_webpassword: "secure_password"
 
 # Backup configuration (read by the restic coordinator, not by this role)
 vault_restic_dns_password: "32_character_secure_password"
-vault_backup_repository_base: "sftp:user@backup-server:/backups"
+vault_backup_repository_base: "/home/backup/restic-repos"
 ```
 
 ### Host Variables (host_vars/dns.yml)

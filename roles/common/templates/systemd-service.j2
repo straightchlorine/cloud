@@ -29,11 +29,6 @@ PartOf={{ unit }}
 Wants={{ want }}
 {% endfor %}
 {% endif %}
-{% if service_before is defined %}
-{% for before in service_before %}
-Before={{ before }}
-{% endfor %}
-{% endif %}
 {% if start_limit_burst is defined %}
 StartLimitBurst={{ start_limit_burst }}
 {% endif %}
@@ -69,16 +64,6 @@ ExecReload={{ exec_reload }}
 {% if exec_start_pre is defined %}
 {% for pre_cmd in exec_start_pre %}
 ExecStartPre={{ pre_cmd }}
-{% endfor %}
-{% endif %}
-{% if exec_start_post is defined %}
-{% for post_cmd in exec_start_post %}
-ExecStartPost={{ post_cmd }}
-{% endfor %}
-{% endif %}
-{% if exec_stop_post is defined %}
-{% for post_cmd in exec_stop_post %}
-ExecStopPost={{ post_cmd }}
 {% endfor %}
 {% endif %}
 
@@ -125,11 +110,6 @@ ProtectHome={{ common_protect_home }}
 {% if common_private_tmp is defined %}
 PrivateTmp={{ common_private_tmp }}
 {% endif %}
-{% if read_only_paths is defined %}
-{% for path in read_only_paths %}
-ReadOnlyPaths={{ path }}
-{% endfor %}
-{% endif %}
 {% if common_read_write_paths is defined %}
 {% for path in common_read_write_paths %}
 ReadWritePaths={{ path }}
@@ -137,20 +117,8 @@ ReadWritePaths={{ path }}
 {% endif %}
 
 # Network security
-{% if private_network is defined %}
-PrivateNetwork={{ private_network }}
-{% endif %}
-{% if restrict_address_families is defined %}
-RestrictAddressFamilies={{ restrict_address_families | join(' ') }}
-{% endif %}
 
 # Capability restrictions
-{% if capability_bounding_set is defined %}
-CapabilityBoundingSet={{ capability_bounding_set | join(' ') }}
-{% endif %}
-{% if ambient_capabilities is defined %}
-AmbientCapabilities={{ ambient_capabilities | join(' ') }}
-{% endif %}
 
 # Advanced security options
 {% if protect_kernel_tunables is defined %}
@@ -179,29 +147,14 @@ MemoryMax={{ memory_limit }}
 {% if memory_max is defined %}
 MemoryMax={{ memory_max }}
 {% endif %}
-{% if memory_high is defined %}
-MemoryHigh={{ memory_high }}
-{% endif %}
 {% if cpu_quota is defined %}
 CPUQuota={{ cpu_quota }}
-{% endif %}
-{% if tasks_max is defined %}
-TasksMax={{ tasks_max }}
 {% endif %}
 {% if limit_nofile is defined %}
 LimitNOFILE={{ limit_nofile }}
 {% endif %}
 
 # Process priority
-{% if nice_level is defined %}
-Nice={{ nice_level }}
-{% endif %}
-{% if io_scheduling_class is defined %}
-IOSchedulingClass={{ io_scheduling_class }}
-{% endif %}
-{% if io_scheduling_priority is defined %}
-IOSchedulingPriority={{ io_scheduling_priority }}
-{% endif %}
 {% endif %}
 
 [Install]

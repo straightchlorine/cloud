@@ -4,7 +4,7 @@
 #
 # Read-only and cheap by design: it reads the run log and queries sqlite directly,
 # and never invokes beets or docker, which take tens of seconds and would load the
-# very thing being watched. It parses the step markers (`=== <ts>  n/8 ...`) that
+# very thing being watched. It parses the step markers (`=== <ts>  n/N ...`) that
 # media-sync --maintenance writes, so the lines after the last marker are the
 # current step's work. It is a separate command, not a media-sync mode, because it
 # must not take the writer lock.
@@ -22,7 +22,7 @@ set -uo pipefail
 # docker at source time, so this stays a cheap read).
 # shellcheck source=/dev/null
 . "$(dirname "$(readlink -f "$0")")/media-lib.sh"
-# --maintenance logs here; night.log is accepted as an alternative name.
+# --maintenance logs to maintenance.log. night.log is read when that file is absent.
 LOG="$LIB/logs/maintenance.log"
 [ -f "$LOG" ] || LOG="$LIB/logs/night.log"
 # A run started by hand with its own redirect (`media-sync --upgrade all > x.log`)
@@ -34,9 +34,9 @@ LOCK="$LIB/logs/.media-sync.lock"
 
 
 sample_fds() {
-    # Docker's per-container soft nofile default is 1024 whatever the host allows,
-    # and a whole-library import uses ~2 descriptors per task. Recording the count
-    # shows the slope without starting a container.
+    # A whole-library import opens many files at once, and Docker's per-container
+    # open-file limit defaults to a low value whatever the host allows. Recording the
+    # count shows the slope without starting a container.
     pid=""
     for p in $(pgrep -f 'lsiopy/bin/' 2>/dev/null); do
         grep -q 'docker-' "/proc/$p/cgroup" 2>/dev/null || continue
@@ -95,13 +95,12 @@ if [ "${1:-}" = "--report" ]; then
 fi
 
 if [ "${1:-}" = "--preflight" ]; then
-    # What to check before starting a pass: MusicBrainz must resolve or a pass
-    # matches nothing, a collapsed library.db means a previous pass died
-    # mid-flight, duplicate paths crash an upgrade, and Docker's per-container fd
-    # default is 1024.
+    # What to check before starting a pass. MusicBrainz must resolve or a pass matches
+    # nothing, a collapsed library.db means a previous pass died mid-flight, and
+    # duplicate paths crash an upgrade.
     #
-    # No docker here, so this stays a cheap, lock-free read; the container-side
-    # resolution check belongs in the role's post_deploy_validate.
+    # There is no docker here, so this stays a cheap, lock-free read. The check from
+    # inside the container is in the role's post_deploy_validate.
     rc=0
     say() { printf '%-20s %s\n' "$1:" "$2"; }
 
@@ -120,8 +119,8 @@ if [ "${1:-}" = "--preflight" ]; then
     files=$(audio_files | wc -l)
     items=$(sqlite3 -readonly -cmd '.timeout 3000' "$DB" 'select count(*) from items;' 2>/dev/null || echo 0)
     say library "$files files on disk, $items rows in library.db"
-    # Only a warning when nothing is running: mid-pass the database is collapsed
-    # on purpose (the upgrade step removes every bare row before importing).
+    # This is reported only when nothing is running, because mid-pass the database is
+    # collapsed on purpose (the upgrade step removes every bare row before importing).
     if [ "$items" -lt $(( files / 2 )) ] && ! pgrep -f 'night\.sh|media-sync' >/dev/null 2>&1; then
         say 'DB vs disk' "FAR FEWER ROWS THAN FILES - a previous pass died after removing its bare rows. Let --adopt re-register, or restore a checkpoint."
         rc=1
@@ -138,8 +137,8 @@ fi
 
 [ -f "$LOG" ] || { echo "no run log at $LOG (nothing has run yet)"; exit 1; }
 
-# The lock is the authoritative "a writer is working" signal; the prune phase
-# runs outside it, so the process check is the belt to that braces.
+# The lock is the authoritative signal that a writer is working. The process check
+# is a second signal.
 lock="free"
 flock -n "$LOCK" -c true 2>/dev/null || lock="held"
 if [ "$lock" = "held" ] || pgrep -f 'night\.sh|media-sync (--|[^-])' >/dev/null 2>&1; then
@@ -179,13 +178,11 @@ walked=$(printf '%s\n' "$body" | grep -acE '^(/music/|/downloads/)')
 skipped=$(printf '%s\n' "$body" | grep -c '^Skipping\.')
 mb503=$(printf '%s\n' "$body" | grep -c 'too many 503')
 matched=$(( walked - skipped ))
-# The size of the pass is the count in the last "beets now tracks N" line of the
-# log (printed by media_tools.py prune and sent by media-sync --adopt), so
-# rewording either breaks this grep.
+# The size of the pass is the count in the last "beets now tracks N" line of the log,
+# which media_tools.py prune prints, so rewording that line breaks this grep.
 target=$(grep -a 'beets now tracks' "$LOG" | tail -1 | grep -oE '[0-9]+$')
 target=${target:-0}
-# --adopt prints no "Skipping." line (every path line is a registered row, not a
-# match). The busy timeout on sqlite3 matters here: adopt holds long write
+# The busy timeout on sqlite3 matters here because an adopt step holds long write
 # transactions.
 case "$marker" in
 *upgrade*)

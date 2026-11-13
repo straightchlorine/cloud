@@ -71,8 +71,7 @@
         success_msg: "[OK] update, backup and reboot-notification cron jobs removed"
 
     - name: Verify the host still resolves DNS
-      # The teardown restored the resolver; a broken resolv.conf here means
-      # the restore path failed even though the removals succeeded.
+      # A failure here means the resolver restore failed even though the removals succeeded.
       ansible.builtin.command: getent hosts github.com
       changed_when: false
       register: dns_teardown_resolve

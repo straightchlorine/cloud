@@ -7,7 +7,7 @@
 [commands]
 apply_updates = yes
 upgrade_type  = {{ honeypot_auto_updates_upgrade_type }}
-# Reboot trigger list and schedule: see the README "Automatic updates" section.
+# roles/honeypot/README.md lists the reboot triggers and the schedule under "Automatic updates".
 reboot = {{ honeypot_auto_updates_reboot }}
 reboot_command = "shutdown -r +5 'honeywatch: rebooting after dnf-automatic'"
 
@@ -15,8 +15,8 @@ reboot_command = "shutdown -r +5 'honeywatch: rebooting after dnf-automatic'"
 emit_via = stdio
 
 [base]
-# One vendor repo outage (tailscale, docker, grafana, epel) must not abort the
-# run and block BaseOS/AppStream kernel fixes; the skipped repo catches up next
-# run. Signature failures still fail the run and reach ntfy.
+# An outage of one vendor repo (tailscale, docker, grafana, epel) must not abort the run
+# and block BaseOS and AppStream kernel fixes. The skipped repo catches up on the next run.
+# Signature failures still fail the run and reach ntfy.
 skip_if_unavailable = True
 excludepkgs = {{ honeypot_dnf_pinned_packages | join(',') }}

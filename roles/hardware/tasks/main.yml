@@ -1,13 +1,18 @@
 ---
-# Hardware curation: map device_type (host_vars) to a hardware platform and
-# resource limit profile. Read-only - sets hardware_platform, hardware_details
-# and hardware_limits.
-# Extracted from the old roles/common/tasks/detect_hardware.yml.
+# Maps device_type (host_vars) to a hardware platform and publishes hardware_platform,
+# hardware_details and hardware_limits. Read-only.
 
 - name: Fail if device_type is not set
   ansible.builtin.fail:
-    msg: "device_type must be set in host_vars (e.g. rpi4b, rpi3b, rpizero2w, debian_vm, arch_linux)."
+    msg: "device_type must be set in host_vars (one of: {{ hardware_device_platforms.keys() | sort | join(', ') }})."
   when: device_type is not defined
+
+- name: Fail if device_type has no hardware platform
+  ansible.builtin.fail:
+    msg: >-
+      device_type '{{ device_type }}' has no hardware platform. Add it to hardware_device_platforms
+      or use one of: {{ hardware_device_platforms.keys() | sort | join(', ') }}.
+  when: device_type not in hardware_device_platforms
 
 - name: Gather system resources
   ansible.builtin.setup:
@@ -19,36 +24,12 @@
       - ansible_processor_cores
       - ansible_processor_vcpus
 
-- name: Map device_type to a hardware platform
+- name: Publish the hardware platform, its resources and its resource limits
   ansible.builtin.set_fact:
-    hardware_platform: >-
-      {%- if device_type == 'rpi4b' -%}
-        rpi4
-      {%- elif device_type == 'rpi3b' -%}
-        rpi3
-      {%- elif device_type == 'rpi2b' -%}
-        rpi2
-      {%- elif device_type in ['rpizero2w', 'rpi02w', 'rpizero2'] -%}
-        rpizero2w
-      {%- elif device_type.endswith('_vm') or device_type.endswith('_pc') -%}
-        pc
-      {%- else -%}
-        {{ device_type }}
-      {%- endif -%}
-
+    hardware_platform: "{{ hardware_device_platforms[device_type] }}"
+    hardware_limits: "{{ hardware_profiles[hardware_device_platforms[device_type]] }}"
     hardware_details:
       memory_mb: "{{ ansible_memtotal_mb }}"
       cpu_cores: "{{ ansible_processor_cores }}"
       cpu_count: "{{ ansible_processor_count }}"
       vcpus: "{{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}"
-
-- name: Fail if detected hardware platform has no resource profile
-  ansible.builtin.fail:
-    msg: >-
-      hardware_platform '{{ hardware_platform }}' is not a key of
-      hardware_profiles. Valid keys: {{ hardware_profiles.keys() | list }}
-  when: hardware_platform not in hardware_profiles
-
-- name: Set hardware-specific resource limits from platform profile
-  ansible.builtin.set_fact:
-    hardware_limits: "{{ hardware_profiles[hardware_platform] }}"

@@ -1,6 +1,4 @@
 ---
-# Also included directly by site.yml's pre-validation (not only via main.yml),
-# so it re-runs os discovery itself - cheap and idempotent.
 - name: Discover the device OS and architecture
   ansible.builtin.include_role:
     name: os
@@ -41,8 +39,8 @@
   tags: [validation]
 
 - name: Validate the automatic-update settings are values dnf-automatic understands
-  # dnf-automatic does not reject unknown values: it silently falls back to its
-  # default (reboot -> never), so a typo would quietly disable kernel reboots.
+  # dnf-automatic does not reject unknown values and silently falls back to its default.
+  # For reboot that default is never, so a typo would quietly disable kernel reboots.
   ansible.builtin.assert:
     that:
       - honeypot_auto_updates_reboot in ['never', 'when-changed', 'when-needed']
@@ -57,8 +55,8 @@
   tags: [validation]
 
 - name: Validate automatic updates can apply anything on this OS
-  # Stream ships no errata metadata: a `security` run is a silent no-op that
-  # leaves every CVE, kernel included, unpatched while the timer looks healthy.
+  # Stream ships no errata metadata, so a `security` run applies nothing.
+  # Every CVE, kernel included, would stay unpatched while the timer looks healthy.
   ansible.builtin.fail:
     msg: >-
       honeypot_auto_updates_upgrade_type is 'security', but CentOS Stream
@@ -80,9 +78,9 @@
   tags: [validation]
 
 - name: Validate the age recipient is a public key, not a private identity
-  # A private identity (AGE-SECRET-KEY-...) here would put the only key that
-  # can decrypt the R2 dumps on the host we assume can be compromised, and
-  # `age -R` would reject it at run time anyway - after a full pg_dumpall.
+  # A private identity (AGE-SECRET-KEY-...) here would put the only key that can
+  # decrypt the R2 dumps on a host that may be compromised.
+  # `age -R` would also reject it at run time.
   ansible.builtin.fail:
     msg: >-
       vault_honeypot_age_recipient must be an age PUBLIC recipient starting
@@ -93,8 +91,8 @@
   tags: [validation]
 
 - name: Validate the backup retention window is a positive number of days
-  # rclone delete --min-age 0d matches every object in the prefix, which would
-  # wipe the whole backup history right after uploading today's dump.
+  # rclone delete --min-age 0d matches every object in the prefix.
+  # That would wipe the whole backup history right after uploading the new dump.
   ansible.builtin.fail:
     msg: >-
       honeypot_backup_retention_days must be a positive integer number of days,
@@ -105,8 +103,7 @@
   tags: [validation]
 
 - name: Validate the image prune keeps at least one release per repo
-  # 0 would delete every semver tag, including the previous release that a
-  # rollback needs.
+  # A keep count of 0 would remove every semver-tagged image, including the newest release.
   ansible.builtin.fail:
     msg: >-
       honeypot_image_prune_keep must be an integer >= 1, got

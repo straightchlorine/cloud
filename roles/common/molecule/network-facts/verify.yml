@@ -4,25 +4,21 @@
   gather_facts: true
   become: true
   tasks:
-    - name: Assert network facts are defined
+    - name: Read what the role published during converge
+      ansible.builtin.slurp:
+        src: /tmp/molecule-network-facts.json
+      register: network_facts_published
+
+    - name: Assert the published facts match the host's own default route
+      vars:
+        published: "{{ network_facts_published.content | b64decode | from_json }}"
+        route: "{{ ansible_facts['default_ipv4'] }}"
       ansible.builtin.assert:
         that:
-          - primary_interface is defined and primary_interface | length > 0
-          - primary_ip is defined and primary_ip | ansible.utils.ipv4
-          - host_ip_cidr is defined and '/' in host_ip_cidr
-          - primary_network_cidr is defined
-        fail_msg: |
-          Network facts validation failed:
-          primary_interface: {{ primary_interface | default('UNDEFINED') }}
-          primary_ip: {{ primary_ip | default('UNDEFINED') }}
-          host_ip_cidr: {{ host_ip_cidr | default('UNDEFINED') }}
-          primary_network_cidr: {{ primary_network_cidr | default('UNDEFINED') }}
-
-    - name: Display network facts
-      ansible.builtin.debug:
-        msg: |
-          [OK] Network Facts:
-          - Interface: {{ primary_interface }}
-          - IP Address: {{ primary_ip }}
-          - Host CIDR: {{ host_ip_cidr }}
-          - Network CIDR: {{ primary_network_cidr }}
+          - published.interface == route.interface
+          - published.ip == route.address
+          - (published.ip | ansible.utils.ipv4) == published.ip
+          - published.network_cidr == route.network ~ '/' ~ route.prefix
+          - published.host_ip_cidr == route.address ~ '/' ~ route.prefix
+        fail_msg: "published {{ published }} does not match the host route {{ route }}"
+        success_msg: "[OK] primary_interface, primary_ip, primary_network_cidr and host_ip_cidr match the host route"

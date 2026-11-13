@@ -7,7 +7,7 @@
   vars:
     gpu_qp_home: /home/gpu/gpu-qp
     gpu_qp_bench: /home/gpu/gpu-qp/bench
-    # Matches the bench processes the way the deploy guard and the dispatcher do.
+    # The same pattern the deploy guard and the dispatcher use to find bench processes.
     gpu_qp_bench_proc_re: '^bash .*/(gpu-qp-)?(supervise|phase|lane)\.sh'
   tasks:
     - name: Read the deployed files
@@ -17,7 +17,7 @@
         - "{{ gpu_qp_home }}/docker-compose.yml"
         - "{{ gpu_qp_home }}/data/molecules.json"
         - /usr/local/bin/gpu-qp
-        - /tmp/gpu-qp.service.rendered
+        - /etc/systemd/system/stack.service
       register: gpu_qp_files
 
     - name: Parse the deployed files
@@ -39,20 +39,19 @@
       ansible.builtin.assert:
         that:
           - compose.services | list | sort == ['nvidia-gpu-exporter', 'quantum-pipeline-gpu']
-          # Worker: batch-only profile, a PINNED GPU device reservation, bind mounts.
           - worker.userns_mode == 'host'
           - worker.profiles == ['batch']
-          # `restart: no` is parsed by YAML as boolean false, not the string 'no'.
+          # YAML parses the rendered `restart: no` as boolean false, not the string 'no'.
           - worker.restart == false
           - worker.deploy.resources.reservations.devices[0].driver == 'nvidia'
           - worker.deploy.resources.reservations.devices[0].capabilities == ['gpu']
-          # gpu_qp_worker_device is '0' here, so the pinned branch renders device_ids
-          # and omits count (count and device_ids are mutually exclusive in compose).
+          # gpu_qp_worker_device is '0' here, so the pinned branch renders device_ids and omits count.
+          # Compose does not allow count and device_ids together.
           - worker.deploy.resources.reservations.devices[0].device_ids == ['0']
           - worker.deploy.resources.reservations.devices[0].count is not defined
           - "'/home/gpu/gpu-qp/data:/usr/src/quantum_pipeline/data:ro' in worker.volumes"
           - "'/home/gpu/gpu-qp/gen:/usr/src/quantum_pipeline/gen' in worker.volumes"
-          # Exporter: device reservation path, capabilities from the role default.
+          # The exporter reserves every card through count.
           - exporter.deploy.resources.reservations.devices[0].driver == 'nvidia'
           - exporter.deploy.resources.reservations.devices[0].count == 'all'
           - exporter.deploy.resources.reservations.devices[0].capabilities == ['gpu']
@@ -84,21 +83,20 @@
           - "'Managed by Ansible' in tool"
           - "'STACK_HOME=\"/home/gpu/gpu-qp\"' in tool"
           - "'SOURCE=\"/home/gpu/gpu-qp/src/quantum-pipeline\"' in tool"
-          # build: the host settings reach Dockerfile.gpu as build args
+          # Build passes CUDA_ARCH from the host settings and sets neither CUDA_VERSION nor AER_VERSION.
           - "'CUDA_VERSION' not in tool"
           - "'AER_VERSION' not in tool"
           - "'CUDA_ARCH=\"6.1\"' in tool"
           - "'--build-arg=' in tool"
-          # run: defaults, the per-run directory, a non-root user
           - "'--file \"data/molecules.json\"' in tool"
           - "'--gpu' in tool"
           - "'--report' in tool"
           - "'MPLCONFIGDIR' in tool"
           - "'/usr/src/quantum_pipeline/gen' in tool"
-          # check: a GPU circuit that cannot fall back to the CPU, plus ldd
+          # Check runs a circuit on device GPU, so it cannot pass on a CPU fallback.
           - "'device=\"GPU\"' in tool"
           - "'ldd' in tool"
-          # scan: the pinned scanner, CI's filters
+          # Scan uses the pinned Trivy image and skips vulnerabilities without a fix.
           - "'TRIVY_IMAGE=\"aquasec/trivy:' in tool"
           - "'--ignore-unfixed' in tool"
         fail_msg: "gpu-qp wrong:\n{{ tool }}"
@@ -168,14 +166,14 @@
     - name: Assert the helpers, the directory and the lock
       ansible.builtin.assert:
         that:
-          # Exactly the role's files: nothing stale, no __pycache__.
+          # The directory holds exactly the role's files, with nothing stale and no __pycache__.
           - (gpu_qp_lib.files | map(attribute='path') | map('basename') | sort | list)
             == ((gpu_qp_bench_files + ['bench.env', 'override.yml']) | sort | list)
           - gpu_qp_lib.files | map(attribute='pw_name') | unique | list == ['root']
           - gpu_qp_lib.files | map(attribute='mode') | unique | list == ['0644']
           - gpu_qp_bench_stats.results[0].stat.mode == '0755'
           - gpu_qp_bench_stats.results[0].stat.pw_name == 'root'
-          # The lock belongs to ansible_user (root in this scenario), not to whoever probes it.
+          # The lock belongs to ansible_user, which is root in this scenario, and not to whoever probes it.
           - gpu_qp_bench_stats.results[1].stat.pw_name == 'root'
           - gpu_qp_bench_stats.results[1].stat.mode == '0644'
         fail_msg: "bench helpers wrong:\n{{ gpu_qp_lib.files | map(attribute='path') | list }}"
@@ -220,8 +218,8 @@
         success_msg: "[OK] override.yml defines the three workers; bench.env carries the role values"
 
     - name: Run gpu-qp runs
-      # Proves the manifest: lookup('file', rstrip=False) and lookup('template') hash what copy
-      # and template wrote. A mismatch would print the lib warning on stderr.
+      # The manifest hashes come from lookups that must match what copy and template wrote.
+      # A mismatch makes the dispatcher print the lib warning on stderr.
       ansible.builtin.command: /usr/local/bin/gpu-qp runs
       register: gpu_qp_runs
       changed_when: false
@@ -270,6 +268,7 @@
           until: gpu_qp_held.rc == 1
           retries: 20
           delay: 1
+          # Rc 0 means the lock is not held yet, which `until` retries instead of failing.
           failed_when: false
           changed_when: false
 
@@ -278,6 +277,7 @@
           environment: "{{ item.env }}"
           register: gpu_qp_locked
           changed_when: false
+          # The assert below checks each exit code, including the expected refusal.
           failed_when: false
           loop:
             - {args: build, env: {}}
@@ -320,12 +320,13 @@
           ansible.builtin.command:
             argv: [pkill, -f, "sleep 120"]
           changed_when: false
+          # pkill exits 1 when nothing matches, which is fine during cleanup.
           failed_when: false
 
     - name: Guard against bench processes without the lock
       ansible.builtin.include_tasks: guard_stub.yml
       loop:
-        # (b) the old bash -c wrapper around gpu-qp-supervise.sh, (c) a lane of the new layout
+        # The first stub is a bash -c wrapper around gpu-qp-supervise.sh, the second a lane of a run tree.
         - {script: /tmp/x/gpu-qp-supervise.sh, cmd: "X=1 bash /tmp/x/gpu-qp-supervise.sh > /tmp/x/out 2>&1"}
         - {script: /tmp/x/run/lib/lane.sh, cmd: "bash /tmp/x/run/lib/lane.sh"}
       loop_control:
@@ -339,8 +340,8 @@
     # --- the helpers against the installed lib ---------------------------------------------
 
     - name: Install git for the bench tests
-      # test_side.sh builds a real checkout to prove fingerprint leaves .git/index alone;
-      # the base image has no git, so those steps would silently do nothing.
+      # test_side.sh builds a real git checkout to prove that fingerprint leaves .git/index alone.
+      # The base image has no git, so without it those steps would silently do nothing.
       ansible.builtin.apt:
         name: git
         state: present
@@ -359,6 +360,7 @@
         GPU_QP_TEST_LIB: "{{ gpu_qp_lib_path }}"
       register: gpu_qp_suite
       changed_when: false
+      # The assert below prints the suite output on failure.
       failed_when: false
 
     - name: Assert the suite passed
@@ -377,6 +379,7 @@
       ansible.builtin.command: "/usr/local/bin/gpu-qp {{ item }}"
       register: gpu_qp_drift
       changed_when: false
+      # The assert below checks the exit codes.
       failed_when: false
       loop: ["start --run m S", runs]
 
@@ -389,3 +392,16 @@
           - gpu_qp_drift.results[1].stderr is search('lib incomplete, redeploy')
         fail_msg: "manifest check wrong:\n{{ gpu_qp_drift.results }}"
         success_msg: "[OK] a changed helper stops start and only warns on runs"
+
+    - name: Check the stack unit state
+      ansible.builtin.command: systemctl {{ item }} stack
+      register: stack_unit_state
+      changed_when: false
+      failed_when: stack_unit_state.stdout | trim != item_expected[item]
+      vars:
+        item_expected: {is-active: active, is-enabled: enabled}
+      loop: [is-active, is-enabled]
+
+    - name: Confirm the stack unit started through the common role
+      ansible.builtin.debug:
+        msg: "[OK] stack.service is active and enabled (real docker_stack_service + stack_start, docker stubbed)"

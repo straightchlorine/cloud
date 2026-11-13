@@ -56,3 +56,11 @@ before anything is installed. Checks: `--tags validation` runs `validate.yml`
 alone, `post_validation` asserts the cgroup layout, tool versions and prints
 the host fingerprint (kernel, CPU, THP, Docker drivers) that belongs next to a
 campaign's numbers.
+
+## Tests
+
+CI runs two scenarios on a Rocky 9 systemd image: `fail-fast-validation` (the
+real `validate.yml` per case) and `default` (the Docker configuration through
+`roles/common`'s `docker_rpm.yml` against a stub `docker.service`: overwrite of
+a stale `daemon.json`, the `Restart docker` handler, docker group membership).
+The package install, repo checkout and pinned tool downloads are not covered.

@@ -1,54 +1,77 @@
 ---
-- name: Download Pi-hole Exporter checksum
-  ansible.builtin.get_url:
-    url: "{{ prometheus_exporters_pihole_exporter_checksum_url }}"
-    dest: "/tmp/pihole_exporter_checksum.txt"
-    force: true
-    timeout: 30
-  register: prom_exp_pihole_exporter_checksum_download
-  retries: 3
-  delay: 5
-  until: prom_exp_pihole_exporter_checksum_download is succeeded
+- name: Read the installed Pi-hole Exporter version
+  # The exporter has no --version flag, so the install records the version it fetched.
+  ansible.builtin.slurp:
+    src: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
+  register: prom_exp_pihole_installed
+  # A missing version file means no exporter is installed, and the install below then runs.
+  failed_when: false
 
-- name: Extract expected Pi-hole Exporter checksum
-  ansible.builtin.shell: |
-    set -o pipefail
-    grep "pihole_exporter-linux-{{ prometheus_exporters_pihole_arch_map[ansible_architecture] }}" \
-      /tmp/pihole_exporter_checksum.txt | cut -d' ' -f1
-  register: prom_exp_pihole_expected_checksum
-  changed_when: false
+- name: Download and install the Pi-hole Exporter
+  when: >-
+    prom_exp_pihole_installed.content is not defined
+    or (prom_exp_pihole_installed.content | b64decode | trim) != prometheus_exporters_pihole_exporter_version
+  block:
+    - name: Download Pi-hole Exporter checksum
+      ansible.builtin.get_url:
+        url: "{{ prometheus_exporters_pihole_exporter_checksum_url }}"
+        dest: "/tmp/pihole_exporter_checksum.txt"
+        force: true
+        mode: "0644"
+        timeout: 30
+      register: prom_exp_pihole_exporter_checksum_download
+      retries: 3
+      delay: 5
+      until: prom_exp_pihole_exporter_checksum_download is succeeded
 
-- name: Download Pi-hole Exporter binary
-  ansible.builtin.get_url:
-    url: "{{ prometheus_exporters_pihole_exporter_binary_url }}"
-    dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
-    owner: "{{ prometheus_exporters_user }}"
-    group: "{{ prometheus_exporters_group }}"
-    mode: "0755"
-    checksum: "sha256:{{ prom_exp_pihole_expected_checksum.stdout }}"
-    timeout: 60
-  become: true
-  register: prom_exp_pihole_exporter_download
-  retries: 3
-  delay: 5
-  until: prom_exp_pihole_exporter_download is succeeded
-  notify: Restart pihole-exporter
+    - name: Extract expected Pi-hole Exporter checksum
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep "pihole_exporter-linux-{{ prometheus_exporters_pihole_arch }}" \
+          /tmp/pihole_exporter_checksum.txt | cut -d' ' -f1
+      register: prom_exp_pihole_expected_checksum
+      changed_when: false
 
-- name: Clean up Pi-hole Exporter checksum file
-  ansible.builtin.file:
-    path: "/tmp/pihole_exporter_checksum.txt"
-    state: absent
+    - name: Download Pi-hole Exporter binary
+      ansible.builtin.get_url:
+        url: "{{ prometheus_exporters_pihole_exporter_binary_url }}"
+        dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
+        owner: "{{ prometheus_exporters_user }}"
+        group: "{{ prometheus_exporters_group }}"
+        mode: "0755"
+        checksum: "sha256:{{ prom_exp_pihole_expected_checksum.stdout }}"
+        timeout: 60
+      become: true
+      register: prom_exp_pihole_exporter_download
+      retries: 3
+      delay: 5
+      until: prom_exp_pihole_exporter_download is succeeded
+      notify: Restart pihole-exporter
+
+    - name: Clean up Pi-hole Exporter checksum file
+      ansible.builtin.file:
+        path: "/tmp/pihole_exporter_checksum.txt"
+        state: absent
+
+    - name: Record the installed Pi-hole Exporter version
+      ansible.builtin.copy:
+        content: "{{ prometheus_exporters_pihole_exporter_version }}\n"
+        dest: "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
+        owner: "{{ prometheus_exporters_user }}"
+        group: "{{ prometheus_exporters_group }}"
+        mode: "0644"
+      become: true
 
 - name: Sync the Pi-hole admin password to the vault
-  # The dns play runs after this one, so a rotated password would otherwise
-  # fail the verification below before the dns role could apply it.
+  # The dns play runs after this one.
+  # Without the sync, a rotated password would fail the verification below before the dns role could apply it.
   ansible.builtin.include_role:
     name: common
     tasks_from: pihole_password_sync
 
 - name: Write the Pi-hole Exporter environment file
-  # Keeps the password out of ExecStart, which ps exposes. Escaped because
-  # systemd parses backslashes and quotes in EnvironmentFile values.
+  # An environment file keeps the password out of ExecStart, which ps exposes.
+  # The password is escaped because systemd parses backslashes and quotes in EnvironmentFile values.
   ansible.builtin.copy:
     content: |
       PIHOLE_PASSWORD="{{ vault_pihole_webpassword
@@ -74,16 +97,16 @@
   vars:
     service_description: "Pi-hole Prometheus Exporter"
     service_after: ["network.target", "pihole-FTL.service"]
-    # The exporter never re-authenticates, so an FTL restart (which drops all
-    # API sessions) must restart it too.
+    # The exporter never re-authenticates, and an FTL restart drops all API sessions.
+    # The exporter must therefore restart together with FTL.
     service_part_of: ["pihole-FTL.service"]
     common_service_wants: ["network.target"]
     service_type: "simple"
     service_user: "{{ prometheus_exporters_user }}"
     service_group: "{{ prometheus_exporters_group }}"
     environment_file: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    # FTL is "started" before its API listens and the exporter logs in only
-    # once, so wait for the API. $$ escapes systemd's variable expansion.
+    # FTL counts as started before its API listens, and the exporter logs in only once.
+    # The exporter therefore waits for the API first. The $$ escapes systemd's variable expansion.
     exec_start_pre:
       - >-
         /bin/sh -c 'for i in $$(seq 1 20); do curl -sf -m 2 -o /dev/null
@@ -128,8 +151,8 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Verify Pi-hole Exporter is scraping Pi-hole
-  # /metrics answers 200 even when every scrape fails (e.g. a dead session), so
-  # pihole_status 1 is the proof it can actually read Pi-hole's API.
+  # /metrics answers 200 even when every scrape fails, for example on a dead session.
+  # Only pihole_status 1 proves that the exporter can read the Pi-hole API.
   block:
     - name: Check the exporter reports pihole_status 1
       ansible.builtin.include_tasks: pihole_exporter_check.yml

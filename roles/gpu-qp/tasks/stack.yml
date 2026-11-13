@@ -3,6 +3,7 @@
   ansible.builtin.include_role:
     name: common
     tasks_from: deploy_compose_stack
+  # The common deploy task names its inputs without this role's prefix.
   vars:  # noqa: var-naming[no-role-prefix]
     stack_name: "gpu-qp"
     compose_file_path: "{{ gpu_qp_home }}/docker-compose.yml"
@@ -15,4 +16,4 @@
     compose_critical_services: >-
       {{ ['nvidia-gpu-exporter'] if gpu_qp_gpu_exporter_enabled else [] }}
     start_stack: "{{ common_start_stack }}"
-  # No notify: compose up -d already recreates containers on file changes.
+  # No notify is needed because `compose up -d` already recreates containers when their files change.

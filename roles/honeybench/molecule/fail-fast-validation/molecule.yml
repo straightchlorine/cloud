@@ -5,8 +5,8 @@ driver:
 
 platforms:
   - name: test
-    # RedHat-family image: validate.yml asserts the OS family, so a Debian
-    # container would fail every case for the wrong reason.
+    # The image must be RedHat-family because validate.yml asserts the OS family.
+    # A Debian container would fail every case for the wrong reason.
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/usr/lib/systemd/systemd}
@@ -18,14 +18,16 @@ provisioner:
   inventory:
     host_vars:
       test:
-        # validate.yml asserts honeybench_user == ansible_user; the connection
-        # user in the container is root.
-        ansible_user: root
+        # validate.yml asserts honeybench_user == ansible_user, and the connection user in the container is root.
+        # The user is given as the uid because `podman exec --user root` fails.
+        # The error is "no matching entries in passwd file".
+        ansible_user: "0"
   env:
-    # CI and local both run `cd roles/<role> && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/honeybench - one level up is roles/,
-    # letting `include_role: name: <any role>` resolve by name.
+    # Molecule runs from the role directory, so MOLECULE_PROJECT_DIRECTORY is roles/honeybench.
+    # Its parent is roles/, which lets `include_role` resolve any role by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+    # The podman connection needs an existing remote tmp directory when the user is given as a uid.
+    ANSIBLE_REMOTE_TMP: /tmp/.ansible
 
 verifier:
   name: ansible

@@ -1,9 +1,8 @@
   {{ service_name }}:
     image: {{ service_image }}
     container_name: {{ service_name }}
-    # Per-service override (e.g. restart: "no" for on-demand tools-profile
-    # containers); defaults to the fleet-wide common_service_restart.
-    restart: {{ service_restart | default(common_service_restart) }}
+    # A service may override the restart policy, for example with "no" for on-demand containers.
+    restart: {{ service_restart if service_restart is defined else common_service_restart }}
 {% if service_stop_grace_period is defined %}
     stop_grace_period: {{ service_stop_grace_period }}
 {% endif %}
@@ -54,10 +53,9 @@
       - {{ network }}
 {% endfor %}
 {% endif %}
-{# Explicit resolvers. Docker otherwise hands the container the host's list via
-   its embedded DNS, which for a host behind a Pi-hole means one flaky resolver
-   and a 1s single-attempt timeout - a hiccup then makes every outbound lookup
-   fail, and a long unattended pass keeps "succeeding" while doing nothing. #}
+{# Docker otherwise passes the host's resolver list through its embedded DNS.
+   Behind a Pi-hole that means one resolver with a short single-attempt timeout, so one hiccup fails every lookup.
+   Explicit resolvers avoid that. #}
 {% if service_dns is defined %}
     dns:
 {% for server in service_dns %}
@@ -88,17 +86,16 @@
 {% endfor %}
 {% endif %}
 {% if service_healthcheck is defined %}
+{% set healthcheck = common_service_healthcheck_defaults | combine(service_healthcheck) %}
     healthcheck:
-      test: {{ service_healthcheck.test }}
-      interval: {{ service_healthcheck.interval | default('30s') }}
-      timeout: {{ service_healthcheck.timeout | default('10s') }}
-      retries: {{ service_healthcheck.retries | default('3') }}
-      start_period: {{ service_healthcheck.start_period | default('40s') }}
+      test: {{ healthcheck.test }}
+      interval: {{ healthcheck.interval }}
+      timeout: {{ healthcheck.timeout }}
+      retries: {{ healthcheck.retries }}
+      start_period: {{ healthcheck.start_period }}
 {% endif %}
-{# Per-container rlimits. Docker's default SOFT nofile is 1024 no matter what
-   the daemon's LimitNOFILE says (that only becomes the hard limit), and a
-   long-running importer can exhaust it: beets died with EMFILE after ~478
-   tasks of a whole-library pass. #}
+{# Docker's default soft nofile limit stays low whatever the daemon's LimitNOFILE says, which only sets the hard limit.
+   A long-running service that opens many files needs its own ulimits. #}
 {% if service_ulimits is defined %}
     ulimits:
 {% for ulimit_name, ulimit_value in service_ulimits.items() %}

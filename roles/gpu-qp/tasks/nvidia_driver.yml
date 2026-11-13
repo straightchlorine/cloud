@@ -1,9 +1,13 @@
 ---
+- name: Refresh the apt cache when it is stale
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: package_cache_update
+
 - name: Install the kernel headers matching the running kernel
   ansible.builtin.apt:
     name: "{{ gpu_qp_driver_headers_packages }}"
     state: present
-    update_cache: true
   become: true
 
 - name: Install the NVIDIA driver packages
@@ -13,7 +17,7 @@
   become: true
 
 - name: Check whether the NVIDIA kernel module is already built
-  # Debian ships it as nvidia-current.ko.xz, other builds as nvidia.ko.
+  # Debian ships the module as nvidia-current.ko.xz, and other builds ship it as nvidia.ko.
   ansible.builtin.find:
     paths: "/lib/modules/{{ ansible_kernel }}/updates/dkms"
     patterns: ["nvidia.ko*", "nvidia-current.ko*"]
@@ -21,9 +25,8 @@
   become: true
 
 - name: Build the NVIDIA kernel module with DKMS
-  # nvidia-kernel-dkms ships source only; dkms compiles it against the headers
-  # installed above. Guarded on the built artifact so a converged host is a no-op
-  # instead of an always-changed rebuild.
+  # nvidia-kernel-dkms ships source only, so dkms compiles it against the headers installed above.
+  # The task is guarded on the built module so that a converged host is not rebuilt on every run.
   ansible.builtin.command:
     cmd: dkms autoinstall
   become: true

@@ -4,15 +4,15 @@
 # for the whole run; every operation it uses lives in media-lib or media-sync.
 #
 # It exists for a library that was never matched: a migrated one, or one built from
-# as-is imports. It takes hours to days and is the one thing in this role that can
-# lose data when it is wrong, hence the checkpoint, the resume point and the preflight.
+# as-is imports. It takes hours to days and can lose data when it is wrong, hence the
+# checkpoint, the resume point and `media-sync --plan`.
 #
 #   1 adopt     register files that have no row
 #   2 prune     drop rows whose file is gone (after a checkpoint of library.db)
 #   3 upgrade   re-match every bare track (no release id) against MusicBrainz as
 #               part of its release. It removes the bare rows first and re-imports
-#               the files, so the library is collapsed until step 4 - the point
-#               of no return
+#               the files, so the library is collapsed until step 4. This is the
+#               point of no return.
 #   4 adopt     re-register what step 3 found no release for
 #   5 regroup   album rows for tracks that carry a release id
 #   6 complete  pin the bare tracks of partly matched albums to their release
@@ -20,8 +20,9 @@
 #               settle_library in media-lib)
 #   8 backfill  lyrics + ReplayGain
 #
-# A failed or interrupted run says where to resume: `--from N`. Resume from 4 or
-# later after step 3 started - never from 1-3 on a collapsed library.
+# A failed or interrupted run says where to resume with `--from N`. After step 3 has
+# started, resume from step 4 or later, never from an earlier step on a collapsed
+# library.
 MAINT_LOG="$LIB/logs/maintenance.log"
 MAINT_STEPS=8
 
@@ -65,7 +66,7 @@ maint_upgrade() {
     upgrade_releases
 }
 
-# --complete lives in media-sync's mode table; the same plan and pin, as a step.
+# The same plan and pin as `media-sync --complete`, run as one step.
 maint_complete() {
     local plan id
     plan="$(complete_plan)"
@@ -96,8 +97,8 @@ maintenance() {
 
     maint_log "maintenance run start from step $FROM/$MAINT_STEPS (log: $MAINT_LOG)"
     notify started "Steps $FROM-$MAINT_STEPS of $MAINT_STEPS. This takes hours to days; you get one more message when it ends."
-    # Only step 3 and the backfill need MusicBrainz or lrclib, but a collapsed
-    # library is the wrong place to find out it is unreachable.
+    # Step 3 needs MusicBrainz, and a collapsed library is the wrong place to find
+    # out that it is unreachable.
     if [ "$FROM" -le 3 ] && ! musicbrainz_reachable; then
         notify failed "musicbrainz.org is unreachable from the beets container; nothing was changed." high rotating_light,error
         exit 1

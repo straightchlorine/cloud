@@ -1,0 +1,20 @@
+---
+# Installs <common_manage_stack_home>/scripts/manage-<name>.sh and symlinks it to
+# /usr/local/bin/manage-<name>. The scripts/ directory must already exist.
+# common_manage_stack_home: compose project directory
+# common_manage_stack_name: short stack name (automation, media)
+- name: Install the stack management script
+  ansible.builtin.template:
+    src: manage-stack.sh.j2
+    dest: "{{ common_manage_stack_home }}/scripts/manage-{{ common_manage_stack_name }}.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Symlink the management script into PATH
+  ansible.builtin.file:
+    src: "{{ common_manage_stack_home }}/scripts/manage-{{ common_manage_stack_name }}.sh"
+    dest: "/usr/local/bin/manage-{{ common_manage_stack_name }}"
+    state: link
+    force: true
+  become: true

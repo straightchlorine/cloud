@@ -12,7 +12,7 @@ platforms:
 provisioner:
   name: ansible
   env:
-    # Molecule runs from roles/hardware, so the parent dir lets
+    # Molecule runs from roles/hardware, so the parent directory lets
     # `include_role: name: hardware` resolve by name.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 verifier:
