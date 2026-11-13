@@ -6,7 +6,7 @@
 #   restic-job gate <job>              ExecCondition= of skip_metered / skip_on_battery jobs
 #   restic-job cron <job>              the cron (OpenRC) counterpart of the whole unit (root)
 #   restic-job notify ok-<job>|fail-<job>  ntfy for OnSuccess=/OnFailure= (root)
-#   restic-job storage <job>           Storage Box free-space check of an sftp job (the weekly step calls it)
+#   restic-job storage <job>           Storage Box free-space check of an sftp job (every run calls it)
 #   restic-job freshness               ntfy for overdue or interrupted jobs and a full Storage Box (root),
 #                                      at most one alert a day per condition
 # run exits 0 (ok), 3 (snapshot saved, some files unreadable) or 1 (failed).
@@ -29,6 +29,9 @@ interrupted=0
 child=0
 job=
 die_rc=1
+started=0 # set by run_job, so that a failure can say how long the run lasted
+box_free='' # bytes free and percent free on the Storage Box, set by storage_check
+box_pct=''
 
 log() { echo "restic-job: $*" >&2; }
 die() {
@@ -36,8 +39,28 @@ die() {
     # conflicts with shutdown.target. The marker lets freshness report the stop later.
     ((interrupted)) && [[ -n $job ]] && touch "$state/$job.interrupted"
     log "FAILED: $*"
+    ((started)) && log "elapsed job_seconds=$SECONDS"
     exit "$die_rc"
 }
+
+# Human units for the log line and the notification: one decimal, binary prefixes.
+human_bytes() {
+    awk -v b="$1" 'BEGIN {
+        split("B KiB MiB GiB TiB", u, " ")
+        for (i = 1; b >= 1024 && i < 5; i++) b /= 1024
+        if (i == 1) printf "%d B", b; else printf "%.1f %s", b, u[i]
+    }'
+}
+
+# The fields of restic's JSON lines are read with grep and bash, not jq, which is not on every host. Matching on
+# the quoted key keeps data_added apart from data_added_packed and does not depend on the order of the keys.
+json_num() {
+    local re="\"$1\":([0-9][0-9.eE+-]*)"
+    [[ $2 =~ $re ]] && echo "${BASH_REMATCH[1]}"
+}
+
+# Text from a file name or an error message is printable and short before it reaches a log line or a notification.
+clean() { tr -c '[:print:]\n' '?' | cut -c1-"$1"; }
 
 load() {
     job=$1
@@ -90,8 +113,11 @@ due() {
 
 run_job() {
     load "$1"
-    local p f rc i warn=0 steps=backup
+    local p f rc i warn=0 steps=backup out line sum snap='' new changed added stored scanned secs kept='' removed=''
+    local unreadable=0 groups keep_part drop_part
     local -a src fresh keep
+    SECONDS=0
+    started=1
     r+=(--cleanup-cache) # exec runs with --no-cache, so only run cleans the cache
     # The tmp directory is made here, as the restic user: root-run Ansible never writes into a directory
     # the restic user owns, where a planted symlink could redirect it.
@@ -141,8 +167,10 @@ run_job() {
     read -ra extra_tags <<<"$RESTIC_JOB_TAGS"
     tag_args=()
     for t in "${extra_tags[@]}"; do tag_args+=(--tag "$t"); done
-    rr backup --host "$RESTIC_JOB_HOST" --tag "$job" "${tag_args[@]}" --exclude-caches \
-        --files-from-verbatim "$conf/$job.sources" --exclude-file "$conf/$job.excludes"
+    # --json is the only restic output with a stable format: one summary object, one object per unreadable file.
+    out=$TMPDIR/$job.out
+    rr backup --json --host "$RESTIC_JOB_HOST" --tag "$job" "${tag_args[@]}" --exclude-caches \
+        --files-from-verbatim "$conf/$job.sources" --exclude-file "$conf/$job.excludes" >"$out"
     rc=$?
     case $rc in
     0) ;;
@@ -150,8 +178,32 @@ run_job() {
         warn=1
         log "snapshot saved, but some source files could not be read (exit 3)"
         ;;
-    *) die "backup failed (restic exit $rc)" ;;
+    *)
+        tail -n 5 "$out" | clean 400 >&2
+        die "backup failed (restic exit $rc)"
+        ;;
     esac
+    sum=$(grep -m1 '"message_type":"summary"' "$out")
+    [[ $sum =~ \"snapshot_id\":\"([0-9a-f]{8}) ]] && snap=${BASH_REMATCH[1]}
+    new=$(json_num files_new "$sum") changed=$(json_num files_changed "$sum")
+    added=$(json_num data_added "$sum") stored=$(json_num data_added_packed "$sum")
+    scanned=$(json_num total_bytes_processed "$sum") secs=$(json_num total_duration "$sum")
+    unreadable=$(grep -c '"message_type":"error"' "$out")
+    if [[ -n ${snap:-} && -n $new && -n $changed && -n $added && -n $stored && -n $scanned && -n $secs ]]; then
+        secs=$(awk -v d="$secs" 'BEGIN { printf "%d", d + 0.5 }')
+        log "snapshot $snap saved: $new new, $changed changed files, $(human_bytes "$added") added" \
+            "($(human_bytes "$stored") stored)"
+    else
+        snap=''
+        log "could not read restic's backup summary"
+    fi
+    # The first unreadable paths, for the notification; the rest are in restic's own error lines.
+    grep -o '"item":"\([^"\\]\|\\.\)*"' "$out" | head -n 3 | while read -r line; do
+        line=${line#\"item\":\"}
+        log "unreadable: $(clean 80 <<<"${line%\"}")"
+    done
+    rm -f "$out"
+
     touch "$state/$job.ok"
     ((interrupted)) && die "stopped after the snapshot was saved"
 
@@ -160,9 +212,21 @@ run_job() {
     # Only the job tag scopes forget, so an OS upgrade (a new OS tag) never splits the retention chain;
     # --keep-tag pins what a person tagged by hand.
     read -ra keep <<<"$RESTIC_JOB_KEEP"
-    rr forget --host "$RESTIC_JOB_HOST" --tag "$job" --group-by host --keep-tag keep "${keep[@]}" ||
+    rr forget --json --host "$RESTIC_JOB_HOST" --tag "$job" --group-by host --keep-tag keep "${keep[@]}" >"$out" ||
         die "forget failed (the snapshot itself was saved)"
     steps+=,forget
+    # One group (one host), so everything before "remove" is the kept snapshots and everything after it up to
+    # "reasons" the removed ones; each is listed with one short_id.
+    groups=$(<"$out")
+    rm -f "$out"
+    if [[ $groups == *'"remove":'* ]]; then
+        keep_part=${groups%%\"remove\":*}
+        drop_part=${groups#*\"remove\":}
+        drop_part=${drop_part%%\"reasons\":*}
+        kept=$(grep -o '"short_id":"' <<<"$keep_part" | wc -l)
+        removed=$(grep -o '"short_id":"' <<<"$drop_part" | wc -l)
+        kept=$((kept)) removed=$((removed))
+    fi
 
     if due "$state/$job.pruned"; then
         rr prune || die "prune failed"
@@ -174,23 +238,32 @@ run_job() {
         touch "$state/$job.checked"
         steps+=,check
     fi
-    # The first run checks at once; the failed check is retried by the next run, because its stamp is not touched.
-    if [[ $RESTIC_REPOSITORY == sftp:* ]] && { [[ ! -e $state/$job.spacechecked ]] || due "$state/$job.spacechecked"; }
-    then
-        storage_check && touch "$state/$job.spacechecked" && steps+=,space
+    # A failed df is logged and leaves the run's outcome alone; it only drops the Storage Box part of the summary.
+    if [[ $RESTIC_REPOSITORY == sftp:* ]] && storage_check; then
+        steps+=,space
     fi
-    log "done ($steps)"
+    # The one line the notification is built from; it is left out when restic's output could not be read.
+    if [[ -n $snap ]]; then
+        sum="snapshot=$snap new=$new changed=$changed added=$added stored=$stored scanned=$scanned seconds=$secs"
+        sum+=" job_seconds=$SECONDS"
+        [[ -n $kept ]] && sum+=" kept=$kept removed=$removed"
+        sum+=" steps=$steps"
+        [[ -n $box_free ]] && sum+=" box_free_pct=$box_pct box_free=$box_free"
+        log "summary $sum unreadable=$unreadable"
+    fi
     exit $((warn ? 3 : 0))
 }
 
-# Reads the Storage Box's free space with the sftp df command (statvfs@openssh.com) and leaves <job>.storage
-# ("<used %> <minimum free %>") when less than the job's minimum is free, or removes it. The alert is not sent
-# here but by the root freshness run: the job runs sandboxed (ProtectSystem=strict, only its state and cache
-# directories writable), and a failure of this check must not be able to touch the backup's outcome.
+# Reads the Storage Box's free space with the sftp df command (statvfs@openssh.com) on every sftp run, keeps it in
+# box_free and box_pct for the summary, and leaves <job>.storage ("<used %> <minimum free %>") when less than the
+# job's minimum is free, or removes it. The alert is not sent here but by the root freshness run: the job runs
+# sandboxed (ProtectSystem=strict, only its state and cache directories writable), and a failure of this check must
+# not be able to touch the backup's outcome.
 # A failed df returns 1 and changes nothing: monitoring must never fail a backup.
 storage_check() {
     local out size used pct
     [[ $RESTIC_REPOSITORY == sftp:* ]] || return 0
+    box_free='' box_pct=''
     out=$(timeout 60 sftp -F "$conf/ssh_config" -b - hetzner-storage <<<df 2>&1) || {
         log "storage check: sftp df failed: ${out//$'\n'/ }"
         return 1
@@ -198,10 +271,12 @@ storage_check() {
     # df prints a header and one row: size, used, avail, (root), %capacity, in KiB.
     read -r size used < <(awk 'NF >= 3 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { s = $1; u = $2 } END { print s, u }' \
         <<<"$out")
-    if [[ ! $size =~ ^[0-9]+$ || ! $used =~ ^[0-9]+$ ]] || ((size == 0)); then
+    if [[ ! $size =~ ^[0-9]+$ || ! $used =~ ^[0-9]+$ ]] || ((size == 0)) || ((used > size)); then
         log "storage check: cannot read sftp df output: ${out//$'\n'/ }"
         return 1
     fi
+    box_free=$(((size - used) * 1024))
+    box_pct=$((((size - used) * 100 + size / 2) / size))
     pct=$(((used * 100 + size / 2) / size))
     # Compared exactly; pct is only the rounded figure for the message.
     if (((size - used) * 100 < RESTIC_JOB_MIN_FREE_PERCENT * size)); then
@@ -410,22 +485,101 @@ cron_job() {
     [[ $kind == ok ]]
 }
 
+# Seconds as 1h5m, 10m10s or 42s.
+human_duration() {
+    local t=$1
+    if ((t >= 3600)); then
+        printf '%dh%dm' $((t / 3600)) $((t % 3600 / 60))
+    elif ((t >= 60)); then
+        printf '%dm%ds' $((t / 60)) $((t % 60))
+    else
+        printf '%ds' "$t"
+    fi
+}
+
+# Prints the notification body of a finished run from its summary line, one fact per line. Every value is read with
+# its own pattern, because the run's output is written by a process that also reads other people's files; a key
+# whose value does not match is left out. $sum is the line without its prefix, $lines the run's output.
+summary_body() {
+    local snap new changed added stored scanned secs took kept removed steps free pct paths='' l1='' l2='' l3='' l4=''
+    local -a unreadable
+    snap=$(kv snapshot '[0-9a-f]{8}') new=$(kv new '[0-9]{1,15}') changed=$(kv changed '[0-9]{1,15}')
+    added=$(kv added '[0-9]{1,15}') stored=$(kv stored '[0-9]{1,15}') scanned=$(kv scanned '[0-9]{1,15}')
+    secs=$(kv seconds '[0-9]{1,9}') took=$(kv job_seconds '[0-9]{1,9}') kept=$(kv kept '[0-9]{1,9}') removed=$(kv removed '[0-9]{1,9}')
+    steps=$(kv steps '[a-z,]{1,40}') free=$(kv box_free '[0-9]{1,15}') pct=$(kv box_free_pct '[0-9]{1,3}')
+    [[ -n $snap ]] && l1="Snapshot $snap"
+    [[ -n $snap && -n $kept && -n $removed ]] && l1+=" - $kept kept, $removed removed"
+    [[ -n $added ]] && l2="+$(human_bytes "$added") new${stored:+ ($(human_bytes "$stored") stored)}"
+    [[ -n $scanned ]] && l2+="${l2:+, }$(human_bytes "$scanned") scanned"
+    # The whole run, including forget, prune, check and the space check; restic's own backup time is the fallback.
+    if [[ -n $took ]]; then
+        l2+="${l2:+; }took $(human_duration "$took")"
+    elif [[ -n $secs ]]; then
+        l2+="${l2:+ }in $(human_duration "$secs")"
+    fi
+    if [[ -n $new && -n $changed ]]; then
+        l3="Files: $(sed -E ':a;s/([0-9])([0-9]{3})($|,)/\1,\2\3/;ta' <<<"$new") new,"
+        l3+=" $(sed -E ':a;s/([0-9])([0-9]{3})($|,)/\1,\2\3/;ta' <<<"$changed") changed"
+    fi
+    [[ -n $free ]] && l4="Storage Box: $(human_bytes "$free") free${pct:+ ($pct%)}"
+    for l in "$l1" "$l2" "$l3" "$l4"; do
+        [[ -n $l ]] && echo "$l"
+    done
+    if [[ ,$steps, == *,prune,* && ,$steps, == *,check,* ]]; then
+        echo "Maintenance: prune and check done"
+    elif [[ ,$steps, == *,prune,* ]]; then
+        echo "Maintenance: prune done"
+    elif [[ ,$steps, == *,check,* ]]; then
+        echo "Maintenance: check done"
+    fi
+    mapfile -t unreadable < <(grep -E '^restic-job: unreadable: .{1,80}$' <<<"$lines" | head -n 3)
+    for l in "${unreadable[@]}"; do
+        paths+="${paths:+, }$(clean 80 <<<"${l#restic-job: unreadable: }")"
+    done
+    [[ -n $paths ]] && echo "Unreadable: $paths"
+}
+
+# The value of one key of the summary line when it matches the pattern $2, else nothing.
+kv() {
+    local re=" $1=($2)( |\$)"
+    [[ $sum =~ $re ]] && echo "${BASH_REMATCH[1]}"
+}
+
 notify() {
-    local kind=${1%%-*} j=${1#*-} title prio=high tags=rotating_light body
+    local kind=${1%%-*} j=${1#*-} title prio=high tags=rotating_light body='' lines='' sum reason took n
     # A skipped run (ExecCondition=) is silent; OnSuccess= still fires for it.
     [[ ${MONITOR_SERVICE_RESULT:-} == exec-condition ]] && return 0
+    if [[ -n ${RESTIC_JOB_LOG:-} ]]; then
+        # The log holds many runs; only the lines after the last start belong to this one.
+        lines=$(awk '/ restic-job: start /{ n = 0 } { l[++n] = $0 } END { for (i = 1; i <= n; i++) print l[i] }' \
+            "$RESTIC_JOB_LOG")
+    elif [[ -n ${MONITOR_INVOCATION_ID:-} && -n ${MONITOR_EXIT_STATUS:-} ]]; then
+        lines=$(journalctl _SYSTEMD_INVOCATION_ID="$MONITOR_INVOCATION_ID" -o cat --no-pager 2>&1 | tail -n 200)
+    fi
+    sum=$(grep -E '^restic-job: summary( [a-z_]+=[a-z0-9,]+)+$' <<<"$lines" | tail -n 1)
+    sum=${sum#restic-job: summary}
+    n=$(kv unreadable '[0-9]{1,9}')
     case $kind:${MONITOR_EXIT_STATUS:-} in
-    ok:3) title="restic $j ok with warnings" prio=default tags=warning ;;
-    ok:*) title="restic $j ok" prio=low tags=white_check_mark ;;
+    ok:3)
+        title="$j backup ok with warnings" prio=default tags=warning
+        ((${n:-0} > 0)) && title="$j backup ok, $n file$( ((n == 1)) || echo s) unreadable"
+        ;;
+    ok:*) title="$j backup ok" prio=low tags=white_check_mark ;;
     # An empty exit status means the job never ran because a dependency such as RequiresMountsFor= failed.
     # systemd reports Result=success for such a job.
-    fail:) title="restic $j FAILED: did not start (a required mount or dependency failed)" ;;
-    *) title="restic $j FAILED (${MONITOR_SERVICE_RESULT:-unknown}/$MONITOR_EXIT_STATUS)" ;;
+    fail:) title="$j backup FAILED: did not start (a required mount or dependency failed)" ;;
+    *) title="$j backup FAILED (${MONITOR_SERVICE_RESULT:-unknown}/$MONITOR_EXIT_STATUS)" ;;
     esac
-    if [[ -n ${RESTIC_JOB_LOG:-} ]]; then
-        body=$(tail -n 8 "$RESTIC_JOB_LOG")
-    elif [[ -n ${MONITOR_INVOCATION_ID:-} && -n ${MONITOR_EXIT_STATUS:-} ]]; then
-        body=$(journalctl _SYSTEMD_INVOCATION_ID="$MONITOR_INVOCATION_ID" -n 8 -o cat --no-pager 2>&1)
+    if [[ $kind == ok && -n $sum ]]; then
+        body=$(summary_body)
+    elif [[ $kind == fail && -n $lines ]]; then
+        reason=$(grep -E '^restic-job: FAILED: ' <<<"$lines" | tail -n 1 | clean 200)
+        took=$(grep -E '^restic-job: elapsed job_seconds=[0-9]{1,9}$' <<<"$lines" | tail -n 1)
+        [[ -n $took ]] && reason+=" (after $(human_duration "${took##*=}"))"
+        # The reason and the elapsed time are already above, so the tail skips those two lines.
+        body=$reason${reason:+$'\n'}$(grep -vE '^restic-job: (FAILED: |elapsed )' <<<"$lines" | tail -n 5)
+    elif [[ -n $lines ]]; then
+        body=$(tail -n 8 <<<"$lines")
     else
         body=$(systemctl --failed --no-legend --plain 2>&1)
     fi
@@ -481,7 +635,7 @@ freshness() {
         }
         alert_due "storage-$j" || continue
         read -r pct min <<<"$marker"
-        if NTFY_STRICT=1 /usr/local/bin/ntfy-notify "$(uname -n): Storage Box at $pct% used" \
+        if NTFY_STRICT=1 /usr/local/bin/ntfy-notify "$(uname -n): $j Storage Box at $pct% used" \
             "Less than $min% is free for restic job $j. Free space on the Storage Box before backups start failing." \
             high rotating_light; then
             touch "$alerts/storage-$j"
@@ -497,7 +651,7 @@ freshness() {
         [[ -e /etc/cron.d/restic-freshness ]] && where="See $logdir/."
         ((${#stale[@]})) && msg+="No good backup within the limit: ${stale[*]}. "
         ((${#stopped[@]})) && msg+="Stopped mid-run (shutdown or stop): ${stopped[*]}. "
-        if NTFY_STRICT=1 /usr/local/bin/ntfy-notify "$(uname -n): restic backups need attention" \
+        if NTFY_STRICT=1 /usr/local/bin/ntfy-notify "$(uname -n): backups need attention" \
             "$msg$where" high rotating_light; then
             for j in "${stale[@]}"; do touch "$alerts/stale-$j"; done
             for j in "${stopped[@]}"; do rm -f "$state/$j.interrupted"; done

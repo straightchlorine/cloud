@@ -17,5 +17,10 @@ provisioner:
   name: ansible
   env:
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  inventory:
+    group_vars:
+      all:
+        # A container reaches no ntfy; prepare.yml installs this stub, which records the deploy message.
+        restic_notice_command: /usr/local/bin/molecule-notice
 verifier:
   name: ansible

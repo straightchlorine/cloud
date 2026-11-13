@@ -47,5 +47,8 @@ restic_connection_user: "{{ ansible_user }}"
 # The key is set per host, so per-host Storage Box sub-accounts need no code change.
 restic_storage_key: ""
 
-# The weekly check of an sftp job alerts when less than this share of the Storage Box is free.
+# Sends the deploy-time test message, one title, body, priority and tags argument each. Molecule points it at a stub.
+restic_notice_command: /usr/local/bin/ntfy-notify
+
+# The Storage Box check of an sftp job alerts when less than this share of the Storage Box is free.
 restic_storage_min_free_percent: 15

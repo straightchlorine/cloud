@@ -168,7 +168,7 @@
     - name: Assert the daemon refused the probe and none of the role's files, and ran the @reboot entry
       vars:
         molecule_refusals: >-
-          {{ molecule_cron_log.stdout_lines | select('search', 'restic-(cr|crgate|crbroken|crslow|freshness)\b')
+          {{ molecule_cron_log.stdout_lines | select('search', 'restic-(cr|crgate|crbroken|crbox|crslow|freshness)\b')
              | reject('search', 'CMD') | list }}
       ansible.builtin.assert:
         that:
@@ -197,12 +197,22 @@
           content: |
             #!/bin/sh
             printf '%s|%s\n' "$1" "$3" >> /run/molecule-ntfy.log
-            printf '%s\n' "$2" | tr '\n' ' ' >> /run/molecule-ntfy-body.log
-            echo >> /run/molecule-ntfy-body.log
+            printf '%s|%s\n' "$1" "$(printf '%s' "$2" | tr '\n' '^')" >> /run/molecule-ntfy-body.log
         - dest: /usr/local/bin/restic-stub
           content: |
             #!/bin/sh
+            # The sftp job serves its repository from a local path, because no Storage Box is reachable here.
+            [ "$STUB_MODE" = sftp ] && export RESTIC_REPOSITORY="${RESTIC_REPOSITORY#sftp:hetzner-storage:}"
+            item=/srv/molecule-src/private/secret
             case "$STUB_MODE: $* " in
+              partial:*" backup "*)
+                /usr/local/bin/restic "$@" || exit
+                echo '{"message_type":"error","error":{"message":"denied"},"during":"archival","item":"'$item'"}'
+                exit 3 ;;
+              nosummary:*" backup "*)
+                /usr/local/bin/restic "$@" | grep -v '"message_type":"summary"'
+                echo '{"message_type":"error","error":{"message":"denied"},"during":"archival","item":"'$item'"}'
+                exit 3 ;;
               probe:*" backup "*)
                 { grep -E '^(CapEff|CapBnd|CapAmb|NoNewPrivs)' /proc/self/status; id -un; umask
                   echo "lockfds=$(ls -l /proc/$$/fd | grep -c '\.lock')"; } > /var/lib/restic/molecule-probe ;;
@@ -238,7 +248,7 @@
     # The plain job: a real run through cron's own entry point, as cron would start it.
     - name: Run the plain job through the wrapper
       ansible.builtin.shell: |
-        rm -f /run/molecule-ntfy.log
+        rm -f /run/molecule-ntfy.log /run/molecule-ntfy-body.log
         {{ molecule_wrapper }} cron cr
         echo "rc=$?"
       register: molecule_cr
@@ -253,6 +263,8 @@
         - cat /run/molecule-ntfy.log
         - stat -c '%U:%G' /var/lib/restic/cr.ok
         - stat -c '%a' /var/log/restic/cr.log
+        - cat /run/molecule-ntfy-body.log
+        - cat /var/log/molecule-notice.log
       register: molecule_cr_out
       changed_when: false
 
@@ -270,12 +282,95 @@
           - >-
             molecule_o[2] is search('(?m)^\S+ restic-job: start cr$')
           - >-
-            molecule_o[2] is search('(?m)^restic-job: done \(backup,forget')
+            molecule_o[2] is search(
+            '(?m)^restic-job: summary snapshot=[0-9a-f]{8} .* steps=backup,forget unreadable=0$')
           - >-
             molecule_o[2] is search('(?m)^\S+ restic-job: exit 0$')
-          - molecule_o[3] is search('restic cr ok\|low')
+          - molecule_o[3] is search('cr backup ok\|low')
           - molecule_o[4] == 'restic:restic'
           - molecule_o[5] == '600'
+          - >-
+            molecule_o[6] is search('^[^:]+: cr backup ok\|Snapshot [0-9a-f]{8} - 1 kept, 0 removed\^'
+            '\+[0-9.]+ (B|KiB|MiB)'
+            ' new \([0-9.]+ (B|KiB|MiB) stored\), [0-9.]+ (B|KiB|MiB) scanned; took [0-9]+s'
+            '\^Files: [0-9,]+ new, 0 changed$')
+          - >-
+            molecule_o[7] is search('(?m)^[^:]+: cr backup deployed\|min\|Armed: schedule \*/30 8-18 \* \* 1-5$')
+          - "'proves delivery' not in molecule_o[7]"
+
+    # Warning (exit 3 with an unreadable file) and the fallback when restic printed no summary object.
+    - name: Run the plain job with a restic that reports an unreadable file, then one that prints no summary
+      ansible.builtin.shell: |
+        rm -f /run/molecule-ntfy-body.log
+        for mode in partial nosummary; do
+          env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=$mode {{ molecule_wrapper }} cron cr
+          echo "rc=$?"
+        done
+        cat /run/molecule-ntfy-body.log
+      register: molecule_cr_warn
+      changed_when: true
+
+    - name: Assert the warning names the unreadable file and the fallback is the log tail
+      ansible.builtin.assert:
+        that:
+          - molecule_cr_warn.stdout_lines[0] == 'rc=0'
+          - molecule_cr_warn.stdout_lines[1] == 'rc=0'
+          - >-
+            molecule_cr_warn.stdout is search('(?m)^[^:]+: cr backup ok, 1 file unreadable\|Snapshot [0-9a-f]{8} - '
+            '1 kept, [01] removed\^.*\^Files: [0-9,]+ new, [0-9,]+ changed'
+            '\^Unreadable: /srv/molecule-src/private/secret$')
+          - >-
+            molecule_cr_warn.stdout is search('(?m)^[^:]+: cr backup ok with warnings\|.*restic-job: could not read '
+            'restic.s backup summary\^restic-job: unreadable: /srv/molecule-src/private/secret')
+          - molecule_cr_warn.stdout is not search('with warnings\|Snapshot ')
+
+    # An sftp job: the repository is local behind the stub, and the Storage Box figures come from the stub df.
+    - name: Install the sftp stub
+      ansible.builtin.copy:
+        dest: "{{ molecule_stubs }}/sftp"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          cat > /dev/null
+          case "$(cat /run/molecule-sftp)" in
+            fail) echo "Connection closed" >&2; exit 1 ;;
+            *) echo "        Size         Used        Avail       (root)    %Capacity"
+               cat /run/molecule-sftp ;;
+          esac
+
+    - name: Run the sftp job with a df that answers, then with one that fails
+      ansible.builtin.shell: |
+        sed -i 's|^RESTIC_REPOSITORY=.*|RESTIC_REPOSITORY=sftp:hetzner-storage:/srv/molecule-repos/crbox|' \
+          /etc/restic/crbox.env
+        rm -f /run/molecule-ntfy-body.log
+        for reply in '1000000000 450000000 550000000 (root) 55%' fail; do
+          printf '%s\n' "$reply" > /run/molecule-sftp
+          chmod 644 /run/molecule-sftp
+          env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=sftp RESTIC_JOB_PATH={{ molecule_path }} \
+            {{ molecule_wrapper }} cron crbox
+          echo "rc=$?"
+        done
+        cat /var/log/restic/crbox.log /run/molecule-ntfy-body.log
+      register: molecule_crbox
+      changed_when: true
+
+    - name: Assert the Storage Box line only follows a df that answered
+      vars:
+        molecule_box_bodies: "{{ molecule_crbox.stdout_lines | select('search', ': crbox backup ok\\|') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "'rc=0' in molecule_crbox.stdout_lines"
+          - >-
+            molecule_crbox.stdout is search(
+            '(?m)^restic-job: summary .* steps=backup,forget,space box_free_pct=55 box_free=563200000000 unreadable=0$')
+          - >-
+            molecule_crbox.stdout is search('restic-job: storage check: sftp df failed: Connection closed')
+          - molecule_box_bodies | length == 2
+          - >-
+            molecule_box_bodies[0] is search(
+            'Files: [0-9,]+ new, [0-9,]+ changed\^Storage Box: 524\.5 GiB free \(55%\)$')
+          - >-
+            molecule_box_bodies[1] is search('Files: [0-9,]+ new, [0-9,]+ changed$')
 
     # The unit's sandbox has a cron counterpart: setpriv sets the user, the single capability, the bounding set
     # and no_new_privs, and the wrapper sets the umask.
@@ -346,9 +441,10 @@
             molecule_o[0] is search('restic-job: FAILED: source missing: /srv/molecule-missing')
           - >-
             molecule_o[0] is search('restic-job: exit 1$')
-          - molecule_o[1] is search('restic crbroken FAILED \(exit-code/1\)\|high')
+          - molecule_o[1] is search('crbroken backup FAILED \(exit-code/1\)\|high')
           - >-
-            molecule_o[2] is search('source missing: /srv/molecule-missing')
+            molecule_o[2] is search('crbroken backup FAILED \(exit-code/1\)\|restic-job: FAILED: source missing: '
+            '/srv/molecule-missing \(after [0-9]+s\)\^')
 
     - name: Rotate the log when it is over 1 MiB
       ansible.builtin.shell: |
@@ -386,7 +482,7 @@
         that:
           - molecule_slow.stdout_lines[-1] == 'rc=1'
           - molecule_slow_out.stdout_lines[0] == 'marker=no'
-          - molecule_slow_out.stdout is search('restic crslow FAILED \(timeout/124\)\|high')
+          - molecule_slow_out.stdout is search('crslow backup FAILED \(timeout/124\)\|high')
 
     # The final SIGKILL reaches only restic-job; the session kill must take what it left behind.
     - name: Run a job whose restic ignores SIGINT, with a 3 s grace before SIGKILL
@@ -408,7 +504,7 @@
           - "'rc=1' in molecule_hang.stdout_lines or 'rc=137' in molecule_hang.stdout_lines"
           - "'left=0' in molecule_hang.stdout_lines"
           - "'lock-free' in molecule_hang.stdout_lines"
-          - molecule_hang.stdout is search('restic crslow FAILED \(timeout/(124|137)\)\|high')
+          - molecule_hang.stdout is search('crslow backup FAILED \(timeout/(124|137)\)\|high')
 
     # Gate: the nmcli reader against canned replies, then the real nmcli, then no nmcli at all.
     - name: Run the gate as the restic user against each set of nmcli replies
@@ -506,8 +602,8 @@
             molecule_gated_parts[0] is search('(?m)^rc=0\nbattery: snaps=1 ok=no$')
           - >-
             molecule_gated_parts[0] is search('(?m)^rc=0\nmetered: snaps=1 ok=no$')
-          - molecule_gated_parts[0] is search('restic crgate ok\|low')
-          - molecule_gated_parts[0] | regex_findall('restic crgate') | length == 1
+          - molecule_gated_parts[0] is search('crgate backup ok\|low')
+          - molecule_gated_parts[0] | regex_findall('crgate backup') | length == 1
           - >-
             molecule_gated_parts[1] is search('restic-job: skipped: last good run is under 20 h old')
           - >-
@@ -531,7 +627,7 @@
       ansible.builtin.assert:
         that:
           - molecule_fresh.stdout_lines[0] == 'rc=2'
-          - molecule_fresh.stdout is search('restic backups need attention\|high')
+          - molecule_fresh.stdout is search('backups need attention\|high')
           - >-
             molecule_fresh.stdout is search('No good backup within the limit: cr\. See /var/log/restic/\.')
           - molecule_fresh.stdout is not search('journalctl')

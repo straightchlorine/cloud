@@ -6,9 +6,8 @@ device_type: gentoo
 # Off-site backup through roles/restic, which playbooks/site.yml applies because no stack role owns this host.
 # The host runs OpenRC, so the role schedules the job with a cron.d entry (restic_scheduler is derived from the
 # service manager) and logs to /var/log/restic/portable.log. Bootstrap: roles/restic/README.md, "Applying to portable".
-# Uncomment this once the vault holds vault_restic_storage_key_portable; until then the key is placed by hand
-# at /etc/ssh/restic_storage_key.
-# restic_storage_key: "{{ vault_restic_storage_key_portable }}"
+# The Storage Box key is vault-managed; its public half must be authorized on the box before the first deploy.
+restic_storage_key: "{{ vault_restic_storage_key_portable }}"
 restic_jobs:
   - name: portable
     repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/portable"

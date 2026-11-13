@@ -83,3 +83,11 @@
         state: started
         daemon_reload: true
       loop: [backup-ok.timer, backup-oldname.timer]
+
+    - name: Install the stub that records the deploy-time test message
+      ansible.builtin.copy:
+        dest: /usr/local/bin/molecule-notice
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          printf '%s|%s|%s\n' "$1" "$3" "$(printf '%s' "$2" | tr '\n' '^')" >> /var/log/molecule-notice.log

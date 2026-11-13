@@ -89,7 +89,7 @@
           name: "{{ molecule_name }}"
           repository: "/srv/molecule-repos/{{ molecule_name }}"
           password: "molecule-restic-password-{{ molecule_name }}"
-      loop: [partial, slow]
+      loop: [partial, slow, box]
       loop_control:
         loop_var: molecule_name
 

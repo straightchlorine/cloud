@@ -18,7 +18,7 @@
       memory_max_mib: 512
       retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
   tasks:
-    - name: Deploy four jobs through the role entry point
+    - name: Deploy five jobs through the role entry point
       ansible.builtin.include_role:
         name: restic
       vars:
@@ -42,6 +42,11 @@
             password: molecule-restic-password-crbroken
             cron_schedule: "0 3 * * 0"
             sources: [/srv/molecule-missing]
+          - <<: *molecule_job
+            name: crbox
+            repository: /srv/molecule-repos/crbox
+            password: molecule-restic-password-crbox
+            cron_schedule: "11 4 * * *"
           - <<: *molecule_job
             name: crslow
             repository: /srv/molecule-repos/crslow

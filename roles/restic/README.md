@@ -121,7 +121,18 @@ systemctl list-timers 'restic-*'
 
 On a cron host, `restic-job cron <job>` starts a run by hand and `/var/log/restic/<job>.log` replaces the journal.
 
-Each run sends an ntfy message (`restic <job> ok`, `ok with warnings`, `FAILED`). `forget` runs nightly;
+Each run sends one short ntfy message. `run` ends by logging a single `restic-job: summary snapshot=... new=...
+added=... stored=... scanned=... seconds=... job_seconds=... kept=... removed=... steps=... [box_free_pct=...
+box_free=...] unreadable=...` line, built from `restic backup --json` and `restic forget --json`; the root notifier
+reads only that line (each value matched against its own pattern, anything else dropped), the same way on systemd
+(the invocation's journal) and cron (the log since the last `start`). Title `<host>: <job> backup ok` (exit 3:
+`..., N files unreadable`, up to three paths in the body); body: snapshot id with kept/removed counts, data added
+(and stored), data scanned and the run's total time, new/changed files, the Storage Box free space when `df`
+answered, and a `Maintenance:` line on a run that pruned or checked. A failure is titled
+`<host>: <job> backup FAILED (<result>/<status>)` and carries the `FAILED:` reason, the elapsed time and the last
+5 log lines. A run with no summary line (restic output it could not read) falls back to the last 8 log lines. The
+deploy test message reads `<host>: <job> backup deployed` / `Armed: next run <time>` (cron: `Armed: schedule
+<cron expression>`). `forget` runs nightly;
 `prune` and `check --read-data-subset 5%` run weekly, driven by stamp age. `restic-freshness.timer` runs
 15 minutes after boot and daily at 12:00 and alerts when a job has no good run within `max_age_hours`.
 
@@ -175,8 +186,8 @@ least 24.
 
 ## Storage Box space
 
-The weekly step (the first run, then every 7 days, with prune and check) runs `sftp df` against the Storage Box
-of an sftp job. When less than `restic_storage_min_free_percent` is free it writes `/var/lib/restic/<job>.storage`
+Every run of an sftp job runs `sftp df` against the Storage Box (the free space goes into the summary and the
+ntfy body). When less than `restic_storage_min_free_percent` is free it writes `/var/lib/restic/<job>.storage`
 and the daily freshness run sends a separate high-priority ntfy, "Storage Box at N% used", until a later check finds
 enough space. The marker is written by the job's user, so root reads only a regular file of two short numbers.
 The backup itself never fails because of this check, by design: when `df` fails or cannot be read, the run logs it
@@ -197,7 +208,7 @@ which runs `restic-job cron <job>` as root. The wrapper stands in for the whole 
    `ionice` and `setpriv` as the restic user with only `CAP_DAC_READ_SEARCH` and no new privileges, the same
    privileges the unit's sandbox gives;
 4. appends the run to `/var/log/restic/<job>.log` (rotated once at 1 MiB);
-5. sends the ntfy message the notify units send (ok, ok with warnings, FAILED), with the last log lines as its body.
+5. sends the ntfy message the notify units send (same text, built from the lines of this run in the log).
 
 A failed ntfy delivery is not retried (the notify unit retries every 15 min); the freshness check alerts when the
 job then stays without a good run. `restic-freshness` runs from `/etc/cron.d/restic-freshness` hourly (minute 7 of every
