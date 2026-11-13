@@ -53,7 +53,7 @@
     that:
       - restic_job_cfg.tags | reject('string') | list | length == 0
       - restic_job_cfg.tags | reject('match', '^[a-z0-9][a-z0-9._-]{0,31}\\Z') | list | length == 0
-    fail_msg: "restic_job.tags: every entry must match ^[a-z0-9][a-z0-9._-]{0,31}$"
+    fail_msg: "restic_job.tags: every entry must match ^[a-z0-9][a-z0-9._-]{0,31}$; got {{ restic_job_cfg.tags }}"
     quiet: true
 
 - name: Check the tags are unique
