@@ -4,7 +4,7 @@ driver:
   name: podman
 
 platforms:
-  - name: test
+  - name: honeypot-fail-fast-validation
     # validate.yml asserts a RedHat-family OS, so a Debian container would fail every case for the wrong reason.
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}
     pre_build_image: true

@@ -3,7 +3,7 @@ role_name_check: 0
 driver:
   name: podman
 platforms:
-  - name: debian12-board
+  - name: common-board-tuning
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}

@@ -5,7 +5,7 @@ driver:
   name: podman
 
 platforms:
-  - name: debian12-docker
+  - name: common-docker-installation
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}

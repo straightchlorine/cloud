@@ -4,7 +4,7 @@ driver:
   name: podman
 
 platforms:
-  - name: test
+  - name: honeypot-default
     # The role targets a RedHat-family host, so the test container matches it.
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}
     pre_build_image: true

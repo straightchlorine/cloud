@@ -4,7 +4,7 @@ driver:
   name: podman
 
 platforms:
-  - name: test
+  - name: honeybench-fail-fast-validation
     # The image must be RedHat-family because validate.yml asserts the OS family.
     # A Debian container would fail every case for the wrong reason.
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}
@@ -17,7 +17,7 @@ provisioner:
   name: ansible
   inventory:
     host_vars:
-      test:
+      honeybench-fail-fast-validation:
         # validate.yml asserts honeybench_user == ansible_user, and the connection user in the container is root.
         # The user is given as the uid because `podman exec --user root` fails.
         # The error is "no matching entries in passwd file".

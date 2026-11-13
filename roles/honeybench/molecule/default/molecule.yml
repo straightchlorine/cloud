@@ -4,7 +4,7 @@ driver:
   name: podman
 
 platforms:
-  - name: test
+  - name: honeybench-default
     # The image must be RedHat-family because validate.yml asserts the OS family.
     # A Debian container would fail every case for the wrong reason.
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-rockylinux9-ansible:latest}

@@ -295,7 +295,16 @@
             ' new \([0-9.]+ (B|KiB|MiB) stored\), [0-9.]+ (B|KiB|MiB) scanned; took [0-9]+s'
             '\^Files: [0-9,]+ new, 0 changed$')
           - >-
-            molecule_o[7] is search('(?m)^[^:]+: cr backup deployed\|min\|Armed: schedule \*/30 8-18 \* \* 1-5$')
+            molecule_o[7] is search('(?m)^[^:]+: cr backup armed\|min\|Schedule: cron \*/30 8-18 \* \* 1-5'
+            '\^No snapshot yet: the first run uploads everything'
+            '\^Repository cr, keeps 1 daily, 0 weekly, 0 monthly, 0 yearly$')
+          - >-
+            molecule_o[7] is search('(?m)^[^:]+: crgate backup armed\|min\|'
+            'Schedule: hourly at :17 \(cron 17 \* \* \* \*\)'
+            '\^Gate: at most one run per 20 h, only on AC power and off metered links\^No snapshot yet')
+          - >-
+            molecule_o[7] is search('(?m)^[^:]+: crbox backup armed\|min\|'
+            'Schedule: daily at 04:11 \(cron 11 4 \* \* \*\)\^')
           - "'proves delivery' not in molecule_o[7]"
 
     # Warning (exit 3 with an unreadable file) and the fallback when restic printed no summary object.

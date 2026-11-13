@@ -91,6 +91,54 @@
         fail_msg: "cgroup memory controller missing: MemoryMax= would be ignored"
       when: restic_scheduler == 'systemd'
 
+- name: Read the latest snapshot as the restic user
+  # One call proves the password, the key, the pinned host key and the repository path.
+  ansible.builtin.command:
+    argv: >-
+      {{ restic_exec_prefix + [restic_job_cfg.name, 'snapshots', '--host', restic_job_cfg.host,
+         '--tag', restic_job_cfg.name, '--latest', '1', '--json'] }}
+  register: restic_latest
+  changed_when: false
+
+- name: Describe when the job runs and the history it continues
+  vars:
+    restic_snaps: "{{ restic_latest.stdout | from_json }}"
+    restic_snap: "{{ restic_snaps | last if restic_snaps else {} }}"
+    restic_cron_f: "{{ restic_job_cfg.cron_schedule.split(' ') if restic_scheduler == 'cron' else [] }}"
+    # Plain words for the two common cron shapes; anything else is shown as written.
+    restic_when: >-
+      {%- if restic_scheduler == 'systemd' -%}
+      Next run: {{ restic_timer_props.stdout_lines | select('match', 'NextElapseUSecRealtime=') | first
+                   | regex_replace('^[^=]*=', '') }} ({{ restic_job_cfg.schedule }})
+      {%- elif restic_cron_f[0] is match('^[0-9]+$') and restic_cron_f[1:] == ['*', '*', '*', '*'] -%}
+      Schedule: hourly at :{{ '%02d' % (restic_cron_f[0] | int) }} (cron {{ restic_job_cfg.cron_schedule }})
+      {%- elif restic_cron_f[:2] | select('match', '^[0-9]+$') | list | length == 2
+               and restic_cron_f[2:] == ['*', '*', '*'] -%}
+      Schedule: daily at {{ '%02d:%02d' % (restic_cron_f[1] | int, restic_cron_f[0] | int) }}
+      (cron {{ restic_job_cfg.cron_schedule }})
+      {%- else -%}
+      Schedule: cron {{ restic_job_cfg.cron_schedule }}
+      {%- endif -%}
+    restic_gate: >-
+      {{ (['on AC power'] if restic_job_cfg.skip_on_battery else [])
+         + (['off metered links'] if restic_job_cfg.skip_metered else []) }}
+    restic_r: "{{ restic_job_cfg.retention }}"
+  ansible.builtin.set_fact:
+    restic_deploy_lines: >-
+      {{ [restic_when]
+         + (['Gate: at most one run per 20 h, only ' ~ restic_gate | join(' and ')] if restic_gate else [])
+         + [('Last snapshot: ' ~ restic_snap.short_id ~ ' at ' ~ restic_snap.time[:16] | replace('T', ' ')
+             ~ ((', ' ~ restic_snap.summary.total_bytes_processed | filesizeformat(true))
+                if 'summary' in restic_snap else ''))
+            if restic_snap else 'No snapshot yet: the first run uploads everything']
+         + ['Repository ' ~ restic_job_cfg.repository | regex_replace('/+$', '') | basename
+            ~ ', keeps ' ~ restic_r.daily ~ ' daily, ' ~ restic_r.weekly ~ ' weekly, '
+            ~ restic_r.monthly ~ ' monthly, ' ~ restic_r.yearly ~ ' yearly'] }}
+
+- name: Report the job as armed
+  ansible.builtin.debug:
+    msg: "{{ restic_deploy_lines }}"
+
 - name: Send a test notification when the job's config changed  # noqa: no-handler
   # Every alert path ends here, so a wrong URL, token or redirect fails now
   # instead of on the night a backup fails. A container has no reachable ntfy; Molecule points
@@ -98,27 +146,11 @@
   ansible.builtin.command:
     argv:
       - "{{ restic_notice_command }}"
-      - "{{ ansible_nodename }}: {{ restic_job_cfg.name }} backup deployed"
-      - >-
-        Armed: {{ ('next run ' ~ (restic_timer_props.stdout_lines | select('match', 'NextElapseUSecRealtime=')
-        | first | regex_replace('^[^=]*=', ''))) if restic_scheduler == 'systemd'
-        else ('schedule ' ~ restic_job_cfg.cron_schedule) }}
+      - "{{ ansible_nodename }}: {{ restic_job_cfg.name }} backup armed"
+      - "{{ restic_deploy_lines | join('\n') }}"
       - min
       - white_check_mark
   environment:
     NTFY_STRICT: "1"
   changed_when: false
   when: restic_job_env.changed
-
-- name: List the latest snapshot as the restic user
-  # One call proves the password, the key, the pinned host key and the repository path.
-  ansible.builtin.command:
-    argv: >-
-      {{ restic_exec_prefix + [restic_job_cfg.name, 'snapshots', '--host', restic_job_cfg.host,
-         '--tag', restic_job_cfg.name, '--latest', '1', '--compact'] }}
-  register: restic_latest
-  changed_when: false
-
-- name: Report the history this job continues
-  ansible.builtin.debug:
-    msg: "{{ restic_latest.stdout_lines }}"

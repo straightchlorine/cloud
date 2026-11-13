@@ -4,7 +4,7 @@ driver:
   name: podman
 
 platforms:
-  - name: test
+  - name: dns-fail-fast-validation
     image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
     pre_build_image: true
     command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
