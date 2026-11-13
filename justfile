@@ -62,37 +62,61 @@ _setup-git-config:
     @git config --local rebase.autoStash true
     @echo "{{ _ok }} Git config applied"
 
-# Run molecule tests (all roles, or: just test <role> [scenario])
+# Run molecule tests: every scenario of a role at once (all roles: one role at a time), or one scenario
 [group: 'test']
 test role="" scenario="":
     #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "{{ role }}" ]; then
-        echo "{{ _run }} Testing all roles"
-        failed=""
-        for r in {{ roles }}; do
-            echo "{{ _run }} $r"
-            if (cd roles/$r && uv run molecule test 2>&1); then
-                echo "{{ _ok }} $r"
+    set -uo pipefail
+    if [ -n "{{ scenario }}" ]; then
+        echo "{{ _run }} {{ role }} ({{ scenario }})"
+        cd roles/{{ role }} && uv run molecule test --scenario-name {{ scenario }} || exit 1
+        echo "{{ _ok }} {{ role }} ({{ scenario }})"
+        exit 0
+    fi
+    # Each scenario has its own container (<role>-<scenario>), so a role's scenarios run side by side.
+    # Their output goes to one log each; the table at the end says which to open.
+    logs=$PWD/.molecule/logs
+    mkdir -p "$logs"
+    failed=""
+    for r in {{ if role == "" { roles } else { role } }}; do
+        # A scenario is a directory with a molecule.yml; common/molecule/fixtures only holds shared stubs.
+        scenarios=$(cd "roles/$r/molecule" 2>/dev/null && ls -d */molecule.yml | cut -d/ -f1)
+        if [ -z "$scenarios" ]; then
+            echo "{{ _fail }} $r: no molecule scenarios under roles/$r/molecule"
+            failed="$failed $r"
+            continue
+        fi
+        echo "{{ _run }} $r: $(echo $scenarios) (logs in .molecule/logs/)"
+        for s in $scenarios; do
+            (
+                cd roles/$r || exit 1
+                SECONDS=0
+                uv run molecule test --scenario-name "$s" >"$logs/$r-$s.log" 2>&1
+                echo "$? $SECONDS" >"$logs/$r-$s.rc"
+            ) &
+        done
+        wait
+        for s in $scenarios; do
+            read -r rc secs <"$logs/$r-$s.rc"
+            if [ "$rc" = 0 ]; then
+                printf '%s %-40s %5ss\n' "{{ _ok }}" "$r/$s" "$secs"
             else
-                echo "{{ _fail }} $r"
-                failed="$failed $r"
+                printf '%s %-40s %5ss  .molecule/logs/%s-%s.log\n' "{{ _fail }}" "$r/$s" "$secs" "$r" "$s"
+                failed="$failed $r/$s"
             fi
         done
-        if [ -n "$failed" ]; then
-            echo "{{ _fail }} Failed:$failed"
-            exit 1
-        fi
-        echo "{{ _ok }} All roles passed"
-    elif [ -z "{{ scenario }}" ]; then
-        echo "{{ _run }} {{ role }}"
-        cd roles/{{ role }} && uv run molecule test
-        echo "{{ _ok }} {{ role }}"
-    else
-        echo "{{ _run }} {{ role }} ({{ scenario }})"
-        cd roles/{{ role }} && uv run molecule test --scenario-name {{ scenario }}
-        echo "{{ _ok }} {{ role }} ({{ scenario }})"
+    done
+    if [ -n "$failed" ]; then
+        echo "{{ _fail }} Failed:$failed"
+        exit 1
     fi
+    echo "{{ _ok }} All scenarios passed"
+
+# Rerun converge + verify on a scenario's live container (created on first use); molecule destroy -s <scenario> ends it
+[group: 'test']
+iterate role scenario:
+    cd roles/{{ role }} && uv run molecule converge --scenario-name {{ scenario }} \
+        && uv run molecule verify --scenario-name {{ scenario }}
 
 # Syntax-check all playbooks
 [group: 'test']

@@ -131,10 +131,11 @@ reads only that line (each value matched against its own pattern, anything else 
 answered, and a `Maintenance:` line on a run that pruned or checked. A failure is titled
 `<host>: <job> backup FAILED (<result>/<status>)` and carries the `FAILED:` reason, the elapsed time and the last
 5 log lines. A run with no summary line (restic output it could not read) falls back to the last 8 log lines. A deploy
-that changes a job's config sends `<host>: <job> backup armed` with up to four lines: `Next run: <time> (<calendar>)`
-(cron: `Schedule: hourly at :17 (cron 17 * * * *)`, `daily at ...`, or the raw expression), the gate when the job
-has one, `Last snapshot: <id> at <time>, <size scanned>` or `No snapshot yet`, and the repository with its
-retention. `forget` runs nightly;
+that changes a job's config sends `<host>: <job> backup armed` with up to four lines: the schedule (`Scheduled every
+day at 10:00 (next: <time>)` on systemd; `Scheduled every hour at xx:17` or `every day at 04:11` on cron; any other
+schedule as written), the gate when the job has one (`At most one run per 20 h; only on AC power and off metered
+connections`), `Last snapshot (<id>) at <time>, <size scanned>` or `No snapshot yet`, and the retention.
+`forget` runs nightly;
 `prune` and `check --read-data-subset 5%` run weekly, driven by stamp age. `restic-freshness.timer` runs
 15 minutes after boot and daily at 12:00 and alerts when a job has no good run within `max_age_hours`.
 

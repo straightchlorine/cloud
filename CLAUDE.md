@@ -374,6 +374,8 @@ The canonical testing documentation is `docs/testing/`:
 - **Idempotence is mandatory.** Fix `changed_when`; never exclude a failing
   task. Reasoned `molecule-idempotence-notest` tags are only for tasks a
   container physically cannot converge (e.g. chrony without CAP_SYS_TIME).
+  Fail-fast scenarios alone drop the idempotence step from `test_sequence`:
+  their cases only run `validate.yml`, so a second pass proves nothing.
 - **Fail-fast scenarios include the real `tasks/validate.yml`** per case and
   assert the failure names the exact variable/condition. A rescue accepting any
   failure is a false-positive factory.

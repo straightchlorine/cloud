@@ -4,10 +4,12 @@ restic_arch_map:
   aarch64: arm64
 
 # The OS that produced a snapshot, so a restore of /etc onto another release is a conscious choice.
-# Arch and Gentoo roll, so they carry no version. Raspberry Pi OS reports Debian.
+# Arch and Gentoo roll, so they carry no version. Raspberry Pi OS reports Debian. Some ansible-core releases
+# report Gentoo as ClearLinux (from /usr/lib/os-release) and keep its ID=gentoo in distribution_release,
+# so both facts are read.
 restic_os_tag: >-
   {{ ('arch' if ansible_distribution | lower is search('^arch')
-      else 'gentoo' if ansible_distribution | lower is search('gentoo|funtoo')
+      else 'gentoo' if (ansible_distribution ~ ' ' ~ ansible_distribution_release) | lower is search('gentoo|funtoo')
       else (ansible_distribution | lower | regex_replace('[^a-z0-9._-]+', '-') | regex_replace('^[^a-z0-9]+', ''))
            ~ (('-' ~ ansible_distribution_major_version) if ansible_distribution_major_version is match('^[0-9]+$')
               else ''))[:32] }}

@@ -562,13 +562,13 @@
         that:
           - >-
             molecule_notice.stdout is search(
-            '(?m)^[^:]+: ok backup armed\|min\|Next run: \S+ [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} \S+ '
-            '\(\*-\*-\* 03:00:00\)\^No snapshot yet: the first run uploads everything'
-            '\^Repository ok, keeps 1 daily, 0 weekly, 0 monthly, 0 yearly$')
+            '(?m)^[^:]+: ok backup armed\|min\|Scheduled every day at 03:00 '
+            '\(next: \S+ [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} \S+\)\^No snapshot yet: the first run uploads everything'
+            '\^Repository keeps 1 daily, 0 weekly, 0 monthly, 0 yearly$')
           - >-
             molecule_notice.stdout is search(
-            '(?m)^[^:]+: gated backup armed\|min\|Next run: [^^]+'
-            '\^Gate: at most one run per 20 h, only off metered links\^No snapshot yet')
+            '(?m)^[^:]+: gated backup armed\|min\|Scheduled every day at 03:00 \(next: [^)]+\)'
+            '\^At most one run per 20 h; only off metered connections\^No snapshot yet')
           - "'proves delivery' not in molecule_notice.stdout"
 
     # The timer's 12:00 calendar trigger would otherwise start a second run

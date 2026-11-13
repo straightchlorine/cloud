@@ -73,7 +73,8 @@ tests, and the vault password.
 just setup                    # venv, dependencies, collections, git hooks
 just lint                     # ansible-lint + yamllint
 just syntax                   # syntax-check every playbook
-just test                     # molecule for every role; just test media [scenario]
+just test                     # molecule, every scenario; just test media [scenario]
+just iterate media default    # converge + verify on a live container while fixing
 just deploy                   # playbooks/site.yml - the whole fleet
 just deploy-service media     # playbooks/media.yml, asks first
 ```

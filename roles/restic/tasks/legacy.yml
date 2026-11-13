@@ -8,54 +8,58 @@
   ansible.builtin.set_fact:
     restic_legacy_name: "{{ restic_job_cfg.legacy_name if 'legacy_name' in restic_job_cfg else restic_job_cfg.name }}"
 
-- name: Look for this job's legacy timer
-  ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{ restic_legacy_name }}.timer"
-  register: restic_legacy_timer
+- name: Retire the legacy systemd units
+  # The push-backup install only ever ran on systemd hosts.
+  when: ansible_service_mgr == 'systemd'
+  block:
+    - name: Look for this job's legacy timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/backup-{{ restic_legacy_name }}.timer"
+      register: restic_legacy_timer
 
-- name: Stop and disable the legacy timer and service
-  # A running legacy backup may leave a stale lock; restic-job's unlock clears it.
-  ansible.builtin.systemd_service:
-    name: "backup-{{ restic_legacy_name }}.{{ item }}"
-    state: stopped
-    enabled: false
-  loop: [timer, service]
-  when: restic_legacy_timer.stat.exists
+    - name: Stop and disable the legacy timer and service
+      # A running legacy backup may leave a stale lock; restic-job's unlock clears it.
+      ansible.builtin.systemd_service:
+        name: "backup-{{ restic_legacy_name }}.{{ item }}"
+        state: stopped
+        enabled: false
+      loop: [timer, service]
+      when: restic_legacy_timer.stat.exists
 
-- name: Find the legacy unit files, their backup-suffixed copies and the timer stamp
-  ansible.builtin.find:
-    paths: [/etc/systemd/system, /var/lib/systemd/timers]
-    patterns:
-      - "backup-{{ restic_legacy_name }}.service"
-      - "backup-{{ restic_legacy_name }}.timer"
-      - "backup-{{ restic_legacy_name }}.service.backup"
-      - "backup-{{ restic_legacy_name }}.timer.backup"
-      - "backup-{{ restic_legacy_name }}.service.*~"
-      - "backup-{{ restic_legacy_name }}.timer.*~"
-      - "stamp-backup-{{ restic_legacy_name }}.timer"
-  register: restic_legacy_files
+    - name: Find the legacy unit files, their backup-suffixed copies and the timer stamp
+      ansible.builtin.find:
+        paths: [/etc/systemd/system, /var/lib/systemd/timers]
+        patterns:
+          - "backup-{{ restic_legacy_name }}.service"
+          - "backup-{{ restic_legacy_name }}.timer"
+          - "backup-{{ restic_legacy_name }}.service.backup"
+          - "backup-{{ restic_legacy_name }}.timer.backup"
+          - "backup-{{ restic_legacy_name }}.service.*~"
+          - "backup-{{ restic_legacy_name }}.timer.*~"
+          - "stamp-backup-{{ restic_legacy_name }}.timer"
+      register: restic_legacy_files
 
-- name: Remove the legacy unit files
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ restic_legacy_files.files }}"
-  loop_control:
-    label: "{{ item.path }}"
-  register: restic_legacy_units
+    - name: Remove the legacy unit files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ restic_legacy_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: restic_legacy_units
 
-- name: Reload systemd after removing the legacy units  # noqa: no-handler
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: restic_legacy_units.changed
+    - name: Reload systemd after removing the legacy units  # noqa: no-handler
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: restic_legacy_units.changed
 
-- name: Clear the legacy service's failed state  # noqa: no-handler
-  # The unit may already be unloaded, so a non-zero rc is expected.
-  ansible.builtin.command:
-    argv: [systemctl, reset-failed, "backup-{{ restic_legacy_name }}.service"]
-  changed_when: true
-  failed_when: false
-  when: restic_legacy_units.changed
+    - name: Clear the legacy service's failed state  # noqa: no-handler
+      # The unit may already be unloaded, so a non-zero rc is expected.
+      ansible.builtin.command:
+        argv: [systemctl, reset-failed, "backup-{{ restic_legacy_name }}.service"]
+      changed_when: true
+      failed_when: false
+      when: restic_legacy_units.changed
 
 - name: Look for the push-model sudoers file
   # Its presence marks a host that really ran the push model, since /opt/backup alone could be anything.

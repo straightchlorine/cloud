@@ -88,6 +88,7 @@ steps:
         esac
         cd roles/${ROLE}
         for dir in molecule/*/; do
+          [ -f "${dir}molecule.yml" ] || continue  # common/molecule/fixtures holds shared stubs, not a scenario
           if [ -f "${dir}ci-skip" ]; then
             echo "SKIP $(basename "$dir"): $(cat "${dir}ci-skip")"
             continue
