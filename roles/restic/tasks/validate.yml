@@ -46,7 +46,7 @@
          or (restic_job is defined and restic_job is mapping and restic_job.skip_metered is defined
              and restic_job.skip_metered) }}
   loop: "{{ ['flock', 'timeout', 'nice', 'ionice', 'setpriv', 'setsid', 'pkill', 'crontab']
-            + (['nmcli'] if restic_cron_gated | bool else []) }}"
+            + (['nmcli'] if restic_cron_gated else []) }}"
   register: restic_cron_tools
   changed_when: false
   failed_when: false  # the assert below names every missing tool at once

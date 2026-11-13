@@ -10,9 +10,11 @@ labels:
 # Local development uses the same file, so CI and `just lint` agree.
 variables:
   - &ansible_env
-    ANSIBLE_CONFIG: ${CI_WORKSPACE}/ansible.cfg
-    # This points ansible at the collections that the install-collections step puts in the workspace.
-    ANSIBLE_COLLECTIONS_PATH: ${CI_WORKSPACE}/collections
+    # Relative to the step's working directory, the workspace. Woodpecker substitutes CI_WORKSPACE with an
+    # empty string here, which turned these into /ansible.cfg and /collections. Ansible ignores an ansible.cfg it
+    # only finds in a world-writable working directory, so the path is given explicitly. The file's
+    # collections_path lists ./collections, where install-collections puts the collections.
+    ANSIBLE_CONFIG: ./ansible.cfg
     PIP_ROOT_USER_ACTION: ignore
     PIP_NO_CACHE_DIR: "1"
 
