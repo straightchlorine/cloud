@@ -148,6 +148,8 @@
         - /etc/systemd/system/backup-ok.service.1234.2026-01-01@00:00:00~
         - /etc/systemd/system/backup-ok.service.backup
         - /etc/systemd/system/backup-ok.timer.backup
+        - /etc/systemd/system/backup-oldname.timer
+        - /etc/systemd/system/backup-oldname.service
         - /etc/sudoers.d/backup-user
         - /opt/backup
       register: molecule_legacy
@@ -253,14 +255,53 @@
     - name: Assert a real, scoped, capability-read snapshot
       vars:
         molecule_snap_list: "{{ molecule_snaps.stdout | from_json }}"
+        molecule_os_tag: "{{ ansible_distribution | lower ~ '-' ~ ansible_distribution_major_version }}"
       ansible.builtin.assert:
         that:
           - molecule_snap_list | length == 1
           - (molecule_snap_list | first).hostname == ansible_nodename
-          - "'ok' in (molecule_snap_list | first).tags"
+          - (molecule_snap_list | first).tags | sort == ['ok', molecule_os_tag] | sort
           - "'/srv/molecule-src/private/secret' in molecule_ls.stdout_lines"
           - "'/srv/molecule-src/skip/excluded' not in molecule_ls.stdout_lines"
           - molecule_stamps.results | selectattr('stat.exists') | list | length == 3
+
+    - name: Pin the latest snapshot by hand, then run the job again
+      ansible.builtin.shell: |
+        set -e
+        exec=/usr/local/libexec/restic/restic-job
+        $exec exec ok tag --add keep latest
+        systemctl start restic-job@ok.service
+        $exec exec ok snapshots --json
+      register: molecule_pinned
+      changed_when: true
+
+    - name: Assert retention of one daily snapshot still left the pinned one alive
+      vars:
+        molecule_pinned_list: "{{ molecule_pinned.stdout_lines[-1] | from_json }}"
+        molecule_os_tag: "{{ ansible_distribution | lower ~ '-' ~ ansible_distribution_major_version }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_pinned_list | length == 2
+          - molecule_pinned_list | selectattr('tags', 'contains', 'keep') | list | length == 1
+          - (molecule_pinned_list | last).tags | sort == ['ok', molecule_os_tag] | sort
+
+    - name: Release the pin and run the job again, so retention takes the old snapshot
+      ansible.builtin.shell: |
+        set -e
+        exec=/usr/local/libexec/restic/restic-job
+        $exec exec ok tag --remove keep --tag keep
+        systemctl start restic-job@ok.service
+        $exec exec ok snapshots --json
+      register: molecule_released
+      changed_when: true
+
+    - name: Assert one snapshot remains and none is pinned
+      vars:
+        molecule_released_list: "{{ molecule_released.stdout_lines[-1] | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - molecule_released_list | length == 1
+          - molecule_released_list | selectattr('tags', 'contains', 'keep') | list | length == 0
 
     - name: Stat the weekly stamps and age them past their 7 d limit
       ansible.builtin.shell: |

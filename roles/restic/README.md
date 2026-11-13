@@ -46,7 +46,9 @@ typo'd path cannot silently start an empty history.
 | cron_schedule | cron hosts | five numeric cron fields (minute hour day month weekday) separated by single spaces; each a list of `*`, `n`, `n-m` or a `/k` step, inside its range (no names such as `mon`) |
 | timeout | yes | `^[0-9]+(s\|min\|h)$` (`TimeoutStartSec`) |
 | memory_max_mib | yes | integer >= 128; becomes `MemoryMax` and `GOMEMLIMIT` (80%) |
+| legacy_name | default: the job name | `^[a-z0-9][a-z0-9-]{0,31}$`; the name of the job's push-backup units (`backup-<legacy_name>.{service,timer}`) that the deploy retires; set it only when the job was renamed |
 | host | default `ansible_nodename` | snapshot host, what existing snapshots carry |
+| tags | default `[<OS tag>]` | list of at most 4 extra snapshot tags, each `^[a-z0-9][a-z0-9._-]{0,31}$`, unique, not the job name, not `keep` (see Snapshot tags) |
 | excludes | default `[]` | single-line restic patterns |
 | fresh | default `[]` | `{path, max_age_hours}`; the run fails before the backup when the path is older |
 | max_age_hours | default 30 | the freshness check alerts past this age of the last good run; a gated job (`skip_metered` or `skip_on_battery`) needs >= 24 |
@@ -125,6 +127,26 @@ Each run sends an ntfy message (`restic <job> ok`, `ok with warnings`, `FAILED`)
 
 A run interrupted by shutdown loses its `OnFailure=` notification (systemd refuses the notify unit during
 shutdown). The script leaves `<job>.interrupted`, and the freshness run reports it after the next boot.
+
+## Snapshot tags
+
+Every snapshot carries the job name plus the job's `tags`, which default to the OS tag: `arch`, `gentoo`, or
+`<distribution>-<major version>` such as `debian-12` (Raspberry Pi OS reports Debian) or `debian-13`.
+
+- The job tag scopes `forget` and prune, together with `--host`. The OS tag never does, so an OS upgrade does
+  not split the retention chain.
+- The OS tag says what produced a snapshot, so check it before restoring `/etc` onto another release.
+- `keep` pins a snapshot: `forget` never removes one tagged `keep`, whatever the retention says. Pin with
+  `sudo /usr/local/libexec/restic/restic-job exec <job> tag --add keep <id>` and release with
+  `... tag --remove keep <id>`.
+- Hostname and date are not tags, because restic records both on every snapshot.
+
+Snapshots written by the legacy script carry no OS tag. Once per repository, as that job's user, retag them:
+`restic-job exec <job> tag --host <host> --set <job>,<os-tag>`. restic 0.19.1 documents `--set` as
+`tag[,tag,...]`, so the comma-separated list sets both tags; it replaces every existing tag on the matched
+snapshots, so do not run it on a repository that already holds a `keep` pin. Run it before the job's first run:
+`forget` is scoped by the job tag, so snapshots still carrying an old job tag (the `station-arch` ones of the
+`station` job) would otherwise never be pruned.
 
 ## Gated jobs
 
@@ -209,7 +231,8 @@ rewrites a vault-managed key).
 
 ## Applying to a workstation
 
-A host with no stack role (station-arch) gets the engine from `playbooks/site.yml`'s workstations play. Run
+A host with no stack role (station-arch, whose job is `station`) gets the engine from
+`playbooks/site.yml`'s workstations play. Run
 these on the machine before the first deploy:
 
 1. `ssh backup@<host> 'sudo -n true && echo become-ok'` decides whether the deploy needs `-K`. When the host is
@@ -243,8 +266,9 @@ Add `-K` when step 1 asked for a password. The play does, in order: validates th
 its `tmp/`; installs the pinned binary at `/usr/local/bin/restic` (pacman's `/usr/bin/restic` stays) and the engine
 script, units and ntfy helper; writes or adopts the Storage Box key, the pinned host key and the job files;
 probes the repository with the job's password and stops with the public key to authorize if ssh is refused, or
-with the restic error if the password is wrong; arms `restic-job@<job>.timer` and the freshness timer; then
-retires the legacy install: it stops and disables `backup-<job>.{timer,service}`, deletes the units, every
+with the restic error if the password is wrong; arms `restic-job@station.timer` and the freshness timer; then
+retires the legacy install: it stops and disables `backup-<legacy_name>.{timer,service}` (`backup-station-arch.*`),
+deletes the units, every
 `.service.<pid>.<date>~` copy and the `.backup` files, resets the failed state, moves `/opt/backup/cache` into the
 cache directory (across filesystems) and keeps or removes `/etc/sudoers.d/backup-user` as the lockout guard
 decides (it tries `runuser -u backup -- sudo -n -u root /usr/bin/true`, which the old restic-only wildcard grant cannot
@@ -256,20 +280,28 @@ The final tasks list the history the job continues. A first run on a real host a
 Watch the first run (it covers everything since the last good backup, so it takes a while):
 
 ```
-sudo systemctl start --no-block restic-job@<job>
-journalctl -fu restic-job@<job>
+sudo systemctl start --no-block restic-job@station
+journalctl -fu restic-job@station
 systemctl list-timers 'restic-*'
-sudo /usr/local/libexec/restic/restic-job exec <job> snapshots --host <hostname> --tag <job>
+sudo /usr/local/libexec/restic/restic-job exec station snapshots --host research-station --tag station
 ```
 
+Retag the legacy snapshots before the first run (see Snapshot tags): the deploy arms the timer, so right after it
+run `sudo systemctl stop restic-job@station.timer`, then
+`sudo /usr/local/libexec/restic/restic-job exec station tag --host research-station --set station,arch`
+(the same as `restic tag --host research-station --set station,arch` against this repository), then
+`sudo systemctl start restic-job@station.timer`. The legacy snapshots carry the tag `station-arch`, and `forget` is
+scoped by the `station` tag.
+
 Preview the first `forget` before the first run, because it groups by host only while the legacy job grouped by
-host and paths: `sudo /usr/local/libexec/restic/restic-job exec <job> forget --dry-run --host <hostname> --tag <job>
+host and paths:
+`sudo /usr/local/libexec/restic/restic-job exec station forget --dry-run --host research-station --tag station
 --group-by host --keep-daily 7 --keep-weekly 2 --keep-monthly 2 --keep-yearly 1` (the job's own retention values).
 The first `forget` applies the job's retention to the whole `--host` and `--tag` history, so older snapshots
-beyond it are dropped; the first `prune` follows a week later. Snapshots that lack the job's tag are never
-forgotten.
+beyond it are dropped; the first `prune` follows a week later. Snapshots that lack the `station` tag are never
+forgotten, which is why the retag comes first.
 
-Rollback: `sudo systemctl disable --now restic-job@<job>.timer restic-freshness.timer`. The repository keeps its
+Rollback: `sudo systemctl disable --now restic-job@station.timer restic-freshness.timer`. The repository keeps its
 history (a new snapshot, and forgotten ones if `forget` ran). The role cannot restore the legacy install; the
 logs and key from the pre-flight are what remains of it. `playbooks/restic-teardown.yml` refuses a host marked
 `teardown_protected`, so a protected workstation is cleaned up by hand: remove the timers, `/etc/restic`,

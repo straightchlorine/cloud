@@ -12,7 +12,9 @@ device_type: arch_linux
 # The units wait for that mount (RequiresMountsFor), so a catch-up run at boot cannot start before it is there.
 restic_cache_dir: /data/vault/.cache/restic
 restic_jobs:
-  - name: station-arch
+  - name: station
+    # The push-backup units this job retires are still named backup-station-arch.
+    legacy_name: station-arch
     repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/station-arch"
     password: "{{ vault_restic_station_arch_password }}"
     schedule: "*-*-* 10:00:00"

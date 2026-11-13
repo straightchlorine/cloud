@@ -32,6 +32,48 @@
     fail_msg: "restic_job.name: '{{ restic_job_cfg.name }}' must match ^[a-z0-9][a-z0-9-]{0,31}$"
     quiet: true
 
+- name: Check the legacy unit name
+  ansible.builtin.assert:
+    that: >-
+      'legacy_name' not in restic_job_cfg
+      or (restic_job_cfg.legacy_name is string and restic_job_cfg.legacy_name is match('^[a-z0-9][a-z0-9-]{0,31}\\Z'))
+    fail_msg: "restic_job.legacy_name: must match ^[a-z0-9][a-z0-9-]{0,31}$"
+    quiet: true
+
+- name: Check the tags are a short list
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.tags is sequence and restic_job_cfg.tags is not string and restic_job_cfg.tags is not mapping
+      - restic_job_cfg.tags | length <= 4
+    fail_msg: "restic_job.tags: needs a list of at most 4 entries (the job name is always added)"
+    quiet: true
+
+- name: Check the tag names
+  ansible.builtin.assert:
+    that:
+      - restic_job_cfg.tags | reject('string') | list | length == 0
+      - restic_job_cfg.tags | reject('match', '^[a-z0-9][a-z0-9._-]{0,31}\\Z') | list | length == 0
+    fail_msg: "restic_job.tags: every entry must match ^[a-z0-9][a-z0-9._-]{0,31}$"
+    quiet: true
+
+- name: Check the tags are unique
+  ansible.builtin.assert:
+    that: restic_job_cfg.tags | unique | length == restic_job_cfg.tags | length
+    fail_msg: "restic_job.tags: entries must be unique"
+    quiet: true
+
+- name: Check the tags leave out the job name
+  ansible.builtin.assert:
+    that: restic_job_cfg.name not in restic_job_cfg.tags
+    fail_msg: "restic_job.tags: must not list the job name, which every snapshot carries anyway"
+    quiet: true
+
+- name: Check the tags leave out the pin tag
+  ansible.builtin.assert:
+    that: "'keep' not in restic_job_cfg.tags"
+    fail_msg: "restic_job.tags: 'keep' is reserved for pinning a snapshot by hand"
+    quiet: true
+
 - name: Check the repository
   ansible.builtin.assert:
     that:

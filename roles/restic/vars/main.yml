@@ -3,6 +3,13 @@ restic_arch_map:
   x86_64: amd64
   aarch64: arm64
 
+# The OS that produced a snapshot, so a restore of /etc onto another release is a conscious choice.
+# Arch and Gentoo roll, so they carry no version. Raspberry Pi OS reports Debian.
+restic_os_tag: >-
+  {{ 'arch' if ansible_distribution == 'Archlinux'
+     else 'gentoo' if ansible_distribution == 'Gentoo'
+     else ansible_distribution | lower ~ '-' ~ ansible_distribution_major_version }}
+
 # systemd splits RequiresMountsFor= on whitespace, starts a specifier at % and gives quotes and backslashes
 # a special meaning, so the patterns reject all of them.
 # The patterns end in \Z because Python's $ also accepts a trailing newline.

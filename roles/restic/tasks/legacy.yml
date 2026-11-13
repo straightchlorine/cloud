@@ -3,15 +3,20 @@
 # It runs after the repository opens with the job's credentials and the new timer is enabled,
 # so protection never lapses.
 # Delete this file once every host has migrated.
+- name: Name the legacy units this job replaces
+  # A renamed job keeps the unit name its push-backup install had.
+  ansible.builtin.set_fact:
+    restic_legacy_name: "{{ restic_job_cfg.legacy_name if 'legacy_name' in restic_job_cfg else restic_job_cfg.name }}"
+
 - name: Look for this job's legacy timer
   ansible.builtin.stat:
-    path: "/etc/systemd/system/backup-{{ restic_job_cfg.name }}.timer"
+    path: "/etc/systemd/system/backup-{{ restic_legacy_name }}.timer"
   register: restic_legacy_timer
 
 - name: Stop and disable the legacy timer and service
   # A running legacy backup may leave a stale lock; restic-job's unlock clears it.
   ansible.builtin.systemd_service:
-    name: "backup-{{ restic_job_cfg.name }}.{{ item }}"
+    name: "backup-{{ restic_legacy_name }}.{{ item }}"
     state: stopped
     enabled: false
   loop: [timer, service]
@@ -21,13 +26,13 @@
   ansible.builtin.find:
     paths: [/etc/systemd/system, /var/lib/systemd/timers]
     patterns:
-      - "backup-{{ restic_job_cfg.name }}.service"
-      - "backup-{{ restic_job_cfg.name }}.timer"
-      - "backup-{{ restic_job_cfg.name }}.service.backup"
-      - "backup-{{ restic_job_cfg.name }}.timer.backup"
-      - "backup-{{ restic_job_cfg.name }}.service.*~"
-      - "backup-{{ restic_job_cfg.name }}.timer.*~"
-      - "stamp-backup-{{ restic_job_cfg.name }}.timer"
+      - "backup-{{ restic_legacy_name }}.service"
+      - "backup-{{ restic_legacy_name }}.timer"
+      - "backup-{{ restic_legacy_name }}.service.backup"
+      - "backup-{{ restic_legacy_name }}.timer.backup"
+      - "backup-{{ restic_legacy_name }}.service.*~"
+      - "backup-{{ restic_legacy_name }}.timer.*~"
+      - "stamp-backup-{{ restic_legacy_name }}.timer"
   register: restic_legacy_files
 
 - name: Remove the legacy unit files
@@ -47,7 +52,7 @@
 - name: Clear the legacy service's failed state  # noqa: no-handler
   # The unit may already be unloaded, so a non-zero rc is expected.
   ansible.builtin.command:
-    argv: [systemctl, reset-failed, "backup-{{ restic_job_cfg.name }}.service"]
+    argv: [systemctl, reset-failed, "backup-{{ restic_legacy_name }}.service"]
   changed_when: true
   failed_when: false
   when: restic_legacy_units.changed

@@ -262,6 +262,28 @@
           file: validate.yml
           scheduler: cron
           expect: "cron wrapper tools: not found on PATH: "
+        - <<: *base
+          id: 74
+          patch: { legacy_name: Old_Name }
+          expect: "restic_job.legacy_name: must match ^[a-z0-9][a-z0-9-]{0,31}$"
+        - { <<: *base, id: 68, patch: { tags: arch }, expect: "restic_job.tags: needs a list of at most 4 entries" }
+        - <<: *base
+          id: 69
+          patch: { tags: [a, b, c, d, e] }
+          expect: "restic_job.tags: needs a list of at most 4 entries"
+        - <<: *base
+          id: 70
+          patch: { tags: [Debian-13] }
+          expect: "restic_job.tags: every entry must match ^[a-z0-9][a-z0-9._-]{0,31}$"
+        - { <<: *base, id: 71, patch: { tags: [arch, arch] }, expect: "restic_job.tags: entries must be unique" }
+        - <<: *base
+          id: 72
+          patch: { tags: [good] }
+          expect: "restic_job.tags: must not list the job name, which every snapshot carries anyway"
+        - <<: *base
+          id: 73
+          patch: { tags: [keep] }
+          expect: "restic_job.tags: 'keep' is reserved for pinning a snapshot by hand"
       loop_control:
         loop_var: molecule_case
         label: "case {{ molecule_case.id }}"

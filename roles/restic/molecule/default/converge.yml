@@ -73,6 +73,8 @@
 
           - <<: *molecule_job
             name: onbat
+            # Its push-backup units carry another name; the role retires those and leaves backup-onbat alone.
+            legacy_name: oldname
             repository: /srv/molecule-repos/onbat
             password: molecule-restic-password-onbat
             skip_on_battery: true

@@ -59,6 +59,12 @@
         - dest: /etc/systemd/system/backup-ok.timer
           content: "[Timer]\nOnCalendar=daily\n[Install]\nWantedBy=timers.target\n"
           mode: "0644"
+        - dest: /etc/systemd/system/backup-oldname.service
+          content: "[Service]\nType=oneshot\nExecStart=/bin/true\n"
+          mode: "0644"
+        - dest: /etc/systemd/system/backup-oldname.timer
+          content: "[Timer]\nOnCalendar=daily\n[Install]\nWantedBy=timers.target\n"
+          mode: "0644"
 
     - name: Age the stale job's fresh path past its 1 h limit
       ansible.builtin.command: touch -d '3 hours ago' /srv/molecule-stale
@@ -70,9 +76,10 @@
         home: /opt/backup
         shell: /bin/bash
 
-    - name: Enable the legacy timer
+    - name: Enable the legacy timers
       ansible.builtin.systemd_service:
-        name: backup-ok.timer
+        name: "{{ item }}"
         enabled: true
         state: started
         daemon_reload: true
+      loop: [backup-ok.timer, backup-oldname.timer]

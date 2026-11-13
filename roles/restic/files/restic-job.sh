@@ -138,7 +138,10 @@ run_job() {
     done
     ((interrupted)) && die "stopped before the backup"
 
-    rr backup --host "$RESTIC_JOB_HOST" --tag "$job" --exclude-caches \
+    read -ra extra_tags <<<"$RESTIC_JOB_TAGS"
+    tag_args=()
+    for t in "${extra_tags[@]}"; do tag_args+=(--tag "$t"); done
+    rr backup --host "$RESTIC_JOB_HOST" --tag "$job" "${tag_args[@]}" --exclude-caches \
         --files-from-verbatim "$conf/$job.sources" --exclude-file "$conf/$job.excludes"
     rc=$?
     case $rc in
@@ -154,8 +157,10 @@ run_job() {
 
     # Grouping by host alone keeps one retention chain across changes to the source list.
     # The --host filter leaves other hosts' snapshots in the same repository untouched.
+    # Only the job tag scopes forget, so an OS upgrade (a new OS tag) never splits the retention chain;
+    # --keep-tag pins what a person tagged by hand.
     read -ra keep <<<"$RESTIC_JOB_KEEP"
-    rr forget --host "$RESTIC_JOB_HOST" --tag "$job" --group-by host "${keep[@]}" ||
+    rr forget --host "$RESTIC_JOB_HOST" --tag "$job" --group-by host --keep-tag keep "${keep[@]}" ||
         die "forget failed (the snapshot itself was saved)"
     steps+=,forget
 
