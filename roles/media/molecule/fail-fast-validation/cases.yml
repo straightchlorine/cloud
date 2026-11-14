@@ -1,0 +1,41 @@
+---
+# Valid values for every field case.yml maps. A case overrides one; a null value leaves that variable undefined.
+# A bare case runs on the play vars alone.
+molecule_case_defaults:
+  ansible_user: root
+  ansible_become: true
+  media_home: /home/music/stack
+  media_library_path: /mnt/music
+  media_youtube_enabled: false
+  vault_youtube_playlists:
+    - "https://www.youtube.com/playlist?list=PLmoleculeA"
+  media_restic_enabled: false
+  media_restic_repository: /srv/molecule-restic/media
+  media_restic_password: molecule-restic-password-media
+
+molecule_cases:
+  - id: library-path-undefined
+    expect: "[media] Required media stack variable 'media_library_path' is not defined or empty"
+    media_library_path: null
+  - id: stack-home-under-root
+    expect: >-
+      media: media_home (/root/stack) resolves under /root, but ansible_user is 'media'. Derive it from the
+      inventory's ansible_user (/home/<user>/...), not from the ansible_user_dir/_id facts.
+    ansible_user: media
+    # The unprivileged user cannot sudo, and validate.yml only reads facts and stats.
+    ansible_become: false
+    media_home: /root/stack
+  - id: placeholder-playlist
+    expect: >-
+      media_youtube_enabled is true but vault_youtube_playlists is missing, empty or still the vault.yml.example
+      placeholder.
+    media_youtube_enabled: true
+    vault_youtube_playlists:
+      - "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+  - id: restic-repository-undefined
+    expect: "Task failed: Error while evaluating conditional: 'media_restic_repository' is undefined"
+    bare: true
+  - id: restic-password-short
+    expect: "restic_job.password: shorter than 16 characters"
+    media_restic_enabled: true
+    media_restic_password: short

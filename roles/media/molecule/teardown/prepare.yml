@@ -1,15 +1,7 @@
 ---
-- name: Prepare - platform prerequisites the role assumes
+- name: Prepare media teardown
   hosts: all
   become: true
   tasks:
-    - name: Install cron, iproute2 and logrotate
-      # The role needs crontab, iproute2 for the network facts, and /etc/logrotate.d.
-      # The minimal test image ships none of them.
-      ansible.builtin.apt:
-        name:
-          - cron
-          - iproute2
-          - logrotate
-        state: present
-        update_cache: true
+    - name: Prepare platform
+      ansible.builtin.include_tasks: ../shared/prepare_platform.yml

@@ -1,0 +1,24 @@
+---
+- name: Read the role defaults for the stub versions
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../defaults/main.yml"
+    name: media_role_defaults
+
+- name: Stub yt-dlp, deno and ntfy-notify
+  # youtube.yml downloads only missing binaries, so the stubs let it run offline.
+  ansible.builtin.copy:
+    dest: "/usr/local/bin/{{ item.name }}"
+    mode: "0755"
+    content: "{{ item.content }}"
+  loop:
+    - name: yt-dlp
+      content: |
+        #!/bin/sh
+        [ "$1" = "--version" ] && { echo {{ media_role_defaults.media_ytdlp_version }}; exit 0; }
+        echo "$@" >> {{ molecule_ytdlp_calls_log }}
+    - name: deno
+      content: "#!/bin/sh\necho deno {{ media_role_defaults.media_deno_version }}\n"
+    - name: ntfy-notify
+      content: "#!/bin/sh\necho \"$1 | $2\" >> {{ molecule_ntfy_log }}\n"
+  loop_control:
+    label: "{{ item.name }}"

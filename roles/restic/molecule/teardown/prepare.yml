@@ -1,29 +1,23 @@
 ---
-- name: Prepare - a source tree, a repository parent and a kept key
+- name: Prepare restic teardown
   hosts: all
   become: true
   tasks:
-    - name: Create the source tree and repository parent
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: directory
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: /srv/molecule-src, mode: "0755" }
-        - { path: /srv/molecule-repos, mode: "1777" }
-        - { path: /srv/pre-parent, mode: "0755" }
+    - name: Install cron for the cron-scheduler teardown
+      ansible.builtin.apt:
+        name: cron
+        update_cache: true
 
-    - name: Give the cache directory's parent to another account, as /data/vault belongs to a user
+    - name: Create the shared source tree
+      ansible.builtin.include_tasks: ../shared/prepare_sources.yml
+
+    - name: Create a cache directory parent that belongs to another account, as /data/vault belongs to a user
       ansible.builtin.file:
         path: /srv/pre-parent
+        state: directory
         owner: nobody
         group: nogroup
-
-    - name: Create a source file
-      ansible.builtin.copy:
-        content: "public\n"
-        dest: /srv/molecule-src/public
-        mode: "0644"
+        mode: "0755"
 
     - name: Place a Storage Box key the teardown must keep
       ansible.builtin.copy:
@@ -31,10 +25,5 @@
         dest: /etc/ssh/restic_storage_key
         mode: "0600"
 
-    - name: Install the stub that records the deploy-time test message
-      ansible.builtin.copy:
-        dest: /usr/local/bin/molecule-notice
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          printf '%s|%s|%s\n' "$1" "$3" "$(printf '%s' "$2" | tr '\n' '^')" >> /var/log/molecule-notice.log
+    - name: Install the deploy-time notice stub
+      ansible.builtin.include_tasks: ../shared/notice_stub.yml

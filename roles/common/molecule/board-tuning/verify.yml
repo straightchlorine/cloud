@@ -1,64 +1,49 @@
 ---
-- name: Verify board tuning
+- name: Verify common board-tuning
   hosts: all
-  gather_facts: true
-  become: true
+  gather_facts: false
   tasks:
-    - name: Stat the deployed tuning artifacts
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: common_tuning_stat
-      loop:
-        - /usr/local/bin/wifi-powersave-off
-        - /etc/systemd/system/wifi-powersave.service
-        - /tmp/zramswap.rendered
-      loop_control:
-        label: "{{ item }}"
+    - name: Assert the tuning artifacts are deployed
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - {path: /usr/local/bin/wifi-powersave-off, state: file, mode: "0755", owner: root}
+          - {path: /etc/systemd/system/wifi-powersave.service, state: file}
+          - {path: /etc/default/zramswap, state: file, mode: "0644", owner: root, group: root}
 
-    - name: Assert every artifact was deployed
-      ansible.builtin.assert:
-        that:
-          - item.stat.exists
-        fail_msg: "{{ item.item }} missing after converge"
-        success_msg: "[OK] {{ item.item }} present"
-      loop: "{{ common_tuning_stat.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Assert power-save script mode and owner
-      ansible.builtin.assert:
-        that:
-          - common_tuning_stat.results[0].stat.mode == '0755'
-          - common_tuning_stat.results[0].stat.pw_name == 'root'
-        fail_msg: >-
-          wifi-powersave-off mode/owner is
-          {{ common_tuning_stat.results[0].stat.mode }} /
-          {{ common_tuning_stat.results[0].stat.pw_name }}
-
-    - name: Read the script and the rendered zram config
+    - name: Read the script and the zram config
       ansible.builtin.slurp:
         src: "{{ item }}"
       register: common_tuning_contents
       loop:
         - /usr/local/bin/wifi-powersave-off
-        - /tmp/zramswap.rendered
+        - /etc/default/zramswap
       loop_control:
         label: "{{ item }}"
 
-    - name: Extract the file contents
-      ansible.builtin.set_fact:
-        common_tuning_script: "{{ common_tuning_contents.results[0].content | b64decode }}"
-        common_zram_config: "{{ common_tuning_contents.results[1].content | b64decode }}"
-
-    - name: Assert script disables power save on wireless
+    - name: Assert the script disables power save on wireless only
       # The wireless discovery is what makes the unit a no-op on wired hosts.
+      vars:
+        script: "{{ common_tuning_contents.results[0].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - "'/sys/class/net/*/wireless' in common_tuning_script"
-          - "'set power_save off' in common_tuning_script"
-        fail_msg: "wifi-powersave-off does not contain the discovery + iw calls"
+          - "'/sys/class/net/*/wireless' in script"
+          - "'set power_save off' in script"
+        fail_msg: "wifi-powersave-off lacks the discovery or the iw call: {{ script }}"
+        quiet: true
 
-    - name: Read the deployed unit's state
+    - name: Assert the zram config renders the default algorithm, share and priority
+      vars:
+        config: "{{ common_tuning_contents.results[1].content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'ALGO=zstd' in config"
+          - "'PERCENT=50' in config"
+          - "'PRIORITY=100' in config"
+        fail_msg: "zramswap.j2 rendered wrong: {{ config }}"
+        quiet: true
+
+    - name: Read the Wi-Fi unit state
       ansible.builtin.systemd:
         name: wifi-powersave
       register: common_tuning_unit
@@ -69,22 +54,5 @@
           - common_tuning_unit.status.ActiveState == 'active'
           - common_tuning_unit.status.UnitFileState == 'enabled'
         fail_msg: >-
-          wifi-powersave is
-          {{ common_tuning_unit.status.ActiveState }} /
-          {{ common_tuning_unit.status.UnitFileState }}
-
-    - name: Assert the zram config renders the role defaults
-      # Values mirror roles/common/defaults/main.yml; update both together.
-      ansible.builtin.assert:
-        that:
-          - "'ALGO=zstd' in common_zram_config"
-          - "'PERCENT=50' in common_zram_config"
-          - "'PRIORITY=100' in common_zram_config"
-        fail_msg: "zramswap.j2 did not render the role defaults"
-
-    - name: Display the tuning results
-      ansible.builtin.debug:
-        msg: |
-          [OK] Board tuning:
-          - wifi-powersave unit: {{ common_tuning_unit.status.ActiveState }}
-          - zram config rendered from defaults
+          wifi-powersave is {{ common_tuning_unit.status.ActiveState }} / {{ common_tuning_unit.status.UnitFileState }}
+        quiet: true

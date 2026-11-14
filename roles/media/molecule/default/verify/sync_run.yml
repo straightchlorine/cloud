@@ -1,0 +1,77 @@
+---
+- name: Stub docker for the beets pull and the text-fix dry run
+  # Nothing is downloaded, so no import runs, but every sync still pulls the beets image.
+  # Each sync also ends with a text-fix dry run in that container.
+  # The stub answers those two calls and fails any other, so the sync cannot reach an unexpected container path.
+  ansible.builtin.copy:
+    dest: /usr/local/bin/docker
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      echo "$*" >> {{ molecule_docker_calls_log }}
+      case "$*" in
+        *" --profile tools pull -q beets" | *"media_tools.py fix-text --dry-run") exit 0 ;;
+      esac
+      exit 1
+
+- name: Truncate the recorder logs
+  # A rerun of verify on a live container would otherwise append to the previous run's calls.
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ item }}"
+    mode: "0644"
+  loop:
+    - "{{ molecule_ytdlp_calls_log }}"
+    - "{{ molecule_ntfy_log }}"
+    - "{{ molecule_docker_calls_log }}"
+
+- name: Run the deployed media-sync against the stub yt-dlp
+  ansible.builtin.command: /usr/local/bin/media-sync
+  changed_when: false
+
+- name: Read the stub's recorded calls
+  ansible.builtin.slurp:
+    src: "{{ molecule_ytdlp_calls_log }}"
+  register: media_ytdlp_calls
+
+- name: Assert every playlist reached yt-dlp intact, once each
+  vars:
+    calls: "{{ (media_ytdlp_calls.content | b64decode).splitlines() }}"
+  ansible.builtin.assert:
+    that:
+      - calls | length == 2
+      - calls[0].endswith(' https://www.youtube.com/playlist?list=PLmoleculeA')
+      - calls[1].endswith(' https://www.youtube.com/playlist?list=PLmoleculeB')
+      - calls[0].startswith('--config-location /home/music/stack/config/yt-dlp.conf ')
+    fail_msg: "yt-dlp calls wrong: {{ calls }}"
+
+- name: Read the ntfy stub's recorded notifications
+  ansible.builtin.slurp:
+    src: "{{ molecule_ntfy_log }}"
+  register: media_ntfy_calls
+
+- name: Assert the sync run sent exactly one summary notification
+  vars:
+    sent: "{{ (media_ntfy_calls.content | b64decode).splitlines() }}"
+  ansible.builtin.assert:
+    that:
+      - sent | length == 1
+      - "'media-sync sync done' in sent[0]"
+      - "'2 playlist(s): 0 track(s) imported, 0 left in downloads/, 0 unexpected yt-dlp error(s).' in sent[0]"
+    fail_msg: "ntfy calls wrong: {{ sent }}"
+
+- name: Read the docker stub's recorded calls
+  ansible.builtin.slurp:
+    src: "{{ molecule_docker_calls_log }}"
+  register: media_docker_calls
+
+- name: Assert the sync pulled beets, then ran the text fix once as a dry run
+  vars:
+    calls: "{{ (media_docker_calls.content | b64decode).splitlines() }}"
+  ansible.builtin.assert:
+    that:
+      - calls | length == 2
+      - calls[0].endswith(' --profile tools pull -q beets')
+      - calls[1] is search(' run --rm -T --entrypoint /lsiopy/bin/python3 beets ')
+      - calls[1].endswith('/config/tools/media_tools.py fix-text --dry-run')
+    fail_msg: "docker calls wrong: {{ calls }}"

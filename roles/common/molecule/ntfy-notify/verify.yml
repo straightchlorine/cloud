@@ -1,5 +1,5 @@
 ---
-- name: Verify - the helper's delivery, strict mode and key handling
+- name: Verify common ntfy-notify
   hosts: all
   become: true
   tasks:
@@ -43,61 +43,76 @@
         timeout: 30
 
     - name: Send through the helper for each stub status, with and without NTFY_STRICT
-      # The body carries a quote and a dollar sign: --data-raw must pass both through.
+      # The body carries a quote and a dollar sign: --data-raw must pass both through. Each send prints the
+      # stub's record of its request after the helper's own exit code is saved.
       ansible.builtin.shell: |
-        echo {{ item.code }} > /tmp/ntfy-stub-code
-        {{ item.env }} /usr/local/bin/ntfy-notify 'The title' 'body "quoted" $HOME' high rotating_light
+        echo {{ item.value.code }} > /tmp/ntfy-stub-code
+        {{ item.value.env }} /usr/local/bin/ntfy-notify 'The title' 'body "quoted" $HOME' high rotating_light
+        rc=$?
+        cat /tmp/ntfy-stub.log
+        exit $rc
       environment:
         HOME: /root
       register: molecule_sends
-      loop:
-        - { code: 200, env: "", label: "200 lenient" }
-        - { code: 200, env: "NTFY_STRICT=1", label: "200 strict" }
-        - { code: 302, env: "", label: "302 lenient" }
-        - { code: 302, env: "NTFY_STRICT=1", label: "302 strict" }
-        - { code: 500, env: "", label: "500 lenient" }
-        - { code: 500, env: "NTFY_STRICT=1", label: "500 strict" }
+      vars:
+        molecule_send_cases:
+          200 lenient: {code: 200, env: ""}
+          200 strict: {code: 200, env: "NTFY_STRICT=1"}
+          302 lenient: {code: 302, env: ""}
+          302 strict: {code: 302, env: "NTFY_STRICT=1"}
+          500 lenient: {code: 500, env: ""}
+          500 strict: {code: 500, env: "NTFY_STRICT=1"}
+      loop: "{{ molecule_send_cases | dict2items }}"
       loop_control:
-        label: "{{ item.label }}"
+        label: "{{ item.key }}"
       changed_when: false
       failed_when: false
 
-    - name: Read the last request the stub recorded for a 200
-      ansible.builtin.shell: |
-        echo 200 > /tmp/ntfy-stub-code
-        /usr/local/bin/ntfy-notify 'The title' 'body "quoted" $HOME' high rotating_light
-        cat /tmp/ntfy-stub.log
-      register: molecule_request
-      changed_when: false
+    - name: Index the sends by case name
+      ansible.builtin.set_fact:
+        molecule_by_case: >-
+          {{ dict(molecule_sends.results | map(attribute='item.key')
+                  | zip(molecule_sends.results)) }}
 
     - name: Assert only a 2xx counts as delivered under NTFY_STRICT
-      vars:
-        molecule_rc: "{{ molecule_sends.results | map(attribute='rc') | list }}"
       ansible.builtin.assert:
         that:
-          - molecule_rc == [0, 0, 0, 1, 0, 1]
-          - "'delivery failed (HTTP 302)' in molecule_sends.results[3].stderr"
-          - "'delivery failed (HTTP 500)' in molecule_sends.results[5].stderr"
-          - molecule_sends.results[2].stderr == ''
+          - molecule_by_case['200 lenient'].rc == 0
+          - molecule_by_case['200 strict'].rc == 0
+          - molecule_by_case['302 lenient'].rc == 0
+          - molecule_by_case['302 strict'].rc == 1
+          - molecule_by_case['500 lenient'].rc == 0
+          - molecule_by_case['500 strict'].rc == 1
+          - "'delivery failed (HTTP 302)' in molecule_by_case['302 strict'].stderr"
+          - "'delivery failed (HTTP 500)' in molecule_by_case['500 strict'].stderr"
+          - molecule_by_case['302 lenient'].stderr == ''
+        fail_msg: "unexpected exit codes: {{ molecule_by_case | dict2items | map(attribute='value.rc') | list }}"
+        quiet: true
 
     - name: Assert the request carried the bearer token, the headers and the body verbatim
+      vars:
+        request: "{{ molecule_by_case['200 lenient'].stdout_lines }}"
       ansible.builtin.assert:
         that:
-          - molecule_request.stdout_lines[0] == '/molecule-test'
-          - molecule_request.stdout_lines[1] == 'Bearer molecule-test-ntfy-key'
-          - molecule_request.stdout_lines[2] == 'The title'
-          - molecule_request.stdout_lines[3] == 'high'
-          - molecule_request.stdout_lines[4] == 'rotating_light'
-          - molecule_request.stdout_lines[5] == 'body "quoted" $HOME'
+          - request[0] == '/molecule-test'
+          - request[1] == 'Bearer molecule-test-ntfy-key'
+          - request[2] == 'The title'
+          - request[3] == 'high'
+          - request[4] == 'rotating_light'
+          - request[5] == 'body "quoted" $HOME'
+        fail_msg: "request record: {{ request }}"
+        quiet: true
 
     - name: Hide the key file
       ansible.builtin.command: mv /etc/ntfy/notify-api-key /etc/ntfy/notify-api-key.away
       changed_when: true
 
     - name: Send without a key, with and without NTFY_STRICT
-      ansible.builtin.shell: "{{ item }} /usr/local/bin/ntfy-notify 'The title' 'body'"
+      ansible.builtin.shell: "{{ item.value }} /usr/local/bin/ntfy-notify 'The title' 'body'"
       register: molecule_nokey
-      loop: ["", "NTFY_STRICT=1"]
+      loop: "{{ {'lenient': '', 'strict': 'NTFY_STRICT=1'} | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
       changed_when: false
       failed_when: false
 
@@ -106,12 +121,16 @@
       changed_when: true
 
     - name: Assert a missing key is a no-op normally and a failure under NTFY_STRICT
+      vars:
+        nokey: "{{ dict(molecule_nokey.results | map(attribute='item.key') | zip(molecule_nokey.results)) }}"
       ansible.builtin.assert:
         that:
-          - molecule_nokey.results[0].rc == 0
-          - molecule_nokey.results[0].stderr == ''
-          - molecule_nokey.results[1].rc == 1
-          - "'cannot read /etc/ntfy/notify-api-key' in molecule_nokey.results[1].stderr"
+          - nokey.lenient.rc == 0
+          - nokey.lenient.stderr == ''
+          - nokey.strict.rc == 1
+          - "'cannot read /etc/ntfy/notify-api-key' in nokey.strict.stderr"
+        fail_msg: "missing-key results: {{ nokey }}"
+        quiet: true
 
     - name: Stop the stub server
       ansible.builtin.command: pkill -f /tmp/ntfy-stub.py

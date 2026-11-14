@@ -52,7 +52,7 @@
 - name: Validate Pi-hole Exporter dependencies
   when:
     - prometheus_exporters_pihole_exporter_enabled
-    - "'dns' in group_names"
+    - "'dns_servers' in group_names"
   tags: [validation]
   block:
     - name: Check if Pi-hole is installed
@@ -133,7 +133,7 @@
   ansible.builtin.debug:
     msg: |
       [OK] Prometheus Exporters Validation Complete:
-      - Architecture: {{ ansible_architecture }} → {{ os_arch_download }}
+      - Architecture: {{ ansible_facts.architecture }} -> {{ os_arch_download }}
       - Enabled exporters: >-
           {{ [('node' if prometheus_exporters_node_exporter_enabled else ''),
           ('pihole' if prometheus_exporters_pihole_exporter_enabled else '')] | select | join(', ') }}

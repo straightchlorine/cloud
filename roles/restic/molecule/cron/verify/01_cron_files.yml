@@ -1,0 +1,55 @@
+---
+- name: Assert the cron files, the directories and the absence of any systemd unit
+  vars:
+    molecule_paths:
+      - { path: /etc/cron.d/restic-cr, state: file, mode: "0644", owner: root }
+      - { path: /etc/cron.d/restic-crgate, state: file }
+      - { path: /etc/cron.d/restic-freshness, state: file }
+      - { path: /var/log/restic, state: directory, mode: "0750", owner: root }
+      - { path: /var/cache/restic, state: directory, mode: "0700", owner: restic }
+      - { path: /var/cache/restic/tmp, state: directory, owner: restic }
+      - { path: /etc/systemd/system/restic-job@.service, state: absent }
+      - { path: /etc/systemd/system/restic-freshness.timer, state: absent }
+      - { path: /etc/systemd/system/restic-job@cr.timer.d, state: absent }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the cron files and the env files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/cron.d/restic-cr
+    - /etc/cron.d/restic-crgate
+    - /etc/cron.d/restic-crbroken
+    - /etc/cron.d/restic-crslow
+    - /etc/cron.d/restic-freshness
+    - /etc/restic/crgate.env
+    - /etc/restic/crslow.env
+  register: molecule_text
+
+- name: Assert the entries and the env files
+  vars:
+    molecule_t: "{{ molecule_text.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_cr: "{{ molecule_t['/etc/cron.d/restic-cr'] | b64decode }}"
+    molecule_crgate: "{{ molecule_t['/etc/cron.d/restic-crgate'] | b64decode }}"
+    molecule_crbroken: "{{ molecule_t['/etc/cron.d/restic-crbroken'] | b64decode }}"
+    molecule_crslow: "{{ molecule_t['/etc/cron.d/restic-crslow'] | b64decode }}"
+    molecule_freshness: "{{ molecule_t['/etc/cron.d/restic-freshness'] | b64decode }}"
+    molecule_gate_env: "{{ (molecule_t['/etc/restic/crgate.env'] | b64decode).splitlines() }}"
+    molecule_slow_env: "{{ (molecule_t['/etc/restic/crslow.env'] | b64decode).splitlines() }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_cr is search('(?m)^\*/30 8-18 \* \* 1-5 root ' ~ molecule_wrapper
+        ~ ' cron cr >>/var/log/restic/cr.log 2>&1$')
+      - molecule_crgate is search('(?m)^17 \* \* \* \* root ' ~ molecule_wrapper ~ ' cron crgate ')
+      - molecule_crbroken is search('(?m)^0 3 \* \* 0 root ')
+      - molecule_crslow is search('(?m)^5,35 \* 1,15 \* \* root ')
+      - molecule_freshness is search('(?m)^@reboot root sleep 900 && ' ~ molecule_wrapper ~ ' freshness >>')
+      - molecule_freshness is search('(?m)^7 \* \* \* \* root ' ~ molecule_wrapper ~ ' freshness >>')
+      - "'TMPDIR=/var/cache/restic/tmp' in molecule_gate_env"
+      - "'RESTIC_JOB_SKIP_METERED=1' in molecule_gate_env"
+      - "'RESTIC_JOB_SKIP_ON_BATTERY=1' in molecule_gate_env"
+      - "'RESTIC_JOB_TIMEOUT=10m' in molecule_gate_env"
+      - "'RESTIC_JOB_TIMEOUT=2s' in molecule_slow_env"
+      - "'GOMEMLIMIT=409MiB' in molecule_gate_env"
+    quiet: true

@@ -1,11 +1,11 @@
 ---
-- name: Converge - honeybench Docker task file
+- name: Converge honeybench default
   hosts: all
   become: true
   vars:
     honeybench_user: root
   tasks:
-    - name: Configure Docker (common docker_rpm, overwrite mode)
+    - name: Configure Docker
       # The Docker packages come from a CentOS 10 repository and need a daemon that the container cannot run.
       # The stub unit and group from prepare.yml stand in for them.
       ansible.builtin.include_role:

@@ -1,0 +1,5 @@
+---
+vault_ntfy_api_key: molecule-test-ntfy-key
+ntfy_topic: molecule-test
+molecule_kept_service: {service_name: kept, service_image: "busybox:1"}
+molecule_dropped_service: {service_name: dropped, service_image: "busybox:1"}

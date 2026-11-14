@@ -1,5 +1,5 @@
 ---
-- name: Converge - hardware discovery role
+- name: Converge hardware default
   hosts: all
   gather_facts: true
   become: true

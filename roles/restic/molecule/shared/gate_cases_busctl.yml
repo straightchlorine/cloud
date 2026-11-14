@@ -1,0 +1,69 @@
+---
+# Canned busctl replies, each "<object path> <property>|<reply>" with the reply busctl --json=short prints.
+molecule_nm: /org/freedesktop/NetworkManager
+molecule_gate_cases:
+  - id: global-metered-yes
+    rc: 1
+    text: "skipped: NetworkManager reports a metered link (Metered=1)"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":1}'
+  - id: global-metered-guess-yes
+    rc: 1
+    text: "skipped: NetworkManager reports a metered link (Metered=3)"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":3}'
+  - id: listed-name-with-unicode-quote-and-backslash
+    rc: 1
+    text: "skipped: connection '\u00dcn\u00ef \"q\" back\\slash' is listed as metered"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+        - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1"]}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-11-wireless"}'
+        - "{{ molecule_nm }}/ActiveConnection/1 Id|{\"type\":\"s\",\"data\":\"\u00dcn\u00ef \\\"q\\\" back\\\\slash\"}"
+  - id: no-active-connection
+    rc: 1
+    text: "skipped: no active network connection"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+        - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":[]}'
+  - id: second-connection-on-a-metered-device
+    rc: 1
+    text: "skipped: link of 'Hotspot' is metered"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":4}'
+        - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1",
+          "{{ molecule_nm }}/ActiveConnection/2"]}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-3-ethernet"}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Id|{"type":"s","data":"Home"}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/2"]}'
+        - '{{ molecule_nm }}/Devices/2 Metered|{"type":"u","data":4}'
+        - '{{ molecule_nm }}/ActiveConnection/2 Type|{"type":"s","data":"802-11-wireless"}'
+        - '{{ molecule_nm }}/ActiveConnection/2 Id|{"type":"s","data":"Hotspot"}'
+        - '{{ molecule_nm }}/ActiveConnection/2 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/3"]}'
+        - '{{ molecule_nm }}/Devices/3 Metered|{"type":"u","data":1}'
+  - id: only-a-docker-bridge
+    rc: 1
+    text: "skipped: no active network connection"
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":2}'
+        - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1",
+          "{{ molecule_nm }}/ActiveConnection/2"]}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"bridge"}'
+        - '{{ molecule_nm }}/ActiveConnection/2 Type|{"type":"s","data":"loopback"}'
+  - id: all-unmetered
+    rc: 0
+    text: ""
+    env:
+      REPLIES:
+        - '{{ molecule_nm }} Metered|{"type":"u","data":4}'
+        - '{{ molecule_nm }} ActiveConnections|{"type":"ao","data":["{{ molecule_nm }}/ActiveConnection/1"]}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Type|{"type":"s","data":"802-3-ethernet"}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Id|{"type":"s","data":"Home"}'
+        - '{{ molecule_nm }}/ActiveConnection/1 Devices|{"type":"ao","data":["{{ molecule_nm }}/Devices/2"]}'
+        - '{{ molecule_nm }}/Devices/2 Metered|{"type":"u","data":2}'

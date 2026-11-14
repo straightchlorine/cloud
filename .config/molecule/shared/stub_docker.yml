@@ -1,0 +1,25 @@
+---
+# No Docker daemon in the container. These stubs let the real stack units start; each docker start
+# appends to /var/tmp/docker-stub-starts, so verify can prove a restart handler fired.
+- name: Stub the docker binary
+  ansible.builtin.copy:
+    dest: /usr/bin/docker
+    content: "#!/bin/sh\nexit 0\n"
+    mode: "0755"
+
+- name: Stub docker.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service
+    content: |
+      [Unit]
+      Description=Docker stub for molecule
+      [Service]
+      ExecStartPre=/bin/sh -c 'echo start >> /var/tmp/docker-stub-starts'
+      ExecStart=/usr/bin/sleep infinity
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+
+- name: Load the docker stub unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true

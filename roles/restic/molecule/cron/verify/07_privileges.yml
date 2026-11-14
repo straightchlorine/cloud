@@ -1,0 +1,22 @@
+---
+# The unit's sandbox has a cron counterpart: setpriv sets the user, the single capability, the bounding set
+# and no_new_privs, and the wrapper sets the umask.
+- name: Run the plain job with a stub restic that records its privileges
+  ansible.builtin.shell: |
+    env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=probe {{ molecule_wrapper }} cron cr
+    echo "rc=$?"
+    cat /var/lib/restic/molecule-probe
+  register: molecule_probe
+  changed_when: true
+
+- name: Assert the run had only CAP_DAC_READ_SEARCH, no new privileges and the restic user
+  ansible.builtin.assert:
+    that:
+      - molecule_probe.stdout_lines[0] == 'rc=0'
+      - "'CapEff:\t0000000000000004' in molecule_probe.stdout_lines"
+      - "'CapBnd:\t0000000000000004' in molecule_probe.stdout_lines"
+      - "'CapAmb:\t0000000000000004' in molecule_probe.stdout_lines"
+      - "'NoNewPrivs:\t1' in molecule_probe.stdout_lines"
+      - "'restic' in molecule_probe.stdout_lines"
+      - "'0077' in molecule_probe.stdout_lines"
+      - "'lockfds=0' in molecule_probe.stdout_lines"

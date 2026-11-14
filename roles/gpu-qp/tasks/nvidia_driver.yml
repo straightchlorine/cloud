@@ -19,7 +19,7 @@
 - name: Check whether the NVIDIA kernel module is already built
   # Debian ships the module as nvidia-current.ko.xz, and other builds ship it as nvidia.ko.
   ansible.builtin.find:
-    paths: "/lib/modules/{{ ansible_kernel }}/updates/dkms"
+    paths: "/lib/modules/{{ ansible_facts.kernel }}/updates/dkms"
     patterns: ["nvidia.ko*", "nvidia-current.ko*"]
   register: gpu_qp_nvidia_module
   become: true

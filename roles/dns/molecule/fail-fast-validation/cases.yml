@@ -1,0 +1,31 @@
+---
+molecule_case_defaults:
+  vault_pihole_webpassword: molecule-test-password
+  common_ntp_server_enabled: false
+  common_ntp_allowed_networks: []
+  dns_backup_enabled: false
+
+# single: true asserts that exactly one item of a looped check failed.
+# dns_pihole_interface and the backup target are left out where the case needs them undefined.
+molecule_cases:
+  - id: interface-undefined
+    expect: "[dns] Required DNS services variable 'dns_pihole_interface' is not defined or empty"
+    single: true
+  - id: vault-placeholder
+    expect: "[dns] Vault variable 'vault_pihole_webpassword' contains placeholder value."
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    vault_pihole_webpassword: your-secure-web-password
+  - id: ntp-networks-empty
+    expect: common_ntp_allowed_networks must be non-empty when common_ntp_server_enabled is true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    common_ntp_server_enabled: true
+  - id: interface-missing
+    expect: "Network interface doesnotexist0 does not exist."
+    dns_pihole_interface: doesnotexist0
+  - id: backup-dir-undefined
+    expect: dns_backup_dir must be set in host_vars when dns_backup_enabled is true
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    dns_backup_enabled: true
+    dns_backup_owner: molecule

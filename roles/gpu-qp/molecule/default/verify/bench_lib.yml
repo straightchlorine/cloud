@@ -1,0 +1,117 @@
+---
+- name: List the installed bench helpers
+  ansible.builtin.find:
+    paths: "{{ gpu_qp_lib_path }}"
+    file_type: any
+    hidden: true
+  register: gpu_qp_lib
+
+- name: Assert the helper files
+  ansible.builtin.assert:
+    that:
+      # The directory holds exactly the role's files, with nothing stale and no __pycache__.
+      - (gpu_qp_lib.files | map(attribute='path') | map('basename') | sort | list)
+        == ((gpu_qp_bench_files + ['bench.env', 'override.yml']) | sort | list)
+      - gpu_qp_lib.files | map(attribute='pw_name') | unique | list == ['root']
+      - gpu_qp_lib.files | map(attribute='mode') | unique | list == ['0644']
+    fail_msg: "bench helpers wrong:\n{{ gpu_qp_lib.files | map(attribute='path') | list }}"
+    quiet: true
+
+- name: Assert the helper directory, the lock and the kernel guard units
+  vars:
+    molecule_paths:
+      - {path: /usr/local/lib/gpu-qp, state: directory, mode: "0755", owner: root}
+      # The lock belongs to ansible_user, which is root here, and not to whoever probes it.
+      - {path: "{{ gpu_qp_bench }}/.lock", state: file, mode: "0644", owner: root}
+      - {path: /etc/systemd/system/gpu-qp-kernel-guard.service, state: file, mode: "0644", owner: root}
+      - {path: /etc/systemd/system/gpu-qp-kernel-guard.timer, state: file, mode: "0644", owner: root}
+      - {path: /etc/systemd/system/apt-daily-upgrade.service.d/gpu-qp-kernel-guard.conf, state: file,
+         mode: "0644", owner: root}
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the kernel guard timer state
+  ansible.builtin.command: systemctl show gpu-qp-kernel-guard.timer --property=ActiveState,UnitFileState
+  register: gpu_qp_guard_timer
+  changed_when: false
+
+- name: Assert the kernel guard timer is active and enabled
+  ansible.builtin.assert:
+    that:
+      - gpu_qp_guard_timer.stdout is search('(?m)^ActiveState=active$')
+      - gpu_qp_guard_timer.stdout is search('(?m)^UnitFileState=enabled$')
+    fail_msg: "kernel guard timer wrong: {{ gpu_qp_guard_timer.stdout }}"
+    quiet: true
+
+- name: Syntax-check the shell helpers
+  ansible.builtin.command: "bash -n {{ gpu_qp_lib_path }}/{{ item }}"
+  loop: "{{ gpu_qp_bench_files | select('match', '.*[.]sh$') | list }}"
+  changed_when: false
+
+- name: Parse the Python helpers
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import ast,sys; ast.parse(open(sys.argv[1]).read())"
+      - "{{ gpu_qp_lib_path }}/{{ item }}"
+  loop: "{{ gpu_qp_bench_files | select('match', '.*[.]py$') | list }}"
+  changed_when: false
+
+- name: Read the rendered override and settings
+  ansible.builtin.slurp:
+    src: "{{ gpu_qp_lib_path }}/{{ item }}"
+  loop: [override.yml, bench.env]
+  register: gpu_qp_lib_files
+
+- name: Assert the override and the settings
+  vars:
+    gpu_qp_blobs: "{{ gpu_qp_lib_files.results | items2dict(key_name='item', value_name='content') }}"
+    override: "{{ gpu_qp_blobs['override.yml'] | b64decode | from_yaml }}"
+    settings: "{{ gpu_qp_blobs['bench.env'] | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        ['quantum-pipeline-cpu', 'quantum-pipeline-gpu1', 'quantum-pipeline-gpu2']
+        is subset(override.services | list)
+      - settings is search('(?m)^GPU_QP_HOME=/home/gpu/gpu-qp$')
+      - settings is search('(?m)^GPU_QP_SOURCE=/home/gpu/gpu-qp/src/quantum-pipeline$')
+      - settings is search('(?m)^GPU_QP_BENCH_ROOT=/home/gpu/gpu-qp/bench$')
+      - settings is search('(?m)^GPU_QP_MIN_FREE_GB=10$')
+      - settings is search('(?m)^GPU_QP_USER=root$')
+    fail_msg: "override or bench.env wrong:\n{{ override }}\n{{ settings }}"
+    quiet: true
+
+- name: Run gpu-qp runs
+  # The manifest hashes come from lookups that must match what copy and template wrote.
+  # A mismatch makes the dispatcher print the lib warning on stderr.
+  ansible.builtin.command: /usr/local/bin/gpu-qp runs
+  register: gpu_qp_runs
+  changed_when: false
+
+- name: Run gpu-qp status with no runs
+  ansible.builtin.command: /usr/local/bin/gpu-qp status
+  register: gpu_qp_status
+  changed_when: false
+
+- name: Run gpu-qp status for an unknown run
+  ansible.builtin.command: /usr/local/bin/gpu-qp status --run nope
+  register: gpu_qp_status_nope
+  changed_when: false
+  failed_when: gpu_qp_status_nope.rc != 2
+
+- name: Run gpu-qp fetch without a run
+  ansible.builtin.command: /usr/local/bin/gpu-qp fetch
+  register: gpu_qp_fetch
+  changed_when: false
+  failed_when: gpu_qp_fetch.rc != 2
+
+- name: Assert the benchmark commands
+  ansible.builtin.assert:
+    that:
+      - gpu_qp_runs.stderr == ''
+      - gpu_qp_runs.stdout is search('^NAME\tSTATE\t')
+      - (gpu_qp_status.stdout ~ gpu_qp_status.stderr) is search('no runs')
+      - "gpu_qp_status_nope.stderr is search('unknown run: nope')"
+      - "gpu_qp_fetch.stderr is search('gpu-qp fetch  --run NAME')"
+    fail_msg: "benchmark commands wrong:\n{{ [gpu_qp_runs, gpu_qp_status, gpu_qp_status_nope, gpu_qp_fetch] }}"
+    quiet: true

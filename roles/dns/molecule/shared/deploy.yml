@@ -1,0 +1,15 @@
+---
+- name: Set up chrony
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: chrony
+
+- name: Deploy the auto-update script and cron
+  ansible.builtin.include_role:
+    name: dns
+    tasks_from: auto_updates
+
+- name: Deploy the Syncthing backup script and cron
+  ansible.builtin.include_role:
+    name: dns
+    tasks_from: backup

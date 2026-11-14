@@ -1,0 +1,7 @@
+# The Molecule toolchain; CI test steps install only this. Pins match the local .venv.
+ansible-core==2.21.3
+molecule==26.8.0
+molecule-plugins[podman]==26.7.15
+jinja2==3.1.6
+# Required by the ansible.utils.ipaddr filter
+netaddr==1.3.0

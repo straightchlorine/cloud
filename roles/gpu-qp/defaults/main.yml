@@ -63,8 +63,8 @@ gpu_qp_driver_packages:
 # The metapackage makes a kernel upgrade pull matching headers, so DKMS can build the module for it.
 # These are Debian package names, so override them on Ubuntu.
 gpu_qp_driver_headers_packages:
-  - "linux-headers-{{ ansible_kernel }}"
-  - "linux-headers-{{ ansible_kernel | regex_replace('^[^-]+-', '') }}"
+  - "linux-headers-{{ ansible_facts.kernel }}"
+  - "linux-headers-{{ ansible_facts.kernel | regex_replace('^[^-]+-', '') }}"
 
 # While benchmark work is pending, a root timer pins the host to the kernel the run started on.
 # Pending means running, or a run that `gpu-qp resume` would pick up.

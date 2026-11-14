@@ -1,0 +1,19 @@
+---
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run firewall validate.yml
+      ansible.builtin.include_role:
+        name: firewall
+        tasks_from: validate
+      vars:
+        firewall_policy_incoming: "{{ molecule_case.firewall_policy_incoming }}"
+        firewall_policy_outgoing: "{{ molecule_case.firewall_policy_outgoing }}"
+        firewall_policy_routed: "{{ molecule_case.firewall_policy_routed }}"
+        firewall_logging: "{{ molecule_case.firewall_logging }}"
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

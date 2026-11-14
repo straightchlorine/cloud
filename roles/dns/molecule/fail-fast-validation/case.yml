@@ -1,0 +1,31 @@
+---
+# Every key is mapped so an absent case field leaves that variable undefined, shadowing play vars and role defaults.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run dns validate.yml
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: validate
+      vars:
+        vault_pihole_webpassword: "{{ molecule_case.vault_pihole_webpassword }}"
+        dns_pihole_interface: "{{ molecule_case.dns_pihole_interface }}"
+        common_ntp_server_enabled: "{{ molecule_case.common_ntp_server_enabled }}"
+        common_ntp_allowed_networks: "{{ molecule_case.common_ntp_allowed_networks }}"
+        dns_backup_enabled: "{{ molecule_case.dns_backup_enabled }}"
+        dns_backup_dir: "{{ molecule_case.dns_backup_dir }}"
+        dns_backup_owner: "{{ molecule_case.dns_backup_owner }}"
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    # A looped check reports its per-item failures in .results.
+    - name: Assert only one item failed
+      ansible.builtin.assert:
+        that: ansible_failed_result.results | selectattr('failed') | list | length == 1
+        fail_msg: "case {{ molecule_case.id }} failed more than one item: {{ ansible_failed_result.results }}"
+        quiet: true
+      when: molecule_case.single is defined
+
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

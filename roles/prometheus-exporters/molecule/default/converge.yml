@@ -1,61 +1,44 @@
 ---
-- name: Converge - the role's container-testable task files
+- name: Converge prometheus-exporters default
   hosts: all
   become: true
   vars:
-    prometheus_exporters_enabled: true
-    prometheus_exporters_user: "prometheus"
-    prometheus_exporters_group: "prometheus"
-    prometheus_exporters_base_dir: "/opt/prometheus-exporters"
-    prometheus_exporters_config_dir: "/etc/prometheus/exporters"
-    prometheus_exporters_node_exporter_enabled: true
-    prometheus_exporters_node_exporter_port: 9100
-    prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
-    prometheus_exporters_pi_hardware_metrics_enabled: false
-    prometheus_exporters_pihole_exporter_enabled: false
-    prometheus_exporters_pihole_exporter_port: 9617
-    # The ufw delete in pihole_exporter_teardown.yml must mirror the source-restricted rule that firewall.yml adds.
+    # pihole_exporter_teardown.yml deletes the ufw rule this source produces.
     prometheus_exporters_firewall_source: "192.168.0.0/16"
   tasks:
-    # This runs the real common setup through include_role.
-    # That makes its templates resolve against the role's own role_path.
-    # Binary downloads and service starts are the parts of the role a container cannot run.
-    # The Pi-hole exporter download is covered only indirectly, through the rendering of its checksum URL.
-    - name: Run the real common exporter setup
+    # Binary downloads and service starts cannot run in a container.
+    - name: Run common_setup
       ansible.builtin.include_role:
         name: prometheus-exporters
         tasks_from: common_setup
 
-    # This fixture stands in for an earlier Pi-hole exporter install that the real teardown below removes.
-    # It is one-shot, hence the molecule-idempotence-notest tag.
-    - name: Create fake Pi-hole Exporter artifacts to exercise the teardown
-      ansible.builtin.copy:
-        content: "fake binary for molecule test\n"
-        dest: "{{ item }}"
-        mode: "0755"
-      loop:
-        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
-        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
-        - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
+    # One-shot arrange steps; the teardown skips silently without teardown_confirmed.
+    - name: Install and tear down fake Pi-hole exporter artifacts
       tags: [molecule-idempotence-notest]
+      block:
+        - name: Create fake Pi-hole exporter files
+          ansible.builtin.copy:
+            content: "fake binary\n"
+            dest: "{{ item }}"
+            mode: "0755"
+          loop:
+            - /opt/prometheus-exporters/bin/pihole_exporter
+            - /opt/prometheus-exporters/bin/pihole_exporter.version
+            - /etc/prometheus/exporters/pihole-exporter.conf
 
-    - name: Create fake Pi-hole Exporter systemd unit
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Pi-hole Exporter (molecule test fixture)
-          [Service]
-          ExecStart=/bin/true
-        dest: /etc/systemd/system/pihole-exporter.service
-        mode: "0644"
-      tags: [molecule-idempotence-notest]
+        - name: Create fake Pi-hole exporter unit
+          ansible.builtin.copy:
+            content: |
+              [Unit]
+              Description=Pi-hole Exporter fixture
+              [Service]
+              ExecStart=/bin/true
+            dest: /etc/systemd/system/pihole-exporter.service
+            mode: "0644"
 
-    # The real teardown gets its gate satisfied the way playbooks/dns-teardown.yml does it.
-    # Without teardown_confirmed the whole block silently skips and this scenario tests nothing.
-    - name: Run the real pihole_exporter_teardown against the fake artifacts
-      ansible.builtin.include_role:
-        name: prometheus-exporters
-        tasks_from: pihole_exporter_teardown
-      vars:
-        teardown_confirmed: true
-      tags: [molecule-idempotence-notest]
+        - name: Run pihole_exporter_teardown
+          ansible.builtin.include_role:
+            name: prometheus-exporters
+            tasks_from: pihole_exporter_teardown
+          vars:
+            teardown_confirmed: true

@@ -1,0 +1,25 @@
+---
+- name: Start the slow job without waiting
+  ansible.builtin.command: systemctl start --no-block restic-job@slow.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: Wait until the slow job holds its lock
+  ansible.builtin.command: /usr/local/libexec/restic/restic-job exec slow list locks --no-lock
+  register: molecule_locks
+  until: molecule_locks.stdout_lines | length == 1
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Stop the slow job mid-backup
+  ansible.builtin.command: systemctl stop restic-job@slow.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: List locks after the stop
+  ansible.builtin.command: /usr/local/libexec/restic/restic-job exec slow list locks --no-lock
+  register: molecule_locks_after
+  changed_when: false
+
+- name: Assert the SIGINT relay let restic delete its lock
+  ansible.builtin.assert:
+    that: molecule_locks_after.stdout | trim == ''

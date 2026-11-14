@@ -1,38 +1,13 @@
 ---
-- name: Converge - Fail-Fast Validation
+- name: Converge prometheus-exporters fail-fast-validation
   hosts: all
-  # The play deliberately sets none of the variables that validate.yml requires.
+  vars_files: [cases.yml]
   tasks:
-    - name: Include the real validate.yml (expect it to fail)
-      block:
-        - name: Run validate.yml without the required variables
-          ansible.builtin.include_tasks: ../../tasks/validate.yml
-
-        - name: Fail the test - validate.yml should have refused to run
-          ansible.builtin.fail:
-            msg: "validate.yml did not fail fast on the missing required variables"
-      rescue:
-        - name: Assert the failure is the validation failure, not an include error
-          # The top-level msg of a looped fail task is the generic "One or more items failed".
-          # The per-item detail lives in .results, and the default covers a failure that has none.
-          # Without this check, any error such as an unresolved include_role would count as a pass.
-          vars:
-            failed_items: "{{ ansible_failed_result.results | default([]) | selectattr('failed') | list }}"
-          ansible.builtin.assert:
-            that:
-              - failed_items | length == 6
-              - "'prometheus_exporters_enabled' in failed_items[0].msg"
-              - "'is not defined or empty' in failed_items[0].msg"
-            fail_msg: >-
-              validate.yml failed for an unexpected reason:
-              {{ ansible_failed_result.msg | default(ansible_failed_result) }}
-            success_msg: "[OK] validate.yml failed on all six missing required variables"
-
-        - name: Record the case as passed for verify.yml
-          # A marker file carries the result because converge and verify are separate ansible-playbook processes.
-          # In-memory facts do not cross that boundary.
-          ansible.builtin.copy:
-            content: ""
-            dest: /tmp/molecule-promexp-validation.passed
-            force: false
-            mode: "0644"
+    - name: Run cases
+      ansible.builtin.include_tasks: "{{ molecule_case.file }}"
+      vars:
+        molecule_case: "{{ molecule_case_defaults | combine(molecule_item) }}"
+      loop: "{{ molecule_cases }}"
+      loop_control:
+        loop_var: molecule_item
+        label: "{{ molecule_item.id }}"

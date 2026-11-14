@@ -1,0 +1,49 @@
+---
+# The harness sends notifications to the journal, because the notify units have a private /tmp and a read-only /.
+# A stub restic covers exit 3 and the long run; a probe instance runs inside the real sandbox.
+- name: Install the stubs
+  vars:
+    molecule_stub_install:
+      - { src: ntfy-notify-journal.sh, dest: /usr/local/bin/ntfy-notify }
+      - { src: restic-stub.sh, dest: /usr/local/bin/restic-stub }
+      - { src: sftp.sh, dest: "{{ molecule_stubs }}/sftp" }
+      - { src: busctl.sh, dest: "{{ molecule_stubs }}/busctl" }
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/install_stubs.yml"
+
+- name: Create the harness drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/restic-job@{{ item }}.service.d"
+    state: directory
+    mode: "0755"
+  loop: [partial, slow, probe, box]
+
+- name: Install the harness drop-ins
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - dest: /etc/systemd/system/restic-job@partial.service.d/zz-stub.conf
+      content: |
+        [Service]
+        Environment=RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=partial RESTIC_JOB_RETRY_SLEEP=1
+    - dest: /etc/systemd/system/restic-job@box.service.d/zz-stub.conf
+      content: |
+        [Service]
+        Environment=RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=sftp
+        Environment=PATH={{ molecule_path }}
+    - dest: /etc/systemd/system/restic-job@slow.service.d/zz-stub.conf
+      content: "[Service]\nEnvironment=RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=slow\n"
+    - dest: /etc/systemd/system/restic-job@probe.service.d/zz-probe.conf
+      content: |
+        [Service]
+        ExecStart=
+        ExecStart=/bin/sh -c 'grep CapEff /proc/self/status > /var/lib/restic/probe-caps; \
+          cat /srv/molecule-src/private/secret > /var/lib/restic/probe-read; \
+          touch /etc/probe-write /srv/molecule-src/probe-write 2> /var/lib/restic/probe-errors; exit 0'
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Load the harness drop-ins
+  ansible.builtin.systemd_service:
+    daemon_reload: true

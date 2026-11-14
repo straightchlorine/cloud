@@ -14,7 +14,7 @@ Ansible fact mapping.
     name: os
 ```
 
-The role is read-only, idempotent and dependency-free — safe to include first.
+The role is read-only, idempotent and dependency-free - safe to include first.
 
 ## Facts published
 

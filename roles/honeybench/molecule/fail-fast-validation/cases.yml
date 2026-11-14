@@ -1,0 +1,34 @@
+---
+# Omitted keys fall back to the role defaults; user "0" is the connection user from molecule.yml.
+molecule_case_defaults:
+  honeybench_user: "0"
+  honeybench_dump_enabled: false
+molecule_cases:
+  # An empty value trips the same required-variable check as an undefined one.
+  - id: user-empty
+    honeybench_user: ""
+    expect: "[honeybench] Required honeybench host variable 'honeybench_user' is not defined or empty"
+  - id: user-not-connection-user
+    honeybench_user: someone-else
+    expect: "honeybench_user ('someone-else') must equal ansible_user ('0')"
+  - id: tool-short-sha256
+    honeybench_tools:
+      - {name: uv, version: "0.13.5", url: "https://example.test/uv-0.13.5.tar.gz",
+         sha256: "f68d291c", strip_components: 1, binaries: [uv], version_args: --version}
+      - {name: just, version: "1.59.0", url: "https://example.test/just-1.59.0.tar.gz",
+         sha256: "409044617b6f06517c1035e55ca38c8c856ff8b650e41bc2aa1ef82d5903a23e",
+         strip_components: 0, binaries: [just], version_args: --version}
+    expect: "Tool 'uv' needs a 64-hex sha256"
+  - id: tool-version-not-in-url
+    honeybench_tools:
+      - {name: k6, version: "2.1.0", url: "https://example.test/k6-v2.0.0-linux-amd64.tar.gz",
+         sha256: "2ae87d976f6cdba17185bdd980d8819a3a98e9092c6f0638cd58272ecefc8b90",
+         strip_components: 1, binaries: [k6], version_args: version}
+    expect: "Tool 'k6' needs a 64-hex sha256"
+  # -e honeybench_dump_enabled=true arrives as the string "true"; the role must still treat it as true.
+  - id: dump-src-missing
+    honeybench_dump_enabled: "true"
+    expect: "[honeybench] Required honeybench host variable 'honeybench_dump_src' is not defined or empty"
+  - id: dump-sha256-missing
+    honeybench_dump_enabled: "true"
+    expect: "[honeybench] Required honeybench host variable 'honeybench_dump_sha256' is not defined or empty"

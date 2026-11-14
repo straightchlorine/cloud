@@ -21,7 +21,7 @@
     common_apt_source_key_path: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
     common_apt_source_line: >-
       deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
-      https://nvidia.github.io/libnvidia-container/stable/deb/{{ gpu_qp_nvidia_arch_map[ansible_architecture] }} /
+      https://nvidia.github.io/libnvidia-container/stable/deb/{{ gpu_qp_nvidia_arch_map[ansible_facts.architecture] }} /
 
 - name: Refresh the apt cache when it is stale
   ansible.builtin.include_role:

@@ -216,7 +216,7 @@
 - name: Find what's mounted at the optional drive path (if anything)
   ansible.builtin.set_fact:
     dns_optional_drive_mounted_source: >-
-      {{ (ansible_mounts | selectattr('mount', 'equalto', dns_optional_drive_mount_path)
+      {{ (ansible_facts.mounts | selectattr('mount', 'equalto', dns_optional_drive_mount_path)
       | list | first).device | default('') }}
 
 - name: Unmount the optional attached drive if mounted

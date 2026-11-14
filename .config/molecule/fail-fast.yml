@@ -1,0 +1,5 @@
+---
+# Added by scripts/molecule-test.sh for fail-fast-validation scenarios: their cases only run validate.yml,
+# so a second converge proves nothing.
+scenario:
+  test_sequence: [destroy, syntax, create, prepare, converge, verify, destroy]

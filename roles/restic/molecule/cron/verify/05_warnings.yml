@@ -1,0 +1,26 @@
+---
+# Warning (exit 3 with an unreadable file) and the fallback when restic printed no summary object.
+- name: Run the plain job with a restic that reports an unreadable file, then one that prints no summary
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy-body.log
+    for mode in partial nosummary; do
+      env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=$mode {{ molecule_wrapper }} cron cr
+      echo "rc=$?"
+    done
+    cat /run/molecule-ntfy-body.log
+  register: molecule_cr_warn
+  changed_when: true
+
+- name: Assert the warning names the unreadable file and the fallback is the log tail
+  ansible.builtin.assert:
+    that:
+      - molecule_cr_warn.stdout_lines[0] == 'rc=0'
+      - molecule_cr_warn.stdout_lines[1] == 'rc=0'
+      - >-
+        molecule_cr_warn.stdout is search('(?m)^[^:]+: cr backup ok, 1 file unreadable\|Snapshot [0-9a-f]{8} - '
+        '1 kept, [01] removed\^.*\^Files: [0-9,]+ new, [0-9,]+ changed'
+        '\^Unreadable: /srv/molecule-src/private/secret$')
+      - >-
+        molecule_cr_warn.stdout is search('(?m)^[^:]+: cr backup ok with warnings\|.*restic-job: could not read '
+        'restic.s backup summary\^restic-job: unreadable: /srv/molecule-src/private/secret')
+      - molecule_cr_warn.stdout is not search('with warnings\|Snapshot ')

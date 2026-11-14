@@ -1,69 +1,46 @@
 ---
-- name: Converge - the gpu-qp role's container-testable task files
+- name: Converge gpu-qp default
   hosts: all
   become: true
+  vars_files:
+    - ../shared/vars.yml
   vars:
-    # The role's ownership and become wiring reads ansible_user directly, so it is pinned.
-    ansible_user: root
-    timezone: UTC
-    domain_name: example.test
-    common_start_stack: false
-    # A container has no GPU, and validate.yml's device check is meant for real hosts.
-    gpu_qp_require_nvidia_device: false
-    gpu_qp_cuda_arch: "6.1"
-    gpu_qp_home: /home/gpu/gpu-qp
     gpu_qp_worker_device: "0"
-    gpu_qp_gpu_exporter_enabled: true
-  pre_tasks:
-    - name: Create the home parent
-      ansible.builtin.file:
-        path: "{{ gpu_qp_home | dirname }}"
-        state: directory
-        mode: "0755"
-
-    - name: Look for pgrep
-      # The deploy guard and the installed test suite need pgrep.
-      ansible.builtin.stat:
-        path: /usr/bin/pgrep
-      register: gpu_qp_pgrep
-
-    - name: Install procps when pgrep is missing
-      ansible.builtin.package:
-        name: procps
-        state: present
-      when: not gpu_qp_pgrep.stat.exists
   tasks:
-    # The scenario skips what a container cannot do.
-    # That is the common package and Docker setup (no docker-in-docker), nvidia_driver.yml (no GPU for DKMS)
-    # and image.yml with nvidia_container_toolkit.yml (they need a live Docker daemon).
-    # It also skips the firewall, because ufw cannot apply rules in a container.
-    # post_deploy_validate.yml is skipped as well because it needs a real GPU.
+    # Skipped because a container cannot run them: the common package and Docker setup, nvidia_driver.yml,
+    # image.yml and nvidia_container_toolkit.yml (no docker daemon), the firewall and post_deploy_validate.yml.
     - name: Gather network facts
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
 
-    - name: Run the pre-deployment validation
+    - name: Validate
       ansible.builtin.include_role:
         name: gpu-qp
         tasks_from: validate
 
-    - name: Refuse to deploy over a running benchmark
+    - name: Guard against a running benchmark
       ansible.builtin.include_role:
         name: gpu-qp
         tasks_from: guard
 
-    - name: Prepare the data directories and the run wrapper
+    - name: Deploy the data directories and the run wrapper
       ansible.builtin.include_role:
         name: gpu-qp
         tasks_from: data
 
-    - name: Render the stack (compose only; start_stack is false)
+    - name: Install the kernel guard
+      # It must follow data.yml, which installs the guard script.
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: kernel_guard
+
+    - name: Render the stack
       ansible.builtin.include_role:
         name: gpu-qp
         tasks_from: stack
 
-    - name: Install the real stack unit (docker is stubbed in prepare)
+    - name: Install the stack unit
       ansible.builtin.include_role:
         name: common
         tasks_from: docker_stack_service
@@ -75,8 +52,7 @@
         common_stack_environment_vars:
           - "GPU_QP_HOME={{ gpu_qp_home }}"
 
-    - name: Start the unit and flush the "Restart stack" handler
-      # The handler is resolved from the common role, so an unknown handler name fails the play.
+    - name: Start the unit and flush the Restart stack handler
       ansible.builtin.include_role:
         name: common
         tasks_from: stack_start

@@ -1,0 +1,46 @@
+---
+# The job timeout is a real run killed by `timeout --signal=INT`; restic must still delete its lock.
+- name: Run the slow job past its 2 s timeout
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log
+    env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=slow {{ molecule_wrapper }} cron crslow
+    echo "rc=$?"
+  register: molecule_slow
+  changed_when: true
+
+- name: Read the slow job's locks, marker and notification
+  ansible.builtin.shell: |
+    {{ molecule_wrapper }} exec crslow list locks --no-lock
+    echo "marker=$(test -e /var/lib/restic/crslow.interrupted && echo yes || echo no)"
+    cat /run/molecule-ntfy.log
+  register: molecule_slow_out
+  changed_when: false
+
+- name: Assert the timeout failed the run, cleared the lock and sent one alert
+  ansible.builtin.assert:
+    that:
+      - molecule_slow.stdout_lines[-1] == 'rc=1'
+      - molecule_slow_out.stdout_lines[0] == 'marker=no'
+      - molecule_slow_out.stdout is search('crslow backup FAILED \(timeout/124\)\|high')
+
+# The final SIGKILL reaches only restic-job; the session kill must take what it left behind.
+- name: Run a job whose restic ignores SIGINT, with a 3 s grace before SIGKILL
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log
+    env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=hang RESTIC_JOB_KILL_AFTER=3s \
+      {{ molecule_wrapper }} cron crslow
+    echo "rc=$?"
+    sleep 1
+    echo "left=$(pgrep -fc '[s]leep 600' || true)"
+    flock -n /run/restic-crslow.lock true && echo lock-free
+    cat /run/molecule-ntfy.log
+  register: molecule_hang
+  changed_when: true
+
+- name: Assert the run was killed, nothing survived and the lock is free
+  ansible.builtin.assert:
+    that:
+      - "'rc=1' in molecule_hang.stdout_lines or 'rc=137' in molecule_hang.stdout_lines"
+      - "'left=0' in molecule_hang.stdout_lines"
+      - "'lock-free' in molecule_hang.stdout_lines"
+      - molecule_hang.stdout is search('crslow backup FAILED \(timeout/(124|137)\)\|high')

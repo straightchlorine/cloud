@@ -196,7 +196,7 @@ receivers:
 
 ### Dashboard Import
 
-Via Grafana UI: + → Import → Upload JSON file
+Via Grafana UI: + > Import > Upload JSON file
 
 Via API:
 

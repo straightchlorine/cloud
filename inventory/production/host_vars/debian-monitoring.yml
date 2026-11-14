@@ -86,7 +86,6 @@ backup_exclude_patterns:
   - "**/*.cache"
 
 # Monitoring stack configuration
-ansible_fqdn: "{{ inventory_hostname }}.{{ domain_name }}"
 monitoring_network: "monitoring-network"
 prometheus_role: "monitoring"
 

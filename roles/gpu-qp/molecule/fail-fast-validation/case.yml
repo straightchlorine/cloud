@@ -1,0 +1,19 @@
+---
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run validate.yml
+      ansible.builtin.include_role:
+        name: gpu-qp
+        tasks_from: validate
+      vars:
+        # The device check is for real hosts, and would mask the variable under test.
+        gpu_qp_require_nvidia_device: false
+        gpu_qp_cuda_arch: "{{ molecule_case.cuda_arch }}"
+        gpu_qp_worker_device: "{{ molecule_case.worker_device }}"
+
+    - name: Fail when validation passes
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure message
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

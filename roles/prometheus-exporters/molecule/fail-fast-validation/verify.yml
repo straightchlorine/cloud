@@ -1,23 +1,9 @@
 ---
-- name: Verify fail-fast validation worked
+- name: Verify prometheus-exporters fail-fast-validation
   hosts: all
-  become: true
+  vars_files: [cases.yml]
   tasks:
-    - name: Stat the marker file converge wrote
-      # Converge and verify run as separate processes, so converge.yml records the case result in a file.
-      # A set_fact would not survive into this play.
-      ansible.builtin.stat:
-        path: /tmp/molecule-promexp-validation.passed
-      register: prom_exp_failfast_marker
-
-    - name: Assert the expected validation failure was recorded
-      ansible.builtin.assert:
-        that:
-          - prom_exp_failfast_marker.stat.exists
-        fail_msg: >-
-          validate.yml should have failed fast on the missing required
-          variables (prometheus_exporters_enabled, base_dir,
-          node_exporter_enabled, prometheus_environment, prometheus_role,
-          device_type) - and converge should have proven the failure was
-          that validation, not an include error.
-        success_msg: "[OK] validate.yml fails fast on missing required variables"
+    - name: Check case markers
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ molecule_cases | map(attribute='id') | list }}"

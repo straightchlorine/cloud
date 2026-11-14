@@ -1,12 +1,14 @@
 ---
-- name: Verify honeypot timer jobs, ntfy helper and Docker daemon config
+- name: Verify honeypot default
   hosts: all
   become: true
+  vars_files:
+    - ../shared/vars.yml
   tasks:
     - name: Stat the installed scripts
       ansible.builtin.stat:
-        path: "/usr/local/sbin/{{ item }}"
-      loop: [honeywatch-ntfy, honeywatch-backup, honeywatch-mmdb-refresh, honeywatch-image-prune]
+        path: "/usr/local/sbin/honeywatch-{{ item }}"
+      loop: [ntfy, backup, mmdb-refresh, image-prune]
       register: honeypot_verify_scripts
 
     - name: Assert the scripts are root-owned and executable
@@ -36,28 +38,34 @@
 
     - name: Assert unit contents come from the role templates
       vars:
-        honeypot_verify_text: "{{ honeypot_verify_units.results | map(attribute='content') | map('b64decode') | list }}"
+        honeypot_verify_text: >-
+          {{ dict(honeypot_verify_units.results | map(attribute='item') | map('basename')
+                  | zip(honeypot_verify_units.results | map(attribute='content') | map('b64decode'))) }}
       ansible.builtin.assert:
         that:
-          - "'/usr/local/sbin/honeywatch-ntfy' in honeypot_verify_text[0]"
-          - "'ExecStart=/usr/local/sbin/honeywatch-backup' in honeypot_verify_text[1]"
-          - "'OnCalendar=*-*-* 03:30:00 UTC' in honeypot_verify_text[2]"
-          - "'Unit=honeywatch-backup.service' in honeypot_verify_text[2]"
-          - "'ExecStart=/usr/local/sbin/honeywatch-mmdb-refresh' in honeypot_verify_text[3]"
-          - "'OnCalendar=Wed *-*-* 04:15:00 UTC' in honeypot_verify_text[4]"
-          - "'honeywatch-image-prune 3 ghcr.io/straightchlorine/honeywatch/api' in honeypot_verify_text[5]"
-          - "'OnCalendar=Sun *-*-* 04:45:00 UTC' in honeypot_verify_text[6]"
-          - "'NTFY_URL=https://ntfy.example.test/honeywatch' in honeypot_verify_text[7]"
+          - "'/usr/local/sbin/honeywatch-ntfy' in honeypot_verify_text['honeywatch-notify@.service']"
+          - "'ExecStart=/usr/local/sbin/honeywatch-backup' in honeypot_verify_text['honeywatch-backup.service']"
+          - "'OnCalendar=*-*-* 03:30:00 UTC' in honeypot_verify_text['honeywatch-backup.timer']"
+          - "'Unit=honeywatch-backup.service' in honeypot_verify_text['honeywatch-backup.timer']"
+          - >-
+            'ExecStart=/usr/local/sbin/honeywatch-mmdb-refresh'
+            in honeypot_verify_text['honeywatch-mmdb-refresh.service']
+          - "'OnCalendar=Wed *-*-* 04:15:00 UTC' in honeypot_verify_text['honeywatch-mmdb-refresh.timer']"
+          - >-
+            'honeywatch-image-prune 3 ghcr.io/straightchlorine/honeywatch/api'
+            in honeypot_verify_text['honeywatch-image-prune.service']
+          - "'OnCalendar=Sun *-*-* 04:45:00 UTC' in honeypot_verify_text['honeywatch-image-prune.timer']"
+          - "'NTFY_URL=https://ntfy.example.test/honeywatch' in honeypot_verify_text['notify.env']"
         quiet: true
 
-    - name: Check each timer is enabled and running
+    - name: Check each timer is enabled
       ansible.builtin.command: "systemctl is-enabled --quiet honeywatch-{{ item }}.timer"
-      loop: [backup, mmdb-refresh, image-prune]
+      loop: "{{ honeypot_molecule_timers }}"
       changed_when: false
 
-    - name: Check each timer was restarted into the active state by the one handler
+    - name: Check each timer is active after the handler restart
       ansible.builtin.command: "systemctl is-active honeywatch-{{ item }}.timer"
-      loop: [backup, mmdb-refresh, image-prune]
+      loop: "{{ honeypot_molecule_timers }}"
       register: honeypot_verify_active
       changed_when: false
       failed_when: honeypot_verify_active.stdout != 'active'
@@ -110,7 +118,7 @@
           - "'Title: T' in honeypot_verify_ntfy.stdout_lines"
           - "'Tags: a,b' in honeypot_verify_ntfy.stdout_lines"
           - "'Priority: high' in honeypot_verify_ntfy.stdout_lines"
-          - "'Authorization: Bearer tk_molecule_test_token' in honeypot_verify_ntfy.stdout_lines"
+          - "('Authorization: Bearer ' ~ vault_honeypot_ntfy_token) in honeypot_verify_ntfy.stdout_lines"
           - "'the message' in honeypot_verify_ntfy.stdout_lines"
-          - "'https://ntfy.example.test/honeywatch' in honeypot_verify_ntfy.stdout_lines"
+          - "(ntfy_server_url ~ '/honeywatch') in honeypot_verify_ntfy.stdout_lines"
         quiet: true

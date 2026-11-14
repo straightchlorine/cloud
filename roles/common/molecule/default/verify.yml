@@ -1,143 +1,76 @@
 ---
-- name: Verify role functionality
+- name: Verify common default
   hosts: all
+  gather_facts: false
   tasks:
-        # Re-gather facts: they don't persist between playbooks in Molecule.
-    - name: Gather system facts
-      ansible.builtin.setup:
-        gather_subset:
-          - network
-          - hardware
-
-    - name: Verify network interfaces exist
-      ansible.builtin.assert:
-        that:
-          - ansible_interfaces is defined
-          - ansible_interfaces | length > 0
-        fail_msg: "No network interfaces found"
-        success_msg: "Network interfaces detected: {{ ansible_interfaces }}"
-
-    - name: Verify IP addresses are configured
-      ansible.builtin.assert:
-        that:
-          - ansible_all_ipv4_addresses is defined
-          - ansible_all_ipv4_addresses | length > 0
-        fail_msg: "No IPv4 addresses configured"
-        success_msg: "IPv4 addresses: {{ ansible_all_ipv4_addresses }}"
-
-    - name: Verify hostname is set
-      ansible.builtin.assert:
-        that:
-          - ansible_hostname is defined
-          - ansible_hostname | length > 0
-        fail_msg: "Hostname is not set"
-        success_msg: "Hostname: {{ ansible_hostname }}"
-
-    - name: Verify system memory is detected
-      ansible.builtin.assert:
-        that:
-          - ansible_memtotal_mb is defined
-          - ansible_memtotal_mb | int > 0
-        fail_msg: "System memory not detected"
-        success_msg: "Total memory: {{ ansible_memtotal_mb }}MB"
-
-    - name: Verify CPU count is detected
-      ansible.builtin.assert:
-        that:
-          - ansible_processor_count is defined
-          - ansible_processor_count | int > 0
-        fail_msg: "CPU count not detected"
-        success_msg: "CPU count: {{ ansible_processor_count }}"
-
-    - name: Verify CPU cores are detected
-      ansible.builtin.assert:
-        that:
-          - ansible_processor_cores is defined
-          - ansible_processor_cores | int > 0
-        fail_msg: "CPU cores not detected"
-        success_msg: "CPU cores: {{ ansible_processor_cores }}"
-
-    - name: Verify OS distribution
-      ansible.builtin.assert:
-        that:
-          - ansible_distribution is defined
-          - ansible_distribution in ['Debian', 'Ubuntu']
-        fail_msg: "Not running on Debian/Ubuntu"
-        success_msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+    - name: Assert the refusal cases failed for their own reason
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: [teardown-guard-refusal, ntfy-notify-missing-vars]
 
     - name: Read the deployed chrony config
       ansible.builtin.slurp:
         src: /etc/chrony/chrony.conf
-      register: common_deployed_chrony_conf
+      register: common_chrony_conf
 
-    - name: Assert the chrony config rendered correctly
+    - name: Assert the chrony config rendered the inputs
+      vars:
+        chrony_conf: "{{ common_chrony_conf.content | b64decode }}"
       ansible.builtin.assert:
         that:
           - "'server pool.ntp.org iburst prefer' in chrony_conf"
           - "'allow 192.168.1.0/24' in chrony_conf"
           - "'local stratum 8' in chrony_conf"
         fail_msg: "chrony.conf rendered wrong: {{ chrony_conf }}"
-        success_msg: "[OK] chrony.conf has upstream, allow network and local stratum"
-      vars:
-        chrony_conf: "{{ common_deployed_chrony_conf.content | b64decode }}"
+        quiet: true
 
-    - name: Assert chrony is installed and enabled
+    - name: Gather installed packages
       ansible.builtin.package_facts:
-      register: common_installed_packages
 
-    - name: Assert the chrony package is present
+    - name: Assert chrony is installed
       ansible.builtin.assert:
         that: "'chrony' in ansible_facts.packages"
-        fail_msg: "chrony package not installed"
-        success_msg: "[OK] chrony installed"
+        quiet: true
 
-    - name: Stat the deployed helpers and the API key file
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: common_deployed_files
-      loop:
-        - /usr/local/bin/ntfy-notify
-        - /usr/local/bin/reboot-notify
-        - /etc/ntfy/notify-api-key
+    - name: Assert the helpers and the key file are deployed
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - {path: /usr/local/bin/ntfy-notify, state: file, mode: "0755"}
+          - {path: /usr/local/bin/reboot-notify, state: file, mode: "0755"}
+          - {path: /etc/ntfy/notify-api-key, state: file, mode: "0600"}
 
-    - name: Assert the helpers are executable and the key file is root-only
-      ansible.builtin.assert:
-        that:
-          - item.stat.exists
-          - item.stat.size > 0
-          - item.stat.mode == ('0600' if item.item.endswith('notify-api-key') else '0755')
-        fail_msg: "{{ item.item }} missing, empty or wrong mode ({{ item.stat.mode | default('n/a') }})"
-        success_msg: "[OK] {{ item.item }} deployed"
-      loop: "{{ common_deployed_files.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Read the deployed ntfy helper, key file and reboot-notify script
+    - name: Read the helper scripts and the key file
       ansible.builtin.slurp:
-        src: "{{ item }}"
-      register: common_deployed_content
-      loop:
-        - /usr/local/bin/ntfy-notify
-        - /etc/ntfy/notify-api-key
-        - /usr/local/bin/reboot-notify
+        src: "{{ item.value }}"
+      register: common_deployed
+      loop: "{{ {'helper': '/usr/local/bin/ntfy-notify', 'key': '/etc/ntfy/notify-api-key',
+                 'reboot': '/usr/local/bin/reboot-notify'} | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
 
-    - name: Assert the ntfy API key lives only in the key file
+    - name: Index the contents by name
+      ansible.builtin.set_fact:
+        common_text: "{{ dict(common_deployed.results | map(attribute='item.key')
+                              | zip(common_deployed.results | map(attribute='content') | map('b64decode'))) }}"
+
+    - name: Assert the API key lives only in the key file
       ansible.builtin.assert:
         that:
-          - "'molecule-test-ntfy-key' not in (common_deployed_content.results[0].content | b64decode)"
-          - "'molecule-test-ntfy-key' in (common_deployed_content.results[1].content | b64decode)"
-        fail_msg: "the vault_ntfy_api_key must be in /etc/ntfy/notify-api-key and never in the helper script"
-        success_msg: "[OK] the API key is in the separate key file only"
+          - common_text.helper | length > 0
+          - "'molecule-test-ntfy-key' not in common_text.helper"
+          - "'molecule-test-ntfy-key' in common_text.key"
+        fail_msg: "the ntfy API key must be in /etc/ntfy/notify-api-key and never in the helper script"
+        quiet: true
 
     - name: Assert reboot-notify calls the ntfy helper by bare name
+      # The bare name relies on the PATH cron entry from auto_updates.yml.
       ansible.builtin.assert:
         that:
-          - "'ntfy-notify ' in (common_deployed_content.results[2].content | b64decode)"
-          - "'/usr/local/bin/ntfy-notify' not in (common_deployed_content.results[2].content | b64decode)"
-        fail_msg: >-
-          reboot-notify.j2 should call ntfy-notify by bare name (relies
-          on the PATH cron entry in auto_updates.yml), not a hardcoded path.
-        success_msg: "[OK] reboot-notify calls ntfy-notify via PATH"
+          - "'ntfy-notify ' in common_text.reboot"
+          - "'/usr/local/bin/ntfy-notify' not in common_text.reboot"
+        fail_msg: "reboot-notify must call ntfy-notify by bare name: {{ common_text.reboot }}"
+        quiet: true
 
     - name: Read root's crontab
       ansible.builtin.command: crontab -l -u root
@@ -150,50 +83,22 @@
           - common_root_crontab.stdout is search('PATH=.?/usr/local/sbin:/usr/local/bin')
           - "'/usr/local/bin/reboot-notify' in common_root_crontab.stdout"
         fail_msg: "auto_updates cron entries missing: {{ common_root_crontab.stdout }}"
-        success_msg: "[OK] PATH and reboot-pending cron entries installed"
+        quiet: true
 
-    - name: Read the compose file the real converge re-rendered
+    - name: Read the compose file
       ansible.builtin.slurp:
         src: /opt/molecule-stack/docker-compose.yml
       register: common_compose_file
 
-    - name: Assert the dropped service left the compose file
+    - name: Assert the undeclared service left the compose file
       ansible.builtin.assert:
-        that:
-          - "'container_name: kept' in (common_compose_file.content | b64decode)"
-          - "'dropped' not in (common_compose_file.content | b64decode)"
+        that: (common_compose_file.content | b64decode | from_yaml).services.keys() | list == ['kept']
         fail_msg: "stale service survived: {{ common_compose_file.content | b64decode }}"
-        success_msg: "[OK] a service no longer declared was removed from the compose file"
+        quiet: true
 
-    - name: Stat the teardown_paths targets
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      register: common_teardown_targets
-      loop:
-        - /tmp/molecule-teardown-file-1
-        - /tmp/molecule-teardown-file-2
-
-    - name: Assert teardown_paths removed them
-      ansible.builtin.assert:
-        that: not item.stat.exists
-        fail_msg: "{{ item.item }} survived teardown_paths"
-        success_msg: "[OK] {{ item.item }} removed"
-      loop: "{{ common_teardown_targets.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Display verification results
-      ansible.builtin.debug:
-        msg: |
-          [OK] Network Configuration Verified
-          - Interfaces: {{ ansible_interfaces }}
-          - IPv4 Addresses: {{ ansible_all_ipv4_addresses }}
-          - Hostname: {{ ansible_hostname }}
-
-          [OK] Hardware Configuration Verified
-          - Total Memory: {{ ansible_memtotal_mb }}MB
-          - CPU Count: {{ ansible_processor_count }}
-          - CPU Cores: {{ ansible_processor_cores }}
-
-          [OK] Operating System Verified
-          - Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+    - name: Assert teardown_paths removed its targets
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - {path: /tmp/molecule-teardown-file-1, state: absent}
+          - {path: /tmp/molecule-teardown-file-2, state: absent}

@@ -1,0 +1,77 @@
+---
+- name: Assert the beets config imports YouTube singles unattended
+  ansible.builtin.assert:
+    that:
+      - beets.directory == '/music'
+      - beets.library == '/config/library.db'
+      - beets['import'].quiet
+      - beets['import'].singletons
+      - beets['import'].quiet_fallback == 'skip'
+      - beets.match.distance_weights.data_source == 0
+      - beets['import'].duplicate_action == 'keep'
+      - >-
+        beets.plugins.split() | sort ==
+        ['chroma', 'duplicates', 'embedart', 'fetchart', 'lastgenre',
+        'lyrics', 'musicbrainz', 'replaygain', 'reviewed']
+      - beets.pluginpath == '/config/plugins'
+      - beets.replaygain.backend == 'ffmpeg'
+      - beets.lyrics.synced
+      - beets.chroma.auto
+      - beets.lastgenre.force
+      - beets.fetchart.auto
+      - beets.embedart.auto
+    fail_msg: "beets config wrong: {{ beets }}"
+
+- name: Assert the adopt overlay leaves existing files untouched
+  ansible.builtin.assert:
+    that:
+      - not adopt['import']['autotag']
+      - not adopt['import']['move']
+      - not adopt['import']['copy']
+      - not adopt['import']['write']
+    fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
+
+- name: Assert the album overlay accepts partial releases
+  ansible.builtin.assert:
+    that:
+      - not interactive['import']['quiet']
+      - interactive.reviewed.mark
+      - not album['import']['singletons']
+      - "'year' not in album.match.distance_weights"
+      - album.match.distance_weights.missing_tracks == 0
+      - "'unmatched_tracks' not in album.match.distance_weights"
+      - album.match.preferred.media == ['Digital Media', 'CD']
+      - album.match.preferred.original_year
+      - "'unmatched_tracks' not in album.match.max_rec"
+      - album.match.max_rec.missing_tracks == 'strong'
+      - album.original_date
+    fail_msg: "overlays wrong: {{ interactive }} / {{ album }}"
+
+- name: Assert the reviewed plugin is deployed and gated
+  ansible.builtin.assert:
+    that:
+      - "'ReviewedPlugin' in reviewed_plugin"
+      - "'import_task_files' in reviewed_plugin"
+      - "'Action.ASIS' in reviewed_plugin"
+      - "'reviewed | ' in reviewed_plugin"
+      - "'item.try_write()' in reviewed_plugin"
+    fail_msg: "reviewed.py wrong:\n{{ reviewed_plugin }}"
+
+- name: Assert the yt-dlp config prefers YouTube Music tags
+  vars:
+    # En dash and em dash, as the character class the role renders.
+    dash_class: "[\u2013\u2014]"
+  ansible.builtin.assert:
+    that:
+      - "'%(artist,uploader)s:%(artist)s' in ytdlp_conf"
+      - "'music\\s*official$' in ytdlp_conf"
+      # Typographic dashes are normalised to a hyphen before the hyphen-only rules run.
+      # Reordering these two rules would silently stop the repost split.
+      - dash_class in ytdlp_conf
+      - "'[^-]+?) - (' in ytdlp_conf"
+      - ytdlp_conf.index(dash_class) < ytdlp_conf.index('[^-]+?) - (')
+      - "'--download-archive \"/mnt/music/state/youtube-archive.txt\"' in ytdlp_conf"
+      # File names are capped in bytes, not characters, to stay under the ext4 limit of 255 bytes.
+      - "'%(artist).60B - %(title).120B [%(id)s]' in ytdlp_conf"
+      - "'media_library_path' not in ytdlp_conf"
+    fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"

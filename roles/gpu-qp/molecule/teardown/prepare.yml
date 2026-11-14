@@ -1,0 +1,15 @@
+---
+- name: Prepare gpu-qp teardown
+  hosts: all
+  become: true
+  vars_files:
+    - ../shared/vars.yml
+  tasks:
+    - name: Stub docker and docker.service
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/stub_docker.yml"
+
+    - name: Create the home parent
+      ansible.builtin.file:
+        path: "{{ gpu_qp_home | dirname }}"
+        state: directory
+        mode: "0755"

@@ -1,33 +1,23 @@
 ---
-- name: Converge - deploy a job, then run the real teardown
+- name: Converge restic teardown
   hosts: all
   become: true
+  vars_files: [../shared/vars.yml]
   vars:
-    restic_connection_user: root  # molecule connects as root; production derives it from ansible_user
-    vault_ntfy_api_key: molecule-test-ntfy-key
-    ntfy_server_url: "https://ntfy.example.test"
-    ntfy_topic: molecule-test
-    restic_init_repository: true
     # The parent exists and belongs to someone else: the role must create only the restic directory inside it,
     # and the teardown must remove only that directory.
     restic_cache_dir: /srv/pre-parent/restic
   tasks:
-    # ARRANGE phase: the teardown removes all of it, so idempotence skips it.
+    # The teardown removes all of it, so idempotence skips the deploys.
     - name: Deploy one job
+      tags: [molecule-idempotence-notest]
       ansible.builtin.include_role:
         name: restic
         tasks_from: job
       vars:
-        restic_job:
-          name: ok
-          repository: /srv/molecule-repos/ok
-          password: molecule-restic-password-ok
-          sources: [/srv/molecule-src]
-          schedule: "*-*-* 03:00:00"
-          timeout: 10min
-          memory_max_mib: 512
-          retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
-      tags: [molecule-idempotence-notest]
+        restic_job: "{{ molecule_job_timer | combine({'name': 'ok', 'repository': '/srv/molecule-repos/ok',
+                                                      'password': 'molecule-restic-password-ok',
+                                                      'excludes': []}) }}"
 
     - name: Flush deploy-phase handlers
       ansible.builtin.meta: flush_handlers
@@ -44,8 +34,11 @@
             msg: restic teardown ran without teardown_confirmed
       rescue:
         - name: Assert the refusal names teardown_confirmed
-          ansible.builtin.assert:
-            that: "'restic teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+          vars:
+            molecule_case:
+              id: unconfirmed
+              expect: restic teardown requires the shared teardown_confirmed fact
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
 
     - name: Teardown refuses a cache directory that is not its own restic directory
       block:
@@ -61,9 +54,12 @@
           ansible.builtin.fail:
             msg: restic teardown accepted a cache directory that is not named restic
       rescue:
-        - name: Assert the refusal names the rule and nothing was removed
-          ansible.builtin.assert:
-            that: "ansible_failed_result.msg is match('restic_cache_dir: last component must be exactly restic')"
+        - name: Assert the refusal names the rule
+          vars:
+            molecule_case:
+              id: cache-dir-not-restic
+              expect: "restic_cache_dir: last component must be exactly restic; refusing to remove /srv/pre-parent"
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
 
     - name: Run the real restic teardown
       ansible.builtin.include_role:
@@ -71,3 +67,47 @@
         tasks_from: teardown
       vars:
         teardown_confirmed: true
+
+    # restic_host_ready outlives the first teardown, which would skip the host setup job.yml includes, so the
+    # cron host runs validate and host itself.
+    - name: Deploy a cron-scheduled job and tear it down
+      tags: [molecule-idempotence-notest]
+      vars:
+        restic_scheduler: cron
+        restic_cron_service: cron
+      block:
+        - name: Validate the cron host
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: validate
+
+        - name: Set up the cron host
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: host
+
+        - name: Deploy one cron job
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: job
+          vars:
+            restic_job: "{{ molecule_job | combine({'name': 'okcron', 'repository': '/srv/molecule-repos/okcron',
+                                                    'password': 'molecule-restic-password-okcron',
+                                                    'cron_schedule': '17 3 * * *'}) }}"
+
+        - name: Look at the cron entry the deploy wrote
+          ansible.builtin.stat:
+            path: /etc/cron.d/restic-okcron
+          register: molecule_cron_entry
+
+        - name: Assert the cron entry exists before the teardown
+          ansible.builtin.assert:
+            that: molecule_cron_entry.stat.exists
+            quiet: true
+
+        - name: Run the restic teardown on the cron host
+          ansible.builtin.include_role:
+            name: restic
+            tasks_from: teardown
+          vars:
+            teardown_confirmed: true

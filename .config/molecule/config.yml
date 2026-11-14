@@ -1,0 +1,31 @@
+---
+# Merged into every scenario's molecule.yml; the scenario wins. Dicts merge, lists replace, so a scenario that
+# lists platforms replaces the one below. Scenarios use `ansible:` keys only: a legacy provisioner.env would
+# replace ansible.env below instead of merging (scripts/molecule-test.sh refuses it).
+driver:
+  name: podman
+platforms:
+  # MOLECULE_ROLE comes from roles/<role>/.env.yml, so container names never collide across roles.
+  - name: ${MOLECULE_ROLE}-${MOLECULE_SCENARIO_NAME}
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian13-ansible:latest}
+    pre_build_image: true
+    command: /usr/lib/systemd/systemd
+    privileged: ${MOLECULE_PRIVILEGED:-false}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+ansible:
+  env:
+    # Molecule runs from roles/<role>; its parent lets include_role resolve any role by name.
+    ANSIBLE_ROLES_PATH: ${MOLECULE_PROJECT_DIRECTORY}/..
+    # Shared test task files, included as "{{ lookup('env', 'MOLECULE_SHARED') }}/<file>.yml".
+    MOLECULE_SHARED: ${MOLECULE_PROJECT_DIRECTORY}/../../.config/molecule/shared
+    # Facts only under ansible_facts, the default ansible-core is moving to.
+    ANSIBLE_INJECT_FACT_VARS: "False"
+    # One podman exec per module instead of copy, chmod, run and cleanup.
+    ANSIBLE_PIPELINING: "True"
+    # Each phase ends with its 20 slowest tasks.
+    ANSIBLE_CALLBACKS_ENABLED: ansible.posix.profile_tasks
+    PROFILE_TASKS_SUMMARY_ONLY: "True"
+scenario:
+  # The repo has no dependency, cleanup or side_effect playbooks.
+  test_sequence: [destroy, syntax, create, prepare, converge, idempotence, verify, destroy]

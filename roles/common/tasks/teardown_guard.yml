@@ -8,7 +8,7 @@
   vars:
     common_teardown_flag: "{{ common_teardown_name | replace('-', '_') }}_teardown_confirm"
   ansible.builtin.assert:
-    that: vars[common_teardown_flag] | default(false) | bool
+    that: lookup('ansible.builtin.vars', common_teardown_flag, default=false) | default(false) | bool
     fail_msg: >-
       Refusing {{ common_teardown_name }} teardown. Re-run with
       -e {{ common_teardown_flag }}=true and --limit <your-test-host>.

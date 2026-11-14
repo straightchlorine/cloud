@@ -20,6 +20,7 @@ scripts/                per-role host tooling: validate-clean.sh / validate-depl
 docs/                   flat topic docs + sections testing/, backup/, monitoring/;
                         docs/wip/ holds gitignored drafts
 .woodpecker/            lint.yaml, test.yaml
+.config/molecule/       base config every scenario merges, fail-fast.yml, shared/ test helpers
 ```
 
 ### Reference implementation
@@ -69,7 +70,8 @@ file holds the standards it builds on.
 
 ### 4. No Hardcoding
 
-- **Dynamic Detection**: Use Ansible facts for system information (IPs, interfaces, architecture)
+- **Dynamic Detection**: Use Ansible facts for system information (IPs, interfaces, architecture), always
+  as `ansible_facts.<name>`: `inject_facts_as_vars` is off in `ansible.cfg` and in Molecule
 - **Variable References**: Use variables for all configuration values
 - **Network Facts**: Use `primary_interface`, `primary_ip`, `host_ip_cidr`,
   `primary_network_cidr` instead of hardcoded values (set by `common/tasks/network_facts.yml`)
@@ -374,8 +376,9 @@ The canonical testing documentation is `docs/testing/`:
 - **Idempotence is mandatory.** Fix `changed_when`; never exclude a failing
   task. Reasoned `molecule-idempotence-notest` tags are only for tasks a
   container physically cannot converge (e.g. chrony without CAP_SYS_TIME).
-  Fail-fast scenarios alone drop the idempotence step from `test_sequence`:
-  their cases only run `validate.yml`, so a second pass proves nothing.
+  Fail-fast scenarios alone skip idempotence (`.config/molecule/fail-fast.yml`,
+  added by the runner): their cases only run `validate.yml`, so a second
+  pass proves nothing.
 - **Fail-fast scenarios include the real `tasks/validate.yml`** per case and
   assert the failure names the exact variable/condition. A rescue accepting any
   failure is a false-positive factory.
@@ -394,13 +397,11 @@ fixture-based scenarios; rebuild before extending them.
 ### CI (Woodpecker on Codeberg)
 
 1. **lint.yaml** -- every push: ansible-lint, yamllint, markdownlint, shellcheck, syntax checks
-2. **test.yaml** -- Molecule under Podman; every scenario of each matrix role
-   runs (`dns`, `automation`, `media`, `honeypot`, `honeybench`, `gpu-qp`,
-   `restic`, `common`, `os`, `hardware`, `prometheus-exporters`; Rocky 9 image
-   for `honeypot` and `honeybench`). A scenario a runner cannot host carries a
-   `ci-skip` file with the reason. `firewall` stays out (tautological
-   scenarios). Add each further role to `.woodpecker/test.yaml` as its tests
-   are rebuilt.
+2. **test.yaml** -- Molecule under Podman, one matrix step per role; the
+   matrix list is the source of truth. Each step runs
+   `scripts/molecule-test.sh <role>`, the same runner as `just test`. A
+   scenario a runner cannot host carries a `ci-skip` file with the reason.
+   Add a role to the matrix once its tests follow the standard.
 
 - Failures must fail the pipeline -- no `|| true` on molecule steps
 - Line length limit: 120 characters (enforced by yamllint)

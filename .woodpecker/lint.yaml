@@ -2,85 +2,40 @@
 when:
   event: [push, pull_request]
 
-# Unlabelled workflows also go to the OCI arm64 agent, whose pods never start.
+# Unlabelled workflows go to the arm64 agent, whose pods never start.
 labels:
   platform: linux/amd64
 
-# Every ansible step runs in a fresh python image and installs the pinned toolchain from requirements.txt.
-# Local development uses the same file, so CI and `just lint` agree.
-variables:
-  - &ansible_env
-    # Relative to the step's working directory, the workspace. Woodpecker substitutes CI_WORKSPACE with an
-    # empty string here, which turned these into /ansible.cfg and /collections. Ansible ignores an ansible.cfg it
-    # only finds in a world-writable working directory, so the path is given explicitly. The file's
-    # collections_path lists ./collections, where install-collections puts the collections.
-    ANSIBLE_CONFIG: ./ansible.cfg
-    PIP_ROOT_USER_ACTION: ignore
-    PIP_NO_CACHE_DIR: "1"
-
 steps:
-  - name: checkout
-    image: woodpeckerci/plugin-git:2
-    settings:
-      depth: 1
-
-  # Woodpecker runs every step in its own container, so only the workspace is shared between steps.
-  # Collections therefore go into ./collections, which ansible.cfg lists first in collections_path.
-  # A container-local path such as /root/.ansible would be gone before the ansible-lint step starts.
-  - name: install-collections
+  # One install of requirements.txt for every Ansible check, the pins `just lint` uses.
+  - name: ansible
     image: python:3.13-slim
-    environment: *ansible_env
+    environment:
+      # Relative: CI_WORKSPACE is empty at compile time, and Ansible ignores ansible.cfg in a world-writable dir.
+      ANSIBLE_CONFIG: ./ansible.cfg
+      PIP_ROOT_USER_ACTION: ignore
+      PIP_NO_CACHE_DIR: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
     commands:
       - pip install -q -r requirements.txt
-      # galaxy.ansible.com answers slowly or intermittently, so the install is retried.
-      - |
-        for attempt in 1 2 3; do
-          if ansible-galaxy collection install -r requirements.yml -p ./collections --force; then
-            exit 0
-          fi
-          echo "> collection install attempt ${attempt}/3 failed; retrying in 15s"
-          sleep 15
-        done
-        echo "> collection install failed after 3 attempts"
-        exit 1
-
-  # ansible-lint would install requirements.yml from Galaxy itself, so it runs offline.
-  # It reuses the collections already on disk.
-  # The cytopia/ansible-lint image is not used because its rule set and ansible-core no longer match this project.
-  - name: ansible-lint
-    image: python:3.13-slim
-    environment: *ansible_env
-    commands:
-      - pip install -q -r requirements.txt
+      # ansible.cfg lists ./collections first.
+      - scripts/install-collections.sh -p ./collections --force
+      # Offline: ansible-lint would fetch requirements.yml from Galaxy itself.
       - ansible-lint --offline roles/ playbooks/
-
-  - name: yaml-lint
-    image: python:3.13-slim
-    commands:
-      - pip install -q yamllint==1.38.0
-      - yamllint -c .yamllint .
+      - yamllint -s -c .yamllint .
+      - ANSIBLE_ROLES_PATH="$PWD/roles" ansible-playbook --syntax-check playbooks/*.yml playbooks/*/*.yml
 
   - name: markdownlint
     image: node:22-slim
     commands:
       - >-
-        npx --yes markdownlint-cli@0.39.0 '**/*.md'
+        npx --yes markdownlint-cli@0.50.0 '**/*.md'
         --ignore .venv --ignore collections --ignore .ansible --ignore node_modules
 
   - name: shellcheck
     image: koalaman/shellcheck-alpine:v0.11.0
     commands:
+      # xargs fails the step on any finding; find -exec \; would not.
       - >-
-        find . -name "*.sh" -not -path "./.git/*"
-        -exec shellcheck {} \;
-
-  - name: syntax-check
-    image: python:3.13-slim
-    environment: *ansible_env
-    commands:
-      - pip install -q -r requirements.txt
-      - chmod 755 .
-      # Globbed so renamed or new playbooks cannot drift out of the check.
-      - >-
-        ANSIBLE_ROLES_PATH="$(pwd)/roles" ansible-playbook --syntax-check
-        playbooks/*.yml playbooks/backup/*.yml
+        find . -name "*.sh" -not -path "./.git/*" -not -path "./collections/*" -not -path "./.venv/*"
+        -print0 | xargs -0 shellcheck

@@ -21,7 +21,7 @@
     msg: "[{{ validation_role }}] Required {{ validation_context }} variable '{{ item }}' is not defined or empty"
   when:
     - required_variables is defined
-    - vars[item] is not defined or vars[item] == ""
+    - (lookup('ansible.builtin.vars', item, default='') | default('')) == ''
   loop: "{{ required_variables }}"
   tags: [validation, variable_validation]
 
@@ -33,8 +33,7 @@
   when:
     - validation_type in ['full', 'vault']
     - vault_placeholders is defined
-    - vars[item.var] is defined
-    - (vars[item.var] | string) == item.value
+    - (lookup('ansible.builtin.vars', item.var, default=none) | default(none) | string) == item.value
   loop: "{{ vault_placeholders }}"
   tags: [validation, vault_validation]
 

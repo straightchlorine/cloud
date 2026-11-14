@@ -1,41 +1,80 @@
 ---
-- name: Verify os discovery
+- name: Verify os default
   hosts: all
-  gather_facts: true
+  gather_facts: false
+  vars:
+    verify_case_ids: [unsupported-family, unmapped-arch]
+    # Golden values, deliberately not read from the role's own maps.
+    verify_download: {x86_64: amd64, aarch64: arm64}
+    verify_arm: [aarch64, armv5tel, armv5tejl, armv6l, armv7l, armv8l]
+    verify_64bit: [x86_64, aarch64]
   tasks:
-    - name: Re-run the os role in the verify process
-      # Verify is a separate playbook run, so converge's set_fact values are gone.
+    # Verify is a separate process, so converge's set_fact values are gone.
+    - name: Re-run the os role
       ansible.builtin.include_role:
         name: os
 
-    - name: Assert normalized OS/arch facts are defined
+    - name: Assert OS facts match the host
       ansible.builtin.assert:
         that:
-          - os_family is defined
-          - os_name is defined
-          - os_version is defined
-          - os_codename is defined
-          - os_is_debian is defined
-          - os_arch_machine is defined
-          - os_arch_raw is defined
-          - os_arch_download is defined
-          - os_is_arm is defined
-          - os_is_64bit is defined
-        fail_msg: "One or more os_* facts were not set"
-
-    - name: Assert Debian family and a supported download arch
-      ansible.builtin.assert:
-        that:
+          - os_family == ansible_facts.os_family
+          - os_name == ansible_facts.distribution
           - os_is_debian
-          - os_arch_download in ['amd64', '386', 'armv5', 'armv6', 'armv7', 'arm64']
-        fail_msg: >-
-          Unexpected discovered values: os_family={{ os_family }}
-          os_arch_machine={{ os_arch_machine }}
-          os_arch_download={{ os_arch_download }}
+          - os_version == ansible_facts.distribution_major_version
+          - os_codename == ansible_facts.distribution_release
+        fail_msg: "os_family={{ os_family }} os_name={{ os_name }} os_version={{ os_version }}"
 
-    - name: Display discovery result
-      ansible.builtin.debug:
-        msg: >-
-          [OK] OS/arch: {{ os_name }} {{ os_version }}
-          / {{ os_arch_machine }} -> {{ os_arch_download }}
-          (arm={{ os_is_arm }}, 64bit={{ os_is_64bit }})
+    - name: Assert architecture facts match the host
+      ansible.builtin.assert:
+        that:
+          - os_arch_machine == ansible_facts.architecture
+          - os_arch_raw == ansible_facts.machine
+          - os_arch_download == verify_download[os_arch_machine]
+          - os_is_arm == (os_arch_machine in verify_arm)
+          - os_is_64bit == (os_arch_machine in verify_64bit)
+        fail_msg: >-
+          arch={{ os_arch_machine }} download={{ os_arch_download }}
+          arm={{ os_is_arm }} 64bit={{ os_is_64bit }}
+
+    - name: Refuse an unsupported OS family
+      block:
+        - name: Run os with no supported family
+          ansible.builtin.include_role:
+            name: os
+          vars:
+            os_supported_families: [NoSuchFamily]
+        - name: Sentinel
+          ansible.builtin.fail:
+            msg: unsupported family accepted
+      rescue:
+        - name: Assert the refusal
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+          vars:
+            molecule_case:
+              id: unsupported-family
+              expect: "os discovery supports only NoSuchFamily - got {{ ansible_facts.os_family }} ("
+
+    - name: Refuse an unmapped architecture
+      block:
+        - name: Run os with an empty arch map
+          ansible.builtin.include_role:
+            name: os
+          vars:
+            os_arch_download_map: {nosucharch: none}
+        - name: Sentinel
+          ansible.builtin.fail:
+            msg: unmapped arch accepted
+      rescue:
+        - name: Assert the refusal
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+          vars:
+            molecule_case:
+              id: unmapped-arch
+              expect: >-
+                No os_arch_download_map entry for ansible_facts.architecture
+                '{{ ansible_facts.architecture }}'. Supported: nosucharch.
+
+    - name: Assert both refusals fired
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ verify_case_ids }}"

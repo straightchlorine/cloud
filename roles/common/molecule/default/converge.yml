@@ -1,50 +1,36 @@
 ---
-- name: Converge
+- name: Converge common default
   hosts: all
+  vars_files:
+    - ../shared/vars.yml
   vars:
-    timezone: UTC
-    common_fail2ban_enabled: false
-    common_package_cache_valid_time: 3600
-    common_packages:
-      - curl
-      - wget
-      - git
-    vault_ntfy_api_key: molecule-test-ntfy-key
     ntfy_server_url: "https://ntfy.example.test"
-    ntfy_topic: "molecule-test"
     common_auto_updates_reboot_time: "03:00"
-    inventory_hostname: molecule-test-host
     common_ntp_upstream_server: pool.ntp.org
     common_ntp_server_enabled: true
     common_ntp_allowed_networks:
       - 192.168.1.0/24
   tasks:
-    - name: Include network facts collection
-      ansible.builtin.include_tasks: ../../tasks/network_facts.yml
+    - name: Publish the network facts
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
 
-    # include_role is used because a raw include_tasks path would not resolve the role-relative chrony.conf.j2 template.
-    # Only the container-unsafe enable task in chrony.yml carries the molecule-idempotence-notest tag, so this
-    # include must not be tagged.
-    - name: Run the real chrony setup and sync
+    # Untagged: only the container-unsafe enable task in chrony.yml carries molecule-idempotence-notest.
+    - name: Set up chrony
       ansible.builtin.include_role:
         name: common
         tasks_from: chrony
 
-    - name: Set timezone
-      community.general.timezone:
-        name: "{{ timezone }}"
-      become: true
-
-    # This runs the same helpers that stack roles re-apply: ntfy-notify with its key file, unattended-upgrades
-    # and the reboot notice.
-    - name: Run the real base_reapply
+    # The helpers stack roles re-apply: ntfy-notify, unattended-upgrades and the reboot notice.
+    - name: Re-apply the base helpers
       ansible.builtin.include_role:
         name: common
         tasks_from: base_reapply
       vars:
         common_auto_updates_reboot_if_required: true
 
-    - name: Re-render the compose file with only one service
+    - name: Re-render the compose file with one service
       ansible.builtin.include_role:
         name: common
         tasks_from: build_docker_compose
@@ -53,10 +39,9 @@
         compose_file_path: /opt/molecule-stack/docker-compose.yml
         compose_file_owner: root
         compose_file_group: root
-        compose_services:
-          - {service_name: kept, service_image: "busybox:1"}
+        compose_services: ["{{ molecule_kept_service }}"]
 
-    - name: Remove and verify a path list with the real teardown_paths
+    - name: Remove a path list
       ansible.builtin.include_role:
         name: common
         tasks_from: teardown_paths
@@ -66,27 +51,29 @@
           - /tmp/molecule-teardown-file-1
           - /tmp/molecule-teardown-file-2
 
-    - name: Teardown guard maps gpu-qp to gpu_qp_teardown_confirm
+    - name: Refuse a teardown without the flag
+      vars:
+        molecule_case:
+          id: teardown-guard-refusal
+          expect: >-
+            Refusing gpu-qp teardown. Re-run with -e gpu_qp_teardown_confirm=true
+            and --limit <your-test-host>.
       block:
-        - name: Run the real teardown_guard without the flag
+        - name: Run teardown_guard without the flag
           ansible.builtin.include_role:
             name: common
             tasks_from: teardown_guard
           vars:
             common_teardown_name: gpu-qp
 
-        - name: Fail the test - the guard should have refused
+        - name: Fail when the guard let the run through
           ansible.builtin.fail:
-            msg: "teardown_guard let gpu-qp through without gpu_qp_teardown_confirm"
+            msg: "case {{ molecule_case.id }} passed validation"
       rescue:
         - name: Assert the refusal names the underscore flag
-          ansible.builtin.assert:
-            that:
-              - "'gpu_qp_teardown_confirm=true' in ansible_failed_result.msg"
-            fail_msg: "wrong refusal: {{ ansible_failed_result.msg | default('') }}"
-            success_msg: "[OK] teardown_guard refuses and names gpu_qp_teardown_confirm"
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
 
-    - name: Teardown guard accepts the documented flag
+    - name: Accept the documented flag
       ansible.builtin.include_role:
         name: common
         tasks_from: teardown_guard
@@ -94,14 +81,20 @@
         common_teardown_name: gpu-qp
         gpu_qp_teardown_confirm: true
 
-    - name: Confirm ntfy_notify fails fast when required vars are missing
+    - name: Refuse a notification without title and message
+      vars:
+        molecule_case:
+          id: ntfy-notify-missing-vars
+          expect: common_ntfy_title and common_ntfy_message must be set to call ntfy_notify
       block:
-        - name: Call ntfy_notify with no title/message (expect failure)
-          ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/ntfy_notify.yml"
-        - name: Fail the test - ntfy_notify should have refused to run
+        - name: Call ntfy_notify without title and message
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: ntfy_notify
+
+        - name: Fail when ntfy_notify ran anyway
           ansible.builtin.fail:
-            msg: "ntfy_notify did not fail fast on missing common_ntfy_title/message"
+            msg: "case {{ molecule_case.id }} passed validation"
       rescue:
-        - name: Expected failure caught
-          ansible.builtin.debug:
-            msg: "[OK] ntfy_notify correctly refused to run without required vars"
+        - name: Assert the refusal names the missing variables
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

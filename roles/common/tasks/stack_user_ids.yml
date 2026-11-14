@@ -12,5 +12,5 @@
 
     - name: Publish the stack user's uid/gid for the compose services
       ansible.builtin.set_fact:
-        common_stack_uid: "{{ getent_passwd[ansible_user][1] }}"
-        common_stack_gid: "{{ getent_passwd[ansible_user][2] }}"
+        common_stack_uid: "{{ ansible_facts.getent_passwd[ansible_user][1] }}"
+        common_stack_gid: "{{ ansible_facts.getent_passwd[ansible_user][2] }}"

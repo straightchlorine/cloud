@@ -1,0 +1,22 @@
+---
+- name: Create the source tree and repository parent
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /srv/molecule-src, mode: "0755" }
+    - { path: /srv/molecule-src/private, mode: "0700" }
+    - { path: /srv/molecule-src/skip, mode: "0755" }
+    - { path: /srv/molecule-repos, mode: "1777" }
+
+- name: Create the source files
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    # Root-only: readable by the restic user only through CAP_DAC_READ_SEARCH.
+    - { dest: /srv/molecule-src/private/secret, content: "root-only\n", mode: "0600" }
+    - { dest: /srv/molecule-src/public, content: "public\n", mode: "0644" }
+    - { dest: /srv/molecule-src/skip/excluded, content: "excluded\n", mode: "0644" }

@@ -1,28 +1,10 @@
 ---
-- name: Prepare - stand-ins for what the role expects on the real host
+- name: Prepare honeypot default
   hosts: all
   become: true
   tasks:
-    - name: Install a stub docker.service
-      # The real docker-ce cannot run in the container.
-      # The stub records each start so verify can prove the Restart docker handler from common fired.
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Docker stub for molecule
-          [Service]
-          ExecStartPre=/bin/sh -c 'echo start >> /var/tmp/docker-stub-starts'
-          ExecStart=/usr/bin/sleep infinity
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/docker.service
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Reload systemd to see the stub
-      ansible.builtin.systemd_service:
-        daemon_reload: true
+    - name: Stub docker
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/stub_docker.yml"
 
     - name: Create /etc/docker
       ansible.builtin.file:
@@ -42,7 +24,7 @@
         mode: '0644'
 
     - name: Create the honeywatch config directory
-      # selinux.yml creates this directory on the real host, but SELinux cannot run in the container.
+      # Only selinux.yml creates it, and SELinux cannot run in the container.
       ansible.builtin.file:
         path: /etc/honeywatch
         state: directory

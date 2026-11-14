@@ -1,100 +1,59 @@
 ---
-- name: Converge - deploy what a container allows, then run the real teardown
+- name: Converge automation teardown
   hosts: all
   become: true
-  vars:
-    ansible_user: root
-    timezone: UTC
-    domain_name: example.test
-    vault_domain_name: example.test
-    vault_letsencrypt_email: test@example.test
-    # The validate.yml file refuses a malformed APP_KEY, and this key has the accepted raw length.
-    vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
-    # The validate.yml file accepts only a 32-character hex cron token, and this token matches.
-    vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
-    vault_firefly_db_password: molecule-test-db-password
-    vault_vaultwarden_admin_token: molecule-test-admin-token
-    vault_watchtower_api_token: molecule-test-watchtower-token
-    automation_trusted_proxies: "100.64.0.0/10"
-    automation_data_path: /mnt/data
-    automation_stack_home: /home/automation/stack
-    automation_backup_enabled: true
-    automation_backup_dir: /tmp/molecule-automation-backup
-    automation_backup_owner: molecule
-    automation_restic_enabled: false
-    common_start_stack: false
+  vars_files:
+    - ../shared/vars.yml
   pre_tasks:
-    - name: Create the stack-home parent (validate.yml asserts it exists)
-      ansible.builtin.file:
-        path: "{{ automation_stack_home | dirname }}"
-        state: directory
-        mode: "0755"
-
-    - name: Publish fixture userns-remap facts
-      # On a real host docker.yml publishes these facts, and the ownership tasks in stack.yml read them.
-      # The fixture value must sit inside the nested rootless-podman uid mapping.
-      # The canonical dockremap base lies outside that mapping, and chown would fail with EINVAL.
-      ansible.builtin.set_fact:
-        common_dockremap_uid: "10000"
-        common_dockremap_gid: "10000"
+    - name: Prepare stack home and remap facts
+      ansible.builtin.include_tasks: ../shared/pre_deploy.yml
 
   tasks:
-    # The deploy tasks run the container-safe parts of a real deploy, so the teardown has real things to remove.
-    # They carry molecule-idempotence-notest because the teardown removes what they create.
-    # The untagged teardown is the system under test and must converge on a rerun.
-    - name: Gather network facts for dynamic configuration
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: network_facts
+    # The deploy removes nothing on a rerun but the teardown removes what it creates, so the arrange steps skip
+    # idempotence; the untagged teardown is the system under test and must converge.
+    - name: Deploy what a container allows
       tags: [molecule-idempotence-notest]
-
-    - name: Run the real stack deployment
-      ansible.builtin.include_role:
-        name: automation
-        tasks_from: stack
-      tags: [molecule-idempotence-notest]
-
-    - name: Run the real backup deployment
-      ansible.builtin.include_role:
-        name: automation
-        tasks_from: backup
-      tags: [molecule-idempotence-notest]
-
-    # On a real host docker_stack_service creates this unit, but a container has no docker.service.
-    # The fake unit only gives the teardown a unit file to stop and remove.
-    - name: Create the fake stack service unit
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Automation Stack (molecule fixture)
-          [Service]
-          Type=oneshot
-          ExecStart=/bin/true
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/stack.service
-        mode: "0644"
-      tags: [molecule-idempotence-notest]
-
-    - name: Teardown refuses to run without the confirm fact
       block:
-        - name: Run the automation teardown unconfirmed
+        - name: Gather network facts
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: network_facts
+
+        - name: Deploy the stack
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: stack
+
+        - name: Deploy the backup
+          ansible.builtin.include_role:
+            name: automation
+            tasks_from: backup
+
+        - name: Install and start the stack unit
+          ansible.builtin.include_tasks: ../shared/install_unit.yml
+
+    - name: Refuse an unconfirmed teardown
+      block:
+        - name: Run the teardown without teardown_confirmed
           ansible.builtin.include_role:
             name: automation
             tasks_from: teardown
 
-        - name: Fail if the unconfirmed teardown ran
+        - name: Fail when the unconfirmed teardown ran
           ansible.builtin.fail:
-            msg: automation teardown ran without teardown_confirmed
+            msg: unconfirmed teardown ran
       rescue:
-        - name: Assert the refusal names teardown_confirmed
-          ansible.builtin.assert:
-            that:
-              - "'automation teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+        - name: Assert the refusal and record it
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+          vars:
+            molecule_case:
+              id: unconfirmed-teardown
+              expect: >-
+                automation teardown requires the shared teardown_confirmed fact - run
+                through playbooks/automation-teardown.yml instead.
 
-    # This runs the teardown as playbooks/automation-teardown.yml does once teardown_confirmed is set.
-    # Its self-verification runs as part of this include, and the docker info guard skips docker compose down.
-    - name: Run the real automation role teardown
+    - name: Run the confirmed teardown
+      # Its own self-verification runs inside this include.
       ansible.builtin.include_role:
         name: automation
         tasks_from: teardown

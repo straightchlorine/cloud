@@ -1,0 +1,7 @@
+---
+# Resolved lazily, so it works in every phase once facts are gathered.
+molecule_primary_interface: "{{ ansible_facts.interfaces | difference(['lo']) | sort | first }}"
+common_ntp_upstream_server: pool.ntp.org
+dns_backup_dir: /tmp/molecule-syncthing-backup
+dns_backup_retention: 14
+dns_backup_owner: molecule

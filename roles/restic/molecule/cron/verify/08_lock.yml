@@ -1,0 +1,22 @@
+---
+# A run holding the lock makes the next cron start skip without a message to ntfy.
+- name: Start the plain job while another process holds its lock
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log
+    ( flock /run/restic-cr.lock sleep 8 ) &
+    sleep 1
+    {{ molecule_wrapper }} cron cr
+    echo "rc=$?"
+    wait
+    cat /run/molecule-ntfy.log 2>/dev/null || true
+    tail -n 1 /var/log/restic/cr.log
+  register: molecule_locked
+  changed_when: true
+
+- name: Assert the locked start skipped silently and logged why
+  ansible.builtin.assert:
+    that:
+      - molecule_locked.stdout_lines[0] == 'rc=0'
+      - molecule_locked.stdout_lines | length == 2
+      - >-
+        molecule_locked.stdout_lines[1] is search('restic-job: skipped: the previous run still holds the lock$')

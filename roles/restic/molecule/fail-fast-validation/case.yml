@@ -1,48 +1,39 @@
 ---
-- name: "Case {{ molecule_case.id }}: expect {{ molecule_case.expect }}"
+- name: "Case {{ molecule_case.id }}"
+  vars:
+    restic_job: >-
+      {{ molecule_good | dict2items | rejectattr('key', 'in', molecule_case.drop)
+         | items2dict | combine(molecule_case.patch) }}
+    restic_known_hosts: "{{ molecule_case.known_hosts }}"
+    restic_storage_host: "{{ molecule_case.storage_host }}"
+    restic_storage_user: "{{ molecule_case.storage_user }}"
+    restic_storage_port: "{{ molecule_case.storage_port }}"
+    # The real facts with the case's architecture and service manager (see molecule.yml for the interpreter).
+    ansible_facts: >-
+      {{ hostvars[inventory_hostname]['ansible_facts']
+         | combine({'architecture': molecule_case.arch, 'service_mgr': molecule_case.mgr}) }}
+    restic_scheduler: "{{ molecule_case.scheduler }}"
+    restic_cache_dir: "{{ molecule_case.cache_dir }}"
+    restic_storage_min_free_percent: "{{ molecule_case.min_free }}"
+    vault_ntfy_api_key: "{{ molecule_case.ntfy_key }}"
+    restic_jobs: "{{ molecule_case.jobs }}"
+    restic_storage_key: "{{ molecule_case.storage_key }}"
   block:
-    - name: Merge the job the way job.yml does, for the key check that reads the merged fact
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/validate_job.yml"
+    # The key check reads the facts validate_job.yml sets from the merged job.
+    - name: Merge the job
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: validate_job
       when: molecule_case.file == 'validate_key.yml'
-      # Include params outrank the defaults the converge loaded with include_vars (restic_jobs).
-      vars: &molecule_case_vars
-        restic_job: >-
-          {{ molecule_good | dict2items | rejectattr('key', 'in', molecule_case.drop)
-             | items2dict | combine(molecule_case.patch) }}
-        restic_known_hosts: "{{ molecule_case.known_hosts }}"
-        restic_storage_host: "{{ molecule_case.storage_host }}"
-        restic_storage_user: "{{ molecule_case.storage_user }}"
-        restic_storage_port: "{{ molecule_case.storage_port }}"
-        ansible_architecture: "{{ molecule_case.arch }}"
-        ansible_service_mgr: "{{ molecule_case.mgr }}"
-        restic_scheduler: "{{ molecule_case.scheduler }}"
-        restic_cache_dir: "{{ molecule_case.cache_dir }}"
-        restic_storage_min_free_percent: "{{ molecule_case.min_free }}"
-        vault_ntfy_api_key: "{{ molecule_case.ntfy_key }}"
-        restic_jobs: "{{ molecule_case.jobs }}"
-        restic_storage_key: "{{ molecule_case.storage_key }}"
 
-    - name: Run the real validate file with the case's input
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../tasks/{{ molecule_case.file }}"
-      vars: *molecule_case_vars
+    - name: Run the validate file with the case's input
+      ansible.builtin.include_role:
+        name: restic
+        tasks_from: "{{ molecule_case.file }}"
 
     - name: Fail the test - the validate file should have refused
       ansible.builtin.fail:
         msg: "case {{ molecule_case.id }} passed validation"
   rescue:
-    - name: Assert the failure names the expected field
-      # A looped fail (unified_validation) keeps its per-item text in .results.
-      vars:
-        molecule_failures: >-
-          {{ [ansible_failed_result.msg] + (ansible_failed_result.results | default([])
-             | selectattr('msg', 'defined') | map(attribute='msg') | list) }}
-      ansible.builtin.assert:
-        that: molecule_failures | select('match', molecule_case.expect | regex_escape) | list | length > 0
-        fail_msg: "case {{ molecule_case.id }} failed for another reason: {{ ansible_failed_result }}"
-
-    - name: Record the case as passed for verify.yml
-      ansible.builtin.copy:
-        content: ""
-        dest: "/tmp/molecule-restic-case{{ molecule_case.id }}.passed"
-        force: false
-        mode: "0644"
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

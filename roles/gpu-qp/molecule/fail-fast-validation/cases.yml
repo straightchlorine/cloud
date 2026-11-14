@@ -1,0 +1,18 @@
+---
+molecule_case_defaults:
+  worker_device: "all"
+# Case 1 omits cuda_arch so the role's required variable is undefined.
+molecule_cases:
+  - id: cuda-arch-missing
+    expect: "[gpu-qp] Required gpu-qp variable 'gpu_qp_cuda_arch' is not defined or empty"
+  - id: cuda-arch-unsupported
+    cuda_arch: "5.0"
+    expect: >-
+      gpu_qp_cuda_arch '5.0' is not a supported CUDA compute capability.
+      Valid values: 6.0, 6.1, 7.0, 7.5, 8.0, 8.6, 8.9, 9.0.
+  - id: worker-device-malformed
+    cuda_arch: "6.1"
+    worker_device: "gpu0"
+    expect: >-
+      gpu_qp_worker_device must be "all" or a comma-separated GPU index list
+      (e.g. "0" or "0,1"); got 'gpu0'.

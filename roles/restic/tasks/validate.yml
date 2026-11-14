@@ -2,11 +2,11 @@
 - name: Require a supported service manager and a scheduler it can run
   ansible.builtin.assert:
     that:
-      - ansible_service_mgr in ['systemd', 'openrc']
+      - ansible_facts.service_mgr in ['systemd', 'openrc']
       - restic_scheduler in ['systemd', 'cron']
-      - restic_scheduler == 'cron' or ansible_service_mgr == 'systemd'
+      - restic_scheduler == 'cron' or ansible_facts.service_mgr == 'systemd'
     fail_msg: >-
-      ansible_service_mgr: {{ ansible_service_mgr }}, restic_scheduler: {{ restic_scheduler }} - the engine
+      ansible_service_mgr: {{ ansible_facts.service_mgr }}, restic_scheduler: {{ restic_scheduler }} - the engine
       supports systemd hosts (timers) and OpenRC hosts (cron); restic_scheduler must be systemd or cron,
       and systemd only on a systemd host
     quiet: true
@@ -64,10 +64,10 @@
 - name: Require a supported architecture with a pinned checksum
   ansible.builtin.assert:
     that:
-      - ansible_architecture in restic_arch_map
-      - restic_binary_sha256[restic_arch_map[ansible_architecture]] is match('^[0-9a-f]{64}$')
+      - ansible_facts.architecture in restic_arch_map
+      - restic_binary_sha256[restic_arch_map[ansible_facts.architecture]] is match('^[0-9a-f]{64}$')
     fail_msg: >-
-      restic_binary_sha256: no checksum for ansible_architecture {{ ansible_architecture }}
+      restic_binary_sha256: no checksum for ansible_facts.architecture {{ ansible_facts.architecture }}
       (supported: {{ restic_arch_map.keys() | join(', ') }})
     quiet: true
 

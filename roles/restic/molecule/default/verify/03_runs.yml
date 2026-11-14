@@ -1,0 +1,191 @@
+---
+- name: Run the ok job twice (forget then keeps one snapshot)
+  ansible.builtin.command: systemctl start restic-job@ok.service  # noqa: command-instead-of-module
+  loop: [1, 2]
+  changed_when: true
+
+- name: List the ok job's snapshots
+  ansible.builtin.command: /usr/local/libexec/restic/restic-job exec ok snapshots --json
+  register: molecule_snaps
+  changed_when: false
+
+- name: List the latest snapshot's files
+  ansible.builtin.command: /usr/local/libexec/restic/restic-job exec ok ls latest
+  register: molecule_ls
+  changed_when: false
+
+- name: Stat the stamps
+  ansible.builtin.stat:
+    path: "/var/lib/restic/ok.{{ item }}"
+  loop: [ok, pruned, checked]
+  register: molecule_stamps
+
+- name: Assert a real, scoped, capability-read snapshot
+  vars:
+    molecule_snap_list: "{{ molecule_snaps.stdout | from_json }}"
+    molecule_os_tag: "{{ ansible_facts.distribution | lower ~ '-' ~ ansible_facts.distribution_major_version }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_snap_list | length == 1
+      - (molecule_snap_list | first).hostname == ansible_facts.nodename
+      - (molecule_snap_list | first).tags | sort == ['ok', molecule_os_tag] | sort
+      - "'/srv/molecule-src/private/secret' in molecule_ls.stdout_lines"
+      - "'/srv/molecule-src/skip/excluded' not in molecule_ls.stdout_lines"
+      - molecule_stamps.results | selectattr('stat.exists') | list | length == 3
+
+- name: Pin the latest snapshot by hand, then run the job again
+  ansible.builtin.shell: |
+    set -e
+    exec=/usr/local/libexec/restic/restic-job
+    $exec exec ok tag --add keep latest
+    systemctl start restic-job@ok.service
+    $exec exec ok snapshots --json
+  register: molecule_pinned
+  changed_when: true
+
+- name: Assert retention of one daily snapshot still left the pinned one alive
+  vars:
+    molecule_pinned_list: "{{ molecule_pinned.stdout_lines[-1] | from_json }}"
+    molecule_os_tag: "{{ ansible_facts.distribution | lower ~ '-' ~ ansible_facts.distribution_major_version }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_pinned_list | length == 2
+      - molecule_pinned_list | selectattr('tags', 'contains', 'keep') | list | length == 1
+      - (molecule_pinned_list | last).tags | sort == ['ok', molecule_os_tag] | sort
+
+- name: Release the pin and run the job again, so retention takes the old snapshot
+  ansible.builtin.shell: |
+    set -e
+    exec=/usr/local/libexec/restic/restic-job
+    $exec exec ok tag --remove keep --tag keep
+    systemctl start restic-job@ok.service
+    $exec exec ok snapshots --json
+  register: molecule_released
+  changed_when: true
+
+- name: Assert one snapshot remains and none is pinned
+  vars:
+    molecule_released_list: "{{ molecule_released.stdout_lines[-1] | from_json }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_released_list | length == 1
+      - molecule_released_list | selectattr('tags', 'contains', 'keep') | list | length == 0
+
+- name: Stat the weekly stamps and age them past their 7 d limit
+  ansible.builtin.shell: |
+    set -e
+    stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+    touch -d '8 days ago' /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+    stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+  register: molecule_stamps_before
+  changed_when: true
+
+- name: Run the ok job with its weekly maintenance due
+  ansible.builtin.command: systemctl start restic-job@ok.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: Read the run's last summary line and the stamps
+  ansible.builtin.shell: |
+    set -o pipefail
+    journalctl -u restic-job@ok.service -o cat --no-pager | grep 'restic-job: summary' | tail -n 1
+    stat -c %Y /var/lib/restic/ok.pruned /var/lib/restic/ok.checked
+  args:
+    executable: /bin/bash
+  register: molecule_weekly
+  changed_when: false
+
+- name: Assert prune and check ran and moved their stamps
+  vars:
+    molecule_aged: "{{ molecule_stamps_before.stdout_lines[2:4] | map('int') | list }}"
+    molecule_now: "{{ molecule_weekly.stdout_lines[1:3] | map('int') | list }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_weekly.stdout_lines[0] is search(' steps=backup,forget,prune,check unreadable=0$')
+      - molecule_now[0] > molecule_aged[0] + 86400
+      - molecule_now[1] > molecule_aged[1] + 86400
+
+- name: Run the partial job (stub exits 3 after a real snapshot)
+  ansible.builtin.command: systemctl start restic-job@partial.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: Run the jobs that must fail (missing source, stale fresh path)
+  ansible.builtin.command: "systemctl start restic-job@{{ item }}.service"  # noqa: command-instead-of-module
+  loop: [broken, stale]
+  register: molecule_failing
+  changed_when: true
+  failed_when: molecule_failing.rc == 0
+
+- name: Run the sandbox probe
+  ansible.builtin.command: systemctl start restic-job@probe.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: Read each job's result
+  ansible.builtin.command: "systemctl show -p Result -p ExecMainStatus restic-job@{{ item }}.service"
+  loop: [partial, broken, stale]
+  register: molecule_results
+  changed_when: false
+
+- name: Read the probe's findings
+  ansible.builtin.slurp:
+    src: "/var/lib/restic/probe-{{ item }}"
+  loop: [caps, read, errors]
+  register: molecule_probe
+
+- name: Stat the probe's write attempt
+  ansible.builtin.stat:
+    path: /etc/probe-write
+  register: molecule_probe_write
+
+- name: Assert exit mapping and the sandbox
+  vars:
+    molecule_r: "{{ molecule_results.results | items2dict(key_name='item', value_name='stdout_lines') }}"
+    molecule_p: "{{ molecule_probe.results | items2dict(key_name='item', value_name='content') }}"
+  ansible.builtin.assert:
+    that:
+      - "'Result=success' in molecule_r.partial and 'ExecMainStatus=3' in molecule_r.partial"
+      - "'Result=exit-code' in molecule_r.broken and 'ExecMainStatus=1' in molecule_r.broken"
+      - "'Result=exit-code' in molecule_r.stale and 'ExecMainStatus=1' in molecule_r.stale"
+      - "'0000000000000004' in (molecule_p.caps | b64decode)"
+      - (molecule_p.read | b64decode) == 'root-only\n'
+      - (molecule_p.errors | b64decode) is search('Read-only file system')
+      - not molecule_probe_write.stat.exists
+    quiet: true
+
+- name: Age the partial job's prune stamp and make the stub's prune fail
+  ansible.builtin.shell: |
+    set -e
+    touch -d '8 days ago' /var/lib/restic/partial.pruned
+    touch /run/molecule-prune-fails
+    stat -c %Y /var/lib/restic/partial.pruned
+  register: molecule_prune_stamp
+  changed_when: true
+
+- name: Run the partial job with a failing prune
+  ansible.builtin.command: systemctl start restic-job@partial.service  # noqa: command-instead-of-module
+  register: molecule_prune_run
+  changed_when: true
+  failed_when: molecule_prune_run.rc == 0
+
+- name: Read the failed run
+  ansible.builtin.shell: |
+    set -o pipefail
+    systemctl show -p Result -p ExecMainStatus restic-job@partial.service
+    stat -c %Y /var/lib/restic/partial.pruned
+    journalctl -u restic-job@partial.service -o cat --no-pager | grep 'restic-job: FAILED' | tail -n 1
+  args:
+    executable: /bin/bash
+  register: molecule_prune_failed
+  changed_when: false
+
+- name: Let the stub's prune work again
+  ansible.builtin.file:
+    path: /run/molecule-prune-fails
+    state: absent
+
+- name: Assert a failed prune fails the run and keeps the stamp due
+  ansible.builtin.assert:
+    that:
+      - "'Result=exit-code' in molecule_prune_failed.stdout_lines"
+      - "'ExecMainStatus=1' in molecule_prune_failed.stdout_lines"
+      - molecule_prune_failed.stdout_lines[2] == molecule_prune_stamp.stdout
+      - "molecule_prune_failed.stdout_lines[3] == 'restic-job: FAILED: prune failed'"

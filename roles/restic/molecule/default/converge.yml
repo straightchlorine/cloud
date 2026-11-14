@@ -1,14 +1,9 @@
 ---
-- name: Converge - the real restic role through both entry points, local repositories
+- name: Converge restic default
   hosts: all
   become: true
+  vars_files: [../shared/vars.yml]
   vars:
-    # molecule connects as root; production derives this from ansible_user.
-    restic_connection_user: root
-    vault_ntfy_api_key: molecule-test-ntfy-key
-    ntfy_server_url: "https://ntfy.example.test"
-    ntfy_topic: molecule-test
-    restic_init_repository: true
     # A non-default cache directory, so the whole scenario runs through the knob; the teardown and cron
     # scenarios cover the default.
     restic_cache_dir: /srv/molecule-cache/restic
@@ -16,13 +11,9 @@
     restic_storage_user: u0
     restic_storage_port: 23
     restic_known_hosts: "[storage.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n"
-    molecule_job: &molecule_job
-      sources: [/srv/molecule-src]
-      excludes: [/srv/molecule-src/skip]
-      schedule: "*-*-* 03:00:00"
-      timeout: 10min
-      memory_max_mib: 512
-      retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+    molecule_offsite_job: >-
+      {{ molecule_job_timer | combine({'name': 'offsite', 'repository': 'sftp:hetzner-storage:/molecule',
+                                       'password': 'molecule-restic-password-offsite'}) }}
   tasks:
     # Extra trailing newlines prove the role writes exactly one; the legacy key from
     # prepare is present, so this also proves the vault key wins over adoption.
@@ -41,54 +32,35 @@
         restic_storage_key: "{{ (molecule_vault_key.content | b64decode) ~ '\n\n' }}"
       no_log: true
 
-    - name: Deploy three jobs through the role entry point (restic_jobs, as station-arch)
+    - name: Deploy five jobs through the role entry point (restic_jobs, as station-arch)
       ansible.builtin.include_role:
         name: restic
       vars:
         restic_jobs:
-          - <<: *molecule_job
-            name: ok
-            repository: /srv/molecule-repos/ok
-            password: molecule-restic-password-ok
-            fresh:
-              - { path: /srv/molecule-src, max_age_hours: 24 }
-          - <<: *molecule_job
-            name: broken
-            repository: /srv/molecule-repos/broken
-            password: molecule-restic-password-broken
-            sources: [/srv/molecule-missing]
-          - <<: *molecule_job
-            name: stale
-            repository: /srv/molecule-repos/stale
-            password: molecule-restic-password-stale
-            fresh:
-              - { path: /srv/molecule-stale, max_age_hours: 1 }
+          - "{{ molecule_job_timer | combine({'name': 'ok', 'repository': '/srv/molecule-repos/ok',
+               'password': 'molecule-restic-password-ok',
+               'fresh': [{'path': '/srv/molecule-src', 'max_age_hours': 24}]}) }}"
+          - "{{ molecule_job_timer | combine({'name': 'broken', 'repository': '/srv/molecule-repos/broken',
+               'password': 'molecule-restic-password-broken', 'sources': ['/srv/molecule-missing']}) }}"
+          - "{{ molecule_job_timer | combine({'name': 'stale', 'repository': '/srv/molecule-repos/stale',
+               'password': 'molecule-restic-password-stale',
+               'fresh': [{'path': '/srv/molecule-stale', 'max_age_hours': 1}]}) }}"
+          - "{{ molecule_job_timer | combine({'name': 'gated', 'repository': '/srv/molecule-repos/gated',
+               'password': 'molecule-restic-password-gated', 'skip_metered': true,
+               'metered_connections': molecule_metered_names}) }}"
+          # Its push-backup units carry another name; the role retires those and leaves backup-onbat alone.
+          - "{{ molecule_job_timer | combine({'name': 'onbat', 'legacy_name': 'oldname',
+               'repository': '/srv/molecule-repos/onbat', 'password': 'molecule-restic-password-onbat',
+               'skip_on_battery': true}) }}"
 
-          - <<: *molecule_job
-            name: gated
-            repository: /srv/molecule-repos/gated
-            password: molecule-restic-password-gated
-            skip_metered: true
-            metered_connections: ["My Phone", "Zoë’s \"iPhone\"", "Ünï \"q\" back\\slash"]
-
-          - <<: *molecule_job
-            name: onbat
-            # Its push-backup units carry another name; the role retires those and leaves backup-onbat alone.
-            legacy_name: oldname
-            repository: /srv/molecule-repos/onbat
-            password: molecule-restic-password-onbat
-            skip_on_battery: true
-
-    - name: Deploy two jobs through tasks_from job (as automation and media)
+    - name: Deploy three jobs through tasks_from job (as automation and media)
       ansible.builtin.include_role:
         name: restic
         tasks_from: job
       vars:
-        restic_job:
-          <<: *molecule_job
-          name: "{{ molecule_name }}"
-          repository: "/srv/molecule-repos/{{ molecule_name }}"
-          password: "molecule-restic-password-{{ molecule_name }}"
+        restic_job: >-
+          {{ molecule_job_timer | combine({'name': molecule_name, 'repository': '/srv/molecule-repos/' ~ molecule_name,
+                                           'password': 'molecule-restic-password-' ~ molecule_name}) }}
       loop: [partial, slow, box]
       loop_control:
         loop_var: molecule_name
@@ -100,11 +72,7 @@
         name: restic
         tasks_from: validate_job
       vars:
-        restic_job:
-          <<: *molecule_job
-          name: offsite
-          repository: "sftp:hetzner-storage:/molecule"
-          password: molecule-restic-password-offsite
+        restic_job: "{{ molecule_offsite_job }}"
 
     - name: Deploy the sftp job as far as the unreachable Storage Box allows
       block:
@@ -113,11 +81,7 @@
             name: restic
             tasks_from: job
           vars:
-            restic_job:
-              <<: *molecule_job
-              name: offsite
-              repository: "sftp:hetzner-storage:/molecule"
-              password: molecule-restic-password-offsite
+            restic_job: "{{ molecule_offsite_job }}"
 
         - name: Fail the test - the repository probe cannot reach a Storage Box here
           ansible.builtin.fail:
@@ -129,9 +93,15 @@
           ansible.builtin.assert:
             that:
               - ansible_failed_task.name == "Say which public key the Storage Box must authorize"
-              - "ansible_failed_result.msg is match('restic_storage_key: the repository probe failed over ssh')"
               - ansible_failed_result.msg is search('authorized_keys')
               - molecule_public_key in ansible_failed_result.msg
+
+        - name: Assert the failure is the probe's and record it
+          vars:
+            molecule_case:
+              id: offsite-probe
+              expect: "restic_storage_key: the repository probe failed over ssh"
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
 
     - name: Refuse a job whose repository does not exist, without the init flag
       block:
@@ -141,29 +111,22 @@
             tasks_from: job
           vars:
             restic_init_repository: false
-            restic_job:
-              <<: *molecule_job
-              name: refused
-              repository: /srv/molecule-repos/refused
-              password: molecule-restic-password-refused
+            restic_job: >-
+              {{ molecule_job_timer | combine({'name': 'refused', 'repository': '/srv/molecule-repos/refused',
+                                               'password': 'molecule-restic-password-refused'}) }}
 
         - name: Fail the test - the missing repository should have been refused
           ansible.builtin.fail:
             msg: a job was deployed against a repository that does not exist
       rescue:
         - name: Assert the refusal names the repository and the init flag
-          ansible.builtin.assert:
-            that:
-              - ansible_failed_result.msg is match('restic_job.repository:')
-              - ansible_failed_result.msg is search('no repository at /srv/molecule-repos/refused')
-              - "'restic_init_repository=true' in ansible_failed_result.msg"
-
-        - name: Record the refusal for verify.yml
-          ansible.builtin.copy:
-            content: ""
-            dest: /var/lib/molecule-init-refused
-            force: false
-            mode: "0644"
+          vars:
+            molecule_case:
+              id: init-refused
+              expect: >-
+                restic_job.repository: no repository at /srv/molecule-repos/refused. Fix the path if
+                this job has history; for a brand-new repository re-run with -e restic_init_repository=true.
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
 
     # The previous install's sudoers file must survive while Ansible's own
     # connection user (station-arch) has no general grant besides it. The play
@@ -240,10 +203,12 @@
             dest: /var/lib/molecule-self-grant-moved
             force: false
             mode: "0644"
+          vars:
+            molecule_grant: "{{ molecule_self_grant.results | items2dict(key_name='item', value_name='stat') }}"
           when:
-            - not molecule_self_grant.results[0].stat.exists
-            - molecule_self_grant.results[1].stat.exists
-            - not molecule_self_grant.results[2].stat.exists
+            - not molecule_grant['/etc/sudoers.d/backup-user'].exists
+            - molecule_grant['/etc/sudoers.d/ansible-backup'].exists
+            - not molecule_grant['/etc/sudoers.d/.backup-user.restore'].exists
 
         - name: Remove the moved grant, so the next case starts without a general grant
           ansible.builtin.file:
@@ -366,7 +331,12 @@
             tasks_from: host
           vars:
             restic_cache_dir: /srv/molecule-trap/restic
+      # The role must refuse; verify asserts the victim stays 755 root:root and the symlink remains.
       rescue:
-        - name: Note that the role stopped at the symlink
-          ansible.builtin.debug:
-            msg: "refused: {{ ansible_failed_result.msg }}"
+        - name: Assert the role refused the symlink
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+          vars:
+            molecule_case:
+              id: cache-symlink
+              expect: "/srv/molecule-trap/restic already exists as a link"

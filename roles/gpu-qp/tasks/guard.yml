@@ -9,10 +9,8 @@
 
 - name: Look for bench processes
   # This also catches a .lock replaced under a live run.
-  # The pattern matches scripts named supervise, phase or lane, with or without a gpu-qp- prefix.
-  # Editors, tail and ansible do not match it.
   ansible.builtin.command:
-    argv: [pgrep, -af, '^bash .*/(gpu-qp-)?(supervise|phase|lane)\.sh']
+    argv: [pgrep, -af, "{{ gpu_qp_bench_proc_re }}"]
   register: gpu_qp_guard_procs
   # Pgrep exits 1 when nothing matches, and the refusal task below reads the exit code.
   failed_when: false

@@ -1,0 +1,35 @@
+---
+# An sftp job: the repository is local behind the stub, and the Storage Box figures come from the stub df.
+- name: Run the sftp job with a df that answers, then with one that fails
+  ansible.builtin.shell: |
+    sed -i 's|^RESTIC_REPOSITORY=.*|RESTIC_REPOSITORY=sftp:hetzner-storage:/srv/molecule-repos/crbox|' \
+      /etc/restic/crbox.env
+    rm -f /run/molecule-ntfy-body.log
+    for reply in '1000000000 450000000 550000000 (root) 55%' fail; do
+      printf '%s\n' "$reply" > /run/molecule-sftp
+      chmod 644 /run/molecule-sftp
+      env RESTIC_JOB_BIN=/usr/local/bin/restic-stub STUB_MODE=sftp RESTIC_JOB_PATH={{ molecule_path }} \
+        {{ molecule_wrapper }} cron crbox
+      echo "rc=$?"
+    done
+    cat /var/log/restic/crbox.log /run/molecule-ntfy-body.log
+  register: molecule_crbox
+  changed_when: true
+
+- name: Assert the Storage Box line only follows a df that answered
+  vars:
+    molecule_box_bodies: "{{ molecule_crbox.stdout_lines | select('search', ': crbox backup ok\\|') | list }}"
+  ansible.builtin.assert:
+    that:
+      - "'rc=0' in molecule_crbox.stdout_lines"
+      - >-
+        molecule_crbox.stdout is search(
+        '(?m)^restic-job: summary .* steps=backup,forget,space box_free_pct=55 box_free=563200000000 unreadable=0$')
+      - >-
+        molecule_crbox.stdout is search('restic-job: storage check: sftp df failed: Connection closed')
+      - molecule_box_bodies | length == 2
+      - >-
+        molecule_box_bodies[0] is search(
+        'Files: [0-9,]+ new, [0-9,]+ changed\^Storage Box: 524\.5 GiB free \(55%\)$')
+      - >-
+        molecule_box_bodies[1] is search('Files: [0-9,]+ new, [0-9,]+ changed$')

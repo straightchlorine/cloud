@@ -1,0 +1,46 @@
+---
+# Every field is mapped in case.yml, so each case needs a good value for all of them.
+molecule_case_defaults:
+  vault_honeypot_r2_bucket: "molecule-bucket"
+  vault_honeypot_age_recipient: "age1moleculetestrecipientvalue"
+  honeypot_ssh_port: 2022
+  honeypot_auto_updates_upgrade_type: default
+  honeypot_backup_retention_days: 30
+  honeypot_image_prune_keep: 3
+  os_family: RedHat
+  os_codename: "Blue Onyx"
+
+molecule_cases:
+  - id: required-variable-empty
+    vault_honeypot_r2_bucket: ""
+    expect: "[honeypot] Required honeypot host variable 'vault_honeypot_r2_bucket' is not defined or empty"
+  - id: age-recipient-placeholder
+    vault_honeypot_age_recipient: "age1your-public-recipient-key"
+    expect: >-
+      [honeypot] Vault variable 'vault_honeypot_age_recipient' contains placeholder value.
+      Please set a real value in vault.yml.
+  - id: ssh-port-collision
+    honeypot_ssh_port: 22
+    expect: >-
+      honeypot_ssh_port is 22, which collides with honeypot_cowrie_public_port (22).
+      Cowrie must own the public port alone - the admin sshd would either fail to bind
+      or be published to the internet.
+  - id: age-private-identity
+    vault_honeypot_age_recipient: "AGE-SECRET-KEY-1MOLECULETESTIDENTITY"
+    expect: >-
+      vault_honeypot_age_recipient must be an age PUBLIC recipient starting with 'age1'.
+      The matching private identity must never reach this host.
+  - id: stream-security-errata
+    honeypot_auto_updates_upgrade_type: security
+    # The Rocky 9 container never reports Stream.
+    os_codename: Stream
+    expect: "honeypot_auto_updates_upgrade_type is 'security', but CentOS Stream publishes no security errata"
+  - id: prune-keep-zero
+    honeypot_image_prune_keep: 0
+    expect: "honeypot_image_prune_keep must be an integer >= 1, got '0'."
+  - id: retention-zero
+    honeypot_backup_retention_days: 0
+    expect: "honeypot_backup_retention_days must be a positive integer number of days, got '0'."
+  - id: os-family-debian
+    os_family: Debian
+    expect: "The honeypot role targets a RedHat-family host (CentOS Stream); got Debian ("

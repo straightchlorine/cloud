@@ -1,0 +1,38 @@
+---
+# Every key is mapped so an absent case field leaves that variable undefined, shadowing play vars and role defaults.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run automation validate.yml
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: validate
+      when: molecule_case.bare is not defined
+      vars:
+        ansible_user: "{{ molecule_case.ansible_user }}"
+        ansible_become: "{{ molecule_case.ansible_become }}"
+        automation_trusted_proxies: "{{ molecule_case.automation_trusted_proxies }}"
+        vault_firefly_app_key: "{{ molecule_case.vault_firefly_app_key }}"
+        vault_firefly_static_cron_token: "{{ molecule_case.vault_firefly_static_cron_token }}"
+        automation_stack_home: "{{ molecule_case.automation_stack_home }}"
+        automation_backup_enabled: "{{ molecule_case.automation_backup_enabled }}"
+        automation_restic_enabled: "{{ molecule_case.automation_restic_enabled }}"
+        automation_restic_repository: "{{ molecule_case.automation_restic_repository }}"
+        automation_restic_password: "{{ molecule_case.automation_restic_password }}"
+
+    - name: Run automation validate.yml on the play vars alone
+      # The repository is genuinely undefined here: reading a missing dict key in the mapping above raises a dict error
+      # instead of the role's own undefined-variable error.
+      ansible.builtin.include_role:
+        name: automation
+        tasks_from: validate
+      when: molecule_case.bare is defined
+      vars:
+        automation_restic_enabled: true
+        automation_restic_password: molecule-restic-password-automation
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

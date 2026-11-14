@@ -4,7 +4,7 @@
 - name: Record whether a drive is already mounted at the data path
   ansible.builtin.set_fact:
     common_ssd_mounted: >-
-      {{ (ansible_mounts | selectattr('mount', 'equalto', common_ssd_mount_path)
+      {{ (ansible_facts.mounts | selectattr('mount', 'equalto', common_ssd_mount_path)
       | list | length) > 0 }}
 
 - name: Detect an unused SSD drive

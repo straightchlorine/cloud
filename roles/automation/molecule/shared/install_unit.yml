@@ -1,0 +1,20 @@
+---
+- name: Install the stack unit
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_stack_service
+  vars:
+    common_start_stack: true
+    common_stack_description: "Automation Stack (molecule)"
+    common_stack_home: "{{ automation_stack_home }}"
+    common_stack_user: "{{ ansible_user }}"
+    common_stack_environment_vars:
+      - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
+
+- name: Start the unit and flush the Restart stack handler
+  # An unknown handler name fails the play, so this also proves the handler resolves.
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: stack_start
+  vars:
+    common_start_stack: true

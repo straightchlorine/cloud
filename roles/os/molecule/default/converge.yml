@@ -1,7 +1,7 @@
 ---
-- name: Converge - os discovery role
+- name: Converge os default
   hosts: all
-  gather_facts: true
+  gather_facts: false
   tasks:
     - name: Run os discovery
       ansible.builtin.include_role:

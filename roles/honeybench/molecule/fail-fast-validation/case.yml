@@ -1,0 +1,19 @@
+---
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run validate
+      ansible.builtin.include_role:
+        name: honeybench
+        tasks_from: validate
+      vars:
+        honeybench_user: "{{ molecule_case.honeybench_user }}"
+        honeybench_dump_enabled: "{{ molecule_case.honeybench_dump_enabled }}"
+        # Omitted per case so the role's own tool list is the baseline.
+        honeybench_tools: "{{ molecule_case.honeybench_tools | default(omit) }}"
+
+    - name: Fail when validate accepts the case
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Check the refusal
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

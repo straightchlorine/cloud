@@ -4,7 +4,7 @@
   ansible.builtin.set_fact:
     media_ytdlp_asset: >-
       {{ {'aarch64': 'yt-dlp_linux_aarch64', 'armv7l': 'yt-dlp_linux_armv7l',
-      'x86_64': 'yt-dlp_linux'}[ansible_architecture] }}
+      'x86_64': 'yt-dlp_linux'}[ansible_facts.architecture] }}
 
 - name: Check for an installed yt-dlp and deno
   ansible.builtin.stat:
@@ -76,7 +76,7 @@
   vars:
     media_deno_zip: >-
       https://github.com/denoland/deno/releases/download/v{{ media_deno_version
-      }}/deno-{{ ansible_architecture }}-unknown-linux-gnu.zip
+      }}/deno-{{ ansible_facts.architecture }}-unknown-linux-gnu.zip
   block:
     - name: Download deno, verified against the release's sha256sum
       ansible.builtin.get_url:

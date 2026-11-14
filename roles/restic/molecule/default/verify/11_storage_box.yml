@@ -1,0 +1,156 @@
+---
+# Storage Box space: the weekly check runs `sftp df` (stubbed through PATH) as the restic user and leaves a marker;
+# the root freshness run sends the alert, once a day per condition, and reads only a well-formed marker.
+- name: Run the storage check against each sftp reply, as the restic user
+  ansible.builtin.shell: |
+    printf '%s\n' "$REPLY" > /run/molecule-sftp
+    chmod 644 /run/molecule-sftp
+    out=$(runuser -u restic -- env PATH={{ molecule_stubs }}:/usr/sbin:/usr/bin:/sbin:/bin \
+      {{ molecule_wrapper }} storage offsite 2>&1)
+    echo "rc=$?"
+    echo "marker=$(cat /var/lib/restic/offsite.storage 2>/dev/null || echo none)"
+    echo "$out"
+  environment:
+    REPLY: "{{ item.reply }}"
+  loop:
+    - { id: low-free, reply: "1000 900 100 (root) 90%", rc: 0, marker: "90 15", text: "Storage Box at 90% used" }
+    - { id: failed-df, reply: "fail", rc: 1, marker: "90 15", text: "sftp df failed: Connection closed" }
+    - { id: unreadable, reply: "garbage", rc: 1, marker: "90 15", text: "cannot read sftp df output" }
+    - { id: enough-free, reply: "1000 500 500 (root) 50%", rc: 0, marker: none, text: "" }
+    - { id: exactly-at-threshold, reply: "1000 850 150 (root) 85%", rc: 0, marker: none, text: "" }
+    - { id: just-below-threshold, reply: "1000 851 149 (root) 85%", rc: 0, marker: "85 15", text: "85% used" }
+  loop_control:
+    label: "{{ item.id }}"
+  register: molecule_storage
+  changed_when: false
+
+- name: Assert the marker follows the free space, and a failing df changes nothing and does not break the caller
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+      - item.stdout_lines[1] == 'marker=' ~ item.item.marker
+      - item.item.text in item.stdout
+    fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+  loop: "{{ molecule_storage.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
+- name: Run freshness with the low-space marker in place, twice
+  ansible.builtin.shell: |
+    printf '90 15\n' > /var/lib/restic/offsite.storage
+    rm -f /var/lib/restic-alerts/storage-offsite
+    {{ molecule_wrapper }} freshness
+    echo "rc1=$?"
+    {{ molecule_wrapper }} freshness
+    echo "rc2=$?"
+    sleep 1
+    echo "alerts=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box at 90% used|high')"
+    ls /var/lib/restic-alerts
+  register: molecule_storage_alert
+  changed_when: true
+
+- name: Assert one high-priority Storage Box alert for two runs, and a stamp in the root directory
+  ansible.builtin.assert:
+    that:
+      - "'alerts=1' in molecule_storage_alert.stdout_lines"
+      - "'storage-offsite' in molecule_storage_alert.stdout_lines"
+      - "'rc1=2' in molecule_storage_alert.stdout_lines"
+
+# The marker is written by the job's user, so root ignores anything but a regular file of two short numbers.
+- name: Run freshness against hostile markers
+  ansible.builtin.shell: |
+    before=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box')
+    rm -f /var/lib/restic-alerts/storage-offsite /var/lib/restic/offsite.storage
+    out=""
+    case "$KIND" in
+      symlink)
+        printf '90 15\n' > /tmp/molecule-marker
+        ln -s /tmp/molecule-marker /var/lib/restic/offsite.storage ;;
+      text) printf 'Storage Box at 1%% $(touch /tmp/molecule-pwned)\n' > /var/lib/restic/offsite.storage ;;
+      long) head -c 5000 /dev/zero | tr '\0' 9 > /var/lib/restic/offsite.storage ;;
+      fifo) mkfifo /var/lib/restic/offsite.storage ;;
+    esac
+    out=$(timeout 20 {{ molecule_wrapper }} freshness 2>&1); echo "rc=$?"
+    sleep 1
+    after=$(journalctl -t molecule-ntfy -o cat --no-pager | grep -c 'Storage Box')
+    echo "new-alerts=$((after - before))"
+    echo "$out" | grep -c 'ignoring'
+    test ! -e /tmp/molecule-pwned && echo not-executed
+    rm -f /var/lib/restic/offsite.storage /var/lib/restic-alerts/storage-offsite
+  environment:
+    KIND: "{{ item }}"
+  loop: [symlink, text, long, fifo]
+  register: molecule_hostile
+  changed_when: false
+
+- name: Assert none of them produced an alert and each was reported as ignored
+  ansible.builtin.assert:
+    that:
+      - "'new-alerts=0' in item.stdout_lines"
+      - "'not-executed' in item.stdout_lines"
+      - "'1' in item.stdout_lines"
+    fail_msg: "{{ item.item }}: {{ item.stdout }}"
+  loop: "{{ molecule_hostile.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# An sftp job serves its repository from a local path through the stub restic, and its df from the sftp stub.
+# The summary carries the Storage Box figures only while df answers.
+- name: Clear the unlock failure the earlier cases left in the stub
+  ansible.builtin.file:
+    path: /run/molecule-unlock-rc
+    state: absent
+
+- name: Point the box job at the Storage Box path
+  ansible.builtin.command:
+    argv:
+      - sed
+      - -i
+      - s|^RESTIC_REPOSITORY=.*|RESTIC_REPOSITORY=sftp:hetzner-storage:/srv/molecule-repos/box|
+      - /etc/restic/box.env
+  changed_when: true
+
+- name: Run the box job with a df that answers, then with one that fails
+  ansible.builtin.shell: |
+    printf '%s\n' "$REPLY" > /run/molecule-sftp
+    chmod 644 /run/molecule-sftp
+    systemctl start restic-job@box.service
+    journalctl -u restic-job@box.service -o cat --no-pager |
+      grep -e 'restic-job: summary' -e 'storage check' | tail -n 2
+  environment:
+    REPLY: "{{ item }}"
+  loop:
+    - "1000000000 450000000 550000000 (root) 55%"
+    - fail
+  register: molecule_box
+  changed_when: true
+
+- name: Assert the summary has the Storage Box figures only when df answered
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_box.results[0].stdout is search(
+        ' steps=backup,forget,space box_free_pct=55 box_free=563200000000 unreadable=0$')
+      - >-
+        molecule_box.results[1].stdout is search(
+        'storage check: sftp df failed: Connection closed\n.* steps=backup,forget unreadable=0$')
+      - "'box_free' not in molecule_box.results[1].stdout_lines[-1]"
+
+- name: Wait for both box notifications
+  ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+  register: molecule_box_bodies
+  until: "molecule_box_bodies.stdout_lines | select('search', ': box backup ok\\|') | list | length == 2"
+  retries: 20
+  delay: 2
+  changed_when: false
+
+- name: Assert the Storage Box line is in the first message and absent from the second
+  vars:
+    molecule_box_lines: "{{ molecule_box_bodies.stdout_lines | select('search', ': box backup ok\\|') | list }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_box_lines[0] is search(
+        'Files: [0-9,]+ new, [0-9,]+ changed\^Storage Box: 524\.5 GiB free \(55%\)$')
+      - >-
+        molecule_box_lines[1] is search('Files: [0-9,]+ new, [0-9,]+ changed$')

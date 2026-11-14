@@ -1,19 +1,18 @@
 ---
-- name: Prepare - sources, a repository parent and a legacy install to migrate
+- name: Prepare restic default
   hosts: all
   become: true
   tasks:
-    - name: Create the source tree and repository parent
+    - name: Create the shared source tree
+      ansible.builtin.include_tasks: ../shared/prepare_sources.yml
+
+    - name: Create the legacy install's and the stale job's directories
       ansible.builtin.file:
         path: "{{ item.path }}"
         state: directory
         mode: "{{ item.mode }}"
       loop:
-        - { path: /srv/molecule-src, mode: "0755" }
-        - { path: /srv/molecule-src/private, mode: "0700" }
-        - { path: /srv/molecule-src/skip, mode: "0755" }
         - { path: /srv/molecule-stale, mode: "0755" }
-        - { path: /srv/molecule-repos, mode: "1777" }
         - { path: /opt/backup/.ssh, mode: "0700" }
         - { path: /opt/backup/cache/0123abcd, mode: "0700" }
         - { path: /etc/sudoers.d, mode: "0750" }
@@ -28,16 +27,12 @@
         argv: [ssh-keygen, -q, -t, ed25519, -N, "", -f, /root/molecule-storage-key]
         creates: /root/molecule-storage-key
 
-    - name: Create the source files and the legacy install's files
+    - name: Create the legacy install's files
       ansible.builtin.copy:
         content: "{{ item.content }}"
         dest: "{{ item.dest }}"
         mode: "{{ item.mode }}"
       loop:
-        # Root-only: readable by the restic user only through CAP_DAC_READ_SEARCH.
-        - { dest: /srv/molecule-src/private/secret, content: "root-only\n", mode: "0600" }
-        - { dest: /srv/molecule-src/public, content: "public\n", mode: "0644" }
-        - { dest: /srv/molecule-src/skip/excluded, content: "excluded\n", mode: "0644" }
         - { dest: /srv/molecule-stale/dump, content: "old\n", mode: "0644" }
         - { dest: /opt/backup/.ssh/hetzner, content: "not-a-real-key\n", mode: "0600" }
         - { dest: /opt/backup/cache/0123abcd/index, content: "cache\n", mode: "0600" }
@@ -84,10 +79,5 @@
         daemon_reload: true
       loop: [backup-ok.timer, backup-oldname.timer]
 
-    - name: Install the stub that records the deploy-time test message
-      ansible.builtin.copy:
-        dest: /usr/local/bin/molecule-notice
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          printf '%s|%s|%s\n' "$1" "$3" "$(printf '%s' "$2" | tr '\n' '^')" >> /var/log/molecule-notice.log
+    - name: Install the deploy-time notice stub
+      ansible.builtin.include_tasks: ../shared/notice_stub.yml

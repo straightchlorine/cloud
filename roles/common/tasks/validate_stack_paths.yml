@@ -17,10 +17,11 @@
   # reflect root under become and land in a directory the stack owner cannot traverse.
   ansible.builtin.fail:
     msg: >-
-      {{ validation_role }}: {{ validation_stack_home_var }} ({{ vars[validation_stack_home_var] }})
+      {{ validation_role }}: {{ validation_stack_home_var }}
+      ({{ lookup('ansible.builtin.vars', validation_stack_home_var) }})
       resolves under /root, but ansible_user is '{{ ansible_user }}'. Derive it from the inventory's ansible_user
       (/home/<user>/...), not from the ansible_user_dir/_id facts.
   when:
     - ansible_user is defined and ansible_user != 'root'
-    - vars[validation_stack_home_var] is match('/root(/|$)')
+    - lookup('ansible.builtin.vars', validation_stack_home_var) is match('/root(/|$)')
   tags: [validation]

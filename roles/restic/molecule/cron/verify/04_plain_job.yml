@@ -1,0 +1,69 @@
+---
+# The plain job: a real run through cron's own entry point, as cron would start it.
+- name: Run the plain job through the wrapper
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log /run/molecule-ntfy-body.log
+    {{ molecule_wrapper }} cron cr
+    echo "rc=$?"
+  register: molecule_cr
+  changed_when: true
+
+- name: Read the plain job's snapshots, files, log, notification and stamp
+  ansible.builtin.command: "{{ item }}"
+  loop:
+    - "{{ molecule_wrapper }} exec cr snapshots --json"
+    - "{{ molecule_wrapper }} exec cr ls latest"
+    - cat /var/log/restic/cr.log
+    - cat /run/molecule-ntfy.log
+    - cat /run/molecule-ntfy-body.log
+    - cat /var/log/molecule-notice.log
+  register: molecule_cr_out
+  changed_when: false
+
+- name: Assert a real, capability-read snapshot, its log, its notification and a stamp the restic user wrote
+  vars:
+    molecule_o: "{{ molecule_cr_out.results | items2dict(key_name='item', value_name='stdout') }}"
+    molecule_snaps: "{{ molecule_o[molecule_wrapper ~ ' exec cr snapshots --json'] | from_json }}"
+    molecule_ls: "{{ molecule_o[molecule_wrapper ~ ' exec cr ls latest'].splitlines() }}"
+    molecule_log: "{{ molecule_o['cat /var/log/restic/cr.log'] }}"
+    molecule_ntfy: "{{ molecule_o['cat /run/molecule-ntfy.log'] }}"
+    molecule_body: "{{ molecule_o['cat /run/molecule-ntfy-body.log'] }}"
+    molecule_notice: "{{ molecule_o['cat /var/log/molecule-notice.log'] }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_cr.stdout_lines[-1] == 'rc=0'
+      - molecule_snaps | length == 1
+      - (molecule_snaps | first).hostname == ansible_facts.nodename
+      - "'cr' in (molecule_snaps | first).tags"
+      - "'/srv/molecule-src/private/secret' in molecule_ls"
+      - "'/srv/molecule-src/skip/excluded' not in molecule_ls"
+      - >-
+        molecule_log is search('(?m)^\S+ restic-job: start cr$')
+      - >-
+        molecule_log is search(
+        '(?m)^restic-job: summary snapshot=[0-9a-f]{8} .* steps=backup,forget unreadable=0$')
+      - >-
+        molecule_log is search('(?m)^\S+ restic-job: exit 0$')
+      - molecule_ntfy is search('cr backup ok\|low')
+      - >-
+        molecule_body is search('^[^:]+: cr backup ok\|Snapshot [0-9a-f]{8} - 1 kept, 0 removed\^'
+        '\+[0-9.]+ (B|KiB|MiB)'
+        ' new \([0-9.]+ (B|KiB|MiB) stored\), [0-9.]+ (B|KiB|MiB) scanned; took [0-9]+s'
+        '\^Files: [0-9,]+ new, 0 changed$')
+      - >-
+        molecule_notice is search('(?m)^[^:]+: cr backup armed\|min\|Scheduled by cron: \*/30 8-18 \* \* 1-5'
+        '\^No snapshot yet: the first run uploads everything'
+        '\^Repository keeps 1 daily, 0 weekly, 0 monthly, 0 yearly$')
+      - >-
+        molecule_notice is search('(?m)^[^:]+: crgate backup armed\|min\|Scheduled every hour at xx:17'
+        '\^At most one run per 20 h; only on AC power and off metered connections\^No snapshot yet')
+      - >-
+        molecule_notice is search('(?m)^[^:]+: crbox backup armed\|min\|Scheduled every day at 04:11\^')
+      - "'proves delivery' not in molecule_notice"
+
+- name: Assert the stamp is the restic user's and the log is root-only
+  vars:
+    molecule_paths:
+      - { path: /var/lib/restic/cr.ok, state: file, owner: restic, group: restic }
+      - { path: /var/log/restic/cr.log, state: file, mode: "0600" }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"

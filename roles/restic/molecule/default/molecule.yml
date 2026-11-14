@@ -1,26 +1,7 @@
 ---
-role_name_check: 0
-driver:
-  name: podman
-platforms:
-  - name: restic-default
-    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian13-ansible:latest}
-    pre_build_image: true
-    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    # The real units run here, so the container is privileged under rootful podman (CI).
-    # AmbientCapabilities needs CAP_DAC_READ_SEARCH in the bounding set, and ProtectSystem= needs mount namespaces.
-    # Rootless podman skips the namespaces silently, so verify's first step fails fast when units cannot start at all.
-    privileged: true
 provisioner:
-  name: ansible
-  env:
-    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
   inventory:
     group_vars:
       all:
         # A container reaches no ntfy; prepare.yml installs this stub, which records the deploy message.
         restic_notice_command: /usr/local/bin/molecule-notice
-verifier:
-  name: ansible

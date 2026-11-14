@@ -1,0 +1,22 @@
+---
+# Inputs: molecule_gate_cases [{id, rc, text, env: {NAME: [lines]}}] and molecule_gate_script, a shell script that
+# reads each NAME as a variable, runs the gate and prints "rc=<n>" first.
+- name: Run the gate against each set of canned replies
+  ansible.builtin.shell: "{{ molecule_gate_script }}"
+  environment: "{{ dict(item.env.keys() | zip(item.env.values() | map('join', '\n'))) }}"
+  loop: "{{ molecule_gate_cases }}"
+  loop_control:
+    label: "{{ item.id }}"
+  register: molecule_gate
+  changed_when: false
+
+- name: Assert each reply set was parsed to the right decision
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+      - item.item.text in item.stdout
+    fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+    quiet: true
+  loop: "{{ molecule_gate.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"

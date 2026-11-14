@@ -1,0 +1,250 @@
+---
+# One case per refusal; defaults hold the values every case shares. expect is the start of the failure message.
+molecule_good:
+  name: good
+  repository: /srv/molecule-repos/good
+  password: molecule-restic-password-good
+  sources: [/srv/molecule-src]
+  schedule: "*-*-* 03:00:00"
+  timeout: 10min
+  memory_max_mib: 512
+  retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+
+molecule_case_defaults:
+  file: validate_job.yml
+  drop: []
+  patch: {}
+  arch: x86_64
+  mgr: systemd
+  scheduler: systemd
+  cache_dir: /var/cache/restic
+  min_free: 15
+  known_hosts: "[storage.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n"
+  ntfy_key: molecule-test-ntfy-key
+  jobs: []
+  storage_key: ""
+  storage_host: storage.example.test
+  storage_user: u0
+  storage_port: 23
+
+molecule_cases:
+  - { id: 1, drop: [sources], expect: "restic_job: missing required field(s) sources" }
+  - { id: 2, patch: { sources: [] }, expect: "restic_job.sources: needs a non-empty list" }
+  - { id: 3, patch: { sources: [srv/x] }, expect: "restic_job.sources: every path must be absolute" }
+  - id: 4
+    patch: { sources: ["/srv/a b"] }
+    expect: "restic_job.sources: paths must not contain whitespace, quotes, backslashes or %"
+  - id: 5
+    patch: { password: your-32-character-secure-restic-password }
+    expect: "restic_job.password: still a vault.yml.example placeholder"
+  - { id: 6, patch: { retention: { daily: 0, weekly: 0, monthly: 0, yearly: 0 } }, expect: "restic_job.retention:" }
+  - { id: 7, patch: { name: Bad_Name }, expect: "restic_job.name:" }
+  - { id: 8, patch: { schedule: "every day" }, expect: "restic_job.schedule:" }
+  - { id: 9, patch: { memory_max_mib: 64 }, expect: "restic_job.memory_max_mib:" }
+  - { id: 10, patch: { repository: relative/repo }, expect: "restic_job.repository:" }
+  - { id: 11, patch: { repository: "sftp:hetzner-storage:/r" }, known_hosts: "", expect: "restic_known_hosts:" }
+  - id: 12
+    file: validate_key.yml
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    expect: "/etc/ssh/restic_storage_key:"
+  - id: 13
+    file: validate.yml
+    arch: armv7l
+    expect: "restic_binary_sha256: no checksum for ansible_facts.architecture armv7l (supported: x86_64, aarch64)"
+  - id: 14
+    file: validate.yml
+    mgr: runit
+    scheduler: cron
+    expect: >-
+      ansible_service_mgr: runit, restic_scheduler: cron - the engine supports systemd hosts (timers)
+      and OpenRC hosts (cron); restic_scheduler must be systemd or cron, and systemd only on a systemd
+      host
+  - { id: 15, patch: { fresh: [{ path: relative/dump, max_age_hours: 1 }] }, expect: "restic_job.fresh:" }
+  - { id: 16, patch: { sources: [/srv/a, /srv/a] }, expect: "restic_job.sources: paths must be unique" }
+  - { id: 17, patch: { password: short }, expect: "restic_job.password: shorter than 16" }
+  - { id: 18, patch: { timeout: "ten minutes" }, expect: "restic_job.timeout:" }
+  - { id: 19, patch: { host: "bad host!" }, expect: "restic_job.host:" }
+  - { id: 20, patch: { max_age_hours: 0 }, expect: "restic_job.max_age_hours:" }
+  - { id: 21, patch: { excludes: ["a\nb"] }, expect: "restic_job.excludes:" }
+  - id: 22
+    file: main.yml
+    jobs: [{ name: same }, { name: same }]
+    expect: "restic_jobs: job names must be unique"
+  - id: 23
+    file: validate.yml
+    ntfy_key: your-ntfy-api-key
+    expect: "[restic] Vault variable 'vault_ntfy_api_key' contains placeholder"
+  - id: 24
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    known_hosts: "[other.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n"
+    expect: "restic_known_hosts: no line for [storage.example.test]:23"
+  - { id: 25, patch: { skip_metered: "yes" }, expect: "restic_job.skip_metered:" }
+  - id: 26
+    patch: { skip_metered: true, metered_connections: "My Phone" }
+    expect: "restic_job.metered_connections: needs a list"
+  - id: 27
+    patch: { skip_metered: true, metered_connections: [""] }
+    expect: "restic_job.metered_connections: needs a list"
+  - id: 28
+    patch: { skip_metered: true, metered_connections: ["a\nb"] }
+    expect: "restic_job.metered_connections: needs a list"
+  - id: 29
+    patch: { skip_metered: false, metered_connections: ["My Phone"] }
+    expect: "restic_job.metered_connections: has no effect unless skip_metered is true"
+  - id: 30
+    patch: { skip_metered: true, metered_connections: { My Phone: true } }
+    expect: "restic_job.metered_connections: needs a list"
+  - id: 31
+    patch: { skip_metered: true, metered_connections: ["a\tb"] }
+    expect: "restic_job.metered_connections: needs a list"
+  - id: 32
+    patch: { skip_metered: true, max_age_hours: 23 }
+    expect: "restic_job.max_age_hours: a skip_metered or skip_on_battery job backs up once per 20 h,"
+  - id: 33
+    patch: { sources: ["/srv/a\"b"] }
+    expect: "restic_job.sources: paths must not contain whitespace, quotes, backslashes or %"
+  - id: 34
+    patch: { sources: ["/srv/a\\b"] }
+    expect: "restic_job.sources: paths must not contain whitespace, quotes, backslashes or %"
+  - id: 35
+    patch: { sources: ["/srv/a\n"] }
+    expect: "restic_job.sources: paths must not contain whitespace, quotes, backslashes or %"
+  - id: 36
+    patch: { repository: "/srv/my repo" }
+    expect: "restic_job.repository: must be sftp:hetzner-storage:/<path> or an absolute local path, without"
+  - id: 37
+    patch: { repository: "sftp:hetzner-storage:/a\\b" }
+    expect: "restic_job.repository: must be sftp:hetzner-storage:/<path> or an absolute local path, without"
+  - { id: 38, patch: { name: "good\n" }, expect: "restic_job.name: 'good" }
+  - id: 39
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    storage_host: "bad host!"
+    expect: "restic_storage_host: needs a hostname of letters, digits, dots and hyphens"
+  - id: 40
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    storage_user: "bad user"
+    expect: "restic_storage_user: needs a user name of letters, digits, dots, underscores and hyphens"
+  - id: 41
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    storage_port: 70000
+    expect: "restic_storage_port: needs an integer from 1 to 65535"
+  - id: 42
+    patch: { repository: "sftp:hetzner-storage:/r" }
+    storage_port: 2x3
+    expect: "restic_storage_port: needs an integer from 1 to 65535"
+  - id: 43
+    file: validate_key.yml
+    storage_key: not-a-private-key
+    expect: "restic_storage_key: holds no -----BEGIN ... PRIVATE KEY----- line; it must be the"
+  - id: 44
+    file: validate_key.yml
+    storage_key: "-----BEGIN OPENSSH PRIVATE KEY-----\n\
+      your-storage-box-private-key-replace\n\
+      -----END OPENSSH PRIVATE KEY-----\n"
+    expect: "restic_storage_key: still a vault.yml.example placeholder"
+  - id: 45
+    file: validate.yml
+    mgr: openrc
+    expect: >-
+      ansible_service_mgr: openrc, restic_scheduler: systemd - the engine supports systemd hosts
+      (timers) and OpenRC hosts (cron); restic_scheduler must be systemd or cron, and systemd only on
+      a systemd host
+  - id: 46
+    file: validate.yml
+    cache_dir: relative/cache
+    expect: &cache_msg >-
+      restic_cache_dir: needs an absolute path of letters, digits and . _ @ + - whose last component
+      is exactly restic (such as /var/cache/restic), without a trailing slash or . and .. components
+  - id: 47
+    file: validate.yml
+    cache_dir: /
+    expect: *cache_msg
+  - id: 48
+    file: validate.yml
+    cache_dir: /data/../etc/restic
+    expect: *cache_msg
+  - id: 49
+    file: validate.yml
+    cache_dir: "/srv/my cache"
+    expect: *cache_msg
+  - id: 50
+    file: validate.yml
+    cache_dir: /srv/cache/
+    expect: *cache_msg
+  - { id: 51, mgr: openrc, scheduler: cron, expect: "restic_job: missing required field(s) cron_schedule" }
+  - id: 52
+    patch: { cron_schedule: "every hour" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 53
+    patch: { cron_schedule: "17 * * *" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 54
+    patch: { cron_schedule: "61 * * * *" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 55
+    patch: { cron_schedule: "17 * * * mon" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 56
+    patch: { cron_schedule: "17  * * * *" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 57
+    patch: { cron_schedule: "0 0 0 * *" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - id: 58
+    patch: { cron_schedule: "*/0 * * * *" }
+    mgr: openrc
+    scheduler: cron
+    expect: "restic_job.cron_schedule: needs five numeric cron fields"
+  - { id: 59, patch: { skip_on_battery: "yes" }, expect: "restic_job.skip_on_battery:" }
+  - id: 60
+    patch: { skip_on_battery: true, max_age_hours: 23 }
+    expect: "restic_job.max_age_hours: a skip_metered or skip_on_battery job backs up once per 20 h,"
+  - id: 61
+    file: validate.yml
+    min_free: 0
+    expect: "restic_storage_min_free_percent: needs an integer from 1 to 90"
+  - id: 62
+    file: validate.yml
+    min_free: 91
+    expect: "restic_storage_min_free_percent: needs an integer from 1 to 90"
+  - id: 63
+    file: validate.yml
+    cache_dir: /var/cache/other
+    expect: *cache_msg
+  - id: 64
+    file: validate.yml
+    cache_dir: /data/vault/.cache
+    expect: *cache_msg
+  - id: 65
+    file: validate.yml
+    cache_dir: /var/cache/restic/tmp
+    expect: *cache_msg
+  - id: 66
+    patch: { skip_metered: true, max_age_hours: 30, metered_connections: [your-phone-hotspot-name] }
+    expect: "restic_job.metered_connections: still a vault.yml.example placeholder"
+  - { id: 67, file: validate.yml, scheduler: cron, expect: "cron wrapper tools: not found on PATH: " }
+  - { id: 68, patch: { tags: arch }, expect: "restic_job.tags: needs a list of at most 4 entries" }
+  - { id: 69, patch: { tags: [a, b, c, d, e] }, expect: "restic_job.tags: needs a list of at most 4 entries" }
+  - id: 70
+    patch: { tags: [Debian-13] }
+    expect: "restic_job.tags: every entry must match ^[a-z0-9][a-z0-9._-]{0,31}$"
+  - { id: 71, patch: { tags: [arch, arch] }, expect: "restic_job.tags: entries must be unique" }
+  - id: 72
+    patch: { tags: [good] }
+    expect: "restic_job.tags: must not list the job name, which every snapshot carries anyway"
+  - { id: 73, patch: { tags: [keep] }, expect: "restic_job.tags: 'keep' is reserved for pinning a snapshot by hand" }
+  - id: 74
+    patch: { legacy_name: Old_Name }
+    expect: "restic_job.legacy_name: must match ^[a-z0-9][a-z0-9-]{0,31}$"

@@ -1,0 +1,26 @@
+---
+# Fake inputs several scenarios share; converge and verify both load this file.
+# Molecule connects as root; production derives the connection user from ansible_user.
+restic_connection_user: root
+vault_ntfy_api_key: molecule-test-ntfy-key
+ntfy_server_url: "https://ntfy.example.test"
+ntfy_topic: molecule-test
+restic_init_repository: true
+
+molecule_job:
+  sources: [/srv/molecule-src]
+  excludes: [/srv/molecule-src/skip]
+  timeout: 10min
+  memory_max_mib: 512
+  retention: { daily: 1, weekly: 0, monthly: 0, yearly: 0 }
+molecule_job_timer: "{{ molecule_job | combine({'schedule': '*-*-* 03:00:00'}) }}"
+
+molecule_metered_names:
+  - My Phone
+  - "Zo\u00eb\u2019s \"iPhone\""
+  - "\u00dcn\u00ef \"q\" back\\slash"
+
+# Verify helpers: stubs sit first in PATH so the gate and the storage check find them.
+molecule_stubs: /usr/local/lib/molecule-stubs
+molecule_path: /usr/local/lib/molecule-stubs:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+molecule_wrapper: /usr/local/libexec/restic/restic-job

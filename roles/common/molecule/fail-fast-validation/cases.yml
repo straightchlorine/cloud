@@ -1,0 +1,27 @@
+---
+molecule_case_defaults:
+  validation_context: fail-fast-test
+  validation_type: full
+  validation_role: common
+# A null value drops the key, which leaves that task var undefined in case.yml.
+molecule_cases:
+  - id: missing-variable
+    expect: "[common] Required fail-fast-test variable 'this_variable_does_not_exist' is not defined or empty"
+    required_variables: [this_variable_does_not_exist, neither_does_this_one]
+  - id: empty-variable
+    expect: "[common] Required fail-fast-test variable 'molecule_probe' is not defined or empty"
+    required_variables: [molecule_probe]
+    probe: ""
+  - id: vault-placeholder
+    expect: "[common] Vault variable 'molecule_probe' contains placeholder value."
+    vault_placeholders: [{var: molecule_probe, value: changeme}]
+    probe: changeme
+  - id: unsupported-os-family
+    expect: "common supports only Debian, Archlinux; got RedHat (Rocky 9)."
+    validation_supported_os_families: [Debian, Archlinux]
+    os_family: RedHat
+    os_name: Rocky
+    os_version: "9"
+  - id: missing-validation-context
+    expect: validation_context, validation_type, and validation_role must be explicitly set
+    validation_context: null

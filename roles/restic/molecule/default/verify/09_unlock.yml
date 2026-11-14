@@ -1,0 +1,55 @@
+---
+# restic-job retries unlock on a flaky repository and fails at once on configuration errors.
+- name: Run the partial job with unlock failing 2 times, 5 times, then exit 10 and exit 12
+  ansible.builtin.shell: |
+    rm -f /var/lib/restic/molecule-unlock-fails /run/molecule-unlock-rc
+    [ -z "$FAILS" ] || echo "$FAILS" > /var/lib/restic/molecule-unlock-fails
+    [ -z "$RC" ] || echo "$RC" > /run/molecule-unlock-rc
+    sleep 1
+    since=$(date '+%Y-%m-%d %H:%M:%S')
+    systemctl start restic-job@partial.service
+    echo "start-rc=$?"
+    systemctl show -p Result -p ExecMainStatus restic-job@partial.service
+    echo "left=$(cat /var/lib/restic/molecule-unlock-fails 2>/dev/null)"
+    journalctl -u restic-job@partial.service --since "$since" -o cat --no-pager
+  environment:
+    FAILS: "{{ item.fails }}"
+    RC: "{{ item.rc }}"
+  loop:
+    - { id: retry-then-success, fails: "2", rc: "", result: success, status: "3", retries: 2, left: "0",
+        text: "restic-job: summary snapshot=" }
+    - { id: unreachable, fails: "5", rc: "", result: exit-code, status: "1", retries: 4, left: "0",
+        text: "restic-job: FAILED: repository unreachable (restic exit 1)" }
+    - { id: no-repository, fails: "", rc: "10", result: exit-code, status: "1", retries: 0, left: "",
+        text: "restic-job: FAILED: no repository at /srv/molecule-repos/partial" }
+    - { id: wrong-password, fails: "", rc: "12", result: exit-code, status: "1", retries: 0, left: "",
+        text: "restic-job: FAILED: wrong password for /srv/molecule-repos/partial" }
+  loop_control:
+    label: "{{ item.id }}"
+  register: molecule_unlock
+  changed_when: true
+
+- name: Assert the retry count, the final state and the message of each unlock case
+  ansible.builtin.assert:
+    that:
+      - "('Result=' ~ item.item.result) in item.stdout_lines"
+      - "('ExecMainStatus=' ~ item.item.status) in item.stdout_lines"
+      - "('left=' ~ item.item.left) in item.stdout_lines"
+      - >-
+        item.stdout_lines | select('search', 'unlock failed') | list | length == item.item.retries
+      - item.item.text in item.stdout
+    fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+  loop: "{{ molecule_unlock.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
+- name: Wait for the failure notifications of the unlock cases
+  ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+  register: molecule_unlock_bodies
+  until:
+    - molecule_unlock_bodies.stdout is search('partial backup FAILED.*repository unreachable')
+    - molecule_unlock_bodies.stdout is search('partial backup FAILED.*no repository at')
+    - molecule_unlock_bodies.stdout is search('partial backup FAILED.*wrong password for')
+  retries: 20
+  delay: 2
+  changed_when: false

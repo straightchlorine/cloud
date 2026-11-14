@@ -1,0 +1,8 @@
+---
+# The role's ownership and become wiring reads ansible_user directly, so it is pinned.
+ansible_user: root
+common_start_stack: false
+# A container has no GPU, and validate.yml's device check is meant for real hosts.
+gpu_qp_require_nvidia_device: false
+gpu_qp_cuda_arch: "6.1"
+gpu_qp_home: /home/gpu/gpu-qp

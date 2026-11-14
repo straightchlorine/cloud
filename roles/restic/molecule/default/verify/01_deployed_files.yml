@@ -1,0 +1,91 @@
+---
+- name: Start a trivial unit first (rootless or cgroup-broken sandboxes stop here)
+  ansible.builtin.command: >-
+    systemd-run --wait --collect -p User=nobody -p ProtectSystem=strict /bin/true
+  changed_when: false
+
+- name: Read the pinned binary
+  ansible.builtin.command: /usr/local/bin/restic version
+  register: molecule_version
+  changed_when: false
+
+- name: Assert the binary link, the job files' modes and the adopted key
+  vars:
+    molecule_paths:
+      - { path: /usr/local/bin/restic, state: link }
+      - { path: /etc/restic/ok.password, state: file, mode: "0440", owner: root, group: restic }
+      - { path: /etc/restic/ok.env, state: file, mode: "0640", group: restic }
+      - { path: /etc/ssh/restic_storage_key, state: file, mode: "0400", owner: restic, group: restic }
+      - { path: /srv/molecule-cache/restic/0123abcd/index, state: file, owner: restic }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Assert the pinned binary version
+  ansible.builtin.assert:
+    that: "'restic 0.19.1 ' in molecule_version.stdout"
+    quiet: true
+
+- name: Read the vault-managed key as deployed and as generated
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: [/etc/ssh/restic_storage_key, /root/molecule-storage-key]
+  register: molecule_keys
+
+- name: Derive the public key from the deployed key
+  ansible.builtin.command: ssh-keygen -y -f /etc/ssh/restic_storage_key
+  register: molecule_derived
+  changed_when: false
+
+- name: Read the generated public key
+  ansible.builtin.slurp:
+    src: /root/molecule-storage-key.pub
+  register: molecule_pub
+
+- name: Assert the vault key was written once-terminated and its public key derives
+  vars:
+    molecule_key_text: "{{ molecule_keys.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_deployed: "{{ molecule_key_text['/etc/ssh/restic_storage_key'] | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_deployed == molecule_key_text['/root/molecule-storage-key'] | b64decode
+      - molecule_deployed is search('\A-----BEGIN OPENSSH PRIVATE KEY-----\n')
+      - molecule_deployed is search('[^\n]\n\Z')
+      - molecule_derived.stdout.split()[:2] == (molecule_pub.content | b64decode).split()[:2]
+  no_log: true
+
+- name: Read the job environment
+  ansible.builtin.slurp:
+    src: /etc/restic/ok.env
+  register: molecule_env
+
+- name: Assert the environment holds no secret, the retention flags and the fresh guard
+  vars:
+    molecule_env_text: "{{ molecule_env.content | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - "'molecule-restic-password-ok' not in molecule_env_text"
+      - "\"RESTIC_JOB_KEEP='--keep-daily 1'\" in molecule_env_text"
+      - "\"RESTIC_JOB_FRESH='/srv/molecule-src:24'\" in molecule_env_text"
+
+- name: Assert the legacy install is retired
+  vars:
+    molecule_paths:
+      - { path: /etc/systemd/system/backup-ok.timer, state: absent }
+      - { path: /etc/systemd/system/backup-ok.service, state: absent }
+      - { path: "/etc/systemd/system/backup-ok.service.1234.2026-01-01@00:00:00~", state: absent }
+      - { path: /etc/systemd/system/backup-ok.service.backup, state: absent }
+      - { path: /etc/systemd/system/backup-ok.timer.backup, state: absent }
+      - { path: /etc/systemd/system/backup-oldname.timer, state: absent }
+      - { path: /etc/systemd/system/backup-oldname.service, state: absent }
+      - { path: /etc/sudoers.d/backup-user, state: absent }
+      - { path: /opt/backup, state: absent }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the backup account
+  ansible.builtin.command: getent passwd backup
+  register: molecule_backup_user
+  changed_when: false
+
+- name: Assert the backup account is Debian's stock one again
+  ansible.builtin.assert:
+    that: "':/var/backups:/usr/sbin/nologin' in molecule_backup_user.stdout"
+    quiet: true

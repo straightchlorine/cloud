@@ -1,25 +1,7 @@
 ---
-role_name_check: 0
-driver:
-  name: podman
-platforms:
-  - name: restic-cron
-    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian13-ansible:latest}
-    pre_build_image: true
-    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    # The wrapper drops to the restic user with setpriv, which needs CAP_SETPCAP to narrow the bounding set.
-    # The container keeps systemd only so that the cron package's init script and the journal work as on Debian.
-    privileged: true
 provisioner:
-  name: ansible
-  env:
-    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
   inventory:
     group_vars:
       all:
         # A container reaches no ntfy; prepare.yml installs this stub, which records the deploy message.
         restic_notice_command: /usr/local/bin/molecule-notice
-verifier:
-  name: ansible

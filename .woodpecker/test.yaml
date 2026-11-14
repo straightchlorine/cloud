@@ -1,37 +1,22 @@
 ---
-# Debian 13 is the image for the apt-based fleet roles.
-# Rocky 9 is the image for the dnf-based honeypot and honeybench roles.
-
 depends_on:
   - lint
 
 when:
-  event:
-    - push
-    - pull_request
-    - manual
-  branch:
-    - main
-    - master
-    - develop
-    - feature/*
-    - refactor/*
+  event: [push, pull_request, manual]
 
-# Unlabelled workflows also go to the OCI arm64 agent, whose pods never start.
+# Unlabelled workflows go to the arm64 agent, whose pods never start.
 labels:
   platform: linux/amd64
 
 matrix:
-  # Only roles whose scenarios exercise the real task files run here.
-  # Fixture-based scenarios burn runner time without catching regressions.
-  # Add a role once its scenarios follow docs/testing/molecule-standard.md.
-  # The firewall role stays out because its scenarios are still tautological.
-  # A scenario the runner cannot host carries a molecule/<scenario>/ci-skip file holding the reason.
-  # The loop prints that reason and moves on.
+  # Roles whose scenarios follow docs/testing/molecule-standard.md; a ci-skip file marks a scenario a runner
+  # cannot host. Images and privileges come from each role's .env.yml.
   ROLE:
     - common
     - os
     - hardware
+    - firewall
     - prometheus-exporters
     - dns
     - automation
@@ -42,12 +27,7 @@ matrix:
     - restic
 
 steps:
-  - name: checkout
-    image: woodpeckerci/plugin-git:2
-    settings:
-      depth: 1
-
-  - name: molecule-test
+  - name: molecule
     image: quay.io/podman/stable:v5.8.9
     pull: true
     privileged: true
@@ -60,38 +40,25 @@ steps:
           limits:
             memory: 4Gi
             cpu: 2000m
+    environment:
+      PIP_ROOT_USER_ACTION: ignore
+      PIP_NO_CACHE_DIR: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
     commands:
-      - dnf install -y python3 python3-pip git containers-common
-      - mkdir -p /etc/containers
-      # The vfs storage driver copies every image layer in full, about 6 GB for the Debian 13 image.
-      # Two such steps at once push the node into DiskPressure and get evicted with exit 137.
-      # Native overlay cannot sit on the step's own overlay rootfs.
-      # The workspace volume under /woodpecker is a plain host directory, so it can.
+      - dnf install -y -q --setopt=install_weak_deps=False python3-pip
+      # vfs copies every layer (~6 GB for Debian 13); two steps at once hit DiskPressure and exit 137.
+      # Native overlay needs a plain host dir: the step rootfs is overlay itself, /woodpecker is not.
       - |
+        mkdir -p /etc/containers
         cat > /etc/containers/storage.conf << 'CONF'
         [storage]
         driver = "overlay"
         graphroot = "/woodpecker/containers-storage"
         CONF
-      - |
         cat > /etc/containers/containers.conf << 'CONF'
         [containers]
         utsns = "private"
         CONF
-      - pip install -r requirements.txt
-      - ansible-galaxy collection install -r requirements.yml
-      # The honeypot and honeybench roles target RedHat-family hosts, so they use the Rocky 9 image.
-      - |
-        case "${ROLE}" in
-          honeypot|honeybench) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-rockylinux9-ansible:latest" ;;
-          *) export MOLECULE_IMAGE="docker.io/geerlingguy/docker-debian13-ansible:latest" ;;
-        esac
-        cd roles/${ROLE}
-        for dir in molecule/*/; do
-          [ -f "${dir}molecule.yml" ] || continue  # common/molecule/fixtures holds shared stubs, not a scenario
-          if [ -f "${dir}ci-skip" ]; then
-            echo "SKIP $(basename "$dir"): $(cat "${dir}ci-skip")"
-            continue
-          fi
-          molecule test -s "$(basename "$dir")" || exit 1
-        done
+      - pip install -q -r requirements-test.txt
+      - scripts/install-collections.sh
+      - scripts/molecule-test.sh "${ROLE}"

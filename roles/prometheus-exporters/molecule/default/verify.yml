@@ -1,61 +1,42 @@
 ---
-- name: Verify the prometheus-exporters role's deployed state
+- name: Verify prometheus-exporters default
   hosts: all
   become: true
-  vars:
-    prometheus_exporters_user: "prometheus"
-    prometheus_exporters_group: "prometheus"
-    prometheus_exporters_base_dir: "/opt/prometheus-exporters"
-    prometheus_exporters_config_dir: "/etc/prometheus/exporters"
-    prometheus_exporters_node_exporter_textfile_dir: "/opt/prometheus-exporters/textfiles"
   tasks:
-    - name: Look up the prometheus user and group
+    - name: Look up the prometheus account
       ansible.builtin.getent:
-        database: "{{ item.database }}"
-        key: "{{ item.key }}"
-      loop:
-        - { database: passwd, key: "{{ prometheus_exporters_user }}" }
-        - { database: group, key: "{{ prometheus_exporters_group }}" }
+        database: "{{ item }}"
+        key: prometheus
+      loop: [passwd, group]
       register: prom_exp_accounts
 
-    - name: Assert the prometheus user and group exist
+    - name: Assert the prometheus user and group are system accounts
       ansible.builtin.assert:
         that:
-          - prom_exp_accounts.results[0].ansible_facts.getent_passwd[prometheus_exporters_user] is defined
-          - prom_exp_accounts.results[0].ansible_facts.getent_passwd[prometheus_exporters_user][1] | int < 1000
-          - prom_exp_accounts.results[1].ansible_facts.getent_group[prometheus_exporters_group] is defined
-        fail_msg: "prometheus user/group missing or not a system account"
-        success_msg: "[OK] prometheus system user and group exist"
+          - prom_exp_accounts.results[0].ansible_facts.getent_passwd.prometheus[1] | int < 1000
+          - prom_exp_accounts.results[1].ansible_facts.getent_group.prometheus is defined
 
-    - name: Stat the directories common_setup created
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ prometheus_exporters_base_dir }}"
-        - "{{ prometheus_exporters_base_dir }}/bin"
-        - "{{ prometheus_exporters_base_dir }}/scripts"
-        - "{{ prometheus_exporters_base_dir }}/logs"
-        - "{{ prometheus_exporters_config_dir }}"
-        - "{{ prometheus_exporters_node_exporter_textfile_dir }}"
-        - /etc/logrotate.d/prometheus-exporters
-      register: prom_exp_dirs
-
-    - name: Assert the directories exist with ownership and mode
-      ansible.builtin.assert:
-        that:
-          - item.stat.exists
-          - item.stat.isdir
-          - item.stat.pw_name == prometheus_exporters_user
-          - item.stat.gr_name == prometheus_exporters_group
-          - item.stat.mode == '0755'
-        fail_msg: >-
-          {{ item.item }} wrong: exists={{ item.stat.exists }},
-          owner={{ item.stat.pw_name | default('?') }}:{{ item.stat.gr_name | default('?') }},
-          mode={{ item.stat.mode | default('?') }}
-        success_msg: "[OK] {{ item.item }} 0755 {{ prometheus_exporters_user }}:{{ prometheus_exporters_group }}"
-      loop: "{{ prom_exp_dirs.results[0:6] }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - name: Check deployed paths
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        prom_dir: { state: directory, mode: "0755", owner: prometheus, group: prometheus }
+        prom_dirs:
+          - /opt/prometheus-exporters
+          - /opt/prometheus-exporters/bin
+          - /opt/prometheus-exporters/scripts
+          - /opt/prometheus-exporters/logs
+          - /opt/prometheus-exporters/textfiles
+          - /etc/prometheus/exporters
+        prom_absent:
+          - /opt/prometheus-exporters/bin/pihole_exporter
+          - /opt/prometheus-exporters/bin/pihole_exporter.version
+          - /etc/prometheus/exporters/pihole-exporter.conf
+          - /etc/systemd/system/pihole-exporter.service
+          - /tmp/pihole_exporter_checksum.txt
+        molecule_paths: >-
+          {{ prom_dirs | map('community.general.dict_kv', 'path') | map('combine', prom_dir) | list
+             + [{'path': '/etc/logrotate.d/prometheus-exporters', 'state': 'file'}]
+             + prom_absent | map('community.general.dict_kv', 'path') | map('combine', {'state': 'absent'}) | list }}
 
     - name: Read the logrotate config
       ansible.builtin.slurp:
@@ -67,10 +48,9 @@
         logrotate_conf: "{{ prom_exp_logrotate_conf.content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - "prometheus_exporters_base_dir ~ '/logs/*.log' in logrotate_conf"
+          - "'/opt/prometheus-exporters/logs/*.log' in logrotate_conf"
           - "'rotate 14' in logrotate_conf"
         fail_msg: "logrotate config wrong: {{ logrotate_conf }}"
-        success_msg: "[OK] exporter log rotation configured"
 
     - name: Collect package facts
       ansible.builtin.package_facts:
@@ -81,26 +61,3 @@
         that:
           - "'curl' in ansible_facts.packages"
           - "'jq' in ansible_facts.packages"
-        fail_msg: "common_setup packages missing"
-        success_msg: "[OK] exporter runtime packages installed"
-
-    - name: Stat the Pi-hole Exporter artifacts the teardown must remove
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter"
-        - "{{ prometheus_exporters_base_dir }}/bin/pihole_exporter.version"
-        - "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-        - /etc/systemd/system/pihole-exporter.service
-        - /tmp/pihole_exporter_checksum.txt
-      register: prom_exp_teardown_check
-
-    - name: Assert the teardown removed every Pi-hole Exporter artifact
-      ansible.builtin.assert:
-        that:
-          - not item.stat.exists
-        fail_msg: "{{ item.item }} still exists after pihole_exporter_teardown.yml"
-        success_msg: "[OK] {{ item.item }} removed by teardown"
-      loop: "{{ prom_exp_teardown_check.results }}"
-      loop_control:
-        label: "{{ item.item }}"

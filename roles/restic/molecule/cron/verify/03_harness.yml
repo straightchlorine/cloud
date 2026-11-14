@@ -1,0 +1,27 @@
+---
+- name: Create the fake power and nmcli trees
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/run/molecule-nmcli, /run/molecule-power, /run/molecule-power/BAT0]
+
+- name: Install the stubs
+  vars:
+    molecule_stub_install:
+      - { src: ntfy-notify-file.sh, dest: /usr/local/bin/ntfy-notify }
+      - { src: restic-stub.sh, dest: /usr/local/bin/restic-stub }
+      - { src: sftp.sh, dest: "{{ molecule_stubs }}/sftp" }
+      - { src: nmcli.sh, dest: "{{ molecule_stubs }}/nmcli" }
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/install_stubs.yml"
+
+- name: Put the fake battery on the charger
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { dest: /run/molecule-power/BAT0/type, content: "Battery\n" }
+    - { dest: /run/molecule-power/BAT0/status, content: "Charging\n" }
+  loop_control:
+    label: "{{ item.dest }}"

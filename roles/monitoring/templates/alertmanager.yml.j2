@@ -74,7 +74,7 @@ receivers:
         send_resolved: true
         http_config:
           proxy_url: ''
-        title: '🔔 Infrastructure Alert'
+        title: 'Infrastructure Alert'
         text: |
           {{ range .Alerts }}
           **Alert:** {{ .Annotations.summary }}
@@ -90,9 +90,9 @@ receivers:
 {% if alertmanager_smtp_smarthost %}
     email_configs:
       - to: '{{ alertmanager_smtp_from }}'
-        subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }} on {{ .GroupLabels.instance }}'
+        subject: 'CRITICAL: {{ .GroupLabels.alertname }} on {{ .GroupLabels.instance }}'
         body: |
-          🚨 **CRITICAL ALERT**
+          **CRITICAL ALERT**
 
           {{ range .Alerts }}
           **Alert:** {{ .Annotations.summary }}
@@ -109,10 +109,10 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '🚨 CRITICAL Infrastructure Alert'
+        title: 'CRITICAL Infrastructure Alert'
         text: |
           {{ range .Alerts }}
-          🚨 **{{ .Annotations.summary }}**
+          **{{ .Annotations.summary }}**
 
           **Description:** {{ .Annotations.description }}
           **Instance:** {{ .Labels.instance }}
@@ -127,7 +127,7 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '🏗️ Infrastructure Alert'
+        title: 'Infrastructure Alert'
         text: |
           {{ range .Alerts }}
           **{{ .Annotations.summary }}**
@@ -143,7 +143,7 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '🌐 DNS Service Alert'
+        title: 'DNS Service Alert'
         text: |
           {{ range .Alerts }}
           **DNS Alert:** {{ .Annotations.summary }}
@@ -158,7 +158,7 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '🤖 Automation Stack Alert'
+        title: 'Automation Stack Alert'
         text: |
           {{ range .Alerts }}
           **Automation Alert:** {{ .Annotations.summary }}
@@ -174,7 +174,7 @@ receivers:
     webhook_configs:
       - url: '{{ alertmanager_webhook_url }}'
         send_resolved: true
-        title: '🎵 Music Stack Alert'
+        title: 'Music Stack Alert'
         text: |
           {{ range .Alerts }}
           **Music Alert:** {{ .Annotations.summary }}

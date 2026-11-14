@@ -1,0 +1,17 @@
+---
+- name: Create the path parents
+  # validate.yml refuses a stack path whose parent is missing.
+  ansible.builtin.file:
+    path: "{{ item | dirname }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ media_home }}"
+    - "{{ media_library_path }}"
+
+- name: Publish the userns-remap facts
+  # docker.yml publishes these on a real host. The uid must sit inside the nested rootless-podman mapping:
+  # the canonical dockremap base lies outside it and chown would fail with EINVAL.
+  ansible.builtin.set_fact:
+    common_dockremap_uid: "10000"
+    common_dockremap_gid: "10000"

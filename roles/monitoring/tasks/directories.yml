@@ -66,20 +66,20 @@
 - name: Display directory setup summary
   ansible.builtin.debug:
     msg: |
-      [OK] Monitoring Directories Created:
+      Monitoring Directories Created:
 
       Data Directories:
-      📁 /var/lib/prometheus (prometheus:prometheus)
-      📁 /var/lib/grafana (grafana:grafana)
-      📁 /var/lib/loki (loki:loki)
-      📁 /var/lib/alertmanager (prometheus:prometheus)
-      📁 /opt/uptime-kuma (uptime-kuma:uptime-kuma)
+      /var/lib/prometheus (prometheus:prometheus)
+      /var/lib/grafana (grafana:grafana)
+      /var/lib/loki (loki:loki)
+      /var/lib/alertmanager (prometheus:prometheus)
+      /opt/uptime-kuma (uptime-kuma:uptime-kuma)
 
       Log Directories:
-      [NOTE] /var/log/prometheus
-      [NOTE] /var/log/grafana
-      [NOTE] /var/log/loki
-      [NOTE] /var/log/alertmanager
-      [NOTE] /var/log/uptime-kuma
+      /var/log/prometheus
+      /var/log/grafana
+      /var/log/loki
+      /var/log/alertmanager
+      /var/log/uptime-kuma
 
       All directories ready for monitoring services!

@@ -1,0 +1,45 @@
+---
+- name: Assert the compose services
+  vars:
+    navidrome: "{{ compose.services.navidrome }}"
+    watchtower: "{{ compose.services.watchtower }}"
+    watchtower_hostname: "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ ansible_facts['hostname'] }}"
+  ansible.builtin.assert:
+    that:
+      - compose.services | list | sort == ['beets', 'cadvisor', 'navidrome', 'watchtower']
+      - navidrome.image == 'deluan/navidrome:latest'
+      - navidrome.deploy.resources.limits.memory == '512M'
+      - navidrome.deploy.resources.limits.cpus | string == '2.0'
+      - "'com.centurylinklabs.watchtower.enable=true' in navidrome.labels"
+      - "'ND_BACKUP_PATH=/data/backups' in navidrome.environment"
+      - "'ND_BACKUP_SCHEDULE=45 1 * * *' in navidrome.environment"
+      - compose.services.beets.image == 'linuxserver/beets:latest'
+      - navidrome.user == '0:0'
+      - "'ND_JWTKEY=${NAVIDROME_JWT_SECRET}' in navidrome.environment"
+      - "'ND_ENABLESHARING=false' in navidrome.environment"
+      - "'ND_PROMETHEUS_ENABLED=true' in navidrome.environment"
+      - "'ND_BASEURL=https://navidrome.example.test' in navidrome.environment"
+      - navidrome.ports | select('match', '.*:4545:4533$') | list | length == 1
+      - compose.services.beets.userns_mode == 'host'
+      - compose.services.beets.profiles == ['tools']
+      - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
+      - "'/mnt/music/state/review:/review' in compose.services.beets.volumes"
+      - "'/mnt/music/removed:/removed' in compose.services.beets.volumes"
+      - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
+      - "'WATCHTOWER_EPHEMERAL_SELF_UPDATE=true' in watchtower.environment"
+      - "watchtower_hostname in watchtower.environment"
+    fail_msg: "compose rendered wrong: {{ compose.services }}"
+
+- name: Assert the .env carries the secrets
+  ansible.builtin.assert:
+    that:
+      - env_file is search('NAVIDROME_JWT_SECRET="[0-9a-f]{64}"')
+      - env_file is search('WATCHTOWER_API_TOKEN="molecule-test-watchtower-token"')
+    fail_msg: ".env wrong: {{ env_file }}"
+
+- name: Assert the rendered systemd unit
+  ansible.builtin.assert:
+    that:
+      - "'ExecStart=/usr/bin/docker compose -f /home/music/stack/docker-compose.yml up -d' in unit"
+      - "'RemainAfterExit=true' in unit"
+    fail_msg: "systemd unit rendered wrong:\n{{ unit }}"

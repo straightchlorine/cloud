@@ -8,11 +8,12 @@ restic_arch_map:
 # report Gentoo as ClearLinux (from /usr/lib/os-release) and keep its ID=gentoo in distribution_release,
 # so both facts are read.
 restic_os_tag: >-
-  {{ ('arch' if ansible_distribution | lower is search('^arch')
-      else 'gentoo' if (ansible_distribution ~ ' ' ~ ansible_distribution_release) | lower is search('gentoo|funtoo')
-      else (ansible_distribution | lower | regex_replace('[^a-z0-9._-]+', '-') | regex_replace('^[^a-z0-9]+', ''))
-           ~ (('-' ~ ansible_distribution_major_version) if ansible_distribution_major_version is match('^[0-9]+$')
-              else ''))[:32] }}
+  {{ ('arch' if ansible_facts.distribution | lower is search('^arch')
+      else 'gentoo'
+        if (ansible_facts.distribution ~ ' ' ~ ansible_facts.distribution_release) | lower is search('gentoo|funtoo')
+      else (ansible_facts.distribution | lower | regex_replace('[^a-z0-9._-]+', '-') | regex_replace('^[^a-z0-9]+', ''))
+           ~ (('-' ~ ansible_facts.distribution_major_version)
+              if ansible_facts.distribution_major_version is match('^[0-9]+$') else ''))[:32] }}
 
 # systemd splits RequiresMountsFor= on whitespace, starts a specifier at % and gives quotes and backslashes
 # a special meaning, so the patterns reject all of them.

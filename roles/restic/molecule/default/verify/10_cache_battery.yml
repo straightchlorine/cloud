@@ -1,0 +1,119 @@
+---
+# The cache directory knob: the unit may write and waits for it, the env file stages pack files in it, and
+# the default directory was never created.
+- name: Assert the cache directory, its parent and the default directory that was never created
+  vars:
+    molecule_paths:
+      - { path: /srv/molecule-cache/restic, state: directory, mode: "0700", owner: restic, group: restic }
+      - { path: /srv/molecule-cache/restic/tmp, state: directory, mode: "0700", owner: restic, group: restic }
+      - { path: /var/cache/restic, state: absent }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the drop-in and the env file
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: [/etc/systemd/system/restic-job@ok.service.d/job.conf, /etc/restic/ok.env]
+  register: molecule_cache_files
+
+- name: Ask systemd for the unit's paths and list the cache directory's children
+  ansible.builtin.command: "{{ item }}"
+  loop:
+    - systemctl show -p ReadWritePaths -p RequiresMountsFor restic-job@ok.service
+    - find /srv/molecule-cache/restic -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+  register: molecule_cache_cmds
+  changed_when: false
+
+- name: Assert the unit and the env file use the configured cache directory
+  vars:
+    molecule_c: "{{ molecule_cache_files.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_dropin: "{{ molecule_c['/etc/systemd/system/restic-job@ok.service.d/job.conf'] | b64decode }}"
+    molecule_env_text: "{{ molecule_c['/etc/restic/ok.env'] | b64decode }}"
+    molecule_c_dirs: "{{ molecule_cache_cmds.results[1].stdout_lines }}"
+  ansible.builtin.assert:
+    that:
+      - "'RequiresMountsFor=/srv/molecule-src /srv/molecule-cache/restic' in molecule_dropin"
+      - "'ReadWritePaths=/srv/molecule-cache/restic' in molecule_dropin"
+      - "'RESTIC_CACHE_DIR=/srv/molecule-cache/restic' in molecule_env_text"
+      - "'TMPDIR=/srv/molecule-cache/restic/tmp' in molecule_env_text"
+      - "'GOMEMLIMIT=409MiB' in molecule_env_text"
+      - "'ReadWritePaths=/srv/molecule-cache/restic' in molecule_cache_cmds.results[0].stdout"
+      # The legacy cache entry, tmp and at least one repository cache written by a real run.
+      - "'0123abcd' in molecule_c_dirs"
+      - molecule_c_dirs | reject('in', ['0123abcd', 'tmp']) | list | length >= 1
+    quiet: true
+
+# skip_on_battery: the gate reads a fake power_supply tree through the RESTIC_JOB_POWER_DIR seam.
+# Only a battery that reports Discharging skips; a USB-C charger is type USB and never decides.
+- name: Read the battery job's drop-in and env file
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: [/etc/systemd/system/restic-job@onbat.service.d/job.conf, /etc/restic/onbat.env]
+  register: molecule_onbat
+
+- name: Run the gate as the restic user against fake power supplies
+  ansible.builtin.shell: |
+    set -e
+    d=$(mktemp -d)
+    for s in $SUPPLIES; do
+      n=${s%%:*}; rest=${s#*:}; mkdir -p "$d/$n"
+      echo "${rest%%:*}" > "$d/$n/type"
+      attr=${rest#*:}
+      [ "$attr" = - ] || echo "${attr#*=}" > "$d/$n/${attr%%=*}"
+    done
+    chmod -R a+rX "$d"
+    rm -f /var/lib/restic/onbat.ok
+    set +e
+    out=$(runuser -u restic -- env RESTIC_JOB_POWER_DIR="$d" \
+      /usr/local/libexec/restic/restic-job gate onbat 2>&1)
+    echo "rc=$?"
+    echo "$out"
+    rm -rf "$d"
+  environment:
+    SUPPLIES: "{{ item.supplies }}"
+  loop:
+    - { id: battery-discharging-usbc-offline, supplies: "BAT0:Battery:status=Discharging ucsi:USB:online=0",
+        rc: 1, text: "skipped: the battery is discharging (on battery)" }
+    - { id: battery-discharging-mains-offline, supplies: "BAT0:Battery:status=Discharging AC:Mains:online=0",
+        rc: 1, text: "skipped: the battery is discharging (on battery)" }
+    - { id: usbc-charger-charging, supplies: "BAT0:Battery:status=Charging ucsi:USB:online=1", rc: 0, text: "" }
+    - { id: battery-full, supplies: "BAT0:Battery:status=Full AC:Mains:online=1", rc: 0, text: "" }
+    - { id: battery-not-charging, supplies: "BAT0:Battery:status=Not_charging", rc: 0, text: "" }
+    - { id: desktop-without-battery, supplies: "AC:Mains:online=0", rc: 0, text: "" }
+    - { id: no-supply-at-all, supplies: "", rc: 0, text: "" }
+  loop_control:
+    label: "{{ item.id }}"
+  register: molecule_battery
+  changed_when: false
+
+- name: Assert the battery job's drop-in and env file
+  vars:
+    molecule_c: "{{ molecule_onbat.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_dropin: "{{ molecule_c['/etc/systemd/system/restic-job@onbat.service.d/job.conf'] | b64decode }}"
+    molecule_env_lines: "{{ (molecule_c['/etc/restic/onbat.env'] | b64decode).splitlines() }}"
+  ansible.builtin.assert:
+    that:
+      - "'ExecCondition=/usr/local/libexec/restic/restic-job gate %i' in molecule_dropin.splitlines()"
+      - "'RESTIC_JOB_SKIP_ON_BATTERY=1' in molecule_env_lines"
+      - "'RESTIC_JOB_SKIP_METERED=0' in molecule_env_lines"
+    quiet: true
+
+- name: Assert the battery decisions
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines[0] == 'rc=' ~ item.item.rc
+      - item.item.text in item.stdout
+    fail_msg: "{{ item.item.id }}: {{ item.stdout }}"
+    quiet: true
+  loop: "{{ molecule_battery.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
+# The directories the role makes, and the symlink it must not follow.
+- name: Assert the missing parent is root's, the alert stamps are root-only and the symlink target is untouched
+  vars:
+    molecule_paths:
+      - { path: /srv/molecule-cache, state: directory, mode: "0755", owner: root, group: root }
+      - { path: /var/lib/restic-alerts, state: directory, mode: "0700", owner: root, group: root }
+      - { path: /srv/molecule-victim, state: directory, mode: "0755", owner: root, group: root }
+      - { path: /srv/molecule-trap/restic, state: link }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"

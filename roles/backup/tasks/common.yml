@@ -69,7 +69,7 @@
     state: present
     update_cache: true
   become: true
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts.os_family == 'Debian'
 
 - name: Install required packages (Arch Linux)
   community.general.pacman:
@@ -80,7 +80,7 @@
       - sshfs
     state: present
   become: true
-  when: ansible_os_family == 'Archlinux'
+  when: ansible_facts.os_family == 'Archlinux'
 
 - name: Check if restic is already installed
   ansible.builtin.command: restic version

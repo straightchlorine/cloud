@@ -1,31 +1,24 @@
 ---
-- name: Converge board tuning
+- name: Converge common board-tuning
   hosts: all
-  gather_facts: true
-  become: true
   vars:
     common_wifi_powersave_tuning_enabled: true
-  # Role defaults for the zram render, which runs outside the role's scope.
-  vars_files:
-    - ../../defaults/main.yml
   pre_tasks:
     # The image ships with empty apt lists, so the role's `apt: name=iw` would fail.
     - name: Warm the apt cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
-      changed_when: false
+      become: true
   tasks:
     # A container has no wireless interface; the script must exit 0 as on a wired host.
-    - name: Run Wi-Fi power-save setup
+    - name: Set up Wi-Fi power save
       ansible.builtin.include_role:
         name: common
         tasks_from: wifi_powersave
 
-    # zram.yml is not included: zramswap needs CAP_SYS_MODULE and CAP_SYS_ADMIN,
-    # which a podman container lacks. Only the config is rendered here.
-    - name: Render zram swap config
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../templates/zramswap.j2"
-        dest: /tmp/zramswap.rendered
-        mode: '0644'
+    # zram.yml itself needs kernel modules a container lacks, so only its config render runs.
+    - name: Render the zram swap config
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: zram_config

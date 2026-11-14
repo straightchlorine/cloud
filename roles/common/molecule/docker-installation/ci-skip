@@ -1,1 +1,0 @@
-Docker-in-container: the daemon needs a privileged host runner (CI pod cannot start dockerd)

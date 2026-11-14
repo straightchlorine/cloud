@@ -1,0 +1,15 @@
+---
+# Nothing supplies the variables without a role default, so they stay undefined.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run validate.yml
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: validate
+
+    - name: Fail when validation passes
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

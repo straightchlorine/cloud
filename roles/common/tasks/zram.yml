@@ -8,15 +8,8 @@
     state: present
   become: true
 
-- name: Configure the zram swap device
-  ansible.builtin.template:
-    src: zramswap.j2
-    dest: /etc/default/zramswap
-    owner: root
-    group: root
-    mode: '0644'
-  become: true
-  notify: Restart zramswap
+- name: Render the zram swap config
+  ansible.builtin.include_tasks: zram_config.yml
 
 - name: Enable and start zram swap
   ansible.builtin.systemd:

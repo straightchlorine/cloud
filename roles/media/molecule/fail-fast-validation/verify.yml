@@ -1,42 +1,10 @@
 ---
-- name: Verify media fail-fast validation
+- name: Verify media fail-fast-validation
   hosts: all
-  become: true
+  vars_files:
+    - cases.yml
   tasks:
-    - name: Stat the per-case marker files converge wrote
-      # Converge and verify are separate processes, so results cross through marker files instead of set_fact.
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /tmp/molecule-case1.passed
-        - /tmp/molecule-case2.passed
-        - /tmp/molecule-case3.passed
-        - /tmp/molecule-case4.passed
-        - /tmp/molecule-case5.passed
-      register: media_failfast_markers
-
-    - name: Assert all five fail-fast cases completed
-      ansible.builtin.assert:
-        that:
-          - item.stat.exists
-        fail_msg: >-
-          {{ item.item }} missing - the corresponding case in converge.yml
-          either did not fail or failed for an unexpected reason.
-        success_msg: "[OK] {{ item.item }} recorded"
-      loop: "{{ media_failfast_markers.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Display fail-fast validation summary
-      ansible.builtin.debug:
-        msg: |
-          [OK] Media Fail-Fast Validation Test Complete
-
-          Case 1 - missing required variable (media_library_path): FAILED as expected
-          Case 2 - stack home under /root for a non-root user: FAILED as expected
-          Case 3 - placeholder playlist (vault_youtube_playlists): FAILED as expected
-          Case 4 - restic on without media_restic_repository: FAILED as expected
-          Case 5 - restic job checks on the job the role builds (short password): FAILED as expected
-
-          All five cases ran the real roles/media/tasks/validate.yml end
-          to end - no hand-copied guards anywhere in this scenario.
+    - name: Assert every case recorded its marker
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ molecule_cases | map(attribute='id') | list }}"

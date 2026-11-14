@@ -1,601 +1,116 @@
 ---
-- name: Verify the media role's deployed state
+- name: Verify media default
   hosts: all
   become: true
-  vars:
-    media_home: /home/music/stack
-    media_library_path: /mnt/music
+  vars_files:
+    - ../shared/vars.yml
   tasks:
     - name: Read the deployed files
       ansible.builtin.slurp:
-        src: "{{ item }}"
-      loop:
-        - "{{ media_home }}/docker-compose.yml"
-        - "{{ media_home }}/.env"
-        - /etc/systemd/system/stack.service
-        - "{{ media_library_path }}/beets/config.yaml"
-        - "{{ media_home }}/config/yt-dlp.conf"
-        - /usr/local/bin/media-syncthing-backup
-        - "{{ media_library_path }}/beets/adopt.yaml"
-        - "{{ media_library_path }}/beets/interactive.yaml"
-        - "{{ media_library_path }}/beets/album.yaml"
-        - "{{ media_home }}/scripts/media-sync.sh"
-        - "{{ media_home }}/scripts/media-import.sh"
-        - "{{ media_library_path }}/beets/plugins/reviewed.py"
-        - "{{ media_home }}/scripts/beet.sh"
-        - "{{ media_home }}/scripts/media-lib.sh"
-        - "{{ media_home }}/scripts/media-maintenance.sh"
-        - "{{ media_home }}/scripts/media-status.sh"
-        - "{{ media_library_path }}/beets/tools/media_tools.py"
-        - "{{ media_library_path }}/beets/tools/media_common.py"
-        - "{{ media_library_path }}/beets/tools/media_audit.py"
-        - "{{ media_library_path }}/beets/tools/media_apply.py"
-        - "{{ media_library_path }}/beets/tools/media_review.py"
-        - "{{ media_home }}/scripts/pick.sh"
-        - "{{ media_home }}/scripts/pick-core.sh"
-        - "{{ media_library_path }}/beets/tools/media_removed.py"
-      register: media_files
+        src: "{{ item.value }}"
+      loop: "{{ media_deployed_paths | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: media_slurped
+      vars:
+        media_deployed_paths:
+          compose: "{{ media_home }}/docker-compose.yml"
+          env: "{{ media_home }}/.env"
+          unit: /etc/systemd/system/stack.service
+          beets: "{{ media_library_path }}/beets/config.yaml"
+          ytdlp_conf: "{{ media_home }}/config/yt-dlp.conf"
+          snapshot_script: /usr/local/bin/media-syncthing-backup
+          adopt: "{{ media_library_path }}/beets/adopt.yaml"
+          interactive: "{{ media_library_path }}/beets/interactive.yaml"
+          album: "{{ media_library_path }}/beets/album.yaml"
+          media_sync: "{{ media_home }}/scripts/media-sync.sh"
+          media_import: "{{ media_home }}/scripts/media-import.sh"
+          reviewed_plugin: "{{ media_library_path }}/beets/plugins/reviewed.py"
+          beet_helper: "{{ media_home }}/scripts/beet.sh"
+          media_lib: "{{ media_home }}/scripts/media-lib.sh"
+          media_maintenance: "{{ media_home }}/scripts/media-maintenance.sh"
+          media_status: "{{ media_home }}/scripts/media-status.sh"
+          media_tools_py: "{{ media_library_path }}/beets/tools/media_tools.py"
+          media_common_py: "{{ media_library_path }}/beets/tools/media_common.py"
+          media_audit_py: "{{ media_library_path }}/beets/tools/media_audit.py"
+          media_apply_py: "{{ media_library_path }}/beets/tools/media_apply.py"
+          media_review_py: "{{ media_library_path }}/beets/tools/media_review.py"
+          pick_wrapper: "{{ media_home }}/scripts/pick.sh"
+          pick_core: "{{ media_home }}/scripts/pick-core.sh"
+          media_removed_py: "{{ media_library_path }}/beets/tools/media_removed.py"
 
-    - name: Parse the deployed files
+    - name: Decode the deployed files by name
+      vars:
+        media_text: >-
+          {{ dict(media_slurped.results | map(attribute='item.key')
+                  | zip(media_slurped.results | map(attribute='content') | map('b64decode'))) }}
       ansible.builtin.set_fact:
-        compose: "{{ media_files.results[0].content | b64decode | from_yaml }}"
-        env_file: "{{ media_files.results[1].content | b64decode }}"
-        unit: "{{ media_files.results[2].content | b64decode }}"
-        beets: "{{ media_files.results[3].content | b64decode | from_yaml }}"
-        ytdlp_conf: "{{ media_files.results[4].content | b64decode }}"
-        snapshot_script: "{{ media_files.results[5].content | b64decode }}"
-        adopt: "{{ media_files.results[6].content | b64decode | from_yaml }}"
-        interactive: "{{ media_files.results[7].content | b64decode | from_yaml }}"
-        album: "{{ media_files.results[8].content | b64decode | from_yaml }}"
-        media_sync: "{{ media_files.results[9].content | b64decode }}"
-        media_import: "{{ media_files.results[10].content | b64decode }}"
-        reviewed_plugin: "{{ media_files.results[11].content | b64decode }}"
-        beet_helper: "{{ media_files.results[12].content | b64decode }}"
-        media_lib: "{{ media_files.results[13].content | b64decode }}"
-        media_maintenance: "{{ media_files.results[14].content | b64decode }}"
-        media_status: "{{ media_files.results[15].content | b64decode }}"
-        media_tools_py: "{{ media_files.results[16].content | b64decode }}"
-        media_common_py: "{{ media_files.results[17].content | b64decode }}"
-        media_audit_py: "{{ media_files.results[18].content | b64decode }}"
-        media_apply_py: "{{ media_files.results[19].content | b64decode }}"
-        media_review_py: "{{ media_files.results[20].content | b64decode }}"
-        pick_wrapper: "{{ media_files.results[21].content | b64decode }}"
-        pick_core: "{{ media_files.results[22].content | b64decode }}"
-        media_removed_py: "{{ media_files.results[23].content | b64decode }}"
+        compose: "{{ media_text.compose | from_yaml }}"
+        env_file: "{{ media_text.env }}"
+        unit: "{{ media_text.unit }}"
+        beets: "{{ media_text.beets | from_yaml }}"
+        ytdlp_conf: "{{ media_text.ytdlp_conf }}"
+        snapshot_script: "{{ media_text.snapshot_script }}"
+        adopt: "{{ media_text.adopt | from_yaml }}"
+        interactive: "{{ media_text.interactive | from_yaml }}"
+        album: "{{ media_text.album | from_yaml }}"
+        media_sync: "{{ media_text.media_sync }}"
+        media_import: "{{ media_text.media_import }}"
+        reviewed_plugin: "{{ media_text.reviewed_plugin }}"
+        beet_helper: "{{ media_text.beet_helper }}"
+        media_lib: "{{ media_text.media_lib }}"
+        media_maintenance: "{{ media_text.media_maintenance }}"
+        media_status: "{{ media_text.media_status }}"
+        media_tools_py: "{{ media_text.media_tools_py }}"
+        media_common_py: "{{ media_text.media_common_py }}"
+        media_audit_py: "{{ media_text.media_audit_py }}"
+        media_apply_py: "{{ media_text.media_apply_py }}"
+        media_review_py: "{{ media_text.media_review_py }}"
+        pick_wrapper: "{{ media_text.pick_wrapper }}"
+        pick_core: "{{ media_text.pick_core }}"
+        media_removed_py: "{{ media_text.media_removed_py }}"
 
-    - name: Stat the deployed files
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ media_home }}/.env"
-        - /usr/local/bin/manage-media
-        - /usr/local/bin/media-sync
-        - "{{ media_home }}/config/playlists.txt"
-        - "{{ media_library_path }}/navidrome-data"
-        - "{{ media_library_path }}/music"
-        - /tmp/molecule-media-backup
-        - /usr/local/bin/media-import
-        - /usr/local/bin/beet
-        - /usr/local/bin/pick
-      register: media_stats
-
-    - name: Stat the retired command
-      # `media-sync --albums` covers this command, so a leftover symlink on a long-lived host would shadow it.
-      ansible.builtin.stat:
-        path: /usr/local/bin/media-import-album
-      register: media_import_album_retired
-
-    - name: Assert the compose services
+    - name: Assert deployed paths, modes and owners
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
       vars:
-        navidrome: "{{ compose.services.navidrome }}"
-        watchtower: "{{ compose.services.watchtower }}"
-        watchtower_hostname: "WATCHTOWER_NOTIFICATIONS_HOSTNAME={{ ansible_facts['hostname'] }}"
+        # music/ belongs to the stack user: beets runs with userns_mode host as that uid and shares it with yt-dlp.
+        # media-import-album is retired: `media-sync --albums` covers it, and a leftover symlink would shadow it.
+        molecule_paths:
+          - { path: /mnt/music/music, state: directory, owner: root }
+          - { path: /mnt/music/navidrome-data, state: directory }
+          - { path: /home/music/stack/.env, state: file, mode: "0600" }
+          - { path: /home/music/stack/config/playlists.txt, state: file, mode: "0600" }
+          - { path: /tmp/molecule-media-backup, state: directory, mode: "0750" }
+          - { path: /usr/local/bin/manage-media, state: link }
+          - { path: /usr/local/bin/media-sync, state: link }
+          - { path: /usr/local/bin/media-import, state: link }
+          - { path: /usr/local/bin/beet, state: link }
+          - { path: /usr/local/bin/pick, state: link }
+          - { path: /usr/local/bin/media-import-album, state: absent }
+
+    - name: Stat the navidrome data directory
+      ansible.builtin.stat:
+        path: /mnt/music/navidrome-data
+      register: media_navidrome_data
+
+    - name: Assert navidrome data is owned by the remapped uid
+      # Navidrome is userns-remapped, and this converge's dockremap base uid is 10000.
       ansible.builtin.assert:
-        that:
-          - compose.services | list | sort == ['beets', 'cadvisor', 'navidrome', 'watchtower']
-          - navidrome.image == 'deluan/navidrome:latest'
-          - navidrome.deploy.resources.limits.memory == '512M'
-          - navidrome.deploy.resources.limits.cpus | string == '2.0'
-          - "'com.centurylinklabs.watchtower.enable=true' in navidrome.labels"
-          - "'ND_BACKUP_PATH=/data/backups' in navidrome.environment"
-          - "'ND_BACKUP_SCHEDULE=45 1 * * *' in navidrome.environment"
-          - compose.services.beets.image == 'linuxserver/beets:latest'
-          - navidrome.user == '0:0'
-          - "'ND_JWTKEY=${NAVIDROME_JWT_SECRET}' in navidrome.environment"
-          - "'ND_ENABLESHARING=false' in navidrome.environment"
-          - "'ND_PROMETHEUS_ENABLED=true' in navidrome.environment"
-          - "'ND_BASEURL=https://navidrome.example.test' in navidrome.environment"
-          - navidrome.ports | select('match', '.*:4545:4533$') | list | length == 1
-          - compose.services.beets.userns_mode == 'host'
-          - compose.services.beets.profiles == ['tools']
-          - "'/mnt/music/beets:/config' in compose.services.beets.volumes"
-          - "'/mnt/music/state/review:/review' in compose.services.beets.volumes"
-          - "'/mnt/music/removed:/removed' in compose.services.beets.volumes"
-          - compose.services.cadvisor.ports | select('match', '.*:8085:8080$') | list | length == 1
-          - "'WATCHTOWER_EPHEMERAL_SELF_UPDATE=true' in watchtower.environment"
-          - "watchtower_hostname in watchtower.environment"
-        fail_msg: "compose rendered wrong: {{ compose.services }}"
-        success_msg: "[OK] navidrome (watchtower-managed, own backups) + watchtower + cadvisor + on-demand beets"
-
-    - name: Assert the .env carries the JWT secret at 0600
-      ansible.builtin.assert:
-        that:
-          - env_file is search('NAVIDROME_JWT_SECRET="[0-9a-f]{64}"')
-          - env_file is search('WATCHTOWER_API_TOKEN="molecule-test-watchtower-token"')
-          - media_stats.results[0].stat.mode == '0600'
-        fail_msg: ".env wrong: {{ env_file }}"
-        success_msg: "[OK] .env holds the JWT secret and is 0600"
-
-    - name: Assert the rendered systemd unit
-      ansible.builtin.assert:
-        that:
-          - "'ExecStart=/usr/bin/docker compose -f /home/music/stack/docker-compose.yml up -d' in unit"
-          - "'RemainAfterExit=true' in unit"
-        fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
-        success_msg: "[OK] media unit renders with the explicit compose path"
-
-    - name: Assert the ownership split
-      # In this converge the dockremap base uid is 10000 and the stack user is root.
-      # Navidrome is userns-remapped, so it owns its data as uid 10000.
-      # Beets runs with userns_mode host as the stack uid and shares it with yt-dlp, so music/ is root-owned.
-      ansible.builtin.assert:
-        that:
-          - media_stats.results[4].stat.uid == 10000
-          - media_stats.results[5].stat.uid == 0
-        fail_msg: >-
-          navidrome-data uid {{ media_stats.results[4].stat.uid }} (want 10000),
-          music uid {{ media_stats.results[5].stat.uid }} (want 0)
-        success_msg: "[OK] navidrome-data remapped, music owned by the stack uid"
-
-    - name: Assert the beets config imports YouTube singles unattended
-      ansible.builtin.assert:
-        that:
-          - beets.directory == '/music'
-          - beets.library == '/config/library.db'
-          - beets['import'].quiet
-          - beets['import'].singletons
-          - beets['import'].quiet_fallback == 'skip'
-          - beets.match.distance_weights.data_source == 0
-          - beets['import'].duplicate_action == 'keep'
-          - >-
-            beets.plugins.split() | sort ==
-            ['chroma', 'duplicates', 'embedart', 'fetchart', 'lastgenre',
-            'lyrics', 'musicbrainz', 'replaygain', 'reviewed']
-          - beets.pluginpath == '/config/plugins'
-          - beets.replaygain.backend == 'ffmpeg'
-          - beets.lyrics.synced
-          - beets.chroma.auto
-          - beets.lastgenre.force
-          - beets.fetchart.auto
-          - beets.embedart.auto
-        fail_msg: "beets config wrong: {{ beets }}"
-        success_msg: "[OK] beets: quiet, skip-unmatched, MB + chroma + lastgenre + covers + lyrics/gain"
-
-    - name: Assert the adopt overlay leaves existing files untouched
-      ansible.builtin.assert:
-        that:
-          - not adopt['import']['autotag']
-          - not adopt['import']['move']
-          - not adopt['import']['copy']
-          - not adopt['import']['write']
-        fail_msg: "adopt.yaml would modify the library: {{ adopt }}"
-        success_msg: "[OK] adopt overlay: no autotag, move, copy or write"
-
-    - name: Assert the album overlay accepts partial releases
-      ansible.builtin.assert:
-        that:
-          - not interactive['import']['quiet']
-          - interactive.reviewed.mark
-          - not album['import']['singletons']
-          - "'year' not in album.match.distance_weights"
-          - album.match.distance_weights.missing_tracks == 0
-          - "'unmatched_tracks' not in album.match.distance_weights"
-          - album.match.preferred.media == ['Digital Media', 'CD']
-          - album.match.preferred.original_year
-          - "'unmatched_tracks' not in album.match.max_rec"
-          - album.match.max_rec.missing_tracks == 'strong'
-          - album.original_date
-          - media_stats.results[7].stat.islnk
-        fail_msg: >-
-          overlays/scripts wrong: {{ interactive }} / {{ album }} /
-          {{ media_stats.results[7].stat }}
-        success_msg: "[OK] album overlay: partial releases accepted, unmatched tracks kept as the guard"
-
-    - name: Assert the pipeline is one engine whose passes stay in order
-      ansible.builtin.assert:
-        that:
-          # One release-pass function takes the overlay as a parameter and serves every mode.
-          # It walks the whole downloads tree one file at a time, because a per-artist subdirectory
-          # would otherwise fall through to the album-less singleton pass.
-          - "'release_pass() {' in media_sync"
-          - "'find \"$1\" -type f ! -name \".*\"' in media_sync"
-          - "'-exec /lsiopy/bin/beet --config \"$2\" import {} \\;' in media_sync"
-          - "'for track in /downloads/*' not in media_sync"
-          # The nightly run calls it before the singleton pass.
-          - "'release_pass /downloads /config/album.yaml' in media_sync"
-          # One Ctrl-C must stop the release pass.
-          # The container's PID 1 needs a signal handler, and the loop must run in the background for the trap to fire.
-          - "'trap \"kill \\$pid' in media_sync"
-          - "'wait $pid' in media_sync"
-          - >-
-            media_sync.index('release_pass /downloads /config/album.yaml')
-            < media_sync.index('" import "${rest[@]}"')
-          # The pass looks only at files newer than the last-sync stamp, so a leftover is not judged again.
-          - "'release_pass /downloads /config/album.yaml \"\" /downloads/.last-sync' in media_sync"
-          - "'${3:+-cnewer \"$3\"}' in media_sync"
-          # The stamp moves only after the passes, so an interrupted night is picked up the next night.
-          - >-
-            media_sync.index('mapfile -t rest') < media_sync.rindex('touch "$stamp"')
-          - "'older track(s) wait for media-import' in media_sync"
-          # Every other mode is a flag on the same engine.
-          - "'--albums)' in media_sync"
-          - "'--keep)' in media_sync"
-          - "'--interactive)' in media_sync"
-          - "'--review)' in media_sync"
-          - "'--singles)' in media_sync"
-          - "'--release)' in media_sync"
-          # The repair paths skip rows that already carry the reviewed marker.
-          - "'reviewed::^$' in media_sync"
-          # This is a folded scalar because Jinja joins two adjacent quoted literals into one string.
-          # A plain scalar would silently search for the joined text.
-          - >-
-            "'mb_trackid::^$' 'reviewed::^$'" in media_sync
-        fail_msg: "media-sync structure wrong:\n{{ media_sync }}"
-        success_msg: "[OK] media-sync: one engine, per-file release pass, marker-aware repair"
-
-    - name: Assert the reviewed plugin is deployed and gated
-      ansible.builtin.assert:
-        that:
-          - "'ReviewedPlugin' in reviewed_plugin"
-          - "'import_task_files' in reviewed_plugin"
-          - "'Action.ASIS' in reviewed_plugin"
-          - "'reviewed | ' in reviewed_plugin"
-          - "'item.try_write()' in reviewed_plugin"
-        fail_msg: "reviewed.py wrong:\n{{ reviewed_plugin }}"
-        success_msg: "[OK] reviewed.py: marks an as-is answer, file tag included"
-
-    - name: Assert media-import only delegates to the engine
-      ansible.builtin.assert:
-        that:
-          - "'exec /usr/local/bin/media-sync' in media_import"
-          - "'docker compose' not in media_import"
-          - "'mode=--review' in media_import"
-        fail_msg: "media-import should be a wrapper, not a second implementation:\n{{ media_import }}"
-        success_msg: "[OK] media-import: interactive wrapper over media-sync"
-
-    - name: Assert the shared modules own the library operations
-      # roles/media/tests/engine-test.sh proves the behaviour against a real beets.
-      # These asserts pin the text that behaviour rests on, so a refactor cannot quietly drop it.
-      ansible.builtin.assert:
-        that:
-          # Adopt registers only files that have no row.
-          # Importing the whole directory would re-create every known row without its album row or reviewed flag.
-          - "'register_new() {' in media_lib"
-          - "'comm -23' in media_lib"
-          - "'unregistered_files() {' in media_lib"
-          - "'register_new /config/adopt.yaml /music' in media_lib"
-          - "'-c /config/adopt.yaml import /music' not in media_lib"
-          - "'-c /config/adopt.yaml import /music' not in media_sync"
-          # Regroup builds album rows from release ids and touches no file.
-          - "'lib.add_album(items)' in media_tools_py"
-          # Prune drops rows and never deletes files.
-          - "'item.remove(False)' in media_tools_py"
-          - "'prune_rows() {' in media_lib"
-          # The library defines the checkpoint and the preflight, and the shared module the match threshold.
-          - "'checkpoint() {' in media_lib"
-          - "'musicbrainz_reachable() {' in media_lib"
-          - "'strong_rec_thresh' in media_common_py"
-          # The constants are defined once, in the library only.
-          - "'LIB=\"' in media_lib"
-          - "'LIB=\"' not in media_sync"
-          - "'media-lib.sh' in media_sync"
-          - "'media-lib.sh' in media_status"
-          # The maintenance routine counts its steps, can resume from the current one, and checks MusicBrainz.
-          - "'MAINT_STEPS=8' in media_maintenance"
-          - "'settle_library' in media_maintenance"
-          - "'maint_complete' in media_maintenance"
-          - "'--from $CURRENT_STEP' in media_maintenance"
-          - "'musicbrainz_reachable' in media_maintenance"
-          - "'checkpoint' in media_maintenance"
-          # The engine exposes these operations and validates what a person types.
-          - "'--maintenance)' in media_sync"
-          - "'--regroup)' in media_sync"
-          - "'--pin)' in media_sync"
-          - "'--complete)' in media_sync"
-          - "'pin_files() {' in media_lib"
-          - "'complete_plan() {' in media_lib"
-          - "'def cmd_pin(' in media_tools_py"
-          - "'AlbumMatch(Distance(), info, mapping).apply_metadata()' in media_common_py"
-          - "'the album already holds that track (a copy)' in media_common_py"
-          - "'claims, left = assign(' in media_common_py"
-          # The pin and the apply share one implementation.
-          - "'mc.plan_pin(' in media_tools_py"
-          - "'mc.apply_pin(' in media_tools_py"
-          - "'mc.plan_pin(' in media_apply_py"
-          - "'def same_title(' in media_common_py"
-          # Python lives in the tools, not in shell strings.
-          # A pin applies the release itself and never imports into an existing album.
-          - "'media_tools.py\" pin' in media_lib"
-          - "'import -S' not in media_lib"
-          - "'importer' not in media_tools_py"
-          - "'--plan)' in media_sync"
-          # The library review's audit is one read-only container run that writes into /review.
-          - "'--audit)' in media_sync"
-          - "'$TOOLS/media_audit.py\"' in media_lib"
-          - "'REVIEW=/review' in media_lib"
-          - "'import media_common as mc' in media_audit_py"
-          - "'.store()' not in media_audit_py"
-          # The apply runs the decisions in one container, waits for a restic backup, and can be undone from its log.
-          - "'--apply)' in media_sync"
-          - "'--undo)' in media_sync"
-          - "'backup_gate() {' in media_lib"
-          - "'restic-job@media.service' in media_lib"
-          - "'/var/lib/restic/media.ok' in media_lib"
-          - "'--max-files 200' in media_lib"
-          - "'-ge 36 ]' in media_lib"
-          - "'def cmd_undo(' in media_apply_py"
-          - "'os.fsync' in media_apply_py"
-          - "'import media_common as mc' in media_apply_py"
-          # The quarantine check is read-only unless --purge is given, which deletes only the safe classes.
-          - "'--removed)' in media_sync"
-          - "'$TOOLS/media_removed.py\"' in media_lib"
-          - "'SAFE = CLASSES[:2]' in media_removed_py"
-          - "'import media_common as mc' in media_removed_py"
-          # On the host, the pick wrapper sets PICK_LOCAL and runs the same script the workstation uses.
-          - "'PICK_LOCAL=1' in pick_wrapper"
-          - "'pick-core.sh' in pick_wrapper"
-          - "'PICK_LOCAL' in pick_core"
-          - "'media-import --quarantine' in pick_core"
-          # The review menu runs host python on the library and saves decisions through the shared writer.
-          - "'--library | --quarantine)' in media_import"
-          - "'beets/tools/media_review.py' in media_import"
-          - "'mc.save_decision(' in media_review_py"
-          - "'mode=ro' in media_review_py"
-          # One helper drops an emptied album row in the same decision that empties it.
-          - "'def drop_emptied_albums(' in media_common_py"
-          - "'drop_emptied(lib, log, n, ' in media_apply_py"
-          - "'mc.drop_emptied_albums(' in media_tools_py"
-          - "'\"album_removed\"' in media_apply_py"
-          # A loose copy of a registered track has one ranking, a replace action and a copy screen.
-          - "'def copy_rank(' in media_common_py"
-          - "'mc.best_copy(' not in media_audit_py"
-          - "'mc.suggest_copy(' in media_audit_py"
-          - "'\"replace\", \"adopt\"' in media_common_py"
-          - "'def do_replace(' in media_apply_py"
-          - "'new.added = gone.added' in media_apply_py"
-          - "'mark_reviewed(new)' in media_apply_py"
-          - "'def restore_comments(' in media_apply_py"
-          - "'def copy(self, path)' in media_review_py"
-          # The same menu handles downloads: the audit lists them, the apply adopts them and the undo reverts them.
-          - "'def downloads(root)' in media_audit_py"
-          - "'--downloads /downloads' in media_lib"
-          - "'--downloads \"$LIB/downloads\"' in media_import"
-          - "'def do_adopt(' in media_apply_py"
-          - "'def undo_adopt(' in media_apply_py"
-          - "'util.unique_path(item.destination())' in media_apply_py"
-          - "'def download(self, key)' in media_review_py"
-          - "'UPG_DROPPED' in media_sync"
-          - "'a MusicBrainz release id (a UUID)' in media_sync"
-          # The audit finds twins over every row and the menu offers them on a screen of their own.
-          # A row queued for quarantine is never the one to keep.
-          - "'def twins(' in media_common_py"
-          - "'mc.twins(' in media_audit_py"
-          - "'mc.queued_quarantines(' in media_audit_py"
-          - "'def twin_dialog(' in media_review_py"
-          - "'self.twin_groups()' in media_review_py"
-          # Enter takes the screen's suggestion and never acts without one.
-          # The summary reads the queue the way the apply does, against the file limit the wrapper passes.
-          - "'no suggestion for this screen' in media_review_py"
-          - "'ma.read_decisions(' in media_review_py"
-          - "'--max-files 200' in media_import"
-          - "'required=True, help=\"the apply' in media_review_py"
-          # Only the menu pairs titles by length (the lenient rule), never the nightly pin or the apply.
-          # A pin saved from the menu carries any pairs the strict rule would not make as a map.
-          - "'def same_title_lenient(' in media_common_py"
-          - "'lenient=True' in media_review_py"
-          - "'lenient' not in media_apply_py"
-          - "'lenient' not in media_tools_py"
-          - "'def pin_map(' in media_review_py"
-          - "'def force_tracks(' in media_common_py"
-          - "'forced=' in media_apply_py"
-          - "'map is for pin decisions only' in media_common_py"
-          # The apply runs decisions by kind with quarantine first and narrows a superseded decision.
-          # At the end it drops every empty album row and files the tracks of a pinned album again.
-          - "'RANK = {' in media_apply_py"
-          - "'narrowed' in media_apply_py"
-          - "'def tidy_folders(' in media_apply_py"
-          - "'_memotable' in media_apply_py"
-          - "'mc.empty_album_ids(' in media_apply_py"
-          - "'def empty_album_ids(' in media_common_py"
-          - "'mc.empty_album_ids(' in media_tools_py"
-          # The status dashboard stays read-only, so it starts no container and takes no writer lock.
-          - "'compose run' not in media_status"
-          - "'flock -n' in media_status"
-        fail_msg: "shared modules wrong:\n{{ media_lib }}"
-        success_msg: "[OK] media-lib / media-maintenance own the library operations, shared with sync and status"
-
-    - name: Assert the interactive wrapper refuses a run without a terminal
-      # Cron runs media-sync, never this wrapper.
-      # Without a terminal the wrapper fails at once.
-      # Otherwise it would run a pass that can never ask, or hang on a prompt nobody sees.
-      ansible.builtin.command: /usr/local/bin/media-import
-      register: media_import_nott
-      changed_when: false
-      failed_when: media_import_nott.rc != 2
-
-    - name: Assert the engine refuses an interactive mode without a terminal
-      # The engine enforces the same rule, which also covers a hand-typed `media-sync --singles` without a terminal.
-      ansible.builtin.command: /usr/local/bin/media-sync --singles
-      register: media_sync_nott
-      changed_when: false
-      failed_when: >-
-        media_sync_nott.rc != 2
-        or 'needs an interactive terminal' not in media_sync_nott.stderr
-
-    - name: Assert the yt-dlp config prefers YouTube Music tags
-      ansible.builtin.assert:
-        that:
-          - "'%(artist,uploader)s:%(artist)s' in ytdlp_conf"
-          - "'music\\s*official$' in ytdlp_conf"
-          # Typographic dashes are normalised to a hyphen before the hyphen-only rules run.
-          # Reordering these two rules would silently stop the repost split.
-          - "'[–—]' in ytdlp_conf"
-          - "'[^-]+?) - (' in ytdlp_conf"
-          - >-
-            ytdlp_conf.index('[–—]') < ytdlp_conf.index('[^-]+?) - (')
-          - "'--download-archive \"/mnt/music/state/youtube-archive.txt\"' in ytdlp_conf"
-          # File names are capped in bytes, not characters, to stay under the ext4 limit of 255 bytes.
-          - "'%(artist).60B - %(title).120B [%(id)s]' in ytdlp_conf"
-          - "'media_library_path' not in ytdlp_conf"
-        fail_msg: "yt-dlp.conf wrong:\n{{ ytdlp_conf }}"
-        success_msg: "[OK] yt-dlp.conf rendered with the tag rules and archive"
-
-    - name: Read the common package list
-      # Converge skips packages.yml because the full apt list is too slow in a container.
-      # The tools are therefore never installed here, so the test checks the list the media host installs them from.
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../../../common/defaults/main.yml"
-        name: media_common_defaults
-
-    - name: Assert common_packages carries the interactive tools
-      # The README runs the long maintenance pass in tmux, and roles/media/files/pick-core.sh needs fzf.
-      # Mosh keeps the interactive sessions alive.
-      ansible.builtin.assert:
-        that:
-          - item in media_common_defaults.common_packages
-        fail_msg: "{{ item }} was dropped from common_packages; the media host needs it"
+        that: media_navidrome_data.stat.uid == 10000
+        fail_msg: "navidrome-data uid {{ media_navidrome_data.stat.uid }} (want 10000)"
         quiet: true
-      loop:
-        - tmux
-        - fzf
-        - mosh
 
-    - name: Assert the management symlinks, the 0600 playlists and the retired command
-      ansible.builtin.assert:
-        that:
-          - media_stats.results[1].stat.islnk
-          - media_stats.results[2].stat.islnk
-          - media_stats.results[3].stat.mode == '0600'
-          - media_stats.results[8].stat.islnk
-          - media_stats.results[9].stat.islnk
-          - "'--entrypoint /lsiopy/bin/beet' in beet_helper"
-          - "'docker compose' in beet_helper"
-          - not media_import_album_retired.stat.exists
-        fail_msg: manage/media-sync/beet symlinks, playlists.txt or a stale media-import-album
-        success_msg: "[OK] manage-media + media-sync + beet in PATH, playlists.txt 0600, media-import-album retired"
+    - name: Assert the compose file and unit
+      ansible.builtin.include_tasks: verify/compose.yml
 
-    - name: Stub docker for the beets pull and the text-fix dry run
-      # Nothing is downloaded, so no import runs, but every sync still pulls the beets image.
-      # Each sync also ends with a text-fix dry run in that container.
-      # The stub answers those two calls and fails any other, so the sync cannot reach an unexpected container path.
-      ansible.builtin.copy:
-        dest: /usr/local/bin/docker
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          echo "$*" >> /tmp/molecule-docker-calls
-          case "$*" in
-            *" --profile tools pull -q beets" | *"media_tools.py fix-text --dry-run") exit 0 ;;
-          esac
-          exit 1
+    - name: Assert the beets config and overlays
+      ansible.builtin.include_tasks: verify/beets.yml
 
-    - name: Run the deployed media-sync against the stub yt-dlp
-      ansible.builtin.command: /usr/local/bin/media-sync
-      changed_when: false
+    - name: Assert the deployed scripts
+      ansible.builtin.include_tasks: verify/scripts.yml
 
-    - name: Read the stub's recorded calls
-      ansible.builtin.slurp:
-        src: /tmp/molecule-ytdlp-calls
-      register: media_ytdlp_calls
+    - name: Assert a sync run against the stub binaries
+      ansible.builtin.include_tasks: verify/sync_run.yml
 
-    - name: Assert every playlist reached yt-dlp intact, once each
-      vars:
-        calls: "{{ (media_ytdlp_calls.content | b64decode).splitlines() }}"
-      ansible.builtin.assert:
-        that:
-          - calls | length == 2
-          - calls[0].endswith(' https://www.youtube.com/playlist?list=PLmoleculeA')
-          - calls[1].endswith(' https://www.youtube.com/playlist?list=PLmoleculeB')
-          - calls[0].startswith('--config-location /home/music/stack/config/yt-dlp.conf ')
-        fail_msg: "yt-dlp calls wrong: {{ calls }}"
-        success_msg: "[OK] both playlists passed to yt-dlp as whole URLs"
-
-    - name: Read the ntfy stub's recorded notifications
-      ansible.builtin.slurp:
-        src: /tmp/molecule-ntfy
-      register: media_ntfy_calls
-
-    - name: Assert the sync run sent exactly one summary notification
-      vars:
-        sent: "{{ (media_ntfy_calls.content | b64decode).splitlines() }}"
-      ansible.builtin.assert:
-        that:
-          - sent | length == 1
-          - "'media-sync sync done' in sent[0]"
-          - "'2 playlist(s): 0 track(s) imported, 0 left in downloads/, 0 unexpected yt-dlp error(s).' in sent[0]"
-        fail_msg: "ntfy calls wrong: {{ sent }}"
-        success_msg: "[OK] one success summary per sync run"
-
-    - name: Read the docker stub's recorded calls
-      ansible.builtin.slurp:
-        src: /tmp/molecule-docker-calls
-      register: media_docker_calls
-
-    - name: Assert the sync pulled beets, then ran the text fix once as a dry run
-      vars:
-        calls: "{{ (media_docker_calls.content | b64decode).splitlines() }}"
-      ansible.builtin.assert:
-        that:
-          - calls | length == 2
-          - calls[0].endswith(' --profile tools pull -q beets')
-          - calls[1] is search(' run --rm -T --entrypoint /lsiopy/bin/python3 beets ')
-          - calls[1].endswith('/config/tools/media_tools.py fix-text --dry-run')
-        fail_msg: "docker calls wrong: {{ calls }}"
-        success_msg: "[OK] the nightly sync checks for escaped text, and a clean library changes nothing"
-
-    - name: Read root's and the stack user's crontab
-      ansible.builtin.command: crontab -l -u root
-      register: media_crontab
-      changed_when: false
-
-    - name: Assert the pipeline and snapshot cron entries
-      ansible.builtin.assert:
-        that:
-          - "'Media nightly sync' in media_crontab.stdout"
-          - "'Media weekly retag' in media_crontab.stdout"
-          - "'/usr/local/bin/media-sync --retag' in media_crontab.stdout"
-          # The weekly apply runs on Sunday after the restic job and before the weekly retag.
-          - "'0 4 * * 0 /usr/local/bin/media-sync --apply' in media_crontab.stdout"
-          - "'Media Syncthing local backup' in media_crontab.stdout"
-          - "'/usr/local/bin/yt-dlp-update' in media_crontab.stdout"
-          - "'PATH=\"/usr/local/bin:/usr/bin:/bin\"' in media_crontab.stdout"
-        fail_msg: "crontab wrong:\n{{ media_crontab.stdout }}"
-        success_msg: "[OK] nightly sync, weekly apply and retag, 02:30 snapshot scheduled"
-
-    - name: Assert the snapshot backup script and destination
-      ansible.builtin.assert:
-        that:
-          - "'navidrome-data/backups/navidrome_backup_' in snapshot_script"
-          - "'beets/library.db' in snapshot_script"
-          - "'youtube-archive.txt' in snapshot_script"
-          - "'mv \"$WORK\" \"$DEST/$STAMP\"' in snapshot_script"
-          - media_stats.results[6].stat.mode == '0750'
-        fail_msg: "snapshot script wrong:\n{{ snapshot_script }}"
-        success_msg: "[OK] snapshot covers navidrome + beets DBs and the yt-dlp archive"
-
-    # The plugin's runtime load check lives in tasks/post_deploy_validate.yml.
-    # This molecule container has no docker, so no beets container can start here.
-    # The text asserts above and that post-deploy check together cover reviewed.py.
-
-    - name: Check the stack unit state
-      ansible.builtin.command: systemctl {{ item }} stack
-      register: stack_unit_state
-      changed_when: false
-      failed_when: stack_unit_state.stdout | trim != item_expected[item]
-      vars:
-        item_expected: {is-active: active, is-enabled: enabled}
-      loop: [is-active, is-enabled]
-
-    - name: Confirm the stack unit started through the common role
-      ansible.builtin.debug:
-        msg: "[OK] stack.service is active and enabled (real docker_stack_service + stack_start, docker stubbed)"
+    - name: Assert the schedule and the stack unit
+      ansible.builtin.include_tasks: verify/schedule.yml

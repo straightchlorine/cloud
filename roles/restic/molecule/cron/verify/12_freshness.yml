@@ -1,0 +1,49 @@
+---
+# The freshness alert on a cron host points at the log directory, not at journalctl.
+- name: Age the plain job's stamp past its limit and run the freshness check
+  ansible.builtin.shell: |
+    touch -d '40 hours ago' /var/lib/restic/cr.ok
+    rm -f /run/molecule-ntfy.log /run/molecule-ntfy-body.log
+    {{ molecule_wrapper }} freshness
+    echo "rc=$?"
+    cat /run/molecule-ntfy.log /run/molecule-ntfy-body.log
+  register: molecule_fresh
+  changed_when: true
+
+- name: Assert the alert names the stale job and the log directory
+  ansible.builtin.assert:
+    that:
+      - molecule_fresh.stdout_lines[0] == 'rc=2'
+      - molecule_fresh.stdout is search('backups need attention\|high')
+      - >-
+        molecule_fresh.stdout is search('No good backup within the limit: cr\. See /var/log/restic/\.')
+      - molecule_fresh.stdout is not search('journalctl')
+
+# The cron entry runs hourly, so a root-owned alert stamp keeps it to one alert a day.
+- name: Run freshness again, then through the cron redirect on an oversized freshness log
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log
+    {{ molecule_wrapper }} freshness
+    echo "again-rc=$?"
+    echo "again-alerts=$(cat /run/molecule-ntfy.log 2>/dev/null | grep -c 'need attention')"
+    stat -c '%a %U:%G' /var/lib/restic-alerts /var/lib/restic-alerts/stale-cr
+    head -c 1100000 /dev/zero | tr '\0' x > /var/log/restic/freshness.log
+    {{ molecule_wrapper }} freshness >>/var/log/restic/freshness.log 2>&1
+    stat -c '%s' /var/log/restic/freshness.log /var/log/restic/freshness.log.1
+    touch /var/lib/restic/cr.ok
+    {{ molecule_wrapper }} freshness
+    test ! -e /var/lib/restic-alerts/stale-cr && echo stamp-cleared
+  register: molecule_fresh_again
+  changed_when: true
+
+- name: Assert one alert a day, a root-only stamp, a rotated log and a stamp cleared when the job is fresh
+  ansible.builtin.assert:
+    that:
+      - "'again-rc=0' in molecule_fresh_again.stdout_lines"
+      - "'again-alerts=0' in molecule_fresh_again.stdout_lines"
+      - "'700 root:root' in molecule_fresh_again.stdout_lines"
+      - molecule_fresh_again.stdout_lines | select('match', '^6[04][04] root:root$') | list | length == 1
+      - molecule_fresh_again.stdout_lines[-3] | int < 10000
+      - molecule_fresh_again.stdout_lines[-2] | int > 1000000
+      - "'stamp-cleared' in molecule_fresh_again.stdout_lines"
+    fail_msg: "{{ molecule_fresh_again.stdout }}"

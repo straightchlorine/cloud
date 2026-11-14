@@ -1,0 +1,99 @@
+---
+# Canned nmcli output, as the terse reader sees it: active connections as NAME:TYPE, then device blocks.
+molecule_gate_cases:
+  - id: metered-device
+    rc: 1
+    text: "skipped: link of 'Home' is metered"
+    env:
+      CONNS: ["Home:802-3-ethernet"]
+      DEVS: ["GENERAL.METERED:yes", "GENERAL.CONNECTION:Home", ""]
+  - id: guessed-metered
+    rc: 1
+    text: "skipped: link of 'Hotspot' is metered"
+    env:
+      CONNS: ["Hotspot:802-11-wireless"]
+      DEVS: ["GENERAL.METERED:yes (guessed)", "GENERAL.CONNECTION:Hotspot", ""]
+  - id: fields-in-the-other-order
+    rc: 1
+    text: "skipped: link of 'Hotspot' is metered"
+    env:
+      CONNS: ["Hotspot:802-11-wireless"]
+      DEVS: ["GENERAL.CONNECTION:Hotspot", "GENERAL.METERED:yes", ""]
+  - id: listed-name-with-unicode-quote-and-backslash
+    rc: 1
+    text: "skipped: connection '\u00dcn\u00ef \"q\" back\\slash' is listed as metered"
+    env:
+      CONNS: ["\u00dcn\u00ef \"q\" back\\slash:802-11-wireless"]
+      DEVS: ["GENERAL.METERED:no", "GENERAL.CONNECTION:x", ""]
+  - id: listed-name-with-a-colon
+    rc: 1
+    text: "skipped: connection 'Lab: Guest' is listed as metered"
+    env:
+      CONNS: ["Home:802-3-ethernet", "Lab: Guest:802-11-wireless"]
+      DEVS: ["GENERAL.METERED:no", "GENERAL.CONNECTION:Home", ""]
+  - id: only-a-docker-bridge
+    rc: 1
+    text: "skipped: no active network connection"
+    env:
+      CONNS: ["docker0:bridge", "veth1234:veth", "tun0:tun"]
+      DEVS: ["GENERAL.METERED:no", "GENERAL.CONNECTION:docker0", ""]
+  - id: bridge-with-an-enslaved-uplink
+    rc: 0
+    text: ""
+    env:
+      CONNS: ["br0:bridge", "bridge-slave-enp6s0:802-3-ethernet"]
+      DEVS:
+        - "GENERAL.METERED:no (guessed)"
+        - "GENERAL.CONNECTION:br0"
+        - ""
+        - "GENERAL.METERED:no"
+        - "GENERAL.CONNECTION:bridge-slave-enp6s0"
+        - ""
+  - id: metered-device-behind-a-bridge-is-ignored-but-the-uplink-counts
+    rc: 1
+    text: "skipped: link of 'Phone' is metered"
+    env:
+      CONNS: ["docker0:bridge", "Phone:802-11-wireless"]
+      DEVS:
+        - "GENERAL.METERED:yes"
+        - "GENERAL.CONNECTION:docker0"
+        - ""
+        - "GENERAL.METERED:yes"
+        - "GENERAL.CONNECTION:Phone"
+        - ""
+  - id: only-loopback
+    rc: 1
+    text: "skipped: no active network connection"
+    env:
+      CONNS: ["lo:loopback"]
+      DEVS: ["GENERAL.METERED:no", "GENERAL.CONNECTION:lo", ""]
+  - id: metered-device-without-a-connection
+    rc: 0
+    text: ""
+    env:
+      CONNS: ["Home:802-3-ethernet"]
+      DEVS:
+        - "GENERAL.METERED:yes"
+        - "GENERAL.CONNECTION:--"
+        - ""
+        - "GENERAL.METERED:no (guessed)"
+        - "GENERAL.CONNECTION:Home"
+        - ""
+  - id: second-device-metered
+    rc: 1
+    text: "skipped: link of 'Hotspot' is metered"
+    env:
+      CONNS: ["Home:802-3-ethernet", "Hotspot:802-11-wireless"]
+      DEVS:
+        - "GENERAL.METERED:no"
+        - "GENERAL.CONNECTION:Home"
+        - ""
+        - "GENERAL.METERED:yes (guessed)"
+        - "GENERAL.CONNECTION:Hotspot"
+        - ""
+  - id: all-unmetered
+    rc: 0
+    text: ""
+    env:
+      CONNS: ["Home:802-3-ethernet"]
+      DEVS: ["GENERAL.METERED:unknown", "GENERAL.CONNECTION:Home", ""]

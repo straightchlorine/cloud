@@ -76,7 +76,7 @@
 - name: Prove the real host's cgroup limit and ntfy delivery
   # A container has neither its own memory controller nor a reachable ntfy.
   # Molecule proves the notifier path with a stub instead.
-  when: ansible_virtualization_type not in ['podman', 'docker', 'container', 'lxc']
+  when: ansible_facts.virtualization_type not in ['podman', 'docker', 'container', 'lxc']
   block:
     - name: Read the cgroup controllers
       ansible.builtin.slurp:
@@ -147,7 +147,7 @@
   ansible.builtin.command:
     argv:
       - "{{ restic_notice_command }}"
-      - "{{ ansible_nodename }}: {{ restic_job_cfg.name }} backup armed"
+      - "{{ ansible_facts.nodename }}: {{ restic_job_cfg.name }} backup armed"
       - "{{ restic_deploy_lines | join('\n') }}"
       - min
       - white_check_mark

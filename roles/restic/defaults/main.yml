@@ -22,12 +22,12 @@ restic_cache_dir: /var/cache/restic
 
 # systemd hosts schedule jobs with timers. Any other host (OpenRC) schedules them with cron.d entries and
 # the log-file wrapper `restic-job cron`.
-restic_scheduler: "{{ 'systemd' if ansible_service_mgr == 'systemd' else 'cron' }}"
+restic_scheduler: "{{ 'systemd' if ansible_facts.service_mgr == 'systemd' else 'cron' }}"
 # The init script of the cron daemon that reads /etc/cron.d (cronie on Gentoo, cron on Debian).
 restic_cron_service: cronie
 
 restic_job_defaults:
-  host: "{{ ansible_nodename }}"   # matches os.Hostname(), the host name existing snapshots carry
+  host: "{{ ansible_facts.nodename }}"   # matches os.Hostname(), the host name existing snapshots carry
   excludes: []
   # Every snapshot also carries the job name, so it is never listed here.
   tags: ["{{ restic_os_tag }}"]

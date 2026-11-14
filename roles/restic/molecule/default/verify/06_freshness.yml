@@ -1,0 +1,54 @@
+---
+# The timer's 12:00 calendar trigger would otherwise start a second run
+# while the manual one is read back, and a stopped timer cannot race it.
+- name: Stop the freshness timer so only the manual run is observed
+  ansible.builtin.systemd:
+    name: restic-freshness.timer
+    state: stopped
+
+- name: Age the ok job's stamp past its limit and leave an undelivered interruption
+  ansible.builtin.shell: |
+    set -e
+    touch -d '40 hours ago' /var/lib/restic/ok.ok
+    touch /var/lib/restic/partial.interrupted
+  changed_when: true
+
+- name: Run the freshness check (exit 2 = alert delivered)
+  ansible.builtin.command: systemctl start restic-freshness.service  # noqa: command-instead-of-module
+  changed_when: true
+  failed_when: false
+
+- name: Wait for the freshness alert
+  ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+  register: molecule_fresh
+  until: "'backups need attention|high' in molecule_fresh.stdout"
+  retries: 20
+  delay: 2
+  changed_when: false
+
+- name: Read the freshness alert body
+  ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+  register: molecule_fresh_body
+  changed_when: false
+
+- name: Read the freshness result and the marker
+  ansible.builtin.command: systemctl show -p Result -p ExecMainStatus -p NRestarts restic-freshness.service
+  register: molecule_fresh_unit
+  changed_when: false
+
+- name: Stat the delivered interruption marker
+  ansible.builtin.stat:
+    path: /var/lib/restic/partial.interrupted
+  register: molecule_partial_marker
+
+- name: Assert freshness alerted once, failed visibly and cleared the marker
+  ansible.builtin.assert:
+    that:
+      # Each cause names only its own job, so neither scan can stand in for the other.
+      - >-
+        molecule_fresh_body.stdout is search('attention\\|No good backup within the limit: ok\\. ')
+      - >-
+        molecule_fresh_body.stdout is search('Stopped mid-run \\(shutdown or stop\\): partial\\. See journalctl')
+      - "'ExecMainStatus=2' in molecule_fresh_unit.stdout_lines"
+      - "'NRestarts=0' in molecule_fresh_unit.stdout_lines"
+      - not molecule_partial_marker.stat.exists

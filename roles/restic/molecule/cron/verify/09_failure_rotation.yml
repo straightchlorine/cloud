@@ -1,0 +1,49 @@
+---
+# A failing job: the notification carries the log tail, and the wrapper says it failed.
+- name: Run the job whose source is missing
+  ansible.builtin.shell: |
+    rm -f /run/molecule-ntfy.log /run/molecule-ntfy-body.log
+    {{ molecule_wrapper }} cron crbroken
+    echo "rc=$?"
+  register: molecule_broken
+  changed_when: true
+
+- name: Read the failed job's log and notification
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: [/var/log/restic/crbroken.log, /run/molecule-ntfy.log, /run/molecule-ntfy-body.log]
+  register: molecule_broken_out
+
+- name: Assert the failure reached the log and ntfy with the run's own lines
+  vars:
+    molecule_o: "{{ molecule_broken_out.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_log: "{{ molecule_o['/var/log/restic/crbroken.log'] | b64decode }}"
+    molecule_ntfy: "{{ molecule_o['/run/molecule-ntfy.log'] | b64decode }}"
+    molecule_body: "{{ molecule_o['/run/molecule-ntfy-body.log'] | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_broken.stdout_lines[-1] == 'rc=1'
+      - >-
+        molecule_log is search('restic-job: FAILED: source missing: /srv/molecule-missing')
+      - >-
+        molecule_log is search('restic-job: exit 1$')
+      - molecule_ntfy is search('crbroken backup FAILED \(exit-code/1\)\|high')
+      - >-
+        molecule_body is search('crbroken backup FAILED \(exit-code/1\)\|restic-job: FAILED: source missing: '
+        '/srv/molecule-missing \(after [0-9]+s\)\^')
+
+- name: Rotate the log when it is over 1 MiB
+  ansible.builtin.shell: |
+    head -c 1100000 /dev/zero | tr '\0' x > /var/log/restic/crbroken.log
+    {{ molecule_wrapper }} cron crbroken
+    echo "rc=$?"
+    stat -c %s /var/log/restic/crbroken.log /var/log/restic/crbroken.log.1
+  register: molecule_rotate
+  changed_when: true
+
+- name: Assert one rotated copy and a small new log
+  ansible.builtin.assert:
+    that:
+      - molecule_rotate.stdout_lines[0] == 'rc=1'
+      - molecule_rotate.stdout_lines[1] | int < 10000
+      - molecule_rotate.stdout_lines[2] | int > 1000000

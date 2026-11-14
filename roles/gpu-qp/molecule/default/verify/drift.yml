@@ -1,0 +1,24 @@
+---
+- name: Append a byte to an installed helper
+  ansible.builtin.shell: echo >> {{ gpu_qp_lib_path }}/lane.sh
+  changed_when: true
+
+- name: Run start and runs against the changed helper
+  ansible.builtin.command: "/usr/local/bin/gpu-qp {{ item }}"
+  register: gpu_qp_drift
+  changed_when: false
+  # The assert below checks the exit codes.
+  failed_when: false
+  loop: ["start --run m S", runs]
+
+- name: Assert start refuses and runs warns
+  vars:
+    drift: "{{ dict(gpu_qp_drift.results | map(attribute='item') | zip(gpu_qp_drift.results)) }}"
+  ansible.builtin.assert:
+    that:
+      - drift['start --run m S'].rc == 1
+      - drift['start --run m S'].stderr is search('lib incomplete, redeploy')
+      - drift['runs'].rc == 0
+      - drift['runs'].stderr is search('lib incomplete, redeploy')
+    fail_msg: "manifest check wrong:\n{{ gpu_qp_drift.results }}"
+    quiet: true

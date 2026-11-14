@@ -1,49 +1,42 @@
 ---
-- name: Verify the teardown left a clean, still-resolving host
+- name: Verify dns teardown
   hosts: all
   become: true
   tasks:
-    - name: Stat everything the teardown should have removed
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /usr/local/bin/pihole
-        - /usr/local/bin/pihole-update
-        - /usr/local/bin/pihole-syncthing-backup
-        - /usr/local/bin/ntfy-notify
-        - /usr/local/bin/reboot-notify
-        - /etc/pihole
-        - /etc/.pihole
-        - /opt/pihole
-        - /etc/ntfy
-        - /etc/chrony/chrony.conf
-        - /etc/logrotate.d/weekly-updates
-        - /etc/systemd/system/pihole-FTL.service
-        - /etc/systemd/system/foreign-zram.service
-      register: dns_teardown_leftovers
+    - name: Assert the unconfirmed teardown was refused
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: [teardown-unconfirmed]
 
-    - name: Assert no role artifact survives the teardown
-      ansible.builtin.assert:
-        that:
-          - not item.stat.exists
-        fail_msg: "{{ item.item }} still exists after teardown"
-        success_msg: "[OK] {{ item.item }} removed"
-      loop: "{{ dns_teardown_leftovers.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - name: Assert no role artifact survives
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - { path: /usr/local/bin/pihole, state: absent }
+          - { path: /usr/local/bin/pihole-update, state: absent }
+          - { path: /usr/local/bin/pihole-syncthing-backup, state: absent }
+          - { path: /usr/local/bin/ntfy-notify, state: absent }
+          - { path: /usr/local/bin/reboot-notify, state: absent }
+          - { path: /etc/pihole, state: absent }
+          - { path: /etc/.pihole, state: absent }
+          - { path: /opt/pihole, state: absent }
+          - { path: /etc/ntfy, state: absent }
+          - { path: /etc/chrony/chrony.conf, state: absent }
+          - { path: /etc/logrotate.d/weekly-updates, state: absent }
+          - { path: /etc/systemd/system/pihole-FTL.service, state: absent }
+          - { path: /etc/systemd/system/foreign-zram.service, state: absent }
 
-    - name: Check the pihole user is gone
+    - name: Look up the pihole user
       ansible.builtin.command: getent passwd pihole
       changed_when: false
-      failed_when: false
+      failed_when: dns_teardown_pihole_user.rc not in [0, 2]
       register: dns_teardown_pihole_user
 
     - name: Assert the pihole user is gone
       ansible.builtin.assert:
-        that:
-          - dns_teardown_pihole_user.rc != 0
-        fail_msg: "the pihole user still exists after teardown"
-        success_msg: "[OK] pihole user removed"
+        that: dns_teardown_pihole_user.rc == 2
+        fail_msg: "the pihole user still exists: {{ dns_teardown_pihole_user.stdout }}"
+        quiet: true
 
     - name: Collect package facts
       ansible.builtin.package_facts:
@@ -51,14 +44,13 @@
 
     - name: Assert chrony was purged
       ansible.builtin.assert:
-        that:
-          - "'chrony' not in ansible_facts.packages"
-        fail_msg: "chrony package still installed after teardown"
-        success_msg: "[OK] chrony purged"
+        that: "'chrony' not in ansible_facts.packages"
+        quiet: true
 
     - name: Read root's crontab
       ansible.builtin.command: crontab -l -u root
       changed_when: false
+      failed_when: dns_teardown_crontab.rc not in [0, 1]
       register: dns_teardown_crontab
 
     - name: Assert the role's cron jobs are gone
@@ -68,10 +60,10 @@
           - "'pihole-syncthing-backup' not in dns_teardown_crontab.stdout"
           - "'Reboot pending notification' not in dns_teardown_crontab.stdout"
         fail_msg: "Cron jobs survived the teardown: {{ dns_teardown_crontab.stdout }}"
-        success_msg: "[OK] update, backup and reboot-notification cron jobs removed"
+        quiet: true
 
-    - name: Verify the host still resolves DNS
-      # A failure here means the resolver restore failed even though the removals succeeded.
+    # A failure means the resolver restore failed even though the removals succeeded.
+    - name: Resolve a public name
       ansible.builtin.command: getent hosts github.com
       changed_when: false
       register: dns_teardown_resolve
@@ -79,18 +71,13 @@
       delay: 2
       until: dns_teardown_resolve.rc == 0
 
-    - name: Assert no Pi-hole ports are still listening
-      ansible.builtin.shell: |
-        set -o pipefail
-        { ss -H -ltn; ss -H -lun; } | grep -E ':(53|80) ' || true
-      args:
-        executable: /bin/bash
-      register: dns_teardown_listeners
+    - name: List listening sockets
+      ansible.builtin.command: ss -H -ltun
       changed_when: false
+      register: dns_teardown_listeners
 
-    - name: Assert nothing listens on 53/80
+    - name: Assert nothing listens on 53 or 80
       ansible.builtin.assert:
-        that:
-          - dns_teardown_listeners.stdout | trim | length == 0
-        fail_msg: "Still listening on 53/80 after teardown: {{ dns_teardown_listeners.stdout }}"
-        success_msg: "[OK] no listeners left on the Pi-hole ports"
+        that: dns_teardown_listeners.stdout_lines | select('search', ':(53|80)\s') | list | length == 0
+        fail_msg: "Still listening on 53/80: {{ dns_teardown_listeners.stdout }}"
+        quiet: true

@@ -1,68 +1,29 @@
 ---
-- name: Converge - the automation role's container-testable task files
+- name: Converge automation default
   hosts: all
   become: true
-  vars:
-    # These values mirror host_vars/pi-automation.yml with fake secrets.
-    # The ansible_user value is pinned because the role's ownership and become wiring reads it directly.
-    ansible_user: root
-    timezone: UTC
-    domain_name: example.test
-    vault_domain_name: example.test
-    vault_letsencrypt_email: test@example.test
-    # The validate.yml file refuses a malformed APP_KEY, and this key has the accepted raw length.
-    vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
-    # The validate.yml file accepts only a 32-character hex cron token, and this token matches.
-    vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
-    vault_firefly_db_password: molecule-test-db-password
-    vault_vaultwarden_admin_token: molecule-test-admin-token
-    vault_watchtower_api_token: molecule-test-watchtower-token
-    automation_trusted_proxies: "100.64.0.0/10"
-    automation_data_path: /mnt/data
-    automation_stack_home: /home/automation/stack
-    automation_backup_enabled: true
-    automation_backup_dir: /tmp/molecule-automation-backup
-    automation_backup_owner: molecule
-    automation_restic_enabled: false
-    common_start_stack: false
+  vars_files:
+    - ../shared/vars.yml
   pre_tasks:
-    - name: Create the stack-home parent (validate.yml asserts it exists)
-      ansible.builtin.file:
-        path: "{{ automation_stack_home | dirname }}"
-        state: directory
-        mode: "0755"
-
-    - name: Publish fixture userns-remap facts
-      # On a real host docker.yml publishes these facts, and the ownership tasks in stack.yml read them.
-      # The fixture value must sit inside the nested rootless-podman uid mapping.
-      # The canonical dockremap base lies outside that mapping, and chown would fail with EINVAL.
-      ansible.builtin.set_fact:
-        common_dockremap_uid: "10000"
-        common_dockremap_gid: "10000"
+    - name: Prepare stack home and remap facts
+      ansible.builtin.include_tasks: ../shared/pre_deploy.yml
 
   tasks:
-    # These are the container-safe task files from main.yml, in the order the role runs them.
-    # Using include_role with tasks_from runs the real task file with the role defaults loaded.
-    # The common packages task is skipped because it is slow, and scripts/automation/validate-deploy.sh covers it on
-    # the staging Pi.
-    # The common optional_ssd task is skipped because a container must not touch the host's block devices.
-    # The docker.yml file is skipped because it installs the Docker daemon and the container has no Docker.
-    # Prepare stubs docker and docker.service instead, so the real stack unit still installs and starts below.
-    # The firewall tasks are skipped because ufw cannot bind rules in a container.
-    # post_deploy_validate.yml is skipped because it needs a running compose stack.
-    - name: Gather network facts for dynamic configuration
+    # Skipped task files: common packages (slow; scripts/automation/validate-deploy.sh covers it), common optional_ssd
+    # (container must not touch block devices), docker.yml (stubbed in prepare), firewall (ufw cannot bind in a
+    # container), post_deploy_validate.yml (needs a running compose stack).
+    - name: Gather network facts
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
 
-    - name: Run the real pre-deployment validation
+    - name: Validate
       ansible.builtin.include_role:
         name: automation
         tasks_from: validate
 
-    - name: Validate the stack with the off-site backup on (the restic job this role builds)
-      # The backup.yml run below keeps restic off because deploying the restic job needs systemd, which this image
-      # lacks.
+    - name: Validate with the off-site backup on
+      # backup.yml below keeps restic off: deploying the restic job needs systemd units this image lacks.
       ansible.builtin.include_role:
         name: automation
         tasks_from: validate
@@ -71,32 +32,15 @@
         automation_restic_repository: /srv/molecule-restic/automation
         automation_restic_password: molecule-restic-password-automation
 
-    - name: Run the real stack deployment (compose + .env + manage script)
+    - name: Deploy the stack
       ansible.builtin.include_role:
         name: automation
         tasks_from: stack
 
-    - name: Run the real backup deployment (script + cron, syncthing off)
+    - name: Deploy the backup
       ansible.builtin.include_role:
         name: automation
         tasks_from: backup
 
-    - name: Install the real stack unit (docker is stubbed in prepare)
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: docker_stack_service
-      vars:
-        common_start_stack: true
-        common_stack_description: "Automation Stack (molecule)"
-        common_stack_home: "{{ automation_stack_home }}"
-        common_stack_user: "{{ ansible_user }}"
-        common_stack_environment_vars:
-          - "AUTOMATION_DATA_PATH={{ automation_data_path }}"
-
-    - name: Start the unit and flush the "Restart stack" handler
-      # The stack_start task from common resolves the handler, and an unknown handler name fails the play.
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: stack_start
-      vars:
-        common_start_stack: true
+    - name: Install and start the stack unit
+      ansible.builtin.include_tasks: ../shared/install_unit.yml

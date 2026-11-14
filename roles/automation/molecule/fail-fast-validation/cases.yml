@@ -1,0 +1,50 @@
+---
+# Valid values for every field case.yml maps. A case overrides one; a null value leaves that variable undefined.
+molecule_case_defaults:
+  ansible_user: root
+  ansible_become: true
+  automation_trusted_proxies: "100.64.0.0/10"
+  vault_firefly_app_key: MoleculeTestAppKey0123456789abcd
+  vault_firefly_static_cron_token: 0123456789abcdef0123456789abcdef
+  automation_stack_home: /home/automation/stack
+  automation_backup_enabled: true
+  automation_restic_enabled: false
+
+molecule_cases:
+  - id: trusted-proxies-undefined
+    expect: "[automation] Required automation stack variable 'automation_trusted_proxies' is not defined or empty"
+    automation_trusted_proxies: null
+  - id: vault-placeholder
+    expect: "[automation] Vault variable 'vault_firefly_app_key' contains placeholder value."
+    vault_firefly_app_key: your-firefly-app-key
+  - id: trusted-proxies-catch-all
+    expect: "automation_trusted_proxies set to '**'"
+    automation_trusted_proxies: "**"
+  - id: stack-home-under-root
+    expect: "automation: automation_stack_home (/root/stack) resolves under /root, but ansible_user is 'testuser'."
+    ansible_user: testuser
+    # The unprivileged user cannot sudo, and validate.yml only reads facts and stats.
+    ansible_become: false
+    automation_stack_home: /root/stack
+  - id: cron-token-short
+    expect: >-
+      vault_firefly_static_cron_token must be exactly 32 hex characters
+      (generate with: openssl rand -hex 16); got 24 characters.
+    vault_firefly_static_cron_token: molecule-test-cron-token
+  - id: app-key-bare-base64
+    expect: "vault_firefly_app_key is not a valid Firefly APP_KEY; got 48 characters."
+    vault_firefly_app_key: base64-without-prefix-44-char-bare-openssloutput
+  - id: restic-repository-undefined
+    expect: "Task failed: Error while evaluating conditional: 'automation_restic_repository' is undefined"
+    bare: true
+  - id: restic-without-dumps
+    expect: "automation_backup_enabled: must be true when automation_restic_enabled is true -"
+    automation_backup_enabled: false
+    automation_restic_enabled: true
+    automation_restic_repository: /srv/molecule-restic/automation
+    automation_restic_password: molecule-restic-password-automation
+  - id: restic-password-short
+    expect: "restic_job.password: shorter than 16 characters"
+    automation_restic_enabled: true
+    automation_restic_repository: /srv/molecule-restic/automation
+    automation_restic_password: short

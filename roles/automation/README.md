@@ -3,7 +3,7 @@
 Docker compose stack for personal automation services on a Raspberry Pi:
 Vaultwarden (passwords), Firefly III (finance, + MariaDB and its cron sidecar)
 and Watchtower (container updates). TLS terminates at the central reverse
-proxy (moving onto the Kubernetes cluster on a separate node) — this role
+proxy (moving onto the Kubernetes cluster on a separate node) - this role
 publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 
 ## Services
@@ -13,7 +13,7 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
 - **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.8.9`.
   Root is deliberately credential-less: the entrypoint demands a root-password
   policy on first init, so the stack sets `MARIADB_RANDOM_ROOT_PASSWORD=1`
-  (throwaway password, never written to `.env`). Nothing uses root — backups
+  (throwaway password, never written to `.env`). Nothing uses root - backups
   dump via the `firefly` user, and maintenance uses the image's built-in
   `unix_socket` auth: `docker exec -it mariadb mariadb`
 - **firefly-cron** (compose-internal): drives Firefly's recurring transactions
@@ -47,13 +47,13 @@ publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
   copy on this host. A deployed `.stignore` keeps the rest out of the mesh:
   `ingest/`, `thumbnails/`, `processed_books/`, `log_archive/` and logs
   (derived/instance-local), the runtime ingest state files (recreated on
-  start), and every SQLite database — a `.db` is only valid alongside its
+  start), and every SQLite database - a `.db` is only valid alongside its
   exact `-wal`, and a file sync ships the two independently.
 - **Snapshotted by the Syncthing backup job**: every `config/*.db` plus
   `library/metadata.db` (WAL-mode, written live) is copied with an online
   `sqlite3 .backup` into each dated snapshot's `calibre-databases/`
   (`<automation_backup_dir>/<stamp>/calibre-databases/`, same 14-run
-  retention as the rest) — this is the *only* place the databases leave
+  retention as the rest) - this is the *only* place the databases leave
   the host. A full restore onto
   another device is: copy the peer's `calibre/config` -> `/config` and
   `calibre/library` -> `/calibre-library`, overlay a snapshot's
@@ -97,7 +97,7 @@ follow from this role's compose config, so the role carries no workaround:
 
 ### Prerequisites
 
-- Raspberry Pi 4B (production) with an optional SSD (auto-detected if attached — the
+- Raspberry Pi 4B (production) with an optional SSD (auto-detected if attached - the
   stack runs on the SD card without one; see "Storage" below)
 - Reverse proxy in place fronting `vaultwarden.*` / `firefly.*` over the tailnet
 
@@ -167,26 +167,26 @@ automation_restic_password: "{{ vault_restic_automation_password }}"
 ## Security
 
 - **Secrets**: only in vault; rendered to a 0600 `.env` next to the compose
-  file and interpolated via `${VAR}` — the compose file itself stays secretless
+  file and interpolated via `${VAR}` - the compose file itself stays secretless
 - **Signup hardening**: `SIGNUPS_ALLOWED=false`, `INVITATIONS_ALLOWED=false`,
   `SHOW_PASSWORD_HINT=false` on Vaultwarden
 - **TRUSTED_PROXIES**: scoped to the tailnet CIDR (validate.yml refuses `**`)
 - **Watchtower**: opt-in per container (`com.centurylinklabs.watchtower.enable=true`);
-  MariaDB is pinned and unlabelled — DB upgrades are never automatic. Its own
+  MariaDB is pinned and unlabelled - DB upgrades are never automatic. Its own
   image self-updates via the ephemeral orchestrator, so the published metrics port
   does not disable self-update
 - **Ports**: service ports bound to `primary_ip` (tailnet-reachable), Watchtower
   metrics API bound to `primary_ip` too
 - **Storage**: a dedicated SSD is optional, mirroring the dns role. When a drive
   is present (auto-detected, or already mounted at `automation_data_path`) the
-  stack data, Docker's `data-root` and journald all live on it — off the SD card;
+  stack data, Docker's `data-root` and journald all live on it - off the SD card;
   with no drive the stack runs from the SD card. No named volumes, bind mounts
   only. The drive is never wiped unless you set `automation_ssd_format: true`
   (opt-in, DESTRUCTIVE).
 
 ## Tag policy
 
-Application images float (`latest`) — that is what Watchtower updates. The
+Application images float (`latest`) - that is what Watchtower updates. The
 known exception: `mariadb:11.8.9` and the `alpine:3.20` cron sidecar are
 minor-pinned and excluded from auto-update; bump them deliberately.
 
@@ -230,7 +230,7 @@ Post-deployment (`post_deploy_validate.yml`) checks that:
 
 - All critical long-lived compose containers report running (vaultwarden,
   firefly, mariadb, watchtower)
-- The `firefly-cron` sleep-sidecar is healthy — judged by its **last exit code**
+- The `firefly-cron` sleep-sidecar is healthy - judged by its **last exit code**
   (0 = clean wget+sleep cycle), never by `State=running` (it only reports
   `running` ~60s of every ~62s cycle by design)
 - Vaultwarden answers `/alive` and Firefly serves its frontend on `primary_ip`
@@ -241,7 +241,7 @@ Post-deployment (`post_deploy_validate.yml`) checks that:
 ### Deploy order: the stack brings up LAST
 
 The automation role runs the Docker stack bring-up (`docker compose up -d` +
-the critical-service poll) **after** every security/configuration step —
+the critical-service poll) **after** every security/configuration step -
 packages, storage, Docker, the backup files, the ntfy helper and the **firewall**
 all land first, so containers never run freely ahead of the host hardening
 (fail2ban and the base firewall run in the `site.yml` base play, before this
@@ -254,7 +254,7 @@ Keep it that way: the stack is the finishing step, not a mid-play side effect.
 `firefly-cron` does one thing: `wget` Firefly's cron endpoint, `sleep 60`, exit
 0. Docker's restart policy then re-runs it. Consequences for every health
 check: `State=running` only holds ~60s of every ~62s cycle, and a sample taken
-during the restart gap will show `restarting` on a perfectly healthy box — a
+during the restart gap will show `restarting` on a perfectly healthy box - a
 `running`-state check is a false positive. What proves health is the last exit
 code (0 = the sidecar finished its cycle; a failed wget aborts before the sleep
 with exit 8/4/1).
@@ -262,7 +262,7 @@ with exit 8/4/1).
 ### Resource limits vs. cgroup availability
 
 The compose services declare `deploy.resources` (memory/CPU) limits. On kernels
-where Docker cannot enforce memory limits — e.g. many Raspberry Pi/VM hosts —
+where Docker cannot enforce memory limits - e.g. many Raspberry Pi/VM hosts -
 Docker logs at every `compose up`:
 
 ```
@@ -277,19 +277,19 @@ all free RAM), it does not stop or harm any container. To get real enforcement:
    `WARNING: No memory limit support` / `No swap limit support`.
 2. cgroup **v1** hosts (or 32-bit Pi OS): add to
    `/boot/firmware/cmdline.txt` (older: `/boot/cmdline.txt`):
-   `cgroup_enable=memory cgroup_memory=1` — then reboot.
-3. cgroup **v2** hosts (what the automation Pis run — `Cgroup Version: 2`,
+   `cgroup_enable=memory cgroup_memory=1` - then reboot.
+3. cgroup **v2** hosts (what the automation Pis run - `Cgroup Version: 2`,
    systemd driver): check `cat /sys/fs/cgroup/cgroup.controllers`. If `memory`
-   is not listed there, the controller is disabled at kernel/boot level —
+   is not listed there, the controller is disabled at kernel/boot level -
    `docker info` cannot fix it. The automation Pi shows exactly
    `cpuset cpu io pids` = confirmed disabled. On Raspberry Pi/RPi-kernel
    distros the well-known trial fix is still the classic boot args
    `cgroup_enable=memory cgroup_memory=1` (the kernel then mounts the memory
    controller; on Bookworm+ systemd may answer by booting hybrid/legacy
-   cgroup — either way `docker info` regains memory support). If even those
-   don't help, the running kernel may lack `CONFIG_MEMCG` entirely — verify
+   cgroup - either way `docker info` regains memory support). If even those
+   don't help, the running kernel may lack `CONFIG_MEMCG` entirely - verify
    with `zgrep MEMCG /proc/config.gz` (kernel build is then the fix).
-4. Either way, re-verify with `docker info | grep -i cgroup` after the fix —
+4. Either way, re-verify with `docker info | grep -i cgroup` after the fix -
    both warnings must be gone for limits to be honored.
 
 Both `scripts/automation/validate-deploy.sh` (hard FAIL) and this role's

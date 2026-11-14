@@ -1,0 +1,119 @@
+---
+# The container has no NetworkManager, so the gate fails closed.
+- name: Start the gated job, whose gate cannot reach NetworkManager
+  ansible.builtin.command: systemctl start restic-job@gated.service  # noqa: command-instead-of-module
+  changed_when: true
+
+- name: Read the gated job's unit state, journal, stamp, repository and drop-ins
+  ansible.builtin.shell: |
+    set -o pipefail
+    systemctl show -p ActiveState -p Result -p ExecMainStatus restic-job@gated.service
+    journalctl -u restic-job@gated.service -o cat --no-pager | grep 'restic-job: skipped: ' || true
+    echo "snapshots=$(find /srv/molecule-repos/gated/snapshots -type f 2>/dev/null | wc -l)"
+    echo "ok-stamp=$(test -e /var/lib/restic/gated.ok && echo yes || echo no)"
+  args:
+    executable: /bin/bash
+  register: molecule_gated
+  changed_when: false
+
+- name: Read the drop-ins and the metered list
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/systemd/system/restic-job@gated.service.d/job.conf
+    - /etc/systemd/system/restic-job@ok.service.d/job.conf
+    - /etc/restic/gated.metered
+  register: molecule_gated_files
+
+- name: Assert the gate skipped the run without failing the unit
+  vars:
+    molecule_text: "{{ molecule_gated_files.results | items2dict(key_name='item', value_name='content') }}"
+  ansible.builtin.assert:
+    that:
+      - "'ActiveState=inactive' in molecule_gated.stdout_lines"
+      - "'Result=exec-condition' in molecule_gated.stdout_lines"
+      - "molecule_gated.stdout is search('restic-job: skipped: NetworkManager unreachable')"
+      - "'snapshots=0' in molecule_gated.stdout_lines"
+      - "'ok-stamp=no' in molecule_gated.stdout_lines"
+      - >-
+        'ExecCondition=/usr/local/libexec/restic/restic-job gate %i'
+        in (molecule_text['/etc/systemd/system/restic-job@gated.service.d/job.conf'] | b64decode).splitlines()
+      - "'ExecCondition' not in (molecule_text['/etc/systemd/system/restic-job@ok.service.d/job.conf'] | b64decode)"
+      - (molecule_text['/etc/restic/gated.metered'] | b64decode).splitlines() == molecule_metered_names
+    quiet: true
+
+- name: Assert the metered list's mode and owner
+  vars:
+    molecule_paths:
+      - { path: /etc/restic/gated.metered, state: file, mode: "0640", owner: root, group: restic }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Plant a fresh good-run stamp and start the gated job again
+  ansible.builtin.shell: |
+    touch /var/lib/restic/gated.ok
+    systemctl start restic-job@gated.service
+    journalctl -u restic-job@gated.service -o cat --no-pager | grep 'restic-job: skipped: ' | tail -n 1
+  register: molecule_gated_fresh
+  changed_when: true
+
+# systemd fires OnSuccess= for an ExecCondition skip (MONITOR_SERVICE_RESULT=exec-condition, no exit status).
+- name: Wait until OnSuccess= ran the notifier for the skipped runs
+  ansible.builtin.command: journalctl -u restic-notify@ok-gated.service -o cat --no-pager
+  register: molecule_gated_notify
+  until: molecule_gated_notify.stdout is search('Finished restic-notify@ok-gated')
+  retries: 10
+  delay: 1
+  changed_when: false
+
+- name: Read every ntfy line
+  ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+  register: molecule_gated_ntfy
+  changed_when: false
+
+- name: Assert a fresh stamp skips first and a skipped run sends nothing
+  ansible.builtin.assert:
+    that:
+      - "molecule_gated_fresh.stdout_lines[-1] == 'restic-job: skipped: last good run is under 20 h old'"
+      - "'gated' not in molecule_gated_ntfy.stdout"
+
+# The gate parses canned busctl replies, because the stub directory comes first in PATH.
+- name: Run the gate as the restic user against each set of canned replies
+  vars:
+    molecule_gate_script: |
+      printf '%s\n' "$REPLIES" > /run/molecule-nm-replies
+      rm -f /var/lib/restic/gated.ok
+      out=$(runuser -u restic -- env PATH={{ molecule_stubs }}:/usr/sbin:/usr/bin:/sbin:/bin \
+        {{ molecule_wrapper }} gate gated 2>&1)
+      echo "rc=$?"
+      echo "$out"
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/run_gate_cases.yml"
+
+- name: Point the gated job at the stub and let it run end to end on an unmetered link
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/restic-job@gated.service.d/zz-nm-stub.conf
+    mode: "0644"
+    content: |
+      [Service]
+      Environment=PATH={{ molecule_path }}
+
+- name: Start the gated job with all-unmetered replies and no good-run stamp
+  ansible.builtin.shell: |
+    systemctl daemon-reload
+    printf '%s\n' "$REPLIES" > /run/molecule-nm-replies
+    rm -f /var/lib/restic/gated.ok
+    systemctl start restic-job@gated.service
+    systemctl show -p Result -p ExecMainStatus restic-job@gated.service
+    echo "snapshots=$(find /srv/molecule-repos/gated/snapshots -type f | wc -l)"
+    echo "ok-stamp=$(test -e /var/lib/restic/gated.ok && echo yes || echo no)"
+  environment:
+    REPLIES: "{{ (molecule_gate_cases | last).env.REPLIES | join('\n') }}"
+  register: molecule_gated_run
+  changed_when: true
+
+- name: Assert the unmetered gated job backed up and stamped
+  ansible.builtin.assert:
+    that:
+      - "'Result=success' in molecule_gated_run.stdout_lines"
+      - "'ExecMainStatus=0' in molecule_gated_run.stdout_lines"
+      - "'snapshots=1' in molecule_gated_run.stdout_lines"
+      - "'ok-stamp=yes' in molecule_gated_run.stdout_lines"

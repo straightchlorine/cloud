@@ -1,0 +1,90 @@
+---
+# Gate: the nmcli reader against canned replies, then the real nmcli, then no nmcli at all.
+- name: Run the gate as the restic user against each set of nmcli replies
+  vars:
+    molecule_gate_script: |
+      rm -f /run/molecule-nmcli/rc /var/lib/restic/crgate.ok
+      printf '%s\n' "$CONNS" > /run/molecule-nmcli/connections
+      printf '%s\n' "$DEVS" > /run/molecule-nmcli/devices
+      out=$(runuser -u restic -- env PATH={{ molecule_path }} RESTIC_JOB_NM=nmcli \
+        RESTIC_JOB_POWER_DIR=/run/molecule-power {{ molecule_wrapper }} gate crgate 2>&1)
+      echo "rc=$?"
+      echo "$out"
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/run_gate_cases.yml"
+
+- name: Run the gate with a failing nmcli, with the real nmcli and without any
+  ansible.builtin.shell: |
+    rm -f /var/lib/restic/crgate.ok
+    echo 8 > /run/molecule-nmcli/rc
+    runuser -u restic -- env PATH={{ molecule_path }} RESTIC_JOB_NM=nmcli \
+      RESTIC_JOB_POWER_DIR=/run/molecule-power {{ molecule_wrapper }} gate crgate 2>&1 || echo "rc=$?"
+    echo @@@
+    runuser -u restic -- env PATH=/usr/sbin:/usr/bin:/sbin:/bin RESTIC_JOB_NM=nmcli \
+      RESTIC_JOB_POWER_DIR=/run/molecule-power {{ molecule_wrapper }} gate crgate 2>&1 || echo "rc=$?"
+    echo @@@
+    runuser -u restic -- env PATH=/nonexistent RESTIC_JOB_NM=nmcli RESTIC_JOB_POWER_DIR=/run/molecule-power \
+      /bin/bash {{ molecule_wrapper }} gate crgate 2>&1 || echo "rc=$?"
+  register: molecule_nmcli_fail
+  changed_when: false
+
+- name: Assert all three are skips that name NetworkManager, and the real nmcli accepted the arguments
+  vars:
+    molecule_parts: "{{ molecule_nmcli_fail.stdout.split('@@@\n') }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_parts[0] is search('skipped: NetworkManager unreachable: Error: NetworkManager is not running')
+      - molecule_parts[0] is search('rc=1')
+      - >-
+        molecule_parts[1] is search('skipped: NetworkManager unreachable: ')
+      - molecule_parts[1] is not search('(?i)invalid|usage|unknown option')
+      - >-
+        molecule_parts[2] is search('skipped: NetworkManager unreachable: nmcli not found')
+
+# The wrapper end to end on the gated job: AC and an unmetered link back up; battery, a throttle and a
+# metered link skip silently into the log.
+- name: Run the gated job through the wrapper in four situations
+  ansible.builtin.shell: |
+    rm -f /run/molecule-nmcli/rc /run/molecule-ntfy.log /var/lib/restic/crgate.ok
+    printf '%s\n' "Home:802-3-ethernet" > /run/molecule-nmcli/connections
+    printf '%s\n' "GENERAL.METERED:no" "GENERAL.CONNECTION:Home" "" > /run/molecule-nmcli/devices
+    w() { env RESTIC_JOB_PATH={{ molecule_path }} PATH={{ molecule_path }} RESTIC_JOB_NM=nmcli \
+      RESTIC_JOB_POWER_DIR=/run/molecule-power \
+      {{ molecule_wrapper }} cron crgate; echo "rc=$?"; }
+    snaps() { find /srv/molecule-repos/crgate/snapshots -type f | wc -l; }
+    w; echo "ac: snaps=$(snaps) ok=$(test -e /var/lib/restic/crgate.ok && echo yes || echo no)"
+    w; echo "throttle: snaps=$(snaps)"
+    rm -f /var/lib/restic/crgate.ok
+    echo Discharging > /run/molecule-power/BAT0/status
+    w; echo "battery: snaps=$(snaps) ok=$(test -e /var/lib/restic/crgate.ok && echo yes || echo no)"
+    echo Full > /run/molecule-power/BAT0/status
+    printf '%s\n' "GENERAL.METERED:yes (guessed)" "GENERAL.CONNECTION:Home" "" > /run/molecule-nmcli/devices
+    w; echo "metered: snaps=$(snaps) ok=$(test -e /var/lib/restic/crgate.ok && echo yes || echo no)"
+    cat /run/molecule-ntfy.log
+    echo @@@
+    cat /var/log/restic/crgate.log
+  register: molecule_gated
+  changed_when: true
+
+- name: Assert one backup and three silent, logged skips
+  vars:
+    molecule_gated_parts: "{{ molecule_gated.stdout.split('@@@\n') }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_gated_parts[0] is search('(?m)^rc=0\nac: snaps=1 ok=yes$')
+      - >-
+        molecule_gated_parts[0] is search('(?m)^rc=0\nthrottle: snaps=1$')
+      - >-
+        molecule_gated_parts[0] is search('(?m)^rc=0\nbattery: snaps=1 ok=no$')
+      - >-
+        molecule_gated_parts[0] is search('(?m)^rc=0\nmetered: snaps=1 ok=no$')
+      - molecule_gated_parts[0] is search('crgate backup ok\|low')
+      - molecule_gated_parts[0] | regex_findall('crgate backup') | length == 1
+      - >-
+        molecule_gated_parts[1] is search('restic-job: skipped: last good run is under 20 h old')
+      - >-
+        molecule_gated_parts[1] is search('restic-job: skipped: the battery is discharging \(on battery\)')
+      - >-
+        molecule_gated_parts[1] is search("restic-job: skipped: link of 'Home' is metered")
+    fail_msg: "{{ molecule_gated.stdout }}"

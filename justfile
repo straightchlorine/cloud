@@ -2,6 +2,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 roles := `ls -d roles/*/molecule | cut -d/ -f2 | tr '\n' ' '`
 
+# Recipes use the repo venv that `just setup` creates.
+export PATH := justfile_directory() + "/.venv/bin:" + env_var("PATH")
+
 _ok   := "[  OK  ]"
 _fail := "[ FAIL ]"
 _info := "[ INFO ]"
@@ -37,7 +40,7 @@ _setup-deps:
 [private]
 _setup-collections:
     @echo "{{ _run }} Installing Ansible collections"
-    @.venv/bin/ansible-galaxy collection install -r requirements.yml --force > /dev/null
+    @scripts/install-collections.sh --force > /dev/null
     @echo "{{ _ok }} Ansible collections installed"
 
 [private]
@@ -62,80 +65,26 @@ _setup-git-config:
     @git config --local rebase.autoStash true
     @echo "{{ _ok }} Git config applied"
 
-# Run molecule tests: every scenario of a role at once (all roles: one role at a time), or one scenario
+# Molecule: every scenario of a role at once, every role in turn, or one scenario
 [group: 'test']
 test role="" scenario="":
     #!/usr/bin/env bash
     set -uo pipefail
-    if [ -n "{{ scenario }}" ]; then
-        echo "{{ _run }} {{ role }} ({{ scenario }})"
-        cd roles/{{ role }} && uv run molecule test --scenario-name {{ scenario }} || exit 1
-        echo "{{ _ok }} {{ role }} ({{ scenario }})"
-        exit 0
-    fi
-    # Each scenario has its own container (<role>-<scenario>), so a role's scenarios run side by side.
-    # Their output goes to one log each; the table at the end says which to open.
-    logs=$PWD/.molecule/logs
-    mkdir -p "$logs"
-    failed=""
-    for r in {{ if role == "" { roles } else { role } }}; do
-        # A scenario is a directory with a molecule.yml; common/molecule/fixtures only holds shared stubs.
-        scenarios=$(cd "roles/$r/molecule" 2>/dev/null && ls -d */molecule.yml | cut -d/ -f1)
-        if [ -z "$scenarios" ]; then
-            echo "{{ _fail }} $r: no molecule scenarios under roles/$r/molecule"
-            failed="$failed $r"
-            continue
-        fi
-        echo "{{ _run }} $r: $(echo $scenarios) (logs in .molecule/logs/)"
-        for s in $scenarios; do
-            (
-                cd roles/$r || exit 1
-                SECONDS=0
-                uv run molecule test --scenario-name "$s" >"$logs/$r-$s.log" 2>&1
-                echo "$? $SECONDS" >"$logs/$r-$s.rc"
-            ) &
-        done
-        wait
-        for s in $scenarios; do
-            read -r rc secs <"$logs/$r-$s.rc"
-            if [ "$rc" = 0 ]; then
-                printf '%s %-40s %5ss\n' "{{ _ok }}" "$r/$s" "$secs"
-            else
-                printf '%s %-40s %5ss  .molecule/logs/%s-%s.log\n' "{{ _fail }}" "$r/$s" "$secs" "$r" "$s"
-                failed="$failed $r/$s"
-            fi
-        done
-    done
-    if [ -n "$failed" ]; then
-        echo "{{ _fail }} Failed:$failed"
-        exit 1
-    fi
-    echo "{{ _ok }} All scenarios passed"
+    [ -z "{{ role }}" ] || exec scripts/molecule-test.sh {{ role }} {{ scenario }}
+    rc=0
+    for r in {{ roles }}; do scripts/molecule-test.sh "$r" || rc=1; done
+    exit $rc
 
-# Rerun converge + verify on a scenario's live container (created on first use); molecule destroy -s <scenario> ends it
+# Converge + verify on a scenario's live container; `molecule destroy -s <scenario>` in the role ends it
 [group: 'test']
 iterate role scenario:
-    cd roles/{{ role }} && uv run molecule converge --scenario-name {{ scenario }} \
-        && uv run molecule verify --scenario-name {{ scenario }}
+    scripts/molecule-test.sh --iterate {{ role }} {{ scenario }}
 
 # Syntax-check all playbooks
 [group: 'test']
 syntax:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "{{ _run }} Checking playbook syntax"
-    failed=0
-    for pb in playbooks/*.yml playbooks/*/*.yml; do
-        [ -f "$pb" ] || continue
-        if ansible-playbook --syntax-check "$pb" > /dev/null 2>&1; then
-            echo "{{ _ok }} $pb"
-        else
-            echo "{{ _fail }} $pb"
-            failed=1
-        fi
-    done
-    [ "$failed" -eq 0 ] || { echo "{{ _fail }} Syntax errors found"; exit 1; }
-    echo "{{ _ok }} All playbooks valid"
+    @ANSIBLE_ROLES_PATH=$PWD/roles ansible-playbook --syntax-check playbooks/*.yml playbooks/*/*.yml >/dev/null
+    @echo "{{ _ok }} playbook syntax"
 
 # Run all linters (ansible-lint + yamllint)
 [group: 'lint']
@@ -143,10 +92,10 @@ lint:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "{{ _run }} ansible-lint"
-    ansible-lint roles/ playbooks/
+    ansible-lint --offline roles/ playbooks/
     echo "{{ _ok }} ansible-lint"
     echo "{{ _run }} yamllint"
-    yamllint -s .
+    yamllint -s -c .yamllint .
     echo "{{ _ok }} yamllint"
     echo "{{ _ok }} All linters passed"
 

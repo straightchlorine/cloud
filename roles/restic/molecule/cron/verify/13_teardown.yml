@@ -1,0 +1,33 @@
+---
+# The teardown of a cron host removes entries, logs, cache and user, so it runs last.
+- name: Run the restic teardown on the cron host
+  ansible.builtin.include_role:
+    name: restic
+    tasks_from: teardown
+  vars:
+    teardown_confirmed: true
+    restic_scheduler: cron
+
+- name: Assert the cron host is torn down and its repository kept
+  vars:
+    molecule_paths:
+      - { path: /etc/cron.d/restic-cr, state: absent }
+      - { path: /etc/cron.d/restic-crgate, state: absent }
+      - { path: /etc/cron.d/restic-freshness, state: absent }
+      - { path: /var/log/restic, state: absent }
+      - { path: /var/cache/restic, state: absent }
+      - { path: /usr/local/libexec/restic, state: absent }
+      - { path: /etc/restic, state: absent }
+      - { path: /srv/molecule-repos/cr/config, state: file }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Look up the restic user
+  ansible.builtin.command: getent passwd restic
+  register: molecule_user
+  changed_when: false
+  failed_when: false
+
+- name: Assert the restic user is gone
+  ansible.builtin.assert:
+    that: molecule_user.rc == 2
+    quiet: true

@@ -1,0 +1,21 @@
+---
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run validate.yml
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: validate
+      vars:
+        prometheus_exporters_enabled: "{{ molecule_case.prometheus_exporters_enabled }}"
+        prometheus_exporters_base_dir: "{{ molecule_case.prometheus_exporters_base_dir }}"
+        prometheus_exporters_node_exporter_enabled: "{{ molecule_case.prometheus_exporters_node_exporter_enabled }}"
+        prometheus_environment: "{{ molecule_case.prometheus_environment }}"
+        prometheus_role: "{{ molecule_case.prometheus_role }}"
+        device_type: "{{ molecule_case.device_type }}"
+
+    - name: Fail when validation passes
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

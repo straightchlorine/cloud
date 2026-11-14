@@ -1,17 +1,7 @@
 ---
-- name: Prepare platform prerequisites
+- name: Prepare media default
   hosts: all
   become: true
   tasks:
-    - name: Install cron, iproute2 and logrotate
-      # The role needs crontab, `ip` and /etc/logrotate.d, which the minimal test image lacks.
-      ansible.builtin.apt:
-        name:
-          - cron
-          - iproute2
-          - logrotate
-        state: present
-        update_cache: true
-
-    - name: Stub docker and docker.service for the real stack unit
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/molecule/fixtures/stub_docker.yml"
+    - name: Prepare platform
+      ansible.builtin.include_tasks: ../shared/prepare_platform.yml

@@ -13,7 +13,7 @@
 # The feature-flag gates below use | default(false) because this playbook never loads the owning roles' defaults.
 # That is an acceptable cross-role flag default under CLAUDE.md.
 - name: Tear down the DNS role for repeatable testing
-  hosts: dns
+  hosts: dns_servers
   become: true
   gather_facts: true
   pre_tasks:
@@ -44,4 +44,4 @@
       when:
         - teardown_confirmed | default(false) | bool
         - prometheus_exporters_pihole_exporter_enabled | default(false)
-        - "'dns' in group_names"
+        - "'dns_servers' in group_names"

@@ -1,0 +1,20 @@
+---
+# Include from verify. Input molecule_case_ids: every case id converge ran. Fails on a missing or extra marker.
+- name: Find the case markers converge wrote
+  ansible.builtin.find:
+    paths: /tmp
+    patterns: molecule-case-*.passed
+  register: molecule_markers
+
+- name: Assert every case failed for its own reason
+  vars:
+    molecule_found: >-
+      {{ molecule_markers.files | map(attribute='path')
+         | map('regex_replace', '^/tmp/molecule-case-(.*)\.passed$', '\1') | sort }}
+    molecule_want: "{{ molecule_case_ids | map('string') | sort }}"
+  ansible.builtin.assert:
+    that: molecule_found == molecule_want
+    fail_msg: >-
+      missing: {{ molecule_want | difference(molecule_found) }},
+      unexpected: {{ molecule_found | difference(molecule_want) }} (see converge output)
+    quiet: true

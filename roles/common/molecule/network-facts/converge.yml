@@ -1,20 +1,13 @@
 ---
-- name: Converge - Network facts detection
+- name: Converge common network-facts
   hosts: all
-  gather_facts: true
-  become: true
   tasks:
-    - name: Include network_facts task
+    - name: Publish the network facts
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
 
-    - name: Include network_facts again; the facts are already set, so it must not change them
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: network_facts
-
-    - name: Record the published facts for verify.yml
+    - name: Record the published facts for verify
       # A file, not set_fact: converge and verify are separate ansible-playbook processes.
       ansible.builtin.copy:
         content: >-

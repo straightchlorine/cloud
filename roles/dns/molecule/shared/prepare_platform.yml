@@ -1,0 +1,13 @@
+---
+- name: Install cron and iproute2
+  # The cron module needs crontab from cron; the teardown scenario needs ss from iproute2.
+  ansible.builtin.apt:
+    name: [cron, iproute2]
+    state: present
+    update_cache: true
+
+- name: Create the backup owner user
+  # backup.yml makes dns_backup_owner the owner of the Syncthing backup directory.
+  ansible.builtin.user:
+    name: molecule
+    system: true

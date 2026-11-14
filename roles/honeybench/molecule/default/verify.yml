@@ -1,5 +1,5 @@
 ---
-- name: Verify honeybench Docker configuration
+- name: Verify honeybench default
   hosts: all
   become: true
   tasks:
@@ -20,17 +20,11 @@
           - honeybench_verify_text.endswith('\n')
         quiet: true
 
-    - name: Stat daemon.json
-      ansible.builtin.stat:
-        path: /etc/docker/daemon.json
-      register: honeybench_verify_stat
-
-    - name: Assert daemon.json ownership and mode
-      ansible.builtin.assert:
-        that:
-          - honeybench_verify_stat.stat.mode == '0644'
-          - honeybench_verify_stat.stat.pw_name == 'root'
-        quiet: true
+    - name: Check daemon.json ownership and mode
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - {path: /etc/docker/daemon.json, state: file, mode: "0644", owner: root}
 
     - name: Count the stub docker.service starts
       ansible.builtin.command: wc -l /var/tmp/docker-stub-starts

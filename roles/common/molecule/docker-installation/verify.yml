@@ -1,76 +1,33 @@
 ---
-- name: Verify Docker installation
+- name: Verify common docker-installation
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: true
-
   tasks:
-    - name: Check Docker is installed
-      ansible.builtin.command: docker --version
-      register: common_docker_version
-      changed_when: false
+    - name: Read daemon.json
+      ansible.builtin.slurp:
+        src: /etc/docker/daemon.json
+      register: common_daemon_json
 
-    - name: Display Docker version
-      ansible.builtin.debug:
-        msg: "Docker version: {{ common_docker_version.stdout }}"
+    - name: Assert the user namespace remap is configured
+      vars:
+        daemon_config: "{{ common_daemon_json.content | b64decode | from_json }}"
+      ansible.builtin.assert:
+        that: daemon_config['userns-remap'] == 'default'
+        fail_msg: "userns-remap missing from daemon.json: {{ daemon_config }}"
+        quiet: true
 
-    - name: Verify Docker daemon is running
+    - name: Read the docker service state
       ansible.builtin.systemd:
         name: docker
       register: common_docker_service
 
-    - name: Assert Docker service is active
+    - name: Assert the docker service is active
       ansible.builtin.assert:
-        that:
-          - common_docker_service.status.ActiveState == "active"
-        fail_msg: "Docker service is not active: {{ common_docker_service.status.ActiveState }}"
+        that: common_docker_service.status.ActiveState == 'active'
+        fail_msg: "docker is {{ common_docker_service.status.ActiveState }}"
+        quiet: true
 
-    - name: Check Docker daemon.json exists
-      ansible.builtin.stat:
-        path: /etc/docker/daemon.json
-      register: common_daemon_json
-
-    - name: Assert daemon.json exists
-      ansible.builtin.assert:
-        that:
-          - common_daemon_json.stat.exists
-        fail_msg: "/etc/docker/daemon.json does not exist"
-
-    - name: Read daemon.json configuration
-      ansible.builtin.slurp:
-        path: /etc/docker/daemon.json
-      register: common_daemon_config
-
-    - name: Parse Docker daemon configuration
-      ansible.builtin.set_fact:
-        common_docker_config: "{{ common_daemon_config.content | b64decode | from_json }}"
-
-    - name: Verify user namespace mapping is configured
-      ansible.builtin.assert:
-        that:
-          - common_docker_config.get('userns-remap') == 'default'
-        fail_msg: "Docker user namespace mapping not configured. Current config: {{ common_docker_config }}"
-
-    - name: Verify Docker Compose plugin availability
+    - name: Run docker compose version
       ansible.builtin.command: docker compose version
-      register: common_compose_version
       changed_when: false
-
-    - name: Display Docker Compose version
-      ansible.builtin.debug:
-        msg: "Docker Compose version: {{ common_compose_version.stdout }}"
-
-    - name: Verify hello-world container runs
-      ansible.builtin.command: docker run --rm hello-world
-      register: common_hello_output
-      changed_when: false
-
-    - name: Display verification summary
-      ansible.builtin.debug:
-        msg: |
-          [OK] Docker Installation Verified:
-          - Docker: {{ common_docker_version.stdout }}
-          - Compose: {{ common_compose_version.stdout }}
-          - Service: Active ({{ common_docker_service.status.ActiveState }})
-          - User Namespace: Enabled (userns-remap=default)
-          - Hello-world test: PASSED

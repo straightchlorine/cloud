@@ -1,0 +1,37 @@
+---
+# Every key is mapped, so a field a case nulls out is undefined here, shadowing play vars and role defaults.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run media validate.yml
+      when: molecule_case.bare is not defined
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: validate
+      vars:
+        ansible_user: "{{ molecule_case.ansible_user }}"
+        ansible_become: "{{ molecule_case.ansible_become }}"
+        media_home: "{{ molecule_case.media_home }}"
+        media_library_path: "{{ molecule_case.media_library_path }}"
+        media_youtube_enabled: "{{ molecule_case.media_youtube_enabled }}"
+        vault_youtube_playlists: "{{ molecule_case.vault_youtube_playlists }}"
+        media_restic_enabled: "{{ molecule_case.media_restic_enabled }}"
+        media_restic_repository: "{{ molecule_case.media_restic_repository }}"
+        media_restic_password: "{{ molecule_case.media_restic_password }}"
+
+    - name: Run media validate.yml on the play vars alone
+      # The repository is genuinely undefined here: reading a dropped dict key in the mapping above raises a dict
+      # error instead of the role's own undefined-variable error.
+      when: molecule_case.bare is defined
+      ansible.builtin.include_role:
+        name: media
+        tasks_from: validate
+      vars:
+        media_restic_enabled: true
+        media_restic_password: molecule-restic-password-media
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

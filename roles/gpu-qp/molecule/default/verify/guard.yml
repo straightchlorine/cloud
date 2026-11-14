@@ -1,0 +1,86 @@
+---
+- name: Dispatcher and guard under a held benchmark lock
+  block:
+    - name: Hold the lock with no .active
+      ansible.builtin.command: "flock {{ gpu_qp_bench }}/.lock sleep {{ gpu_qp_hold_seconds }}"
+      async: "{{ gpu_qp_hold_seconds }}"
+      poll: 0
+      changed_when: false
+
+    - name: Wait for the lock to be held
+      ansible.builtin.command: "flock -n -s {{ gpu_qp_bench }}/.lock true"
+      register: gpu_qp_held
+      until: gpu_qp_held.rc == 1
+      retries: 20
+      delay: 1
+      # Rc 0 means the lock is not held yet, which `until` retries instead of failing.
+      failed_when: false
+      changed_when: false
+
+    - name: Run build, matrix --list, build --help and build --bogus under the lock
+      ansible.builtin.command: "/usr/local/bin/gpu-qp {{ item.args }}"
+      environment: "{{ item.env }}"
+      register: gpu_qp_locked
+      changed_when: false
+      # The assert below checks each exit code, including the expected refusal.
+      failed_when: false
+      loop:
+        - {args: build, env: {}}
+        - {args: matrix --list, env: {}}
+        - {args: build --help, env: {}}
+        - {args: build --bogus, env: {GPU_QP_IGNORE_RUN: "1"}}
+      loop_control:
+        label: "{{ item.args }}"
+
+    - name: Assert the dispatcher guard
+      vars:
+        locked: "{{ dict(gpu_qp_locked.results | map(attribute='item.args') | zip(gpu_qp_locked.results)) }}"
+      ansible.builtin.assert:
+        that:
+          - locked['build'].rc == 1
+          - locked['build'].stderr is search('in progress [(]unknown run[)]')
+          - locked['matrix --list'].rc == 0
+          - locked['build --help'].rc == 0
+          - locked['build --bogus'].rc == 2
+          - locked['build --bogus'].stderr is search('unknown run')
+        fail_msg: "dispatcher guard wrong:\n{{ gpu_qp_locked.results }}"
+        quiet: true
+
+    - name: Deploy guard refuses a held lock
+      vars:
+        molecule_case:
+          id: held-lock
+          expect: "benchmark run in progress (lock held, see /home/gpu/gpu-qp/bench/.active)"
+      block:
+        - name: Run the deploy guard
+          ansible.builtin.include_role:
+            name: gpu-qp
+            tasks_from: guard
+
+        - name: Fail when the guard lets a held lock through
+          ansible.builtin.fail:
+            msg: "guard.yml let a held lock through"
+      rescue:
+        - name: Assert the guard named the benchmark run
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+  always:
+    - name: Release the lock
+      ansible.builtin.command:
+        argv: [pkill, -f, "sleep {{ gpu_qp_hold_seconds }}$"]
+      changed_when: false
+      # Pkill exits 1 when nothing matches, which is fine during cleanup.
+      failed_when: false
+
+- name: Guard against bench processes without the lock
+  ansible.builtin.include_tasks: guard_stub.yml
+  loop:
+    # The first stub is a bash -c wrapper around gpu-qp-supervise.sh, the second a lane of a run tree.
+    - {script: /tmp/x/gpu-qp-supervise.sh, cmd: "X=1 bash /tmp/x/gpu-qp-supervise.sh > /tmp/x/out 2>&1"}
+    - {script: /tmp/x/run/lib/lane.sh, cmd: "bash /tmp/x/run/lib/lane.sh"}
+  loop_control:
+    label: "{{ item.script }}"
+
+- name: Deploy guard passes with nothing running
+  ansible.builtin.include_role:
+    name: gpu-qp
+    tasks_from: guard

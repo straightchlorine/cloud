@@ -1,7 +1,23 @@
 ---
-- name: Prepare platform prerequisites
+- name: Prepare gpu-qp default
   hosts: all
   become: true
+  vars_files:
+    - ../shared/vars.yml
   tasks:
-    - name: Stub docker and docker.service for the real stack unit
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/../../../common/molecule/fixtures/stub_docker.yml"
+    - name: Stub docker and docker.service
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/stub_docker.yml"
+
+    - name: Create the home parent
+      ansible.builtin.file:
+        path: "{{ gpu_qp_home | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install procps and git
+      # The deploy guard and the installed suite need pgrep, and test_side.sh builds a real git checkout.
+      ansible.builtin.apt:
+        name: [procps, git]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600

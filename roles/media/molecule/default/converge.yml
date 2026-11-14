@@ -1,89 +1,35 @@
 ---
-- name: Converge - the media role's container-testable task files
+- name: Converge media default
   hosts: all
   become: true
-  vars:
-    # Pinned: the role's ownership/become wiring reads ansible_user directly.
-    ansible_user: root
-    timezone: UTC
-    domain_name: example.test
-    media_home: /home/music/stack
-    media_library_path: /mnt/music
-    # This is the media host's board type, and its hardware profile sizes the navidrome container.
-    device_type: rpi3b
-    media_restic_enabled: false
-    vault_watchtower_api_token: molecule-test-watchtower-token
-    common_start_stack: false
-    media_youtube_enabled: true
-    vault_youtube_playlists:
-      - "https://www.youtube.com/playlist?list=PLmoleculeA"
-      - "https://www.youtube.com/playlist?list=PLmoleculeB"
-    media_backup_enabled: true
-    media_backup_dir: /tmp/molecule-media-backup
+  vars_files:
+    - ../shared/vars.yml
   pre_tasks:
+    - name: Prepare path parents and remap facts
+      ansible.builtin.include_tasks: ../shared/pre_deploy.yml
 
-    - name: Create the path parents
-      ansible.builtin.file:
-        path: "{{ item | dirname }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ media_home }}"
-        - "{{ media_library_path }}"
-
-    - name: Publish fixture userns-remap facts
-      # The uid must sit inside the nested rootless-podman mapping, or chown fails with EINVAL.
-      ansible.builtin.set_fact:
-        common_dockremap_uid: "10000"
-        common_dockremap_gid: "10000"
-
-    - name: Read the role defaults for the stub below
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../../defaults/main.yml"
-        name: media_role_defaults
-
-    - name: Stub yt-dlp and deno
-      # Youtube.yml downloads only missing binaries, so the stubs let it run offline.
-      ansible.builtin.copy:
-        dest: "/usr/local/bin/{{ item.name }}"
-        mode: "0755"
-        content: "{{ item.content }}"
-      loop:
-        - name: yt-dlp
-          content: |
-            #!/bin/sh
-            [ "$1" = "--version" ] && { echo {{ media_role_defaults.media_ytdlp_version }}; exit 0; }
-            echo "$@" >> /tmp/molecule-ytdlp-calls
-        - name: deno
-          content: "#!/bin/sh\necho deno {{ media_role_defaults.media_deno_version }}\n"
-        - name: ntfy-notify
-          content: "#!/bin/sh\necho \"$1 | $2\" >> /tmp/molecule-ntfy\n"
-      loop_control:
-        label: "{{ item.name }}"
+    - name: Stub yt-dlp, deno and ntfy-notify
+      ansible.builtin.include_tasks: ../shared/stub_binaries.yml
 
   tasks:
-    # Several parts of the role are deliberately not run here.
-    # The packages task would apt-install the whole common list, which is too slow.
-    # The optional SSD task is skipped because containers must not touch block devices.
-    # Docker is not installed, and prepare stubs docker and docker.service.
-    # The real stack unit therefore installs and starts below.
-    # The firewall task is skipped because ufw cannot bind rules in a container.
-    # post_deploy_validate.yml is skipped because it needs a running compose stack.
+    # Not run here: packages.yml (the full apt list is too slow), the optional SSD task (no block devices),
+    # the firewall (ufw cannot bind rules in a container) and post_deploy_validate.yml (needs a running compose
+    # stack). Docker is stubbed in prepare, so the real stack unit installs and starts below.
     - name: Gather network facts
       ansible.builtin.include_role:
         name: common
         tasks_from: network_facts
 
-    - name: Detect hardware for resource allocation
+    - name: Detect hardware
       ansible.builtin.include_role:
         name: hardware
 
-    - name: Run the pre-deployment validation
+    - name: Validate the stack
       ansible.builtin.include_role:
         name: media
         tasks_from: validate
 
-    - name: Validate the stack with the off-site backup on (the restic job this role builds)
+    - name: Validate the stack with the off-site backup on
       ansible.builtin.include_role:
         name: media
         tasks_from: validate
@@ -92,40 +38,23 @@
         media_restic_repository: /srv/molecule-restic/media
         media_restic_password: molecule-restic-password-media
 
-    - name: Run the backup deployment
-      # Restic stays disabled here because deploying the job needs systemd, which this image lacks.
+    - name: Deploy the backup
+      # Restic stays off: deploying its job needs the host's systemd timers.
       ansible.builtin.include_role:
         name: media
         tasks_from: backup
 
-    - name: Run the pipeline deployment
-      # Main.yml runs the youtube pipeline before stack.yml, and this converge keeps that order.
-      # A fresh deploy with no stack directories yet is then actually exercised.
+    - name: Deploy the pipeline
+      # main.yml runs youtube.yml before stack.yml; keeping that order exercises a fresh deploy with no
+      # stack directories yet.
       ansible.builtin.include_role:
         name: media
         tasks_from: youtube
 
-    - name: Run the stack deployment
+    - name: Deploy the stack
       ansible.builtin.include_role:
         name: media
         tasks_from: stack
 
-    - name: Install the real stack unit (docker is stubbed in prepare)
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: docker_stack_service
-      vars:
-        common_start_stack: true
-        common_stack_description: "Media Stack (molecule)"
-        common_stack_home: "{{ media_home }}"
-        common_stack_user: "{{ ansible_user }}"
-        common_stack_environment_vars:
-          - "MEDIA_LIBRARY_PATH={{ media_library_path }}"
-
-    - name: Start the unit and flush the "Restart stack" handler
-      # Resolves the handler from common; an unknown handler name fails the play.
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: stack_start
-      vars:
-        common_start_stack: true
+    - name: Install and start the stack unit
+      ansible.builtin.include_tasks: ../shared/install_unit.yml

@@ -238,7 +238,7 @@ groups:
           category: hardware
         annotations:
           summary: "High CPU temperature on {{ $labels.instance }}"
-          description: "CPU temperature on {{ $labels.instance }} has been above 70°C for 5 minutes."
+          description: "CPU temperature on {{ $labels.instance }} has been above 70C for 5 minutes."
 
       - alert: CriticalCPUTemperature
         expr: node_hwmon_temp_celsius > 80
@@ -248,7 +248,7 @@ groups:
           category: hardware
         annotations:
           summary: "Critical CPU temperature on {{ $labels.instance }}"
-          description: "CPU temperature on {{ $labels.instance }} has been above 80°C for 2 minutes."
+          description: "CPU temperature on {{ $labels.instance }} has been above 80C for 2 minutes."
 
       - alert: LowVoltage
         expr: node_hwmon_voltage_volt < 4.8

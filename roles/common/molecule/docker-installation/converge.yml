@@ -1,52 +1,36 @@
 ---
-# Runs the real roles/common/tasks/docker.yml (see docs/testing/molecule-standard.md).
-# The scenario connects as root, which bypasses the Docker socket's group ownership.
-# So the smoke test in docker.yml cannot catch a non-root permission failure, and the non-root re-run below covers that.
-
-- name: Converge - Docker installation
+- name: Converge common docker-installation
   hosts: all
-  gather_facts: true
   become: true
-
   pre_tasks:
-    - name: Update apt cache
+    - name: Update the apt cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
       changed_when: false
-
   tasks:
-    - name: Include Docker installation task
+    - name: Install Docker
       ansible.builtin.include_role:
         name: common
         tasks_from: docker
 
-    # -- Non-root docker group guard ----------------------------------------
-    # Ansible caches one become session per target user, so a user added to the docker group mid-play keeps the
-    # old groups.
-    # Then `docker run` fails with "permission denied" on docker.sock.
-    # The next three tasks create the user, cache a session before the group grant, and re-run docker.yml as that user.
-    - name: Create the non-root docker test user (not yet a docker member)
+    # The scenario connects as root, which bypasses the docker socket's group ownership, so only a non-root
+    # re-run can catch a permission failure in docker.yml's smoke test.
+    - name: Create the non-root docker test user
       ansible.builtin.user:
         name: docker-probe
-        state: present
         shell: /bin/bash
-      become: true
 
-    - name: Arm a stale non-root become session before the docker group is granted
-      # Running any command caches a become session for docker-probe before it has the docker group.
-      # The docker.yml smoke test would reuse that session if docker.yml lost its reset_connection step.
+    # Ansible caches one become session per user. Arming it before the group grant makes docker.yml's
+    # smoke test fail if it loses its reset_connection step.
+    - name: Arm a stale become session for the test user
       ansible.builtin.command: id
-      args:
-        warn: false
-      become: true
       become_user: docker-probe
       changed_when: false
 
-    - name: Include the real docker role as the non-root user (regression path)
+    - name: Install Docker as the non-root user
       ansible.builtin.include_role:
         name: common
         tasks_from: docker
       vars:
-        # The role's become and smoke test steps run as this user.
         ansible_user: docker-probe

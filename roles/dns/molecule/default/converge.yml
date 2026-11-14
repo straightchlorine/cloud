@@ -1,57 +1,33 @@
 ---
-- name: Converge - the dns role's container-testable task files
+- name: Converge dns default
   hosts: all
   become: true
+  vars_files:
+    - ../shared/vars.yml
   vars:
-    # These values mirror the dns host_vars, except for public resolvers that the container can actually reach.
     vault_pihole_webpassword: molecule-test-password
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    # Public resolvers the container can reach.
     dns_pihole_dns_servers:
       - 9.9.9.9
       - 149.112.112.112
-    common_ntp_upstream_server: pool.ntp.org
     common_ntp_server_enabled: true
     common_ntp_allowed_networks:
       - 192.168.1.0/24
     dns_backup_enabled: true
-    dns_backup_dir: /tmp/molecule-syncthing-backup
-    dns_backup_retention: 14
-    dns_backup_owner: molecule
   tasks:
-    # The interface name varies by driver and network, and validate.yml checks that it exists.
-    # So the name is discovered here instead of hardcoded.
-    - name: Detect the container's primary interface
-      ansible.builtin.set_fact:
-        dns_pihole_interface: "{{ ansible_facts['interfaces'] | difference(['lo']) | sort | first }}"
-
-    # These are the container-safe task files from main.yml, in the order the role runs them.
-    # Using include_role with tasks_from runs the real task file with the role defaults loaded.
-    # install.yml is skipped because basic-install.sh needs a real host, so scripts/dns/validate-deploy.sh covers it.
-    # storage.yml is skipped because drive detection could format the host's real block devices through the
-    # container's /sys.
-    # post_deploy_validate.yml is skipped because it needs a running Pi-hole.
-    # The firewall tasks are skipped because ufw cannot bind rules in a container.
-    - name: Run the real pre-deployment validation
+    # Skipped on purpose: install.yml (basic-install.sh needs a real host, see scripts/dns/validate-deploy.sh),
+    # storage.yml (drive detection could format the host's devices through /sys), post_deploy_validate.yml
+    # (needs a running Pi-hole) and the firewall (ufw cannot bind in a container).
+    - name: Validate the dns variables
       ansible.builtin.include_role:
         name: dns
         tasks_from: validate
 
-    - name: Run the real chrony setup and sync
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: chrony
+    - name: Deploy chrony, auto-updates and the backup
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/deploy.yml"
 
-    - name: Run the real auto-update script and cron deployment
-      ansible.builtin.include_role:
-        name: dns
-        tasks_from: auto_updates
-
-    - name: Run the real Syncthing backup deployment
-      ansible.builtin.include_role:
-        name: dns
-        tasks_from: backup
-
-    # The role deploys setupVars.conf.j2 only inside install.yml, which this scenario skips.
-    # Rendering it here makes a broken template variable fail CI instead of writing a blank value on a real Pi.
+    # Only install.yml deploys this template, so a broken variable would otherwise surface on a real Pi.
     - name: Render the Pi-hole setup vars template
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../templates/setupVars.conf.j2"

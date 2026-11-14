@@ -1,0 +1,58 @@
+---
+# One case per required variable: a valid set with that one value emptied (or never supplied).
+molecule_case_defaults:
+  file: case.yml
+  prometheus_exporters_enabled: true
+  prometheus_exporters_base_dir: /opt/prometheus-exporters
+  prometheus_exporters_node_exporter_enabled: true
+  prometheus_environment: production
+  prometheus_role: test
+  device_type: rpi4b
+
+molecule_cases:
+  - id: enabled-empty
+    prometheus_exporters_enabled: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_exporters_enabled'
+      is not defined or empty
+  - id: base-dir-empty
+    prometheus_exporters_base_dir: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_exporters_base_dir'
+      is not defined or empty
+  - id: node-enabled-empty
+    prometheus_exporters_node_exporter_enabled: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_exporters_node_exporter_enabled'
+      is not defined or empty
+  - id: environment-empty
+    prometheus_environment: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_environment'
+      is not defined or empty
+  - id: role-empty
+    prometheus_role: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_role'
+      is not defined or empty
+  - id: device-type-empty
+    device_type: ""
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'device_type'
+      is not defined or empty
+  # The three variables with no role default, never supplied.
+  - id: environment-undefined
+    file: case_undefined.yml
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_environment'
+      is not defined or empty
+  - id: role-undefined
+    file: case_undefined.yml
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'prometheus_role'
+      is not defined or empty
+  - id: device-type-undefined
+    file: case_undefined.yml
+    expect: >-
+      [prometheus-exporters] Required prometheus exporters variable 'device_type'
+      is not defined or empty

@@ -1,30 +1,14 @@
 ---
-- name: Converge - Firewall Fail-Fast Validation
+- name: Converge firewall fail-fast-validation
   hosts: all
-  vars:
-    timezone: UTC
-    # The firewall policy variables are left undefined on purpose.
-    # The block below only installs ufw and never includes the role, so it does not exercise the role's validation.
+  vars_files:
+    - cases.yml
   tasks:
-    - name: Test firewall without required variables
-      block:
-        - name: Try basic UFW install without firewall variables
-          ansible.builtin.apt:
-            name: ufw
-            state: present
-          become: true
-
-        - name: Set result to success
-          ansible.builtin.set_fact:
-            firewall_validation_failed: false
-      rescue:
-        - name: Capture failure if it occurs
-          ansible.builtin.set_fact:
-            firewall_validation_failed: true
-            firewall_validation_error: "{{ ansible_failed_result.msg | default('Unknown error') }}"
-
-        - name: Display failure message
-          ansible.builtin.debug:
-            msg: |
-              [OK] Firewall validation failed
-              Error: {{ firewall_validation_error }}
+    - name: Run each case
+      ansible.builtin.include_tasks: case.yml
+      loop: "{{ molecule_cases }}"
+      loop_control:
+        loop_var: molecule_item
+        label: "{{ molecule_item.id }}"
+      vars:
+        molecule_case: "{{ molecule_case_defaults | combine(molecule_item) }}"

@@ -1,43 +1,57 @@
 ---
-- name: Verify the automation role's deployed state
+- name: Verify automation default
   hosts: all
   become: true
-  vars:
-    automation_stack_home: /home/automation/stack
+  vars_files:
+    - ../shared/vars.yml
   tasks:
-    - name: Read the generated compose file and env file
+    - name: Read the deployed files
       ansible.builtin.slurp:
-        src: "{{ item }}"
+        src: "{{ item.path }}"
       loop:
-        - "{{ automation_stack_home }}/docker-compose.yml"
-        - "{{ automation_stack_home }}/.env"
-        - /usr/local/bin/automation-syncthing-backup
-        - "{{ automation_stack_home }}/scripts/manage-automation.sh"
-        - /etc/systemd/system/stack.service
-      register: automation_deployed_files
+        - { key: compose, path: "{{ automation_stack_home }}/docker-compose.yml" }
+        - { key: env, path: "{{ automation_stack_home }}/.env" }
+        - { key: backup, path: /usr/local/bin/automation-syncthing-backup }
+        - { key: manage, path: "{{ automation_stack_home }}/scripts/manage-automation.sh" }
+        - { key: unit, path: /etc/systemd/system/stack.service }
+        - { key: wrapper, path: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh" }
+      loop_control:
+        label: "{{ item.key }}"
+      register: automation_slurped
 
-    - name: Stat the deployed files
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ automation_stack_home }}/.env"
-        - "{{ automation_stack_home }}/scripts/manage-automation.sh"
-        - /usr/local/bin/manage-automation
-        - /usr/local/bin/automation-syncthing-backup
-        - /tmp/molecule-automation-backup
-        - /etc/systemd/system/stack.service
-      register: automation_deployed_stats
+    - name: Index the file contents by name
+      ansible.builtin.set_fact:
+        files: >-
+          {{ dict(automation_slurped.results | map(attribute='item.key')
+                  | zip(automation_slurped.results | map(attribute='content') | map('b64decode'))) }}
+
+    - name: Assert deployed paths, modes and owners
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - { path: "{{ automation_stack_home }}/.env", state: file, mode: "0600" }
+          - { path: "{{ automation_stack_home }}/scripts/manage-automation.sh", state: file, mode: "0755" }
+          - { path: /usr/local/bin/manage-automation, state: link }
+          - { path: /usr/local/bin/automation-syncthing-backup, state: file, mode: "0755" }
+          - { path: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh", state: file, mode: "0755" }
+          - path: "{{ automation_backup_dir }}"
+            state: directory
+            mode: "0750"
+            owner: "{{ automation_backup_owner }}"
+          - { path: /etc/systemd/system/stack.service, state: file }
 
     - name: Read root's crontab
       ansible.builtin.command: crontab -l -u root
       changed_when: false
       register: automation_root_crontab
 
-    - name: Assert compose file contents (services, bindings, no secrets)
+    - name: Assert compose file contents
       vars:
-        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
+        compose_file: "{{ files.compose }}"
+        compose_data: "{{ compose_file | from_yaml }}"
       ansible.builtin.assert:
         that:
+          - compose_data.services | length == 7
           - "'vaultwarden:' in compose_file"
           - "'fireflyiii/core:latest' in compose_file"
           - "'mariadb:11.8.9' in compose_file"
@@ -53,44 +67,32 @@
           # Secrets must appear only as ${VAR} placeholders.
           - "'ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}' in compose_file"
           - "'DB_PASSWORD=${FIREFLY_DB_PASSWORD}' in compose_file"
-          # The mariadb entrypoint demands a root-password policy on first init.
-          # The root user is otherwise unused because checks and backups run as the firefly user.
+          # The mariadb entrypoint demands a root-password policy on first init; the root user is otherwise unused.
           - "'MARIADB_RANDOM_ROOT_PASSWORD=1' in compose_file"
           - "'HARDCOVER_TOKEN=${HARDCOVER_TOKEN}' in compose_file"
           - "'molecule-test' not in compose_file"
-          # The application services carry the watchtower label, and mariadb does not.
           - "'com.centurylinklabs.watchtower.enable=true' in compose_file"
+          # An empty top-level volumes or networks key is invalid compose.
+          - >-
+            'volumes' not in compose_data
+            or (compose_data.volumes is mapping and compose_data.volumes | length > 0)
+          - >-
+            'networks' not in compose_data
+            or (compose_data.networks is mapping and compose_data.networks | length > 0)
         fail_msg: "docker-compose.yml rendered wrong:\n{{ compose_file }}"
-        success_msg: "[OK] compose file has the 7 services, correct bindings and no inlined secrets"
-
-    - name: Assert the rendered compose parses and has no empty top-level keys
-      vars:
-        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
-        compose_data: "{{ compose_file | from_yaml }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            'volumes' not in compose_data or (compose_data.volumes is mapping and compose_data.volumes | length > 0)
-          - >-
-            'networks' not in compose_data or (compose_data.networks is mapping and compose_data.networks | length > 0)
-          - "compose_data.services is mapping"
-        fail_msg: >-
-          rendered compose file is structurally invalid (empty volumes/networks,
-          or missing services): {{ compose_data }}
-        success_msg: "[OK] rendered compose parses and has non-empty volumes/networks mappings"
+        quiet: true
 
     - name: Assert Watchtower's schedule actually runs
       vars:
         watchtower_env: >-
-          {{ dict((automation_deployed_files.results[0].content | b64decode | from_yaml)
-          .services.watchtower.environment | map('split', '=', 1)) }}
+          {{ dict((files.compose | from_yaml).services.watchtower.environment | map('split', '=', 1)) }}
       ansible.builtin.assert:
         that:
-          # The 'update' endpoint switches Watchtower to API-only mode, silently
-          # disabling WATCHTOWER_SCHEDULE unless periodic polls are re-enabled.
+          # The 'update' endpoint switches Watchtower to API-only mode, silently disabling WATCHTOWER_SCHEDULE
+          # unless periodic polls are re-enabled.
           - >-
             'update' not in watchtower_env.WATCHTOWER_HTTP_API_ENDPOINTS.split(',')
-            or watchtower_env.WATCHTOWER_HTTP_API_PERIODIC_POLLS | default('false') | bool
+            or (watchtower_env.get('WATCHTOWER_HTTP_API_PERIODIC_POLLS', 'false') | bool)
           # Watchtower's cron has a leading seconds field.
           - watchtower_env.WATCHTOWER_SCHEDULE.split() | length == 6
           # A published port otherwise disables the rename-based self-update.
@@ -98,11 +100,11 @@
           # The notification hostname is the machine's hostname, not the alias.
           - watchtower_env.WATCHTOWER_NOTIFICATIONS_HOSTNAME == ansible_facts['hostname']
         fail_msg: "watchtower env would never run its schedule: {{ watchtower_env }}"
-        success_msg: "[OK] watchtower schedule is 6-field and not disabled by the update API"
+        quiet: true
 
     - name: Assert cAdvisor label and port binding
       vars:
-        cadvisor: "{{ (automation_deployed_files.results[0].content | b64decode | from_yaml).services.cadvisor }}"
+        cadvisor: "{{ (files.compose | from_yaml).services.cadvisor }}"
       ansible.builtin.assert:
         that:
           - "'com.centurylinklabs.watchtower.enable=true' in cadvisor.labels"
@@ -110,180 +112,128 @@
             cadvisor.ports | select('match', '^' ~ ansible_facts['default_ipv4']['address'] ~ ':')
             | list | length == cadvisor.ports | length
         fail_msg: "cadvisor service wrong: {{ cadvisor }}"
-        success_msg: "[OK] cadvisor labelled for Watchtower and bound to primary_ip"
-
-    - name: Assert the compose builder's block layout
-      vars:
-        compose_file: "{{ automation_deployed_files.results[0].content | b64decode }}"
-      ansible.builtin.assert:
-        that:
-          - compose_file is search('\n# END networks')
-          # yamlfmt rewrites |+ to |, which drops a block's trailing blank line.
-          - compose_file is not search('[^\n]\n# END ')
-          - compose_file is not search('[ \t]\n')
-        fail_msg: "compose layout wrong (no blank line before '# END', or trailing whitespace):\n{{ compose_file }}"
-        success_msg: "[OK] every managed block ends with a blank line; no trailing whitespace"
-
-    - name: Assert the generated .env carries the secrets at 0600
-      vars:
-        env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
-      ansible.builtin.assert:
-        that:
-          # compose-env.j2 double-quotes every value (a mid-value '#' would
-          # otherwise truncate it in Compose's .env parser), so the assertions
-          # carry the quotes.
-          - "'VAULTWARDEN_ADMIN_TOKEN=\"molecule-test-admin-token\"' in env_file"
-          - "'FIREFLY_DB_PASSWORD=\"molecule-test-db-password\"' in env_file"
-          - "'WATCHTOWER_API_TOKEN=\"molecule-test-watchtower-token\"' in env_file"
-          - automation_deployed_stats.results[0].stat.mode == '0600'
-        fail_msg: >-
-          .env wrong (mode {{ automation_deployed_stats.results[0].stat.mode }}): {{ env_file }}
-        success_msg: "[OK] .env holds every vault secret and is 0600"
-
-    - name: Assert the manage script and its symlink
-      ansible.builtin.assert:
-        that:
-          - automation_deployed_stats.results[1].stat.mode == '0755'
-          - automation_deployed_stats.results[1].stat.executable
-          - automation_deployed_stats.results[2].stat.islnk
-          - "'docker compose' in (automation_deployed_files.results[3].content | b64decode)"
-        fail_msg: manage script/symlink wrong
-        success_msg: "[OK] manage-automation.sh (0755) deployed and symlinked into PATH"
-
-    - name: Assert the backup script and cron job
-      vars:
-        backup_script: "{{ automation_deployed_files.results[2].content | b64decode }}"
-      ansible.builtin.assert:
-        that:
-          - automation_deployed_stats.results[3].stat.mode == '0755'
-          - "'/usr/local/bin/automation-syncthing-backup' in automation_root_crontab.stdout"
-          - "'Automation Syncthing local backup' in automation_root_crontab.stdout"
-          # The backup script must not embed any vault secret.
-          - "'molecule-test' not in backup_script"
-          - "'VACUUM INTO' in backup_script"
-          - "'mariadb-dump' in backup_script"
-          # Calibre: the config/library trees replicate live via Syncthing
-          # folder, so the script snapshots every *.db under config and the
-          # library catalog.
-          - "'databases' in backup_script"
-          - "'config/*.db' in backup_script"
-          - "'library/metadata.db' in backup_script"
-          - "'calibre' in backup_script"
-          # A stuck compose exec must not hang the DB dump.
-          - "'timeout 600' in backup_script"
-          # Snapshots are built outside the Syncthing folder and renamed in
-          # whole, so peers never receive half-written dumps.
-          - "'mktemp -d' in backup_script"
-          - "'mv \"$WORK\" \"$DEST/$STAMP\"' in backup_script"
-          - "'$WORK/calibre-databases' in backup_script"
-          # 02:30, ahead of the 03:00 restic job that ships the dumps.
-          - automation_root_crontab.stdout is search('(?m)^30 0?2 \\* \\* \\* ')
-        fail_msg: "backup script/cron wrong: {{ backup_script }}"
-        success_msg: "[OK] backup script (0755, no embedded secrets) + root cron present"
-
-    - name: Assert the backup directory ownership
-      ansible.builtin.assert:
-        that:
-          - automation_deployed_stats.results[4].stat.isdir
-          - automation_deployed_stats.results[4].stat.mode == '0750'
-          - automation_deployed_stats.results[4].stat.pw_name == 'molecule'
-        fail_msg: >-
-          backup dir wrong: mode {{ automation_deployed_stats.results[4].stat.mode }}
-          owner {{ automation_deployed_stats.results[4].stat.pw_name }}
-        success_msg: "[OK] Syncthing backup dir 0750 owned by molecule"
-
-    - name: Assert the rendered systemd unit
-      vars:
-        unit: "{{ automation_deployed_files.results[4].content | b64decode }}"
-      ansible.builtin.assert:
-        that:
-          - "'Requires=docker.service' in unit"
-          - "'ExecStart=/usr/bin/docker compose -f /home/automation/stack/docker-compose.yml up -d' in unit"
-          - "'RemainAfterExit=true' in unit"
-        fail_msg: "systemd unit rendered wrong:\n{{ unit }}"
-        success_msg: "[OK] stack unit renders with explicit compose path"
+        quiet: true
 
     - name: Assert the app services bind to the primary IP
       vars:
-        services: "{{ (automation_deployed_files.results[0].content | b64decode | from_yaml).services }}"
+        services: "{{ (files.compose | from_yaml).services }}"
         primary_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
       ansible.builtin.assert:
         that:
           - services[item.key].ports | length == 1
           - services[item.key].ports[0] is match('^' ~ primary_ip ~ ':' ~ item.port ~ ':')
         fail_msg: "{{ item.key }} ports wrong: {{ services[item.key].ports }}"
-        success_msg: "[OK] {{ item.key }} is bound to {{ primary_ip }}"
+        quiet: true
       loop:
         - { key: vaultwarden, port: 8081 }
         - { key: firefly, port: 8082 }
         - { key: calibre-web-automated, port: 8083 }
 
-    - name: Assert the remaining vault secrets reach the .env
-      vars:
-        env_file: "{{ automation_deployed_files.results[1].content | b64decode }}"
+    - name: Assert the compose builder's block layout
       ansible.builtin.assert:
         that:
-          - "'FIREFLY_APP_KEY=\"MoleculeTestAppKey0123456789abcd\"' in env_file"
-          - "'FIREFLY_STATIC_CRON_TOKEN=\"0123456789abcdef0123456789abcdef\"' in env_file"
-        fail_msg: ".env is missing a Firefly secret: {{ env_file }}"
-        success_msg: "[OK] .env carries the Firefly app key and cron token"
+          - files.compose is search('\n# END networks')
+          # yamlfmt rewrites |+ to |, which drops a block's trailing blank line.
+          - files.compose is not search('[^\n]\n# END ')
+          - files.compose is not search('[ \t]\n')
+        fail_msg: "compose layout wrong (no blank line before '# END', or trailing whitespace):\n{{ files.compose }}"
+        quiet: true
+
+    - name: Assert the .env carries the vault secrets
+      ansible.builtin.assert:
+        that:
+          # compose-env.j2 double-quotes every value so a mid-value '#' cannot truncate it in Compose's parser.
+          - "'VAULTWARDEN_ADMIN_TOKEN=\"' ~ vault_vaultwarden_admin_token ~ '\"' in files.env"
+          - "'FIREFLY_DB_PASSWORD=\"' ~ vault_firefly_db_password ~ '\"' in files.env"
+          - "'WATCHTOWER_API_TOKEN=\"' ~ vault_watchtower_api_token ~ '\"' in files.env"
+          - "'FIREFLY_APP_KEY=\"' ~ vault_firefly_app_key ~ '\"' in files.env"
+          - "'FIREFLY_STATIC_CRON_TOKEN=\"' ~ vault_firefly_static_cron_token ~ '\"' in files.env"
+        fail_msg: ".env is missing a secret: {{ files.env }}"
+        quiet: true
+
+    - name: Assert the manage script runs compose
+      ansible.builtin.assert:
+        that: "'docker compose' in files.manage"
+        quiet: true
+
+    - name: Assert the backup script and cron job
+      ansible.builtin.assert:
+        that:
+          - "'/usr/local/bin/automation-syncthing-backup' in automation_root_crontab.stdout"
+          - "'Automation Syncthing local backup' in automation_root_crontab.stdout"
+          # 02:30, ahead of the 03:00 restic job that ships the dumps.
+          - automation_root_crontab.stdout is search('(?m)^30 0?2 \\* \\* \\* ')
+          - "'molecule-test' not in files.backup"
+          - "'VACUUM INTO' in files.backup"
+          - "'mariadb-dump' in files.backup"
+          # Calibre config and library trees replicate live via Syncthing, so the script snapshots every *.db.
+          - "'databases' in files.backup"
+          - "'config/*.db' in files.backup"
+          - "'library/metadata.db' in files.backup"
+          - "'calibre' in files.backup"
+          # A stuck compose exec must not hang the DB dump.
+          - "'timeout 600' in files.backup"
+          # Snapshots are built outside the Syncthing folder and renamed in whole, so peers never see half dumps.
+          - "'mktemp -d' in files.backup"
+          - "'mv \"$WORK\" \"$DEST/$STAMP\"' in files.backup"
+          - "'$WORK/calibre-databases' in files.backup"
+        fail_msg: "backup script or cron wrong: {{ files.backup }}\n{{ automation_root_crontab.stdout }}"
+        quiet: true
+
+    - name: Assert the rendered systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'Requires=docker.service' in files.unit"
+          - >-
+            'ExecStart=/usr/bin/docker compose -f ' ~ automation_stack_home ~ '/docker-compose.yml up -d'
+            in files.unit
+          - "'RemainAfterExit=true' in files.unit"
+        fail_msg: "systemd unit rendered wrong:\n{{ files.unit }}"
+        quiet: true
+
+    - name: Assert the mariadb entrypoint wrapper
+      ansible.builtin.assert:
+        that:
+          - "'rm -f /var/lib/mysql/tc.log' in files.wrapper"
+          - "'exec docker-entrypoint.sh \"$@\"' in files.wrapper"
+        fail_msg: "mariadb entrypoint wrapper wrong:\n{{ files.wrapper }}"
+        quiet: true
 
     - name: Stat the data directories
       ansible.builtin.stat:
-        path: /mnt/data/{{ item }}
+        path: "{{ automation_data_path }}/{{ item.dir }}"
       loop:
-        - vaultwarden
-        - mariadb
-        - calibre/config
-        - calibre/ingest
-        - calibre/library
-        - firefly/upload
+        # The remap base is 10000 and PUID/PGID is 0 because ansible_user is root, so most directories land on the
+        # base while the firefly upload directory adds the www-data offset.
+        - { dir: vaultwarden, id: 10000 }
+        - { dir: mariadb, id: 10000 }
+        - { dir: calibre/config, id: 10000 }
+        - { dir: calibre/ingest, id: 10000 }
+        - { dir: calibre/library, id: 10000 }
+        - { dir: firefly/upload, id: 10033 }
+      loop_control:
+        label: "{{ item.dir }}"
       register: automation_data_dirs
 
     - name: Assert userns-remap ownership of the data directories
       ansible.builtin.assert:
         that:
           - item.stat.isdir
-          # The fixture remap base is 10000 and the PUID/PGID is 0 because ansible_user is root.
-          # So the calibre directories land on the base, while the firefly upload directory adds the www-data offset.
-          - item.stat.uid == (10033 if item.item == 'firefly/upload' else 10000)
-          - item.stat.gid == (10033 if item.item == 'firefly/upload' else 10000)
-        fail_msg: "/mnt/data/{{ item.item }} owned by {{ item.stat.uid }}:{{ item.stat.gid }}"
-        success_msg: "[OK] /mnt/data/{{ item.item }} owned by its expected remap-range uid/gid"
+          - item.stat.uid == item.item.id
+          - item.stat.gid == item.item.id
+        fail_msg: "{{ item.item.dir }} owned by {{ item.stat.uid }}:{{ item.stat.gid }}"
+        quiet: true
       loop: "{{ automation_data_dirs.results }}"
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item.item.dir }}"
 
-    - name: Stat the mariadb entrypoint wrapper
-      ansible.builtin.stat:
-        path: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh"
-      register: automation_entrypoint_stat
-
-    - name: Read the mariadb entrypoint wrapper
-      ansible.builtin.slurp:
-        src: "{{ automation_stack_home }}/scripts/mariadb-safe-entrypoint.sh"
-      register: automation_entrypoint
-
-    - name: Assert the mariadb entrypoint wrapper
-      vars:
-        wrapper: "{{ automation_entrypoint.content | b64decode }}"
-      ansible.builtin.assert:
-        that:
-          - automation_entrypoint_stat.stat.mode == '0755'
-          - "'rm -f /var/lib/mysql/tc.log' in wrapper"
-          - "'exec docker-entrypoint.sh \"$@\"' in wrapper"
-        fail_msg: "mariadb entrypoint wrapper wrong:\n{{ wrapper }}"
-        success_msg: "[OK] mariadb wrapper clears tc.log and hands off to the image entrypoint"
-
-    - name: Check the stack unit state
-      ansible.builtin.command: systemctl {{ item }} stack
-      register: stack_unit_state
+    - name: Read the stack unit state
+      ansible.builtin.command: systemctl {{ item.state }} stack
+      register: automation_unit_state
       changed_when: false
-      failed_when: stack_unit_state.stdout | trim != item_expected[item]
-      vars:
-        item_expected: {is-active: active, is-enabled: enabled}
-      loop: [is-active, is-enabled]
-
-    - name: Confirm the stack unit started through the common role
-      ansible.builtin.debug:
-        msg: "[OK] stack.service is active and enabled (real docker_stack_service + stack_start, docker stubbed)"
+      failed_when: automation_unit_state.stdout | trim != item.want
+      loop:
+        - { state: is-active, want: active }
+        - { state: is-enabled, want: enabled }
+      loop_control:
+        label: "{{ item.state }}"

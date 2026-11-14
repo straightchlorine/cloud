@@ -1,0 +1,20 @@
+---
+# Include from a case's rescue. Input molecule_case: {id, expect}. Passes only when one failure message
+# starts with expect, then records the case for assert_markers.yml.
+- name: "Assert case {{ molecule_case.id }} failed with: {{ molecule_case.expect }}"
+  vars:
+    # A looped fail or assert keeps its per-item text in .results.
+    molecule_failures: >-
+      {{ [ansible_failed_result.msg] + (ansible_failed_result.results | default([])
+         | selectattr('msg', 'defined') | map(attribute='msg') | list) }}
+  ansible.builtin.assert:
+    that: molecule_failures | select('match', molecule_case.expect | regex_escape) | list | length > 0
+    fail_msg: "case {{ molecule_case.id }} failed for another reason: {{ molecule_failures }}"
+    quiet: true
+
+- name: "Record case {{ molecule_case.id }} as passed"
+  ansible.builtin.copy:
+    content: ""
+    dest: "/tmp/molecule-case-{{ molecule_case.id }}.passed"
+    force: false
+    mode: "0644"

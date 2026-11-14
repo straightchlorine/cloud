@@ -10,7 +10,7 @@
 
 - name: Retire the legacy systemd units
   # The push-backup install only ever ran on systemd hosts.
-  when: ansible_service_mgr == 'systemd'
+  when: ansible_facts.service_mgr == 'systemd'
   block:
     - name: Look for this job's legacy timer
       ansible.builtin.stat:
@@ -217,7 +217,7 @@
         home: /var/backups
         shell: /usr/sbin/nologin
       when:
-        - ansible_os_family == 'Debian'
+        - ansible_facts.os_family == 'Debian'
         - restic_connection_user != 'backup'
         - "':/opt/backup:' in restic_legacy_account.stdout"
 

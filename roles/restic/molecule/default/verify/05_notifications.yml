@@ -1,0 +1,109 @@
+---
+- name: Wait for the per-run notifications
+  ansible.builtin.command: journalctl -t molecule-ntfy -o cat --no-pager
+  register: molecule_ntfy
+  until: >-
+    'probe backup ok|low' in molecule_ntfy.stdout
+    and 'slow backup FAILED (exit-code/1)|high' in molecule_ntfy.stdout
+    and 'partial backup FAILED (exit-code/1)|high' in molecule_ntfy.stdout
+  retries: 20
+  delay: 2
+  changed_when: false
+
+- name: Read the failure bodies
+  ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+  register: molecule_bodies
+  changed_when: false
+
+- name: Assert each failure body carries the run's own journal lines
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_bodies.stdout is search('broken backup FAILED.*source missing: /srv/molecule-missing')
+      - molecule_bodies.stdout is search('stale backup FAILED.*not updated in the last 1 h')
+      - molecule_bodies.stdout is search('partial backup FAILED.*prune failed')
+
+- name: Stat the slow job's interrupted marker
+  ansible.builtin.stat:
+    path: /var/lib/restic/slow.interrupted
+  register: molecule_marker
+
+- name: Assert one notification per outcome and the marker cleared on delivery
+  ansible.builtin.assert:
+    that:
+      - "'ok backup ok|low' in molecule_ntfy.stdout"
+      - "'partial backup ok, 1 file unreadable|default' in molecule_ntfy.stdout"
+      - "'broken backup FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+      - "'stale backup FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+      - "'partial backup FAILED (exit-code/1)|high' in molecule_ntfy.stdout"
+      - not molecule_marker.stat.exists
+
+# The message bodies, newlines shown as ^: what the notifier builds from the summary line of each outcome.
+- name: Assert the success, warning and failure bodies
+  vars:
+    molecule_unit: '[0-9]+(\.[0-9])? (B|KiB|MiB)'
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_bodies.stdout is search(
+        '(?m)ok backup ok\|Snapshot [0-9a-f]{8} - 1 kept, [01] removed\^\+'
+        ~ molecule_unit ~ ' new \(' ~ molecule_unit ~ ' stored\), '
+        ~ molecule_unit ~ ' scanned; took [0-9]+s\^Files: [0-9,]+ new, [0-9,]+ changed$')
+      - >-
+        molecule_bodies.stdout is search(
+        '(?m)ok backup ok\|Snapshot [0-9a-f]{8} - 1 kept, 1 removed\^.*\^Files: [0-9,]+ new, [0-9,]+ changed'
+        '\^Maintenance: prune and check done$')
+      - >-
+        molecule_bodies.stdout is search(
+        '(?m)partial backup ok, 1 file unreadable\|Snapshot [0-9a-f]{8} - 1 kept, [01] removed\^.*scanned; took '
+        '[0-9]+s\^Files: [0-9,]+ new, [0-9,]+ changed\^Unreadable: /srv/molecule-src/private/secret$')
+      - >-
+        molecule_bodies.stdout is search(
+        'broken backup FAILED \(exit-code/1\)\|restic-job: FAILED: source missing: /srv/molecule-missing'
+        ' \(after [0-9]+s\)\^')
+      - molecule_bodies.stdout is not search('(ok|partial) backup ok.*Storage Box')
+
+# A run whose backup output has no summary object (a changed restic, an old script) leaves no summary line, and
+# the notification falls back to the raw journal lines.
+- name: Run the partial job with its summary removed from restic's output
+  ansible.builtin.shell: |
+    touch /run/molecule-nosummary /var/lib/restic/partial.pruned /var/lib/restic/partial.checked
+    systemctl start restic-job@partial.service
+    rm -f /run/molecule-nosummary
+  changed_when: true
+
+- name: Wait for the fallback notification
+  ansible.builtin.command: journalctl -t molecule-ntfy-body -o cat --no-pager
+  register: molecule_fallback
+  until: molecule_fallback.stdout is search('partial backup ok with warnings\|')
+  retries: 20
+  delay: 2
+  changed_when: false
+
+- name: Assert the fallback body is the journal tail and has no summary lines
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_fallback.stdout is search(
+        "partial backup ok with warnings\\|.*restic-job: could not read restic's backup summary"
+        "\\^restic-job: unreadable: /srv/molecule-src/private/secret")
+      - molecule_fallback.stdout is not search('with warnings\|Snapshot ')
+
+- name: Read the deploy messages the role sent
+  ansible.builtin.command: cat /var/log/molecule-notice.log
+  register: molecule_notice
+  changed_when: false
+
+- name: Assert the deploy message names the next run, the gate and the history, and promises nothing else
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_notice.stdout is search(
+        '(?m)^[^:]+: ok backup armed\|min\|Scheduled every day at 03:00 '
+        '\(next: \S+ [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} \S+\)\^No snapshot yet: the first run uploads everything'
+        '\^Repository keeps 1 daily, 0 weekly, 0 monthly, 0 yearly$')
+      - >-
+        molecule_notice.stdout is search(
+        '(?m)^[^:]+: gated backup armed\|min\|Scheduled every day at 03:00 \(next: [^)]+\)'
+        '\^At most one run per 20 h; only off metered connections\^No snapshot yet')
+      - "'proves delivery' not in molecule_notice.stdout"

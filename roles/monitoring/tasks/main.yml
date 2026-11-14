@@ -39,20 +39,20 @@
 - name: Display monitoring stack deployment summary
   ansible.builtin.debug:
     msg: |
-      [OK] Monitoring Stack Deployment Complete for {{ inventory_hostname }}
+      Monitoring Stack Deployment Complete for {{ inventory_hostname }}
 
       Services Available:
-      [TARGET] Grafana: {{ primary_ip }}:{{ monitoring_grafana_port }} (Unified dashboards)
-      [STATS] Prometheus: {{ primary_ip }}:{{ monitoring_prometheus_port }} (Metrics collection)
-      [NOTE] Loki: {{ primary_ip }}:{{ monitoring_loki_port }} (Log aggregation)
-      🔍 Uptime Kuma: {{ primary_ip }}:{{ monitoring_uptime_kuma_port }} (Service monitoring)
-      🚨 Alertmanager: {{ primary_ip }}:{{ monitoring_alertmanager_port }} (Alert routing)
+      Grafana: {{ primary_ip }}:{{ monitoring_grafana_port }} (Unified dashboards)
+      Prometheus: {{ primary_ip }}:{{ monitoring_prometheus_port }} (Metrics collection)
+      Loki: {{ primary_ip }}:{{ monitoring_loki_port }} (Log aggregation)
+      Uptime Kuma: {{ primary_ip }}:{{ monitoring_uptime_kuma_port }} (Service monitoring)
+      Alertmanager: {{ primary_ip }}:{{ monitoring_alertmanager_port }} (Alert routing)
 
       Configuration:
-      📁 Stack Home: {{ monitoring_stack_home }}
-      [SAVE] Data Path: {{ monitoring_data_path }}
-      👤 User: {{ monitoring_user }} ({{ monitoring_uid }}:{{ monitoring_gid }})
-      🔒 SSL: {{ 'Enabled' if monitoring_enable_ssl else 'Disabled' }}
+      Stack Home: {{ monitoring_stack_home }}
+      Data Path: {{ monitoring_data_path }}
+      User: {{ monitoring_user }} ({{ monitoring_uid }}:{{ monitoring_gid }})
+      SSL: {{ 'Enabled' if monitoring_enable_ssl else 'Disabled' }}
 
       Next Steps:
       1. Configure Prometheus targets in inventory

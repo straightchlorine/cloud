@@ -29,7 +29,9 @@
     hardware_platform: "{{ hardware_device_platforms[device_type] }}"
     hardware_limits: "{{ hardware_profiles[hardware_device_platforms[device_type]] }}"
     hardware_details:
-      memory_mb: "{{ ansible_memtotal_mb }}"
-      cpu_cores: "{{ ansible_processor_cores }}"
-      cpu_count: "{{ ansible_processor_count }}"
-      vcpus: "{{ ansible_processor_vcpus if ansible_processor_vcpus is defined else ansible_processor_cores }}"
+      memory_mb: "{{ ansible_facts.memtotal_mb }}"
+      cpu_cores: "{{ ansible_facts.processor_cores }}"
+      cpu_count: "{{ ansible_facts.processor_count }}"
+      vcpus: >-
+        {{ ansible_facts.processor_vcpus if ansible_facts.processor_vcpus is defined
+           else ansible_facts.processor_cores }}

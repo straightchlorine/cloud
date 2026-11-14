@@ -43,7 +43,7 @@
     msg: "{{ item }} must be set in host_vars when dns_backup_enabled is true"
   when:
     - dns_backup_enabled
-    - vars[item] is not defined
+    - lookup('ansible.builtin.vars', item, default=none) | default(none) is none
   loop:
     - dns_backup_dir
     - dns_backup_owner
@@ -52,5 +52,5 @@
   ansible.builtin.fail:
     msg: |
       Network interface {{ dns_pihole_interface }} does not exist.
-      Available: {{ ansible_interfaces | join(', ') }}
-  when: dns_pihole_interface not in ansible_interfaces
+      Available: {{ ansible_facts.interfaces | join(', ') }}
+  when: dns_pihole_interface not in ansible_facts.interfaces

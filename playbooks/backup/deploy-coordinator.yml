@@ -26,7 +26,7 @@
           - coordinator_targets count: {{ coordinator_targets | length }}
           {% endif %}
           - device_role: {{ device_role | default('UNDEFINED') }}
-          - Working directory: {{ ansible_env.PWD | default('UNDEFINED') }}
+          - Working directory: {{ ansible_facts.env.PWD | default('UNDEFINED') }}
 
     - name: Display coordinator deployment summary
       ansible.builtin.debug:

@@ -1,0 +1,20 @@
+---
+molecule_case_defaults:
+  firewall_policy_incoming: deny
+  firewall_policy_outgoing: allow
+  firewall_policy_routed: deny
+  firewall_logging: low
+
+molecule_cases:
+  - id: policy-incoming-invalid
+    expect: "Firewall policies must be one of: allow, deny, reject"
+    firewall_policy_incoming: permit
+  - id: policy-outgoing-invalid
+    expect: "Firewall policies must be one of: allow, deny, reject"
+    firewall_policy_outgoing: ""
+  - id: policy-routed-invalid
+    expect: "Firewall policies must be one of: allow, deny, reject"
+    firewall_policy_routed: Allow
+  - id: logging-invalid
+    expect: "firewall_logging must be one of: on, off, low, medium, high, full"
+    firewall_logging: verbose

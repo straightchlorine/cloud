@@ -1,18 +1,10 @@
 ---
-- name: Verify restic fail-fast validation
+- name: Verify restic fail-fast-validation
   hosts: all
   become: true
+  vars_files: [cases.yml]
   tasks:
-    - name: Stat the per-case markers converge wrote
-      ansible.builtin.stat:
-        path: "/tmp/molecule-restic-case{{ item }}.passed"
-      loop: "{{ range(1, 75) | list }}"
-      register: molecule_markers
-
-    - name: Assert all 74 cases failed for their own reason
-      ansible.builtin.assert:
-        that: item.stat.exists
-        fail_msg: "case {{ item.item }} did not fail as expected - see converge output"
-      loop: "{{ molecule_markers.results }}"
-      loop_control:
-        label: "case {{ item.item }}"
+    - name: Assert every case failed for its own reason
+      vars:
+        molecule_case_ids: "{{ molecule_cases | map(attribute='id') | list }}"
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"

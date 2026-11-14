@@ -1,43 +1,114 @@
 ---
-- name: Verify hardware discovery
+- name: Verify hardware default
   hosts: all
   gather_facts: true
   become: true
   vars:
-    # The facts the role sets live only in the process that ran it.
-    # Verify therefore runs the role itself, once per device_type.
+    # Role facts live only in the process that ran the role, so verify runs it per device_type.
     hardware_expected:
-      rpi4b: rpi4
-      rpi3b: rpi3
-      rpizero2w: rpizero2w
-      debian: pc
-      debian_vm: pc
-      cloud_vm: pc
-      arch_linux: pc
+      rpi4b:
+        platform: rpi4
+        memory: "512M"
+        cpus: "1.5"
+        memory_reservation: "256M"
+        cpus_reservation: "0.75"
+      rpi3b:
+        platform: rpi3
+        memory: "512M"
+        cpus: "2.0"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      rpi2b:
+        platform: rpi2
+        memory: "256M"
+        cpus: "0.75"
+        memory_reservation: "128M"
+        cpus_reservation: "0.5"
+      rpizero2w:
+        platform: rpizero2w
+        memory: "160M"
+        cpus: "0.75"
+        memory_reservation: "96M"
+        cpus_reservation: "0.5"
+      rpi02w:
+        platform: rpizero2w
+        memory: "160M"
+        cpus: "0.75"
+        memory_reservation: "96M"
+        cpus_reservation: "0.5"
+      rpizero2:
+        platform: rpizero2w
+        memory: "160M"
+        cpus: "0.75"
+        memory_reservation: "96M"
+        cpus_reservation: "0.5"
+      debian:
+        platform: pc
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      debian_vm:
+        platform: pc
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      cloud_vm:
+        platform: pc
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+      arch_linux:
+        platform: pc
+        memory: "1G"
+        cpus: "2.0"
+        memory_reservation: "512M"
+        cpus_reservation: "1.0"
+    hardware_refusals:
+      - id: device-type-undefined
+        expect: "device_type must be set in host_vars (one of: arch_linux, cloud_vm, debian,"
+      - id: device-type-unlisted
+        expect: "device_type 'toaster' has no hardware platform."
   tasks:
-    - name: Run the hardware role for every supported device_type
+    - name: Run hardware for every device_type
       ansible.builtin.include_tasks: per_device.yml
       loop: "{{ hardware_expected | dict2items }}"
       loop_control:
         loop_var: hardware_case
 
-    - name: Refuse an unlisted device_type with the list of valid ones
+    - name: Refuse an undefined device_type
+      vars:
+        molecule_case: "{{ hardware_refusals[0] }}"
       block:
-        - name: Run the hardware role with an unknown device_type
+        - name: Run hardware without device_type
+          ansible.builtin.include_role:
+            name: hardware
+        - name: Sentinel for undefined device_type
+          ansible.builtin.fail:
+            msg: "hardware accepted an undefined device_type"
+      rescue:
+        - name: Assert the undefined refusal
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+
+    - name: Refuse an unlisted device_type
+      vars:
+        molecule_case: "{{ hardware_refusals[1] }}"
+      block:
+        - name: Run hardware with device_type toaster
           ansible.builtin.include_role:
             name: hardware
           vars:
             device_type: toaster
-
-        - name: Fail the test - the role should have refused
+        - name: Sentinel for unlisted device_type
           ansible.builtin.fail:
             msg: "hardware accepted device_type toaster"
       rescue:
-        - name: Assert the failure names the device_type and the valid ones
-          ansible.builtin.assert:
-            that:
-              - "'device_type' in ansible_failed_result.msg"
-              - "'toaster' in ansible_failed_result.msg"
-              - "'rpi3b' in ansible_failed_result.msg"
-            fail_msg: "wrong failure: {{ ansible_failed_result.msg | default('') }}"
-            success_msg: "[OK] an unknown device_type fails with the valid list"
+        - name: Assert the unlisted refusal
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+
+    - name: Assert both refusals were recorded
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ hardware_refusals | map(attribute='id') | list }}"

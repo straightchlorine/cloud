@@ -1,24 +1,11 @@
 ---
-- name: Verify fail-fast validation test
+- name: Verify common fail-fast-validation
   hosts: all
   gather_facts: false
-  become: false
+  vars_files:
+    - cases.yml
   tasks:
-    - name: Stat the marker converge's rescue wrote
-      # Converge and verify are separate processes, so facts do not carry over.
-      ansible.builtin.stat:
-        path: /tmp/molecule-common-failfast.passed
-      register: common_failfast_marker
-
-    - name: Assert that expected failure was caught
-      ansible.builtin.assert:
-        that:
-          - common_failfast_marker.stat.exists
-        fail_msg: "Fail-fast validation test did not complete as expected"
-
-    - name: Display success message
-      ansible.builtin.debug:
-        msg: |
-          [OK] Fail-Fast Validation Test PASSED:
-          The role correctly implements fail-fast behavior
-          by failing when required variables are missing.
+    - name: Assert every case failed for its own reason
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ molecule_cases | map(attribute='id') | list }}"

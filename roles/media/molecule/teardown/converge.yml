@@ -1,112 +1,69 @@
 ---
-- name: Converge - deploy, then tear down
+- name: Converge media teardown
   hosts: all
   become: true
-  vars:
-    ansible_user: root
-    timezone: UTC
-    domain_name: example.test
-    media_home: /home/music/stack
-    media_library_path: /mnt/music
-    # This is the media host's board type, and its hardware profile sizes the navidrome container.
-    device_type: rpi3b
-    media_restic_enabled: false
-    vault_watchtower_api_token: molecule-test-watchtower-token
-    common_start_stack: false
-    media_youtube_enabled: true
-    vault_youtube_playlists:
-      - "https://www.youtube.com/playlist?list=PLmoleculeA"
-    media_backup_enabled: true
-    media_backup_dir: /tmp/molecule-media-backup
-  pre_tasks:
-    - name: Create the path parents
-      ansible.builtin.file:
-        path: "{{ item | dirname }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ media_home }}"
-        - "{{ media_library_path }}"
-
-    - name: Publish fixture userns-remap facts
-      # The uid must sit inside the nested rootless-podman mapping, or chown fails with EINVAL.
-      ansible.builtin.set_fact:
-        common_dockremap_uid: "10000"
-        common_dockremap_gid: "10000"
-
-    - name: Read the role defaults for the stub below
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../../defaults/main.yml"
-        name: media_role_defaults
-
-    - name: Stub yt-dlp and deno
-      ansible.builtin.copy:
-        dest: "/usr/local/bin/{{ item }}"
-        mode: "0755"
-        content: "#!/bin/sh\necho stub\n"
-      loop: [yt-dlp, deno]
-      tags: [molecule-idempotence-notest]
-
+  vars_files:
+    - ../shared/vars.yml
   tasks:
-    # The deploy tasks skip the idempotence check because the teardown removes what they create.
-    # The teardown is the part that must converge on a rerun.
-    - name: Gather network facts for dynamic configuration
-      ansible.builtin.include_role:
-        name: common
-        tasks_from: network_facts
+    # The teardown removes what the deploy creates, so the arrange steps skip idempotence; the untagged
+    # teardown is the system under test and must converge.
+    - name: Deploy what a container allows
       tags: [molecule-idempotence-notest]
-
-    - name: Detect hardware for resource allocation
-      ansible.builtin.include_role:
-        name: hardware
-      tags: [molecule-idempotence-notest]
-
-    - name: Run the real stack deployment
-      ansible.builtin.include_role:
-        name: media
-        tasks_from: stack
-      tags: [molecule-idempotence-notest]
-
-    # A container has no docker.service, so this task fakes the unit that the teardown removes.
-    - name: Create the fake stack service unit
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Media Stack (molecule fixture)
-          [Service]
-          Type=oneshot
-          ExecStart=/bin/true
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/stack.service
-        mode: "0644"
-      tags: [molecule-idempotence-notest]
-
-    - name: Run the real backup and pipeline deployments
-      ansible.builtin.include_role:
-        name: media
-        tasks_from: "{{ item }}"
-      loop: [backup, youtube]
-      tags: [molecule-idempotence-notest]
-
-    - name: Teardown refuses to run without the confirm fact
       block:
-        - name: Run the media teardown unconfirmed
+        - name: Prepare path parents and remap facts
+          ansible.builtin.include_tasks: ../shared/pre_deploy.yml
+
+        - name: Stub yt-dlp, deno and ntfy-notify
+          ansible.builtin.include_tasks: ../shared/stub_binaries.yml
+
+        - name: Gather network facts
+          ansible.builtin.include_role:
+            name: common
+            tasks_from: network_facts
+
+        - name: Detect hardware
+          ansible.builtin.include_role:
+            name: hardware
+
+        - name: Deploy the stack
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: stack
+
+        - name: Install and start the stack unit
+          ansible.builtin.include_tasks: ../shared/install_unit.yml
+
+        - name: Deploy the backup
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: backup
+
+        - name: Deploy the pipeline
+          ansible.builtin.include_role:
+            name: media
+            tasks_from: youtube
+
+    - name: Refuse an unconfirmed teardown
+      block:
+        - name: Run the teardown without teardown_confirmed
           ansible.builtin.include_role:
             name: media
             tasks_from: teardown
 
-        - name: Fail if the unconfirmed teardown ran
+        - name: Fail when the unconfirmed teardown ran
           ansible.builtin.fail:
-            msg: media teardown ran without teardown_confirmed
+            msg: unconfirmed teardown ran
       rescue:
-        - name: Assert the refusal names teardown_confirmed
-          ansible.builtin.assert:
-            that:
-              - "'media teardown requires the shared teardown_confirmed fact' in ansible_failed_result.msg"
+        - name: Assert the refusal and record it
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"
+          vars:
+            molecule_case:
+              id: unconfirmed-teardown
+              expect: media teardown requires the shared teardown_confirmed fact
 
-    # The docker-info guard skips `docker compose down`, because the container has no Docker.
-    - name: Run the media teardown
+    - name: Run the confirmed teardown
+      # Its own self-verification runs inside this include. The docker-info guard skips `docker compose down`
+      # because the container has no Docker.
       ansible.builtin.include_role:
         name: media
         tasks_from: teardown

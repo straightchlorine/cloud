@@ -1,51 +1,50 @@
 ---
-- name: Verify the teardown left a clean host
+- name: Verify media teardown
   hosts: all
   become: true
-  vars:
-    media_home: /home/music/stack
+  vars_files:
+    - ../shared/vars.yml
   tasks:
-    - name: Stat everything the teardown should have removed
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /usr/local/bin/manage-media
-        - /usr/local/bin/media-sync
-        - /usr/local/bin/media-import
-        - /usr/local/bin/beet
-        - /usr/local/bin/media-syncthing-backup
-        - /usr/local/bin/yt-dlp
-        - /usr/local/bin/deno
-        - /etc/systemd/system/stack.service
-        - "{{ media_home }}"
-      register: media_teardown_leftovers
+    - name: Assert the refusal case recorded its marker
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: [unconfirmed-teardown]
 
-    - name: Assert no role artifact survives the teardown
-      ansible.builtin.assert:
-        that:
-          - not item.stat.exists
-        fail_msg: "{{ item.item }} still exists after teardown"
-        success_msg: "[OK] {{ item.item }} removed"
-      loop: "{{ media_teardown_leftovers.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - name: Assert no role artifact survives
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - { path: /usr/local/bin/manage-media, state: absent }
+          - { path: /usr/local/bin/media-sync, state: absent }
+          - { path: /usr/local/bin/media-import, state: absent }
+          - { path: /usr/local/bin/media-status, state: absent }
+          - { path: /usr/local/bin/media-import-album, state: absent }
+          - { path: /usr/local/bin/beet, state: absent }
+          - { path: /usr/local/bin/yt-dlp, state: absent }
+          - { path: /usr/local/bin/deno, state: absent }
+          - { path: /usr/local/bin/yt-dlp-update, state: absent }
+          - { path: /usr/local/bin/media-syncthing-backup, state: absent }
+          - { path: /etc/systemd/system/stack.service, state: absent }
+          - { path: "{{ media_home }}", state: absent }
 
     - name: Read root's crontab
+      # crontab exits 1 when the teardown left root with no crontab at all.
       ansible.builtin.command: crontab -l -u root
       changed_when: false
       failed_when: false
       register: media_teardown_crontab
 
-    - name: Assert the role's cron jobs are gone
+    - name: Assert the role's cron entries are gone
       ansible.builtin.assert:
         that:
-          - "'Media ' not in (media_teardown_crontab.stdout | default(''))"
-          - "'PATH=' not in (media_teardown_crontab.stdout | default(''))"
-        fail_msg: "Cron jobs survived the teardown: {{ media_teardown_crontab.stdout | default('') }}"
-        success_msg: "[OK] media stack cron jobs removed"
+          - "'#Ansible: Media' not in media_teardown_crontab.stdout"
+          - "'#Ansible: Weekly yt-dlp updates' not in media_teardown_crontab.stdout"
+          - "'PATH=' not in media_teardown_crontab.stdout"
+        fail_msg: "cron entries survived the teardown: {{ media_teardown_crontab.stdout }}"
+        quiet: true
 
-    - name: Assert the stack service is not active
-      ansible.builtin.systemd:
-        name: stack
+    - name: Check the stack service is not active
+      ansible.builtin.command: systemctl is-active stack
+      changed_when: false
+      failed_when: media_teardown_unit.rc == 0
       register: media_teardown_unit
-      failed_when: media_teardown_unit.status.ActiveState == 'active'

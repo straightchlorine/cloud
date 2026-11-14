@@ -1,0 +1,33 @@
+---
+# Input molecule_paths: [{path, state: file|directory|link|absent, mode?, owner?, group?}].
+- name: Stat the expected paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop: "{{ molecule_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: molecule_path_stats
+
+- name: Assert each path's state, mode and owner
+  vars:
+    molecule_want: "{{ item.item }}"
+    molecule_st: "{{ item.stat }}"
+    molecule_kinds: { file: isreg, directory: isdir, link: islnk, absent: exists }
+    molecule_kind: "{{ molecule_kinds[molecule_want.state] }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_st.exists == (molecule_want.state != 'absent')
+      - molecule_want.state == 'absent' or molecule_st[molecule_kind]
+      - molecule_want.mode is not defined or molecule_st.mode == molecule_want.mode
+      - molecule_want.owner is not defined or molecule_st.pw_name == molecule_want.owner
+      - molecule_want.group is not defined or molecule_st.gr_name == molecule_want.group
+    fail_msg: >-
+      {{ molecule_want.path }}: want {{ molecule_want | to_json }}, got
+      {{ molecule_st | dict2items
+         | selectattr('key', 'in', ['exists', 'isreg', 'isdir', 'islnk', 'mode', 'pw_name', 'gr_name'])
+         | items2dict | to_json }}
+    quiet: true
+  loop: "{{ molecule_path_stats.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"

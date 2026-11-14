@@ -1,54 +1,20 @@
 ---
-role_name_check: 0
-
-driver:
-  name: podman
-
 platforms:
-  - name: common-docker-installation
-    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian12-ansible:latest}
+  # dockerd inside podman needs a privileged container with SYS_ADMIN.
+  - name: ${MOLECULE_ROLE}-${MOLECULE_SCENARIO_NAME}
+    image: ${MOLECULE_IMAGE:-docker.io/geerlingguy/docker-debian13-ansible:latest}
     pre_build_image: true
-    command: ${MOLECULE_COMMAND:-/lib/systemd/systemd}
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    # Note: Privileged required for Docker-in-Podman testing
+    command: /usr/lib/systemd/systemd
     privileged: true
     capabilities:
       - SYS_ADMIN
     env:
       container: podman
-
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
 provisioner:
-  name: ansible
-  env:
-    # CI/local both run `cd roles/<role> && molecule test`, so
-    # MOLECULE_PROJECT_DIRECTORY is roles/common - one level up is roles/,
-    # letting `include_role: name: common` resolve by name.
-    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
-  config_options:
-    defaults:
-      interpreter_python: auto_silent
   inventory:
     group_vars:
       all:
+        # docker.yml adds ansible_user to the docker group, and the podman inventory does not set it.
         ansible_user: root
-        timezone: UTC
-        common_package_cache_valid_time: 3600
-
-verifier:
-  name: ansible
-
-scenario:
-  name: docker-installation
-  test_sequence:
-    - dependency
-    - cleanup
-    - destroy
-    - syntax
-    - create
-    - prepare
-    - converge
-    - verify
-    - idempotence
-    - cleanup
-    - destroy

@@ -1,0 +1,27 @@
+---
+- name: Read root's crontab
+  ansible.builtin.command: crontab -l -u root
+  register: media_crontab
+  changed_when: false
+
+- name: Assert the pipeline and snapshot cron entries
+  ansible.builtin.assert:
+    that:
+      - "'Media nightly sync' in media_crontab.stdout"
+      - "'Media weekly retag' in media_crontab.stdout"
+      - "'/usr/local/bin/media-sync --retag' in media_crontab.stdout"
+      # The weekly apply runs on Sunday after the restic job and before the weekly retag.
+      - "'0 4 * * 0 /usr/local/bin/media-sync --apply' in media_crontab.stdout"
+      - "'Media Syncthing local backup' in media_crontab.stdout"
+      - "'/usr/local/bin/yt-dlp-update' in media_crontab.stdout"
+      - "'PATH=\"/usr/local/bin:/usr/bin:/bin\"' in media_crontab.stdout"
+    fail_msg: "crontab wrong:\n{{ media_crontab.stdout }}"
+
+- name: Check the stack unit state
+  ansible.builtin.command: systemctl {{ item }} stack
+  register: stack_unit_state
+  changed_when: false
+  failed_when: stack_unit_state.stdout | trim != item_expected[item]
+  vars:
+    item_expected: {is-active: active, is-enabled: enabled}
+  loop: [is-active, is-enabled]

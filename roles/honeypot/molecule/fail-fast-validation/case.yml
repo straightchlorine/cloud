@@ -1,0 +1,24 @@
+---
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run honeypot validate.yml
+      # include_role vars outrank the os role's set_fact, so os_family and os_codename reach validate.yml.
+      ansible.builtin.include_role:
+        name: honeypot
+        tasks_from: validate
+      vars:
+        vault_honeypot_r2_bucket: "{{ molecule_case.vault_honeypot_r2_bucket }}"
+        vault_honeypot_age_recipient: "{{ molecule_case.vault_honeypot_age_recipient }}"
+        honeypot_ssh_port: "{{ molecule_case.honeypot_ssh_port }}"
+        honeypot_auto_updates_upgrade_type: "{{ molecule_case.honeypot_auto_updates_upgrade_type }}"
+        honeypot_backup_retention_days: "{{ molecule_case.honeypot_backup_retention_days }}"
+        honeypot_image_prune_keep: "{{ molecule_case.honeypot_image_prune_keep }}"
+        os_family: "{{ molecule_case.os_family }}"
+        os_codename: "{{ molecule_case.os_codename }}"
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

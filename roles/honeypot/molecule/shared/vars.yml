@@ -1,0 +1,22 @@
+---
+ntfy_server_url: "https://ntfy.example.test"
+vault_honeypot_ntfy_token: "tk_molecule_test_token"
+vault_honeypot_r2_bucket: "molecule-bucket"
+vault_honeypot_r2_endpoint: "https://molecule.r2.cloudflarestorage.com"
+vault_honeypot_r2_access_key_id: "molecule-access-key"
+vault_honeypot_r2_secret_access_key: "molecule-secret-key"
+vault_honeypot_age_recipient: "age1moleculetestrecipientvalue"
+vault_honeypot_maxmind_account_id: "molecule-account"
+vault_honeypot_maxmind_license_key: "molecule-license"
+
+# Timer jobs converge installs and verify checks. Each entry is a task file plus an optional job name.
+honeypot_molecule_task_files:
+  - {file: docker}
+  - {file: notify}
+  - {file: backup}
+  - {file: mmdb_refresh}
+  - {file: timer_job, job: image-prune}
+honeypot_molecule_timers:
+  - backup
+  - mmdb-refresh
+  - image-prune

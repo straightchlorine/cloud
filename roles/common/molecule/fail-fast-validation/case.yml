@@ -1,0 +1,26 @@
+---
+# Each value reads molecule_case, so a key the case lacks leaves the role variable undefined.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run unified_validation # noqa: var-naming[no-role-prefix]
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: unified_validation
+      vars:
+        validation_context: "{{ molecule_case.validation_context }}"
+        validation_type: "{{ molecule_case.validation_type }}"
+        validation_role: "{{ molecule_case.validation_role }}"
+        required_variables: "{{ molecule_case.required_variables }}"
+        vault_placeholders: "{{ molecule_case.vault_placeholders }}"
+        validation_supported_os_families: "{{ molecule_case.validation_supported_os_families }}"
+        os_family: "{{ molecule_case.os_family }}"
+        os_name: "{{ molecule_case.os_name }}"
+        os_version: "{{ molecule_case.os_version }}"
+        molecule_probe: "{{ molecule_case.probe }}"
+
+    - name: Fail when validation let the case through
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure names the case's condition
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

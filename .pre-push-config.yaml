@@ -1,36 +1,17 @@
 ---
-# These pre-push hooks are slower than the pre-commit ones.
-# Install: pre-commit install --hook-type pre-push -c .pre-push-config.yaml
-# Manual: pre-commit run --hook-stage push --all-files -c .pre-push-config.yaml
-
+# pre-commit install --hook-type pre-push -c .pre-push-config.yaml
 repos:
   - repo: local
     hooks:
-      - id: ansible-playbook-syntax-all
-        name: Ansible playbook syntax check (all playbooks)
-        entry: >
-          bash -c 'find playbooks -name "*.yml"
-          -exec ansible-playbook --syntax-check {} \; 2>/dev/null'
+      - id: lint
+        name: ansible-lint and yamllint
+        entry: just lint
         language: system
         pass_filenames: false
-
-  # The common role is the smoke test because the other roles build on it.
-  - repo: local
-    hooks:
-      - id: molecule-test-common
-        name: Molecule test - common role (default)
-        entry: bash -c 'cd roles/common && uv run molecule test --scenario-name default'
+      # common is the smoke test: the other roles build on it.
+      - id: molecule-common
+        name: Molecule common default
+        entry: scripts/molecule-test.sh common default
         language: system
         pass_filenames: false
         verbose: true
-
-  - repo: local
-    hooks:
-      - id: ansible-lint-roles
-        name: Ansible-lint roles and playbooks
-        entry: bash -c 'ansible-lint roles/ playbooks/'
-        language: system
-        pass_filenames: false
-
-default_language_version:
-  python: python3

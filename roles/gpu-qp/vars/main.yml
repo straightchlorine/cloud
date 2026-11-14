@@ -21,3 +21,8 @@ gpu_qp_bench_files:
   - side.py
   - status.sh
   - supervise.sh
+
+# The benchmark-run process pattern, read from files/bench/env.sh so the scripts and the deploy guard share one copy.
+gpu_qp_bench_proc_re: >-
+  {{ lookup('ansible.builtin.file', 'bench/env.sh')
+     | regex_search("(?<=^BENCH_PROC_RE=').*(?='$)", multiline=True) }}

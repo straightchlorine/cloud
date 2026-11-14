@@ -1,0 +1,59 @@
+---
+- name: Assert the sftp probe and the init refusal ran in converge
+  vars:
+    molecule_case_ids: [offsite-probe, init-refused, cache-symlink]
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+
+- name: Assert the Storage Box connection files and the refused job's repository
+  vars:
+    molecule_paths:
+      - { path: /etc/restic/ssh_config, state: file, mode: "0640", owner: root, group: restic }
+      - { path: /etc/restic/known_hosts, state: file, mode: "0644", owner: root, group: root }
+      - { path: /srv/molecule-repos/refused/config, state: absent }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the ssh config and the pinned host keys
+  ansible.builtin.slurp:
+    src: "/etc/restic/{{ item }}"
+  loop: [ssh_config, known_hosts]
+  register: molecule_conn_text
+
+- name: Assert the Storage Box connection is pinned
+  vars:
+    molecule_conn: "{{ molecule_conn_text.results | items2dict(key_name='item', value_name='content') }}"
+    molecule_ssh: "{{ molecule_conn.ssh_config | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - molecule_ssh is search('^Host hetzner-storage$', multiline=True)
+      - molecule_ssh is search('^    HostName storage.example.test$', multiline=True)
+      - molecule_ssh is search('^    User u0$', multiline=True)
+      - molecule_ssh is search('^    Port 23$', multiline=True)
+      - molecule_ssh is search('^    IdentityFile /etc/ssh/restic_storage_key$', multiline=True)
+      - molecule_ssh is search('^    StrictHostKeyChecking yes$', multiline=True)
+      - molecule_ssh is search('^    UserKnownHostsFile /etc/restic/known_hosts$', multiline=True)
+      - molecule_ssh is search('^    GlobalKnownHostsFile /dev/null$', multiline=True)
+      - (molecule_conn.known_hosts | b64decode) ==
+        '[storage.example.test]:23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAImolecule\n'
+    quiet: true
+
+- name: Assert the sudo grant went only once another general grant existed, and the home stayed
+  vars:
+    molecule_paths:
+      - { path: /etc/sudoers.d/backup-user, state: absent }
+      - { path: /etc/sudoers.d/other-general, state: file }
+      - { path: /var/lib/molecule-lockout-kept, state: file }
+      - { path: /opt/backup, state: absent }
+      - { path: /var/lib/molecule-lockout-home-kept, state: file }
+      - { path: /var/lib/molecule-unrelated-kept, state: file }
+      - { path: /var/lib/molecule-self-grant-moved, state: file }
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+
+- name: Read the account entry recorded while the guard ran
+  ansible.builtin.slurp:
+    src: /var/lib/molecule-lockout-account
+  register: molecule_lockout_account
+
+- name: Assert the account stayed on the legacy home
+  ansible.builtin.assert:
+    that: (molecule_lockout_account.content | b64decode) is match('backup:x:34:34:backup:/opt/backup:')
+    quiet: true

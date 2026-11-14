@@ -10,33 +10,33 @@
   ansible.builtin.fail:
     msg: >-
       os discovery supports only {{ os_supported_families | join(', ') }} -
-      got {{ ansible_os_family }} ({{ ansible_distribution }}
-      {{ ansible_distribution_version }}).
-  when: ansible_os_family not in os_supported_families
+      got {{ ansible_facts.os_family }} ({{ ansible_facts.distribution }}
+      {{ ansible_facts.distribution_version }}).
+  when: ansible_facts.os_family not in os_supported_families
 
 - name: Reject architectures without a download mapping
   ansible.builtin.fail:
     msg: >-
-      No os_arch_download_map entry for ansible_architecture
-      '{{ ansible_architecture }}'. Supported:
+      No os_arch_download_map entry for ansible_facts.architecture
+      '{{ ansible_facts.architecture }}'. Supported:
       {{ os_arch_download_map.keys() | sort | join(', ') }}.
-  when: ansible_architecture not in os_arch_download_map
+  when: ansible_facts.architecture not in os_arch_download_map
 
 - name: Publish normalized OS facts
   ansible.builtin.set_fact:
-    os_family: "{{ ansible_os_family }}"
-    os_name: "{{ ansible_distribution }}"
-    os_version: "{{ ansible_distribution_major_version }}"
-    os_codename: "{{ ansible_distribution_release }}"
-    os_is_debian: "{{ ansible_os_family == 'Debian' }}"
+    os_family: "{{ ansible_facts.os_family }}"
+    os_name: "{{ ansible_facts.distribution }}"
+    os_version: "{{ ansible_facts.distribution_major_version }}"
+    os_codename: "{{ ansible_facts.distribution_release }}"
+    os_is_debian: "{{ ansible_facts.os_family == 'Debian' }}"
 
 - name: Publish normalized architecture facts
   ansible.builtin.set_fact:
-    os_arch_machine: "{{ ansible_architecture }}"
-    os_arch_raw: "{{ ansible_machine }}"
-    os_arch_download: "{{ os_arch_download_map[ansible_architecture] }}"
-    os_is_arm: "{{ ansible_architecture in os_arch_arm }}"
-    os_is_64bit: "{{ ansible_architecture in os_arch_64bit }}"
+    os_arch_machine: "{{ ansible_facts.architecture }}"
+    os_arch_raw: "{{ ansible_facts.machine }}"
+    os_arch_download: "{{ os_arch_download_map[ansible_facts.architecture] }}"
+    os_is_arm: "{{ ansible_facts.architecture in os_arch_arm }}"
+    os_is_64bit: "{{ ansible_facts.architecture in os_arch_64bit }}"
 
 - name: Report discovered OS and architecture
   ansible.builtin.debug:

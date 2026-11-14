@@ -1,0 +1,46 @@
+---
+- name: Prepare common docker-installation
+  hosts: all
+  become: true
+  tasks:
+    # userns-remap makes dockerd chown /var/lib/docker into dockremap's subordinate range. Rootless podman maps
+    # only the container's first 65536 ids, so the range must sit inside them; useradd's default (100000+) does not.
+    - name: Give dockremap a subordinate range inside the container's id map
+      ansible.builtin.copy:
+        content: "dockremap:10000:50000\n"
+        dest: "/etc/{{ item }}"
+        mode: "0644"
+      loop: [subuid, subgid]
+
+    - name: Create the dockremap user
+      ansible.builtin.user:
+        name: dockremap
+        system: true
+        create_home: false
+
+    # A rootless container may not create netfilter chains or bridges, so dockerd starts without them.
+    # The role's daemon.json stays untouched; only the test unit gets the flags.
+    - name: Create the docker.service drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Start dockerd without iptables management
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.service.d/molecule.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock \
+            --iptables=false --ip6tables=false --bridge=none
+        mode: "0644"
+
+    # The second docker.yml run connects as docker-probe (ansible_user is the connection user), like the fleet's
+    # NOPASSWD ansible account.
+    - name: Let docker-probe become root without a password
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/docker-probe
+        content: "docker-probe ALL=(ALL) NOPASSWD: ALL\n"
+        mode: "0440"
+        validate: visudo -cf %s

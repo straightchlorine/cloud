@@ -1,0 +1,21 @@
+---
+- name: Copy the bench tests into the container
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../tests/bench/"
+    dest: /tmp/qp-bench-tests
+    mode: preserve
+
+- name: Run the bench tests against the installed helpers
+  ansible.builtin.command: bash /tmp/qp-bench-tests/run.sh
+  environment:
+    GPU_QP_TEST_LIB: "{{ gpu_qp_lib_path }}"
+  register: gpu_qp_suite
+  changed_when: false
+  # The assert below prints the suite output on failure.
+  failed_when: false
+
+- name: Assert the suite passed
+  ansible.builtin.assert:
+    that: gpu_qp_suite.rc == 0 and gpu_qp_suite.stdout == 'ALL PASSED'
+    fail_msg: "bench tests failed:\n{{ gpu_qp_suite.stdout }}\n{{ gpu_qp_suite.stderr }}"
+    quiet: true
