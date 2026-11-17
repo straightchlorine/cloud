@@ -46,6 +46,11 @@
   hosts: fleet
   become: true
   gather_facts: true
+  # A fresh host runs its first unattended-upgrades during the deploy, holding the dpkg lock for many minutes
+  # on a Pi. apt waits for it instead of failing after its default 60 s.
+  module_defaults: &apt_waits_for_dpkg
+    ansible.builtin.apt:
+      lock_timeout: 1800
   pre_tasks:
     - name: Sync system clock via chrony
       # This must run before any HTTPS-dependent task, such as the apt cache update, installs and checksum downloads.
@@ -82,6 +87,7 @@
   hosts: dns_servers
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: dns
       tags: [dns, pihole]
@@ -90,6 +96,7 @@
   hosts: music
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: media
       tags: [media, music, docker]
@@ -98,6 +105,7 @@
   hosts: automation
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: automation
       tags: [automation, services]
@@ -106,6 +114,7 @@
   hosts: monitoring
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: monitoring
       tags: [monitoring, grafana, prometheus, loki]
@@ -114,6 +123,7 @@
   hosts: workstations
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: restic
       tags: [restic, backup]
@@ -122,6 +132,7 @@
   hosts: gpu_qp
   become: true
   gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
   roles:
     - role: gpu-qp
       tags: [gpu-qp, gpu, quantum, docker]

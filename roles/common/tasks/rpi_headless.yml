@@ -1,7 +1,7 @@
 ---
 # A headless Pi needs no display stack. Without vc4-kms-v3d the kernel keeps its default CMA pool instead of the
 # overlay's 256 MB, and gpu_mem=16 boots the cut-down firmware (start_cd.elf), leaving the rest to Linux.
-# The firmware reads config.txt only at boot, so the handler asks for a reboot in the next unattended-upgrades run.
+# The firmware reads config.txt only at boot, so a change asks for a reboot in the next unattended-upgrades run.
 - name: Look at the firmware config
   ansible.builtin.stat:
     path: "{{ common_rpi_config_txt }}"
@@ -19,7 +19,7 @@
     regexp: '^dtoverlay=vc4-f?kms-v3d'
     state: absent
   become: true
-  notify: Request a reboot
+  register: common_rpi_headless_overlay
 
 - name: Turn off display, camera and audio probing and shrink the GPU memory
   ansible.builtin.lineinfile:
@@ -37,4 +37,16 @@
   loop_control:
     label: "{{ item.line }}"
   become: true
-  notify: Request a reboot
+  register: common_rpi_headless_settings
+
+- name: Request a reboot for the new firmware config
+  # A task, not a handler: a later failure in the play would drop a pending handler, and the rerun no longer sees
+  # a change. unattended-upgrades reboots after its next run when this file exists (Automatic-Reboot).
+  ansible.builtin.copy:
+    content: "*** System restart required ***\n"
+    dest: /var/run/reboot-required
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: common_rpi_headless_overlay.changed or common_rpi_headless_settings.changed

@@ -182,8 +182,9 @@ Before Ansible can reach the host at all, Wi-Fi has to be provisioned at flash
 time: Raspberry Pi Imager's advanced options (or `firstrun.sh` on the boot
 partition) set the SSID, key and country. Nothing in this repo can do that over
 a network that does not exist yet. The deploy user is the board's first user
-(`ansible`, see `hosts.yml`): name it so in Raspberry Pi Imager with the controller's SSH key. Raspberry Pi
-OS gives the first user passwordless sudo; on another image, run `playbooks/bootstrap.yml` first.
+(`ansible`, see `hosts.yml`): name it so in Raspberry Pi Imager with the controller's SSH key and a password.
+Imager does not grant it passwordless sudo, so run `playbooks/bootstrap.yml --limit dns -K` once before the
+first deploy.
 
 The optional USB drive still works through an OTG adapter, but on a Zero it is
 usually skipped - `storage.yml` falls back to SD-card-only and the journal size

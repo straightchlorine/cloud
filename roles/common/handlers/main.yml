@@ -57,14 +57,3 @@
     name: zramswap
     state: restarted
   become: true
-
-- name: Request a reboot
-  # unattended-upgrades reboots after its next run when this file exists (Automatic-Reboot), and reboot-notify
-  # announces it beforehand.
-  ansible.builtin.copy:
-    content: "*** System restart required ***\n"
-    dest: /var/run/reboot-required
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
