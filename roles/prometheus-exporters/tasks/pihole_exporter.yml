@@ -69,76 +69,8 @@
     name: common
     tasks_from: pihole_password_sync
 
-- name: Write the Pi-hole Exporter environment file
-  # An environment file keeps the password out of ExecStart, which ps exposes.
-  # The password is escaped because systemd parses backslashes and quotes in EnvironmentFile values.
-  ansible.builtin.copy:
-    content: |
-      PIHOLE_PASSWORD="{{ vault_pihole_webpassword
-      | replace(prom_exp_backslash, prom_exp_backslash ~ prom_exp_backslash)
-      | replace('"', prom_exp_backslash ~ '"') }}"
-    dest: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    owner: root
-    group: root
-    mode: "0600"
-  vars:
-    prom_exp_backslash: '\'
-  no_log: true
-  become: true
-  notify: Restart pihole-exporter
-
-- name: Create Pi-hole Exporter systemd service
-  ansible.builtin.template:
-    src: "{{ role_path }}/../common/templates/systemd-service.j2"
-    dest: /etc/systemd/system/pihole-exporter.service
-    owner: root
-    group: root
-    mode: "0644"
-  vars:
-    service_description: "Pi-hole Prometheus Exporter"
-    service_after: ["network.target", "pihole-FTL.service"]
-    # The exporter never re-authenticates, and an FTL restart drops all API sessions.
-    # The exporter must therefore restart together with FTL.
-    service_part_of: ["pihole-FTL.service"]
-    common_service_wants: ["network.target"]
-    service_type: "simple"
-    service_user: "{{ prometheus_exporters_user }}"
-    service_group: "{{ prometheus_exporters_group }}"
-    environment_file: "{{ prometheus_exporters_config_dir }}/pihole-exporter.conf"
-    # FTL counts as started before its API listens, and the exporter logs in only once.
-    # The exporter therefore waits for the API first. The $$ escapes systemd's variable expansion.
-    exec_start_pre:
-      - >-
-        /bin/sh -c 'for i in $$(seq 1 20); do curl -sf -m 2 -o /dev/null
-        http://{{ prometheus_exporters_pihole_exporter_target_host }}:{{
-        prometheus_exporters_pihole_exporter_target_port }}/api/info/login
-        && exit 0; sleep 2; done; exit 1'
-    exec_start: >-
-      {{ prometheus_exporters_base_dir }}/bin/pihole_exporter
-      -pihole_hostname {{ prometheus_exporters_pihole_exporter_target_host }}
-      -timeout {{ prometheus_exporters_pihole_exporter_api_timeout }}
-      -port {{ prometheus_exporters_pihole_exporter_port }}
-    restart_policy: "on-failure"
-    restart_sec: "5"
-    syslog_identifier: "pihole-exporter"
-    kill_mode: "mixed"
-    timeout_stop_sec: "5"
-    common_protect_system: "strict"
-    common_protect_home: "yes"
-    common_private_tmp: "yes"
-    common_read_write_paths: ["{{ prometheus_exporters_base_dir }}/bin"]
-  become: true
-  notify:
-    - Reload systemd
-    - Restart pihole-exporter
-
-- name: Enable and start Pi-hole Exporter service
-  ansible.builtin.systemd:
-    name: pihole-exporter
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
+- name: Install the Pi-hole Exporter unit
+  ansible.builtin.include_tasks: pihole_exporter_unit.yml
 
 - name: Restart the exporter so it logs in with the synced password
   ansible.builtin.systemd:

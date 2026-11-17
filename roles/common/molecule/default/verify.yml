@@ -27,6 +27,35 @@
     - name: Gather installed packages
       ansible.builtin.package_facts:
 
+    - name: Assert a board without a hardware clock keeps its time across reboots
+      ansible.builtin.assert:
+        that: "'fake-hwclock' in ansible_facts.packages"
+        fail_msg: "no /dev/rtc0 in the container, yet fake-hwclock is not installed"
+        quiet: true
+
+    - name: Dry-run logrotate over every config
+      # Exit 0 and no error lines: a pattern that overlaps a package's own log makes logrotate drop the file.
+      ansible.builtin.command: logrotate --debug /etc/logrotate.conf
+      register: common_logrotate_debug
+      changed_when: false
+
+    - name: Assert logrotate accepts the configs
+      ansible.builtin.assert:
+        that: common_logrotate_debug.stderr_lines | select('match', '^error') | list | length == 0
+        fail_msg: "{{ common_logrotate_debug.stderr_lines | select('match', '^error') | list }}"
+        quiet: true
+
+    - name: Read fail2ban's restart policy
+      ansible.builtin.command: systemctl show fail2ban -p Restart -p ActiveState --value
+      register: common_fail2ban_unit
+      changed_when: false
+
+    - name: Assert fail2ban runs and restarts after a failure
+      ansible.builtin.assert:
+        that: common_fail2ban_unit.stdout_lines == ['on-failure', 'active']
+        fail_msg: "fail2ban Restart/ActiveState: {{ common_fail2ban_unit.stdout_lines }}"
+        quiet: true
+
     - name: Assert chrony is installed
       ansible.builtin.assert:
         that: "'chrony' in ansible_facts.packages"

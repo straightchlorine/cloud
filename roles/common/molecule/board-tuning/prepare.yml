@@ -11,6 +11,39 @@
           ExecStart=/usr/bin/sleep infinity
         mode: "0644"
 
+    # The stock Raspberry Pi OS (trixie) config.txt, as the zero shipped it.
+    - name: Create the firmware directory
+      ansible.builtin.file:
+        path: /boot/firmware
+        state: directory
+        mode: "0755"
+
+    - name: Write a stock firmware config
+      ansible.builtin.copy:
+        dest: /boot/firmware/config.txt
+        content: |
+          # For more options and information see
+          # http://rptl.io/configtxt
+          dtparam=audio=on
+          camera_auto_detect=1
+          display_auto_detect=1
+          auto_initramfs=1
+          dtoverlay=vc4-kms-v3d
+          max_framebuffers=2
+          disable_fw_kms_setup=1
+          arm_64bit=1
+          disable_overscan=1
+          arm_boost=1
+
+          [cm4]
+          otg_mode=1
+
+          [cm5]
+          dtoverlay=dwc2,dr_mode=host
+
+          [all]
+        mode: "0755"
+
     - name: Load the stub unit
       ansible.builtin.systemd_service:
         daemon_reload: true

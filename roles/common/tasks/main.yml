@@ -11,13 +11,7 @@
   become: true
 
 - name: Configure log rotation
-  ansible.builtin.template:
-    src: logrotate.conf.j2
-    dest: /etc/logrotate.d/system-logs
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+  ansible.builtin.include_tasks: logrotate.yml
 
 - name: Install the ntfy helper and configure unattended-upgrades
   ansible.builtin.include_tasks: base_reapply.yml
@@ -28,6 +22,21 @@
 - name: Configure Wi-Fi power-save tuning
   ansible.builtin.include_tasks: wifi_powersave.yml
   when: common_wifi_powersave_tuning_enabled
+
+- name: Disable cloud-init after first-boot provisioning
+  # Raspberry Pi OS images provision through cloud-init once; later boots only rerun it and fail.
+  ansible.builtin.copy:
+    content: ""
+    dest: /etc/cloud/cloud-init.disabled
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: common_cloud_init_disabled
+
+- name: Strip the display stack from a headless Pi
+  ansible.builtin.include_tasks: rpi_headless.yml
+  when: common_rpi_headless_enabled
 
 - name: Configure compressed RAM swap
   ansible.builtin.include_tasks: zram.yml

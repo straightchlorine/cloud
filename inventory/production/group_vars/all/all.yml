@@ -1,11 +1,6 @@
 ---
 timezone: Europe/Warsaw
 
-# playbooks/backup/deploy-coordinator.yml reads the base path.
-# roles/backup overrides the password file per target when it renders restic-init.sh.
-common_backup_base_path: "/opt/backup"
-common_backup_password_file: "{{ common_backup_base_path }}/restic-password"
-
 # The domain comes from the vault.
 domain_name: "{{ vault_domain_name }}"
 

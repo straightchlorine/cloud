@@ -83,7 +83,7 @@ iterate role scenario:
 # Syntax-check all playbooks
 [group: 'test']
 syntax:
-    @ANSIBLE_ROLES_PATH=$PWD/roles ansible-playbook --syntax-check playbooks/*.yml playbooks/*/*.yml >/dev/null
+    @ANSIBLE_ROLES_PATH=$PWD/roles ansible-playbook --syntax-check playbooks/*.yml >/dev/null
     @echo "{{ _ok }} playbook syntax"
 
 # Run all linters (ansible-lint + yamllint)

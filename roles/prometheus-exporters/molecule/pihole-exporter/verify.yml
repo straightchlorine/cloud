@@ -1,0 +1,71 @@
+---
+- name: Verify prometheus-exporters pihole-exporter
+  hosts: all
+  become: true
+  vars:
+    molecule_links:
+      - { path: /etc/systemd/system/pihole-FTL.service.wants/pihole-exporter.service, state: link }
+      - { path: /etc/systemd/system/multi-user.target.wants/pihole-exporter.service, state: absent }
+  tasks:
+    - name: Read the exporter state and invocation
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState -p InvocationID --value
+      register: molecule_before
+      changed_when: false
+
+    - name: Assert the exporter runs
+      ansible.builtin.assert:
+        that: molecule_before.stdout_lines[0] == 'active'
+        fail_msg: "pihole-exporter is {{ molecule_before.stdout_lines[0] }}"
+        quiet: true
+
+    # pihole -up stops FTL, reinstalls it and starts it again.
+    - name: Stop FTL
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        state: stopped
+
+    - name: Wait for the exporter to stop with FTL
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState --value
+      register: molecule_stopped
+      changed_when: false
+      until: molecule_stopped.stdout == 'inactive'
+      retries: 10
+      delay: 1
+
+    - name: Start FTL
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        state: started
+
+    - name: Wait for the exporter to start with FTL
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState --value
+      register: molecule_started
+      changed_when: false
+      until: molecule_started.stdout == 'active'
+      retries: 30
+      delay: 1
+
+    - name: Read the exporter invocation
+      ansible.builtin.command: systemctl show pihole-exporter -p InvocationID --value
+      register: molecule_after_start
+      changed_when: false
+
+    - name: Restart FTL
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        state: restarted
+
+    - name: Wait for the exporter to run again
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState -p InvocationID --value
+      register: molecule_after_restart
+      changed_when: false
+      until:
+        - molecule_after_restart.stdout_lines[0] == 'active'
+        - molecule_after_restart.stdout_lines[1] != molecule_after_start.stdout
+      retries: 30
+      delay: 1
+
+    - name: Assert the exporter is linked to FTL, not to boot
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths: "{{ molecule_links }}"

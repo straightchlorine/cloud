@@ -16,6 +16,31 @@
   become: true
   notify: Restart fail2ban
 
+- name: Create the fail2ban drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/fail2ban.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Restart fail2ban after a failure
+  # A failed start at boot otherwise leaves SSH unprotected until the next deploy.
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      Restart=on-failure
+      RestartSec=30
+    dest: /etc/systemd/system/fail2ban.service.d/restart.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Restart fail2ban
+
 - name: Start and enable fail2ban
   ansible.builtin.systemd:
     name: fail2ban

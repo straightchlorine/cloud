@@ -56,3 +56,31 @@
         fail_msg: >-
           wifi-powersave is {{ common_tuning_unit.status.ActiveState }} / {{ common_tuning_unit.status.UnitFileState }}
         quiet: true
+
+    - name: Read the firmware config
+      ansible.builtin.slurp:
+        src: /boot/firmware/config.txt
+      register: common_config_txt
+
+    - name: Assert the headless settings sit before the first board filter, the rest untouched
+      vars:
+        lines: "{{ (common_config_txt.content | b64decode).splitlines() }}"
+        global_lines: "{{ lines[:lines.index('[cm4]')] }}"
+      ansible.builtin.assert:
+        that:
+          - lines | select('match', 'dtoverlay=vc4') | list | length == 0
+          - "'camera_auto_detect=0' in global_lines"
+          - "'display_auto_detect=0' in global_lines"
+          - "'dtparam=audio=off' in global_lines"
+          - "'gpu_mem=16' in global_lines"
+          - "'arm_64bit=1' in global_lines"
+          - lines[lines.index('[cm5]') + 1] == 'dtoverlay=dwc2,dr_mode=host'
+          - lines[-1] == '[all]'
+        fail_msg: "{{ lines }}"
+        quiet: true
+
+    - name: Assert the change requested a reboot
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - {path: /var/run/reboot-required, state: file}

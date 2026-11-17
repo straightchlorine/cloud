@@ -6,6 +6,8 @@ common_ntp_server_enabled: false
 common_ntp_allowed_networks: []
 
 # Security Configuration
+# Raspberry Pi OS images provisioned by rpi-imager; cloud VMs keep cloud-init.
+common_cloud_init_disabled: false
 common_fail2ban_enabled: true
 common_fail2ban_ssh_maxretry: 3
 common_fail2ban_ssh_bantime: 600
@@ -76,6 +78,9 @@ common_rpi_cgroup_memory_enabled: true
 # do better with zram than SD-card swap.
 common_wifi_powersave_tuning_enabled: false
 common_zram_enabled: false
+# Opt-in for headless Raspberry Pi OS hosts: no display, camera or audio, minimum GPU memory.
+common_rpi_headless_enabled: false
+common_rpi_config_txt: /boot/firmware/config.txt
 common_zram_algorithm: "zstd"
 common_zram_percent: 50
 common_zram_priority: 100

@@ -1,0 +1,41 @@
+---
+# Creates the Ansible connection user on a host, connecting as a user that can sudo today:
+#   ansible-playbook -i inventory/production playbooks/bootstrap.yml --limit <host> -e ansible_user=<user> [-K]
+# Then set ansible_user: ansible for the host in inventory/production/hosts.yml.
+- name: Create the Ansible connection user
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    bootstrap_user: ansible
+  tasks:
+    - name: Refuse a run without --limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: "Pass --limit <host>: this creates a root-equivalent account."
+        quiet: true
+
+    - name: Create the user
+      ansible.builtin.user:
+        name: "{{ bootstrap_user }}"
+        shell: /bin/bash
+
+    - name: Authorize the controller key
+      ansible.posix.authorized_key:
+        user: "{{ bootstrap_user }}"
+        key: "{{ lookup('ansible.builtin.file', ansible_ssh_private_key_file ~ '.pub') }}"
+
+    - name: Grant passwordless sudo
+      # Become runs arbitrary modules, so the connection user is the one account with a full grant.
+      ansible.builtin.copy:
+        content: "{{ bootstrap_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        dest: "/etc/sudoers.d/{{ bootstrap_user }}"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Prove the user becomes root without a password
+      ansible.builtin.command:
+        argv: [runuser, -u, "{{ bootstrap_user }}", --, sudo, -n, -u, root, /usr/bin/true]
+      changed_when: false

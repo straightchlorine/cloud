@@ -18,6 +18,8 @@
           - gnupg
           - python3-netaddr
           - cron
+          - logrotate
+          - fail2ban
         state: present
       become: true
 

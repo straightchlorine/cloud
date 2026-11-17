@@ -9,7 +9,7 @@ existing violations should be fixed when encountered.
 ```
 inventory/production/   hosts.yml, group_vars/, host_vars/, vault.yml.example
 playbooks/              site.yml (fleet), per-stack plays, per-role *-teardown.yml,
-                        backup/ (legacy coordinator play)
+                        bootstrap.yml (creates the Ansible connection user on a new host)
 roles/                  common os hardware firewall prometheus-exporters  (base)
                         dns automation media gpu-qp monitoring            (stacks)
                         restic backup                                     (backup)
@@ -164,7 +164,7 @@ inventory/production/
     pi-test-media.yml             # Disposable media staging/test Pi
     media.yml                     # Media stack host (navidrome, beets, yt-dlp)
     debian-monitoring.yml         # Monitoring-specific: grafana, prometheus
-    backup_wyse.yml               # Coordinator-specific: backup targets
+    backup_wyse.yml               # Dell Wyse; legacy coordinator retired by backup-teardown.yml
     station-arch.yml              # Workstation
     gpu-station.yml               # GPU research host (gpu-qp)
     centos-honeypot.yml           # Honeypot VPS
@@ -329,8 +329,9 @@ interrupted; prune and `check` run weekly. Inspect or restore with
 `restic-job exec <job> snapshots|restore ...`. Job schema and operator
 commands: `roles/restic/README.md`.
 
-Coordinator-backed hosts (remote targets) are added to `coordinator_targets`
-in the coordinator's host_vars instead (see docs/backup/index.md).
+Hosts that cannot run the engine themselves (the dns Pi) are not backed up
+yet: their pull job on backup_wyse replaces the retired coordinator
+(`roles/backup` keeps only its teardown).
 
 ---
 
@@ -470,10 +471,11 @@ Checklist for adding a new service role:
 
 ### Adding New Hosts
 
-1. Add to `inventory/production/hosts.yml` with appropriate groups
+1. Add to `inventory/production/hosts.yml` with appropriate groups, then create
+   the connection user with `playbooks/bootstrap.yml`
 2. Create `host_vars/{hostname}.yml` with all required variables (no defaults)
 3. Add to the `prometheus` group for monitoring
-4. Add to backup targets (standalone or coordinator)
+4. Wire its backup: a stack role's restic job, or `restic_jobs` in host_vars
 5. Set `device_type`, `prometheus_role`, and exporter flags
 
 ---

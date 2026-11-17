@@ -20,6 +20,20 @@
     state: present
   become: true
 
+- name: Look for a hardware clock
+  ansible.builtin.stat:
+    path: /dev/rtc0
+  register: common_chrony_rtc
+
+- name: Keep the time across reboots on a board without a hardware clock
+  # chrony replaces systemd-timesyncd, which saved the time to disk; without either, a Pi boots at its image date
+  # and runs every early service with a clock weeks behind until chrony steps it.
+  ansible.builtin.apt:
+    name: fake-hwclock
+    state: present
+  become: true
+  when: not common_chrony_rtc.stat.exists
+
 - name: Create chrony configuration
   ansible.builtin.template:
     src: chrony.conf.j2

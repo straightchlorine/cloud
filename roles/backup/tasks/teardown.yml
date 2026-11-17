@@ -1,0 +1,148 @@
+---
+# Removes every trace of the legacy coordinator: its units, both base trees, the backup account's sudo grant and
+# home, the legacy restic binary and the fuse user_allow_other line. Delete this role once backup_wyse is clean.
+- name: Refuse to run outside a confirmed teardown
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: teardown_gate
+  vars:
+    common_teardown_name: backup
+
+- name: List the legacy units systemd knows
+  ansible.builtin.command:
+    argv: [systemctl, list-units, --all, --plain, --no-legend, --full, "backup-*", "repository-*"]
+  register: backup_teardown_units
+  changed_when: false
+
+- name: Stop and disable the legacy units
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ backup_teardown_units.stdout | regex_findall(backup_teardown_unit_re) | unique }}"
+  vars:
+    # Anchored so dpkg-db-backup.timer and the like never match.
+    backup_teardown_unit_re: '(?<![\w-])(?:backup|repository)-\S+?\.(?:service|timer)\b'
+
+- name: Find the legacy unit files, drop-ins and wants links
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: ["backup-*.service", "backup-*.timer", "backup-*.service.d", "repository-*.service", "repository-*.timer"]
+    file_type: any
+    recurse: true
+  register: backup_teardown_unit_files
+
+- name: Remove the legacy unit files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ backup_teardown_unit_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: backup_teardown_removed_units
+
+- name: Reload systemd  # noqa: no-handler
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: backup_teardown_removed_units.changed
+
+- name: Forget the legacy units' failed state  # noqa: no-handler
+  ansible.builtin.command:
+    argv: [systemctl, reset-failed, "backup-*", "repository-*"]
+  changed_when: true
+  when: backup_teardown_removed_units.changed
+
+- name: Remove both legacy base trees
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: [/opt/backup, /opt/enterprise-backup]
+
+- name: Find sudoers files that grant the backup account
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    contains: 'backup\s'
+  register: backup_teardown_sudoers
+
+- name: Remove the backup account's sudo grants
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ backup_teardown_sudoers.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Restore Debian's stock backup account
+  # base-passwd owns uid 34, so the account goes back to its stock home and shell instead of being deleted.
+  ansible.builtin.user:
+    name: backup
+    home: /var/backups
+    shell: /usr/sbin/nologin
+    groups: []
+    password_lock: true
+
+- name: Look at the restic binary
+  ansible.builtin.stat:
+    path: /usr/local/bin/restic
+  register: backup_teardown_restic
+
+- name: Remove the legacy restic binary
+  # roles/restic installs a symlink here; only the coordinator's plain copy goes.
+  ansible.builtin.file:
+    path: /usr/local/bin/restic
+    state: absent
+  when: backup_teardown_restic.stat.exists and not backup_teardown_restic.stat.islnk
+
+- name: Drop the coordinator's fuse user_allow_other line
+  ansible.builtin.lineinfile:
+    path: /etc/fuse.conf
+    regexp: '^user_allow_other'
+    state: absent
+
+- name: List the legacy units systemd still knows
+  ansible.builtin.command:
+    argv: [systemctl, list-units, --all, --plain, --no-legend, --full, "backup-*", "repository-*"]
+  register: backup_teardown_units_after
+  changed_when: false
+
+- name: Find what the teardown must have removed
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: ["backup-*.service", "backup-*.timer", "backup-*.service.d", "repository-*.service", "repository-*.timer"]
+    file_type: any
+    recurse: true
+  register: backup_teardown_unit_files_after
+
+- name: Find sudoers files that still grant the backup account
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    contains: 'backup\s'
+  register: backup_teardown_sudoers_after
+
+- name: Look at the legacy base trees
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: [/opt/backup, /opt/enterprise-backup]
+  register: backup_teardown_trees_after
+
+- name: Read the backup account
+  ansible.builtin.getent:
+    database: passwd
+    key: backup
+
+- name: Assert nothing of the coordinator survives
+  vars:
+    backup_teardown_unit_re: '(?<![\w-])(?:backup|repository)-\S+?\.(?:service|timer)\b'
+  ansible.builtin.assert:
+    that:
+      - backup_teardown_units_after.stdout | regex_findall(backup_teardown_unit_re) | length == 0
+      - backup_teardown_unit_files_after.files | length == 0
+      - backup_teardown_sudoers_after.files | length == 0
+      - backup_teardown_trees_after.results | selectattr('stat.exists') | list | length == 0
+      - ansible_facts.getent_passwd.backup[4:6] == ['/var/backups', '/usr/sbin/nologin']
+    fail_msg: >-
+      units: {{ backup_teardown_units_after.stdout_lines }},
+      unit files: {{ backup_teardown_unit_files_after.files | map(attribute='path') | list }},
+      sudoers: {{ backup_teardown_sudoers_after.files | map(attribute='path') | list }},
+      account: {{ ansible_facts.getent_passwd.backup }}
+    quiet: true

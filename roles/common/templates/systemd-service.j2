@@ -83,6 +83,12 @@ StandardError={{ common_standard_error }}
 {% if syslog_identifier is defined %}
 SyslogIdentifier={{ syslog_identifier }}
 {% endif %}
+{% if syslog_level is defined %}
+SyslogLevel={{ syslog_level }}
+{% endif %}
+{% if log_level_max is defined %}
+LogLevelMax={{ log_level_max }}
+{% endif %}
 
 # Restart configuration
 Restart={{ restart_policy if restart_policy is defined else common_restart_policy }}

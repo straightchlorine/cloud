@@ -25,6 +25,10 @@
     # The video group is needed because vcgencmd uses /dev/vchiq, which is owned by root:video with mode 0660.
     service_group: "video"
     exec_start: "{{ prometheus_exporters_pi_hardware_metrics_script }}"
+    # Each run would log three start/finish lines, which crowd the small in-RAM journal on a Pi.
+    # Errors and the script's own output (raised to warning) still reach the journal.
+    log_level_max: notice
+    syslog_level: warning
     common_protect_system: "strict"
     common_protect_home: "yes"
     common_private_tmp: "yes"

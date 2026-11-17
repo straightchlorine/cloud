@@ -36,7 +36,7 @@ prometheus_exporters_node_exporter_enabled_collectors:
 prometheus_exporters_node_exporter_textfile_dir: "{{ prometheus_exporters_base_dir }}/textfiles"
 prometheus_exporters_pi_hardware_metrics_enabled: true
 prometheus_exporters_pi_hardware_metrics_script: "{{ prometheus_exporters_base_dir }}/scripts/pi_hardware_metrics.sh"
-prometheus_exporters_pi_hardware_metrics_interval: 30 # seconds
+prometheus_exporters_pi_hardware_metrics_interval: 60 # seconds
 
 prometheus_exporters_pihole_exporter_enabled: false # Enable only on DNS hosts
 prometheus_exporters_pihole_exporter_version: "v1.2.0"

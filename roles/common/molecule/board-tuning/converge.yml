@@ -18,6 +18,11 @@
         tasks_from: wifi_powersave
 
     # zram.yml itself needs kernel modules a container lacks, so only its config render runs.
+    - name: Strip the display stack
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: rpi_headless
+
     - name: Render the zram swap config
       ansible.builtin.include_role:
         name: common

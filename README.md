@@ -107,7 +107,7 @@ tailnet. Teardowns are plays as well:
 | `honeypot` | The honeywatch VPS: sshd, firewalld, SELinux, updates, image pruning |
 | `alloy` | Grafana Alloy: the journal and host metrics to the fleet cluster over the tailnet |
 | `honeybench` | CentOS Stream 10 VM for benchmarking honeywatch |
-| `backup`, `restic` | Legacy dns pull coordinator; the restic engine for push hosts |
+| `backup`, `restic` | Teardown of the retired coordinator; the restic engine for every backup |
 
 `roles/dns` is the reference role: structure, fail-fast validation, post-deploy
 checks, teardown and Molecule scenarios. Where an older role does it differently,

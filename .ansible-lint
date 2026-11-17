@@ -1,6 +1,6 @@
 ---
 skip_list:
-  # The remaining hits are in roles/backup, roles/monitoring and roles/restic.
+  # The remaining hits are in roles/monitoring and roles/restic.
   # Drop each entry once those roles are clean.
   - ignore-errors
   - no-changed-when

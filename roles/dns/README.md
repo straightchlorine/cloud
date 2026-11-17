@@ -45,7 +45,7 @@ ansible-playbook -i inventory/production/hosts.yml \
 # Pi-hole authentication
 vault_pihole_webpassword: "secure_password"
 
-# Backup configuration (read by the restic coordinator, not by this role)
+# Off-site backup password (for the planned pull job on backup_wyse)
 vault_restic_dns_password: "32_character_secure_password"
 vault_backup_repository_base: "/home/backup/restic-repos"
 ```
@@ -82,9 +82,7 @@ dns_backup_enabled: true
 dns_backup_dir: "/home/zero/syncthing/pihole-backup"
 dns_backup_owner: "zero"
 
-# Off-site backup, run by the restic coordinator (not by this role)
-restic_repository: "{{ vault_backup_repository_base }}/dns"
-restic_password: "{{ vault_restic_dns_password }}"
+# Off-site backup: not wired yet; a pull job on backup_wyse will read vault_restic_dns_password.
 ```
 
 ## Security Enhancements

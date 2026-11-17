@@ -1,0 +1,9 @@
+---
+- name: Rotate the logs the repo's cron jobs write
+  ansible.builtin.template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/system-logs
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

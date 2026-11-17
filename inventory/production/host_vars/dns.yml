@@ -5,6 +5,8 @@ device_type: rpizero2w
 
 common_wifi_powersave_tuning_enabled: true
 common_zram_enabled: true
+common_cloud_init_disabled: true
+common_rpi_headless_enabled: true
 
 dns_pihole_dns_servers:
   - "192.168.20.1"

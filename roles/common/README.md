@@ -5,7 +5,8 @@ Shared task files for every Debian host role. Nothing here runs on its own excep
 `include_role: name=common tasks_from=<file>` and pass inputs as variables.
 
 `main.yml` applies, in order: packages, fail2ban, timezone, logrotate, ntfy helper and
-unattended-upgrades, dotfiles, and the opt-in Wi-Fi power-save and zram tuning. Chrony is applied
+unattended-upgrades, dotfiles, and the opt-in Wi-Fi power-save, cloud-init switch-off (`common_cloud_init_disabled`)
+and zram tuning. Chrony is applied
 by the fleet play before it.
 
 Inputs are `common_*` unless the contract predates the prefix (`compose_*`, `validation_*`),
@@ -18,8 +19,10 @@ which `roles/monitoring` still consumes.
 | `packages.yml` | dpkg lock wait, recovery, apt cache, common + role packages | `role_specific_packages` (optional) |
 | `package_cache_update.yml` | apt cache refresh honouring the cache age | `common_package_cache_valid_time` |
 | `apt_source.yml` | third-party apt repository: key, one-line source, cache refresh | `common_apt_source_name`, `_key_url`, `_key_path`, `_line` |
-| `chrony.yml` | NTP client, optional NTP server | `common_ntp_server_enabled`, `common_ntp_allowed_networks`, `common_ntp_upstream_server` |
-| `fail2ban.yml` | SSH jail | `common_fail2ban_*` |
+| `chrony.yml` | NTP client, optional NTP server; `fake-hwclock` on boards without `/dev/rtc0` | `common_ntp_server_enabled`, `common_ntp_allowed_networks`, `common_ntp_upstream_server` |
+| `fail2ban.yml` | SSH jail; restarts fail2ban after a failed start | `common_fail2ban_*` |
+| `rpi_headless.yml` | removes the display driver overlay, turns off display/camera/audio probing, `gpu_mem=16`; asks for a reboot | `common_rpi_headless_enabled`, `common_rpi_config_txt` |
+| `logrotate.yml` | rotates `/var/log/*-syncthing-backup.log`, the logs the repo's cron jobs write | `common_log_rotation_days`, `common_log_compression` |
 | `auto_updates.yml` | unattended-upgrades, night window, reboot notification | `common_auto_updates_*` |
 | `ntfy_install.yml` | `ntfy-notify` helper and its API key file | `vault_ntfy_api_key` |
 | `ntfy_notify.yml` | one notification from a play | `common_ntfy_title`, `_message`, `_priority`, `_tags` |

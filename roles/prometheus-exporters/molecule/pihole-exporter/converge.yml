@@ -1,0 +1,33 @@
+---
+- name: Converge prometheus-exporters pihole-exporter
+  hosts: all
+  become: true
+  vars:
+    prometheus_exporters_pihole_exporter_enabled: true
+    prometheus_exporters_pihole_exporter_target_host: 127.0.0.1
+    prometheus_exporters_pihole_exporter_target_port: 8080
+    vault_pihole_webpassword: molecule-pihole-password
+  tasks:
+    # The site play applies common first; the unit template reads its defaults and the unit tasks notify its handlers.
+    - name: Load the common role as the site play does
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+        public: true
+
+    - name: Run common_setup
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: common_setup
+
+    # The download needs a real Pi-hole to verify against; the unit's lifecycle is what this scenario tests.
+    - name: Install a stub exporter binary
+      ansible.builtin.copy:
+        content: "#!/bin/sh\nexec sleep infinity\n"
+        dest: /opt/prometheus-exporters/bin/pihole_exporter
+        mode: "0755"
+
+    - name: Install the exporter unit
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: pihole_exporter_unit

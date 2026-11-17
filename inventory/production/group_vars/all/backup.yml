@@ -1,6 +1,4 @@
 ---
-backup_user: backup
-backup_group: backup
 
 # The Hetzner Storage Box connection values come from the vault, see vault.yml.example.
 # One account is shared by every push host, so any host's key can delete every repository.

@@ -1,0 +1,40 @@
+---
+# A headless Pi needs no display stack. Without vc4-kms-v3d the kernel keeps its default CMA pool instead of the
+# overlay's 256 MB, and gpu_mem=16 boots the cut-down firmware (start_cd.elf), leaving the rest to Linux.
+# The firmware reads config.txt only at boot, so the handler asks for a reboot in the next unattended-upgrades run.
+- name: Look at the firmware config
+  ansible.builtin.stat:
+    path: "{{ common_rpi_config_txt }}"
+  register: common_rpi_config
+
+- name: Require the firmware config
+  ansible.builtin.assert:
+    that: common_rpi_config.stat.exists
+    fail_msg: "{{ common_rpi_config_txt }} not found; common_rpi_headless_enabled is for Raspberry Pi OS hosts"
+    quiet: true
+
+- name: Drop the display driver overlay
+  ansible.builtin.lineinfile:
+    path: "{{ common_rpi_config_txt }}"
+    regexp: '^dtoverlay=vc4-f?kms-v3d'
+    state: absent
+  become: true
+  notify: Request a reboot
+
+- name: Turn off display, camera and audio probing and shrink the GPU memory
+  ansible.builtin.lineinfile:
+    path: "{{ common_rpi_config_txt }}"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    # Before the first [filter] section, so the setting applies to every board.
+    insertbefore: '^\['
+    firstmatch: true
+  loop:
+    - { regexp: '^camera_auto_detect=', line: camera_auto_detect=0 }
+    - { regexp: '^display_auto_detect=', line: display_auto_detect=0 }
+    - { regexp: '^dtparam=audio=', line: dtparam=audio=off }
+    - { regexp: '^gpu_mem=', line: gpu_mem=16 }
+  loop_control:
+    label: "{{ item.line }}"
+  become: true
+  notify: Request a reboot

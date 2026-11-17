@@ -1,0 +1,40 @@
+---
+- name: Prepare prometheus-exporters pihole-exporter
+  hosts: all
+  become: true
+  tasks:
+    - name: Install curl for the unit's API wait
+      ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+
+    # Stands in for Pi-hole: a pihole-FTL.service whose API answers only while the unit runs.
+    - name: Create the stub FTL API directory
+      ansible.builtin.file:
+        path: /srv/ftl-stub/api/info
+        state: directory
+        mode: "0755"
+
+    - name: Serve a stub FTL API path
+      ansible.builtin.copy:
+        content: "{}\n"
+        dest: /srv/ftl-stub/api/info/login
+        mode: "0644"
+
+    - name: Install the stub pihole-FTL unit
+      ansible.builtin.copy:
+        content: |
+          [Service]
+          ExecStart=/usr/bin/python3 -m http.server 8080 --bind 127.0.0.1 --directory /srv/ftl-stub
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/pihole-FTL.service
+        mode: "0644"
+
+    - name: Start the stub pihole-FTL
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        state: started
+        enabled: true
+        daemon_reload: true

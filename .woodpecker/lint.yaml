@@ -23,7 +23,7 @@ steps:
       # Offline: ansible-lint would fetch requirements.yml from Galaxy itself.
       - ansible-lint --offline roles/ playbooks/
       - yamllint -s -c .yamllint .
-      - ANSIBLE_ROLES_PATH="$PWD/roles" ansible-playbook --syntax-check playbooks/*.yml playbooks/*/*.yml
+      - ANSIBLE_ROLES_PATH="$PWD/roles" ansible-playbook --syntax-check playbooks/*.yml
 
   - name: markdownlint
     image: node:22-slim

@@ -1,0 +1,28 @@
+---
+# Retires the legacy backup coordinator (roles/backup) from a host:
+#   ansible-playbook -i inventory/production playbooks/backup-teardown.yml --limit backup_wyse \
+#     -e backup_teardown_confirm=true
+# It removes the backup account's sudo grant, so Ansible must connect as another user (playbooks/bootstrap.yml).
+- name: Tear down the legacy backup coordinator
+  hosts: backup_primary
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gate the teardown
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: teardown_guard
+      vars:
+        common_teardown_name: backup
+
+    - name: Refuse to connect as the account this removes
+      ansible.builtin.assert:
+        that: ansible_user != 'backup'
+        fail_msg: "Connected as backup. Run playbooks/bootstrap.yml and set ansible_user: ansible first."
+        quiet: true
+
+    - name: Run the coordinator teardown
+      ansible.builtin.include_role:
+        name: backup
+        tasks_from: teardown
+      when: teardown_confirmed | default(false) | bool

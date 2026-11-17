@@ -23,6 +23,16 @@
         tasks_from: chrony
 
     # The helpers stack roles re-apply: ntfy-notify, unattended-upgrades and the reboot notice.
+    - name: Configure fail2ban
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: fail2ban
+
+    - name: Configure log rotation
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: logrotate
+
     - name: Re-apply the base helpers
       ansible.builtin.include_role:
         name: common
