@@ -56,5 +56,5 @@ prometheus_role: "dns"
 # Syncthing runs as the SSH user, so the backup directory belongs to that user.
 common_syncthing_enabled: true
 dns_backup_enabled: true
-dns_backup_dir: "/home/zero/syncthing/pihole-backup"
-dns_backup_owner: "zero"
+dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
+dns_backup_owner: "{{ ansible_user }}"

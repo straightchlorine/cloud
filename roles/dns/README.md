@@ -79,8 +79,8 @@ common_ntp_allowed_networks:
 # Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
 common_syncthing_enabled: true
 dns_backup_enabled: true
-dns_backup_dir: "/home/zero/syncthing/pihole-backup"
-dns_backup_owner: "zero"
+dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
+dns_backup_owner: "{{ ansible_user }}"
 
 # Off-site backup: not wired yet; a pull job on backup_wyse will read vault_restic_dns_password.
 ```
@@ -167,11 +167,11 @@ common_wifi_powersave_tuning_enabled: true
 common_zram_enabled: true
 
 # Syncthing stays on: at ~50-80MB it fits the Zero's headroom (Pi-hole peaks
-# ~150MB), and with a 32GB card the default 14-archive retention costs ~50-80MB.
+# ~150MB), and the default 14-archive retention costs ~50-80MB of the SD card.
 common_syncthing_enabled: true
 dns_backup_enabled: true
-dns_backup_dir: "/home/zero/syncthing/pihole-backup"
-dns_backup_owner: "zero"
+dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
+dns_backup_owner: "{{ ansible_user }}"
 ```
 
 The `hardware` role maps `rpizero2w` (aliases `rpi02w`, `rpizero2`) to the
@@ -182,8 +182,8 @@ Before Ansible can reach the host at all, Wi-Fi has to be provisioned at flash
 time: Raspberry Pi Imager's advanced options (or `firstrun.sh` on the boot
 partition) set the SSID, key and country. Nothing in this repo can do that over
 a network that does not exist yet. The deploy user is the board's first user
-(`zero`, see `hosts.yml`) - give it the controller's SSH key and a NOPASSWD
-sudoers drop-in before the first run (see "Deploy").
+(`ansible`, see `hosts.yml`): name it so in Raspberry Pi Imager with the controller's SSH key. Raspberry Pi
+OS gives the first user passwordless sudo; on another image, run `playbooks/bootstrap.yml` first.
 
 The optional USB drive still works through an OTG adapter, but on a Zero it is
 usually skipped - `storage.yml` falls back to SD-card-only and the journal size
