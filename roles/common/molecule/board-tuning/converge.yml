@@ -23,7 +23,13 @@
         name: common
         tasks_from: rpi_headless
 
-    - name: Render the zram swap config
+    - name: Render the zram-tools config
       ansible.builtin.include_role:
         name: common
         tasks_from: zram_config
+
+    # prepare.yml installs rpi-swap's config, so zram.yml takes its rpi-swap branch, which needs no kernel module.
+    - name: Configure zram swap
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: zram

@@ -1,0 +1,37 @@
+---
+# zram only, without rpi-swap's default writeback file on the SD card. rpi-swap sizes its devices at boot,
+# so a change takes effect after a reboot.
+- name: Create the rpi-swap drop-in directory
+  ansible.builtin.file:
+    path: /etc/rpi/swap.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Configure rpi-swap
+  ansible.builtin.copy:
+    content: |
+      [Main]
+      Mechanism=zram
+
+      [Zram]
+      RamMultiplier={{ common_zram_percent / 100 }}
+    dest: /etc/rpi/swap.conf.d/50-ansible.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: common_zram_rpi_swap_conf
+
+- name: Request a reboot for the new swap layout  # noqa: no-handler  (see request_reboot.yml)
+  ansible.builtin.include_tasks: request_reboot.yml
+  when: common_zram_rpi_swap_conf.changed
+
+- name: Remove zram-tools, which would claim the same device
+  ansible.builtin.apt:
+    name: zram-tools
+    state: absent
+    purge: true
+  become: true

@@ -1,0 +1,12 @@
+---
+# unattended-upgrades reboots after its next run when this file exists (Automatic-Reboot), and reboot-notify
+# announces it beforehand. Callers include it as a task, not a handler: a later failure in the play would drop a
+# pending handler, and the rerun no longer sees the change that needed the reboot.
+- name: Request a reboot
+  ansible.builtin.copy:
+    content: "*** System restart required ***\n"
+    dest: /var/run/reboot-required
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

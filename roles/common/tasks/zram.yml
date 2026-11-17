@@ -2,19 +2,31 @@
 # zram avoids SD-card swap wear and keeps apt or gravity runs from OOM-killing
 # Pi-hole on low-RAM boards.
 
-- name: Install zram-tools
-  ansible.builtin.apt:
-    name: zram-tools
-    state: present
-  become: true
+- name: Look for Raspberry Pi OS swap management
+  # rpi-swap (Raspberry Pi OS trixie and later) already sets up zram on /dev/zram0, so zram-tools would collide.
+  ansible.builtin.stat:
+    path: /etc/rpi/swap.conf
+  register: common_zram_rpi_swap
 
-- name: Render the zram swap config
-  ansible.builtin.include_tasks: zram_config.yml
+- name: Configure zram through rpi-swap
+  ansible.builtin.include_tasks: zram_rpi_swap.yml
+  when: common_zram_rpi_swap.stat.exists
 
-- name: Enable and start zram swap
-  ansible.builtin.systemd:
-    name: zramswap
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
+- name: Configure zram through zram-tools
+  when: not common_zram_rpi_swap.stat.exists
+  block:
+    - name: Install zram-tools
+      ansible.builtin.apt:
+        name: zram-tools
+        state: present
+      become: true
+
+    - name: Render the zram swap config
+      ansible.builtin.include_tasks: zram_config.yml
+
+    - name: Enable and start zram swap
+      ansible.builtin.systemd:
+        name: zramswap
+        enabled: true
+        state: started
+      become: true

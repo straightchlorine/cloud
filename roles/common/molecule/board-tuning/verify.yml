@@ -84,3 +84,28 @@
       vars:
         molecule_paths:
           - {path: /var/run/reboot-required, state: file}
+
+    - name: Read the rpi-swap drop-in
+      ansible.builtin.slurp:
+        src: /etc/rpi/swap.conf.d/50-ansible.conf
+      register: common_rpi_swap_dropin
+
+    - name: Assert rpi-swap runs zram only, at half the RAM
+      ansible.builtin.assert:
+        that: >-
+          (common_rpi_swap_dropin.content | b64decode).splitlines()
+          == ['[Main]', 'Mechanism=zram', '', '[Zram]', 'RamMultiplier=0.5']
+        fail_msg: "{{ common_rpi_swap_dropin.content | b64decode }}"
+        quiet: true
+
+    - name: Look for zram-tools
+      ansible.builtin.command: dpkg-query -W -f=${Status} zram-tools
+      register: common_zram_tools_status
+      changed_when: false
+      failed_when: false
+
+    - name: Assert zram-tools is not installed next to rpi-swap
+      ansible.builtin.assert:
+        that: common_zram_tools_status.stdout is not search('install ok installed')
+        fail_msg: "zram-tools: {{ common_zram_tools_status.stdout }}"
+        quiet: true

@@ -12,13 +12,14 @@
       - >-
         beets.plugins.split() | sort ==
         ['chroma', 'duplicates', 'embedart', 'fetchart', 'lastgenre',
-        'lyrics', 'musicbrainz', 'replaygain', 'reviewed']
+        'lyrics', 'musicbrainz', 'permissions', 'replaygain', 'reviewed']
       - beets.pluginpath == '/config/plugins'
       - beets.replaygain.backend == 'ffmpeg'
       - beets.lyrics.synced
       - beets.chroma.auto
       - beets.lastgenre.force
       - beets.fetchart.auto
+      - beets.fetchart.maxwidth == 1200
       - beets.embedart.auto
     fail_msg: "beets config wrong: {{ beets }}"
 

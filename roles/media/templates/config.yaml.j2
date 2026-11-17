@@ -32,7 +32,9 @@ paths:
 
 # The reviewed plugin marks a "use as-is" answer, and only runs when an overlay sets
 # `reviewed.mark: yes`.
-plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed
+# permissions (defaults 644/755): fetchart saves art through a 0600 temp file, which
+# Navidrome's remapped uid cannot read, so every cover.jpg was skipped.
+plugins: lyrics replaygain duplicates chroma musicbrainz lastgenre fetchart embedart reviewed permissions
 pluginpath: /config/plugins
 
 lyrics:
@@ -67,6 +69,9 @@ lastgenre:
 # art back into the file. Sources are tried in order.
 fetchart:
     auto: yes
+    # Cover Art Archive originals average 2.5 MB; 1200 matches embedart and is more
+    # than Navidrome ever serves.
+    maxwidth: 1200
     sources:
         - coverart
         - itunes

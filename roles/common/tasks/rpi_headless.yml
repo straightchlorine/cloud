@@ -40,13 +40,5 @@
   register: common_rpi_headless_settings
 
 - name: Request a reboot for the new firmware config
-  # A task, not a handler: a later failure in the play would drop a pending handler, and the rerun no longer sees
-  # a change. unattended-upgrades reboots after its next run when this file exists (Automatic-Reboot).
-  ansible.builtin.copy:
-    content: "*** System restart required ***\n"
-    dest: /var/run/reboot-required
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+  ansible.builtin.include_tasks: request_reboot.yml
   when: common_rpi_headless_overlay.changed or common_rpi_headless_settings.changed

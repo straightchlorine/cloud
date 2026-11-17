@@ -36,7 +36,8 @@ which `roles/monitoring` still consumes.
 | `detect_optional_drive.yml` | find an unused non-boot drive | - |
 | `journald_relocate.yml`, `journald_limits.yml` | journald on the SSD, size cap | `common_journald_path`, `common_journald_system_max_use` |
 | `wifi_powersave.yml` | boot unit that turns Wi-Fi power save off | `common_wifi_powersave_tuning_enabled` |
-| `zram.yml`, `zram_config.yml`, `zram_teardown.yml` | compressed RAM swap; `zram_config` renders `/etc/default/zramswap` only | `common_zram_*` |
+| `zram.yml`, `zram_rpi_swap.yml`, `zram_config.yml`, `zram_teardown.yml` | compressed RAM swap: through Raspberry Pi OS's rpi-swap when present (zram only, no SD-card writeback file; applies after a reboot), else zram-tools; `zram_config` renders `/etc/default/zramswap` only | `common_zram_*` |
+| `request_reboot.yml` | writes `/var/run/reboot-required`, which unattended-upgrades acts on | - |
 | `syncthing.yml` | Syncthing from its apt repository | `common_syncthing_home` |
 | `syncthing_share.yml` | install Syncthing once and register folders | `common_syncthing_share_folders` |
 | `syncthing_folder.yml` | one folder (used by `syncthing_share`) | `common_syncthing_folder` |

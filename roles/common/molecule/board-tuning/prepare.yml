@@ -44,6 +44,19 @@
           [all]
         mode: "0755"
 
+    # rpi-swap's main config, which marks a Raspberry Pi OS trixie image.
+    - name: Create the rpi-swap config directory
+      ansible.builtin.file:
+        path: /etc/rpi
+        state: directory
+        mode: "0755"
+
+    - name: Write the stock rpi-swap config
+      ansible.builtin.copy:
+        dest: /etc/rpi/swap.conf
+        content: "[Main]\n[File]\n[Zram]\n"
+        mode: "0644"
+
     - name: Load the stub unit
       ansible.builtin.systemd_service:
         daemon_reload: true
