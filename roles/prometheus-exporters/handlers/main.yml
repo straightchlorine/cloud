@@ -9,10 +9,10 @@
   become: true
   when: prometheus_exporters_node_exporter_enabled
 
-- name: Restart pihole-exporter
-  ansible.builtin.systemd:
-    name: pihole-exporter
-    state: restarted
+- name: Restart pihole-exporter  # noqa: command-instead-of-module  (the systemd module has no try-restart)
+  # try-restart leaves a stopped exporter alone: it starts with FTL, which may not be installed yet.
+  ansible.builtin.command: systemctl try-restart pihole-exporter
+  changed_when: true
   become: true
   when: prometheus_exporters_pihole_exporter_enabled
 

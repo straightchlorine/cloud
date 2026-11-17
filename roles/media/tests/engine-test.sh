@@ -1009,6 +1009,33 @@ out=$("$STACK/scripts/pick.sh" 2>&1 || true)
 has "pick with no verb says how to use it" "$out" "pick remove <host>"
 out=$(roles/media/files/pick-core.sh remove 2>&1 || true)
 has "from a workstation the host is still required" "$out" "pick remove <host>"
+
+# ---- pick remove --delete: past the quarantine, the files and rows go now
+for n in 1 2; do tone "Doomed/Gone/0$n Gone $n.opus" "Doomed" "Gone $n" "Gone Album" "$n"; done
+: > "$LIBD/music/Doomed/Gone/cover.jpg"
+beet -c /config/as-album.yaml import /music/Doomed > /dev/null 2>&1
+docker compose -f "$STACK/docker-compose.yml" run --rm -T --entrypoint /lsiopy/bin/python3 beets -c "
+import beets.library as L
+a = L.Library('/config/library.db', '/music').albums('album:Gone Album').get()
+a.artpath = b'/music/Doomed/Gone/cover.jpg'
+a.store()" < /dev/null > /dev/null 2>&1
+eq "fixture: an album of two with a cover" "$(q "select count(*) from items where artist='Doomed'") $(q "select count(*) from albums where album='Gone Album' and artpath is not null")" "2 1"
+before_n=$(wc -l < "$DEC")
+out=$(SSH="$T/fake-ssh" FZF="$T/fake-fzf" LIB="$LIBD" roles/media/files/pick-core.sh remove media 'album:Gone Album' --delete --yes 2>&1)
+has "pick remove --delete deletes the picked tracks" "$out" "deleted 2 file\(s\) and their rows"
+has "and names each file" "$out" "deleted: /music/Doomed/Gone/01 Gone 1.opus"
+eq "the rows and the emptied album row are gone" "$(q "select count(*) from items where artist='Doomed'") $(q "select count(*) from albums where album='Gone Album'")" "0 0"
+eq "the files, the cover and the emptied folders are gone" "$([ -e "$LIBD/music/Doomed" ] && echo there || echo gone)" gone
+eq "nothing went to the quarantine" "$(find "$LIBD/removed" -type f | wc -l)" 0
+eq "and no decision was queued" "$(wc -l < "$DEC")" "$before_n"
+out=$(SSH="$T/fake-ssh" FZF="$T/fake-fzf" LIB="$LIBD" roles/media/files/pick-core.sh remove media --purge --delete --yes 2>&1 || true)
+has "--purge and --delete are refused together" "$out" "--purge and --delete do not go together"
+ms --delete; eq "--delete needs a row id" "$RC" 2
+ms --delete 12x; eq "--delete takes only row ids" "$RC" 2
+ms --delete "$(id_k 3)" 999999
+eq "--delete with an unknown row deletes nothing" "$RC|$(printf '%s' "$OUT" | tail -1)" \
+    "1|media-sync --delete: 1 of 2 row(s) exist; nothing deleted"
+eq "and the known row is still there" "$(q "select count(*) from items where id=$(id_k 3)")" 1
 kill "$STUB" 2> /dev/null
 wait "$STUB" 2> /dev/null
 cj_before=$(md5sum < "$CJ")

@@ -32,9 +32,7 @@
         dest: /etc/systemd/system/pihole-FTL.service
         mode: "0644"
 
-    - name: Start the stub pihole-FTL
+    # Left stopped: on a fresh host the fleet play sets up the exporter before the dns play starts Pi-hole.
+    - name: Load the stub pihole-FTL
       ansible.builtin.systemd_service:
-        name: pihole-FTL
-        state: started
-        enabled: true
         daemon_reload: true

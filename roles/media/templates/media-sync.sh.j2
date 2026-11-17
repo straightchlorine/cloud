@@ -46,6 +46,8 @@
 #   media-sync --undo <apply log>     take an apply back (state/review/apply-log/)
 #   media-sync --removed [--purge]    check removed/ against the library by audio and
 #                                     list what is safe to delete; --purge deletes it
+#   media-sync --delete <row id>...   delete the tracks and their files now, past the
+#                                     quarantine (pick remove --delete); no undo
 #   media-sync --plan                 show what --maintenance would face; changes nothing
 #   media-sync --maintenance [--from <1-8>]
 #                                     the one-time routine for an existing library,
@@ -106,6 +108,13 @@ case "$MODE" in
     --pin)
         [ -n "$DIR" ] || { echo "usage: media-sync --pin '<beets query>' --id <release> [--dry-run]" >&2; exit 2; }
         [ -n "$ALBUM_ID" ] || { echo "media-sync --pin needs --id <release>" >&2; exit 2; } ;;
+    --delete)
+        # The ids become a beets query, where an empty one would match every track.
+        { [ -n "$DIR" ] && [ "$DRY" = 0 ] && [ "$FORCE" = 0 ]; } ||
+            { echo "usage: media-sync --delete <row id>..." >&2; exit 2; }
+        for id in "${ARGS[@]}"; do
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "media-sync --delete takes row ids, got: $id" >&2; exit 2; }
+        done ;;
 esac
 
 # Release pass, one file at a time, because downloads/ is a playlist dump and one
@@ -407,6 +416,25 @@ case "$MODE" in
         echo "$result"
         notify "done" "$(printf '%s\n' "$result" | tail -1)"
         exit 0 ;;
+    --delete)
+        # pick remove --delete: the files go now instead of to removed/ with the next
+        # apply, so --undo cannot bring them back (the nightly restic snapshot can).
+        # beet remove -d also drops an album row it empties, with its cover, and prunes
+        # emptied folders. A stale id deletes nothing, so a pick never half-applies.
+        mapfile -t ids < <(printf '%s\n' "${ARGS[@]}" | sort -un)
+        query=() n=0
+        for id in "${ids[@]}"; do query+=("," "id:$id"); n=$((n + 1)); done
+        query=("${query[@]:1}")
+        paths="$("${BEET[@]}" ls -f '$path' "${query[@]}" < /dev/null)"
+        found="$(printf '%s' "$paths" | grep -c . || true)"
+        if [ "$found" != "$n" ]; then
+            echo "media-sync --delete: $found of $n row(s) exist; nothing deleted" >&2
+            exit 1
+        fi
+        "${BEET[@]}" remove -d -f "${query[@]}" < /dev/null
+        printf '%s\n' "$paths" | sed 's/^/deleted: /'
+        echo "deleted $n file(s) and their rows; media-sync --undo cannot restore them"
+        exit 0 ;;
     --fix-text)
         # See fix_text. A dry run lists the changes and moves nothing.
         [ -z "$DIR" ] && [ "$FORCE" = 0 ] || { echo "media-sync --fix-text takes only --dry-run" >&2; exit 2; }
@@ -468,7 +496,7 @@ case "$MODE" in
         echo "usage: media-sync [mode]"
         echo "  modes: --retag --upgrade [all|<query>] --albums [<dir>] [--id <release>] --keep [<dir>]"
         echo "         --adopt --regroup --audit --apply [--dry-run] [--force] --undo <log> --settle"
-        echo "         --removed [--purge] --fix-text [--dry-run]"
+        echo "         --removed [--purge] --delete <row id>... --fix-text [--dry-run]"
         echo "         --pin '<query>' --id <release> [--dry-run] --complete [--dry-run] --backfill"
         echo "         --plan --maintenance [--from <1-8>] --interactive [<dir>] --review [<dir>]"
         echo "         --singles [<dir>] --release [<dir>] [--id <release>]"

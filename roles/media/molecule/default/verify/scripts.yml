@@ -131,6 +131,11 @@
       - "'pick-core.sh' in pick_wrapper"
       - "'PICK_LOCAL' in pick_core"
       - "'media-import --quarantine' in pick_core"
+      # pick remove --delete deletes through media-sync, under its lock, never past an unknown row id.
+      - "'media-sync --delete' in pick_core"
+      - "'--delete)' in media_sync"
+      - "'remove -d -f' in media_sync"
+      - "'row(s) exist; nothing deleted' in media_sync"
       # The review menu runs host python on the library and saves decisions through the shared writer.
       - "'--library | --quarantine)' in media_import"
       - "'beets/tools/media_review.py' in media_import"

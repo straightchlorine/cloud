@@ -7,16 +7,29 @@
       - { path: /etc/systemd/system/pihole-FTL.service.wants/pihole-exporter.service, state: link }
       - { path: /etc/systemd/system/multi-user.target.wants/pihole-exporter.service, state: absent }
   tasks:
-    - name: Read the exporter state and invocation
-      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState -p InvocationID --value
+    - name: Read the exporter state before FTL runs
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState --value
       register: molecule_before
       changed_when: false
 
-    - name: Assert the exporter runs
+    - name: Assert the exporter waits for FTL instead of failing
       ansible.builtin.assert:
-        that: molecule_before.stdout_lines[0] == 'active'
-        fail_msg: "pihole-exporter is {{ molecule_before.stdout_lines[0] }}"
+        that: molecule_before.stdout == 'inactive'
+        fail_msg: "pihole-exporter is {{ molecule_before.stdout }} before FTL was ever started"
         quiet: true
+
+    - name: Start FTL, as the Pi-hole installer does
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        state: started
+
+    - name: Wait for FTL to bring the exporter up
+      ansible.builtin.command: systemctl show pihole-exporter -p ActiveState --value
+      register: molecule_first_start
+      changed_when: false
+      until: molecule_first_start.stdout == 'active'
+      retries: 30
+      delay: 1
 
     # pihole -up stops FTL, reinstalls it and starts it again.
     - name: Stop FTL

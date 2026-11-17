@@ -7,6 +7,7 @@
 #   pick fix    <host> [<query>]    the library review (media-import --library) over ssh
 #   pick remove <host> [<query>]    queue tracks to be moved aside (fzf multi-select)
 #   pick remove <host> --purge      empty removed/ (the files moved aside)
+#   pick remove <host> --delete [<query>]  delete the picked tracks now, past the quarantine
 #
 # On the media host the `pick` command (a wrapper the media role installs) leaves the
 # host out and runs everything locally: pick remove [<query>], pick fix [<query>], ...
@@ -18,7 +19,8 @@
 # `music/` is a send-only Syncthing share, so a delete here would reach the vault copy.
 #
 # Flags: --yes (skip the confirmation), --purge (empty the quarantine instead of
-# picking tracks). Env: LIB (the library root on the host), REMOVED
+# picking tracks), --delete (delete the picked files now: no quarantine, no undo,
+# only the nightly restic snapshot). Env: LIB (the library root on the host), REMOVED
 # ($LIB/removed), FZF, SSH (overridable for tests), PICK_LOCAL=1 (set by the host's
 # wrapper: no ssh, no host argument).
 set -euo pipefail
@@ -45,7 +47,8 @@ pick album  <host> <query>      assign an album to the tracks the query matches
 pick fix    <host> [<query>]    the library review (media-import --library) over ssh
 pick remove <host> [<query>]    queue tracks to be moved aside (fzf multi-select)
 pick remove <host> --purge      empty removed/
-On the media host leave out <host>. Flags: --yes, --purge.
+pick remove <host> --delete [<query>]  delete the picked tracks now (no undo)
+On the media host leave out <host>. Flags: --yes, --purge, --delete.
 EOF
     exit 2
 }
@@ -62,15 +65,18 @@ case "$verb" in album | fix | remove) ;; *) usage ;; esac
 if [ -n "$LOCAL" ]; then shift; else shift 2; fi
 
 purge=no
+delete=no
 yes=no
 query=""
 for arg in "$@"; do
     case "$arg" in
         --purge) purge=yes ;;
+        --delete) delete=yes ;;
         --yes) yes=yes ;;
         *) [ -z "$query" ] || die "only one query is expected"; query="$arg" ;;
     esac
 done
+[ "$purge" = no ] || [ "$delete" = no ] || die "--purge and --delete do not go together"
 if [ "$verb" = album ] && [ -z "$query" ]; then
     die "pick album needs a query, e.g. 'path:Rodrigo' or 'albumartist:Blondie'"
 fi
@@ -171,7 +177,7 @@ purge_quarantine() {
 }
 
 pick_remove() {
-    local list sel count
+    local list sel count ids
     list="$(mktemp)"
     trap 'rm -f "$list"' RETURN
 
@@ -188,9 +194,14 @@ pick_remove() {
     printf '%s\n' "$sel" | awk -F'\t' -v b="$BOLD" -v o="$OFF" '{ printf "  %s - %s%s%s\n", $2, b, $4, o }'
     count="$(printf '%s\n' "$sel" | wc -l)"
     echo "${BOLD}$count${OFF} track(s) selected"
-    confirm "queue them for the quarantine ($REMOVED/<date>, with the next apply)?"
-
-    remote "media-import --quarantine $(printf '%s\n' "$sel" | cut -f1 | tr '\n' ' ')"
+    ids="$(printf '%s\n' "$sel" | cut -f1 | tr '\n' ' ')"
+    if [ "$delete" = yes ]; then
+        confirm "${RED}delete${OFF}${BOLD} them now? files and rows, no quarantine, no undo (only the nightly restic snapshot has them)"
+        remote "media-sync --delete $ids"
+    else
+        confirm "queue them for the quarantine ($REMOVED/<date>, with the next apply)?"
+        remote "media-import --quarantine $ids"
+    fi
 }
 
 pick_fix() {

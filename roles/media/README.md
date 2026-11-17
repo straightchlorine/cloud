@@ -549,7 +549,10 @@ reads it: `3 decision(s) saved, 14 file(s) queued (quarantine 2, pin 12); next: 
 --dry-run`, with `over the limit of 200 files, so the apply needs --force` when the total passes the
 limit (`media_apply_max_files`, which the wrapper passes as `--max-files`). Plain `media-import` (no
 arguments) keeps the beets prompts for new downloads. Every answer is saved at once as a decision;
-nothing changes until the apply. `pick remove` saves a quarantine decision the same way.
+nothing changes until the apply. `pick remove` saves a quarantine decision the same way;
+`pick remove --delete` skips both and runs `media-sync --delete <row id>...` at once: the files, their
+rows, an album row left empty (with its cover) and emptied folders go now, under the media-sync lock.
+`--undo` cannot bring them back; the nightly restic snapshot can.
 
 ### Applying review decisions (apply, undo)
 

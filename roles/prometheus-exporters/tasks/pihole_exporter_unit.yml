@@ -73,10 +73,17 @@
   become: true
   when: prom_exp_pihole_unit.changed
 
-- name: Enable and start Pi-hole Exporter service
+- name: Check whether Pi-hole FTL is running  # noqa: command-instead-of-module  (answers for a missing unit too)
+  ansible.builtin.command: systemctl is-active pihole-FTL
+  register: prom_exp_ftl_active
+  changed_when: false
+  failed_when: false  # inactive or missing FTL exits non-zero, which the next task reads
+
+- name: Enable the Pi-hole Exporter, and start it while FTL runs
+  # FTL's start pulls the exporter in, so before the dns play installs Pi-hole it is only linked.
   ansible.builtin.systemd:
     name: pihole-exporter
     enabled: true
-    state: started
+    state: "{{ 'started' if prom_exp_ftl_active.stdout == 'active' else omit }}"
     daemon_reload: true
   become: true

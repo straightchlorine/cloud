@@ -82,28 +82,7 @@
 - name: Flush pending handlers before verifying
   ansible.builtin.meta: flush_handlers
 
-- name: Verify Pi-hole Exporter is scraping Pi-hole
-  # /metrics answers 200 even when every scrape fails, for example on a dead session.
-  # Only pihole_status 1 proves that the exporter can read the Pi-hole API.
-  block:
-    - name: Check the exporter reports pihole_status 1
-      ansible.builtin.include_tasks: pihole_exporter_check.yml
-  rescue:
-    - name: Read the exporter's recent log
-      ansible.builtin.command: journalctl -u pihole-exporter -n 5 --no-pager
-      register: prom_exp_pihole_exporter_log
-      changed_when: false
-      become: true
-
-    - name: Show why the exporter is not scraping
-      ansible.builtin.debug:
-        var: prom_exp_pihole_exporter_log.stdout_lines
-
-    - name: Restart the exporter to clear poisoned scrape state
-      ansible.builtin.systemd:
-        name: pihole-exporter
-        state: restarted
-      become: true
-
-    - name: Check the exporter reports pihole_status 1 after restart
-      ansible.builtin.include_tasks: pihole_exporter_check.yml
+- name: Verify the Pi-hole Exporter
+  # Before Pi-hole is installed FTL is not running; the dns role's post-deploy check verifies it then.
+  ansible.builtin.include_tasks: pihole_exporter_verify.yml
+  when: prom_exp_ftl_active.stdout == 'active'

@@ -82,3 +82,12 @@
   register: dns_ntp_status
   failed_when: dns_ntp_status.status.ActiveState != "active"
   tags: [post_validation]
+
+- name: Verify the Pi-hole Exporter now that Pi-hole runs
+  # The fleet play installs the exporter before this play installs Pi-hole, so a first deploy verifies it here.
+  # The flag belongs to prometheus-exporters, whose defaults this play does not load.
+  ansible.builtin.include_role:
+    name: prometheus-exporters
+    tasks_from: pihole_exporter_verify
+  when: prometheus_exporters_pihole_exporter_enabled | default(false)
+  tags: [post_validation]
