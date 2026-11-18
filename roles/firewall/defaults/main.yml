@@ -13,4 +13,8 @@ firewall_ports: []
 
 firewall_rules: []
 
+# Empty keeps SSH open to every address. A list of addresses or CIDRs allows SSH from those only and removes the
+# open rule once they are in place.
+firewall_ssh_sources: []
+
 firewall_logging: "low"

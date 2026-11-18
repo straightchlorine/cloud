@@ -43,6 +43,28 @@
         rule: allow
         port: "22"
         comment: "SSH access"
+      when: firewall_ssh_sources | length == 0
+
+    - name: Allow SSH from the listed sources
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+        src: "{{ item }}"
+        comment: "SSH from {{ item }}"
+      loop: "{{ firewall_ssh_sources }}"
+
+    - name: Remove the open SSH rules
+      # It comes after the source rules, so a source ufw refuses fails the play before the open rule is gone.
+      # An older deploy left two forms, "22" for any protocol and "22/tcp" (from a firewall_common_ports entry),
+      # and ufw treats them as different rules; deleting an absent one changes nothing.
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: "{{ item }}"
+        delete: true
+      loop: [any, tcp]
+      when: firewall_ssh_sources | length > 0
 
     - name: Configure the group-wide firewall ports
       community.general.ufw:

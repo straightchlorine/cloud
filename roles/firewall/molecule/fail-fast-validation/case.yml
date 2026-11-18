@@ -10,6 +10,9 @@
         firewall_policy_outgoing: "{{ molecule_case.firewall_policy_outgoing }}"
         firewall_policy_routed: "{{ molecule_case.firewall_policy_routed }}"
         firewall_logging: "{{ molecule_case.firewall_logging }}"
+        firewall_ssh_sources: "{{ molecule_case.firewall_ssh_sources }}"
+        firewall_common_ports: "{{ molecule_case.firewall_common_ports }}"
+        firewall_ports: "{{ molecule_case.firewall_ports }}"
 
     - name: Fail when validation passed
       ansible.builtin.fail:

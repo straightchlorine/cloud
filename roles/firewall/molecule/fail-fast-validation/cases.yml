@@ -4,6 +4,9 @@ molecule_case_defaults:
   firewall_policy_outgoing: allow
   firewall_policy_routed: deny
   firewall_logging: low
+  firewall_ssh_sources: []
+  firewall_common_ports: []
+  firewall_ports: []
 
 molecule_cases:
   - id: policy-incoming-invalid
@@ -18,3 +21,17 @@ molecule_cases:
   - id: logging-invalid
     expect: "firewall_logging must be one of: on, off, low, medium, high, full"
     firewall_logging: verbose
+  - id: ssh-sources-not-a-list
+    expect: firewall_ssh_sources must be a list of IPv4 addresses or CIDRs
+    firewall_ssh_sources: 192.168.100.20
+  - id: ssh-source-not-an-address
+    expect: firewall_ssh_sources must be a list of IPv4 addresses or CIDRs
+    firewall_ssh_sources: [192.168.100.20, controller.lan]
+  - id: ssh-sources-with-open-common-port
+    expect: firewall_ssh_sources is set, so port 22 must not be in
+    firewall_ssh_sources: [192.168.100.20]
+    firewall_common_ports: [{ port: 22, comment: SSH }]
+  - id: ssh-sources-with-open-host-port
+    expect: firewall_ssh_sources is set, so port 22 must not be in
+    firewall_ssh_sources: [192.168.100.20]
+    firewall_ports: [22]

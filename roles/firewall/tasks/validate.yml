@@ -15,3 +15,23 @@
       - firewall_logging in ['on', 'off', 'low', 'medium', 'high', 'full']
     fail_msg: "firewall_logging must be one of: on, off, low, medium, high, full"
     success_msg: "[OK] firewall_logging has valid value"
+
+- name: Validate firewall_ssh_sources is a list of IPv4 addresses or CIDRs
+  ansible.builtin.assert:
+    that:
+      - firewall_ssh_sources is sequence and firewall_ssh_sources is not string
+      - firewall_ssh_sources | reject('string') | list | length == 0
+      - firewall_ssh_sources | reject('match', '^[0-9]{1,3}([.][0-9]{1,3}){3}(/[0-9]{1,2})?\\Z') | list | length == 0
+    fail_msg: "firewall_ssh_sources must be a list of IPv4 addresses or CIDRs"
+    success_msg: "[OK] firewall_ssh_sources is well formed"
+
+- name: Validate that no port list reopens SSH to everyone when SSH is limited to sources
+  # A 22 entry would be re-added on every run, right after the open rules were removed.
+  ansible.builtin.assert:
+    that:
+      - >-
+        firewall_ssh_sources | length == 0
+        or ('22' not in firewall_common_ports | map(attribute='port') | map('string') | list
+            and '22' not in firewall_ports | map('string') | list)
+    fail_msg: "firewall_ssh_sources is set, so port 22 must not be in firewall_common_ports or firewall_ports"
+    success_msg: "[OK] no port list reopens SSH"
