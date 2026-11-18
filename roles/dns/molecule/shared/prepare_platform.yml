@@ -11,3 +11,6 @@
   ansible.builtin.user:
     name: molecule
     system: true
+    # The pull key's authorized_keys file lives in the owner's home.
+    home: /home/molecule
+    create_home: true

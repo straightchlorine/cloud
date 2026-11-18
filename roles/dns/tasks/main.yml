@@ -47,6 +47,10 @@
   ansible.builtin.include_tasks: backup.yml
   when: dns_backup_enabled
 
+- name: Authorize the off-site pull of the backup folder
+  ansible.builtin.include_tasks: backup_pull_key.yml
+  when: dns_backup_pull_enabled
+
 - name: Share the backup folder through Syncthing
   ansible.builtin.include_role:
     name: common

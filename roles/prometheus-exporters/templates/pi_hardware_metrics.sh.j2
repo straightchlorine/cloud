@@ -53,6 +53,16 @@ vc() {
         done
     fi
 
+    # The superblock's error count survives reboots and only a fsck clears it, so any value above 0 means the
+    # storage returned bad data at some point; a failing SD card shows up here before files go missing.
+    echo "# HELP hw_filesystem_errors Errors ext4 has recorded on the filesystem."
+    echo "# TYPE hw_filesystem_errors gauge"
+    for count in /sys/fs/ext4/*/errors_count; do
+        [ -r "$count" ] || continue
+        device=${count%/errors_count}
+        echo "hw_filesystem_errors{device=\"${device##*/}\"} $(cat "$count")"
+    done
+
     echo "# HELP hw_metrics_last_update_timestamp_seconds Last run of this collector."
     echo "# TYPE hw_metrics_last_update_timestamp_seconds gauge"
     echo "hw_metrics_last_update_timestamp_seconds $(date +%s)"

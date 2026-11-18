@@ -14,6 +14,9 @@
         dns_backup_enabled: "{{ molecule_case.dns_backup_enabled }}"
         dns_backup_dir: "{{ molecule_case.dns_backup_dir }}"
         dns_backup_owner: "{{ molecule_case.dns_backup_owner }}"
+        dns_backup_pull_enabled: "{{ molecule_case.dns_backup_pull_enabled }}"
+        dns_backup_pull_pubkey: "{{ molecule_case.dns_backup_pull_pubkey }}"
+        dns_backup_pull_from: "{{ molecule_case.dns_backup_pull_from }}"
 
     - name: Fail when validation passed
       ansible.builtin.fail:

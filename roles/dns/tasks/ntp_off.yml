@@ -1,0 +1,16 @@
+---
+# One FTL setting key arrives as dns_ntp_key.
+- name: Read the running FTL value of {{ dns_ntp_key }}
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, "{{ dns_ntp_key }}"]
+  register: dns_ntp_running
+  changed_when: false
+  become: true
+
+- name: Turn off the FTL setting {{ dns_ntp_key }}
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, "{{ dns_ntp_key }}", "false"]
+  become: true
+  changed_when: true
+  notify: Restart pihole-FTL
+  when: dns_ntp_running.stdout | trim != 'false'

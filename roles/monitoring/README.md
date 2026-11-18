@@ -1,5 +1,7 @@
 # Monitoring Role
 
+> Experimental, never deployed; see docs/wip/triage-2026-11-17.md section 4.
+
 Grafana, Prometheus, Loki, and Alertmanager for centralized infrastructure monitoring.
 
 ## Services

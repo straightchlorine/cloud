@@ -4,6 +4,7 @@ molecule_case_defaults:
   common_ntp_server_enabled: false
   common_ntp_allowed_networks: []
   dns_backup_enabled: false
+  dns_backup_pull_enabled: false
 
 # single: true asserts that exactly one item of a looped check failed.
 # dns_pihole_interface and the backup target are left out where the case needs them undefined.
@@ -29,3 +30,39 @@ molecule_cases:
     dns_pihole_interface: "{{ molecule_primary_interface }}"
     dns_backup_enabled: true
     dns_backup_owner: molecule
+  - id: pull-without-backup
+    expect: "dns_backup_pull_enabled needs dns_backup_enabled"
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    dns_backup_pull_enabled: true
+    dns_backup_pull_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMoleculePullKeyMoleculePullKeyMoleculePk x@y"
+    dns_backup_pull_from: 192.168.101.10
+  - id: pull-pubkey-undefined
+    expect: dns_backup_pull_pubkey must be set in host_vars when dns_backup_pull_enabled is true
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    dns_backup_enabled: true
+    dns_backup_owner: molecule
+    dns_backup_dir: /tmp/molecule-syncthing-backup
+    dns_backup_pull_enabled: true
+    dns_backup_pull_from: 192.168.101.10
+  - id: pull-from-undefined
+    expect: dns_backup_pull_from must be set in host_vars when dns_backup_pull_enabled is true
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    dns_backup_enabled: true
+    dns_backup_owner: molecule
+    dns_backup_dir: /tmp/molecule-syncthing-backup
+    dns_backup_pull_enabled: true
+    dns_backup_pull_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMoleculePullKeyMoleculePullKeyMoleculePk x@y"
+  - id: pull-pubkey-private-key
+    expect: dns_backup_pull_pubkey must be a public key line
+    single: true
+    dns_pihole_interface: "{{ molecule_primary_interface }}"
+    dns_backup_enabled: true
+    dns_backup_owner: molecule
+    dns_backup_dir: /tmp/molecule-syncthing-backup
+    dns_backup_pull_enabled: true
+    dns_backup_pull_from: 192.168.101.10
+    # Built in two pieces so the detect-private-key hook does not read the test value as a real key.
+    dns_backup_pull_pubkey: "{{ '-----BEGIN OPENSSH ' ~ 'PRIVATE KEY-----' }}"

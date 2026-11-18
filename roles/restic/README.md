@@ -4,6 +4,7 @@ The fleet's single restic engine: a pinned upstream binary, one script, one hard
 (`restic-job@<job>`) and per-job data in `/etc/restic/<job>.*`. Stack roles pass one job; hosts with no
 owning stack role list jobs in host_vars `restic_jobs`. A host without systemd (OpenRC) schedules the same job
 with a cron.d entry and the log-file wrapper `restic-job cron <job>` (see Cron hosts).
+Which hosts have a job, and which data is not backed up, is in `docs/backup/index.md`.
 
 ## Wiring a job
 
@@ -121,26 +122,17 @@ systemctl list-timers 'restic-*'
 
 On a cron host, `restic-job cron <job>` starts a run by hand and `/var/log/restic/<job>.log` replaces the journal.
 
-Each run sends one short ntfy message. `run` ends by logging a single `restic-job: summary snapshot=... new=...
-added=... stored=... scanned=... seconds=... job_seconds=... kept=... removed=... steps=... [box_free_pct=...
-box_free=...] unreadable=...` line, built from `restic backup --json` and `restic forget --json`; the root notifier
-reads only that line (each value matched against its own pattern, anything else dropped), the same way on systemd
-(the invocation's journal) and cron (the log since the last `start`). Title `<host>: <job> backup ok` (exit 3:
-`..., N files unreadable`, up to three paths in the body); body: snapshot id with kept/removed counts, data added
-(and stored), data scanned and the run's total time, new/changed files, the Storage Box free space when `df`
-answered, and a `Maintenance:` line on a run that pruned or checked. A failure is titled
-`<host>: <job> backup FAILED (<result>/<status>)` and carries the `FAILED:` reason, the elapsed time and the last
-5 log lines. A run with no summary line (restic output it could not read) falls back to the last 8 log lines. A deploy
-that changes a job's config sends `<host>: <job> backup armed` with up to four lines: the schedule (`Scheduled every
-day at 10:00 (next: <time>)` on systemd; `Scheduled every hour at xx:17` or `every day at 04:11` on cron; any other
-schedule as written), the gate when the job has one (`At most one run per 20 h; only on AC power and off metered
-connections`), `Last snapshot (<id>) at <time>, <size scanned>` or `No snapshot yet`, and the retention.
-`forget` runs nightly;
-`prune` and `check --read-data-subset 5%` run weekly, driven by stamp age. `restic-freshness.timer` runs
-15 minutes after boot and daily at 12:00 and alerts when a job has no good run within `max_age_hours`.
-
-A run interrupted by shutdown loses its `OnFailure=` notification (systemd refuses the notify unit during
-shutdown). The script leaves `<job>.interrupted`, and the freshness run reports it after the next boot.
+- Each run sends one ntfy message: `<host>: <job> backup ok` (exit 3: `N files unreadable`), or
+  `<host>: <job> backup FAILED (<result>/<status>)` with the reason and the last log lines. A deploy that
+  changes a job's config sends `<host>: <job> backup armed` (schedule, gate, last snapshot, retention).
+- `run` logs one `restic-job: summary ...` line from `restic backup --json` and `restic forget --json`;
+  the root notifier reads only that line, the same way on systemd (the invocation's journal) and cron
+  (the log since the last `start`). Without a summary line it falls back to the last 8 log lines.
+- `forget` runs nightly; `prune` and `check --read-data-subset 5%` run weekly, driven by stamp age.
+- `restic-freshness.timer` runs 15 minutes after boot and daily at 12:00 and alerts when a job has no good
+  run within `max_age_hours`.
+- A run interrupted by shutdown loses its `OnFailure=` notification (systemd refuses the notify unit during
+  shutdown). The script leaves `<job>.interrupted`, and the freshness run reports it after the next boot.
 
 ## Snapshot tags
 
@@ -189,16 +181,15 @@ least 24.
 
 ## Storage Box space
 
-Every run of an sftp job runs `sftp df` against the Storage Box (the free space goes into the summary and the
-ntfy body). When less than `restic_storage_min_free_percent` is free it writes `/var/lib/restic/<job>.storage`
-and the daily freshness run sends a separate high-priority ntfy, "Storage Box at N% used", until a later check finds
-enough space. The marker is written by the job's user, so root reads only a regular file of two short numbers.
-The backup itself never fails because of this check, by design: when `df` fails or cannot be read, the run logs it
-(`storage check: ...`), leaves the marker alone and tries again on the next run, so a check that fails for good only
-ever shows in the log. Test it by hand with `echo df | sftp -F /etc/restic/ssh_config hetzner-storage`.
-`restic-job storage <job>` runs the check by hand. The
-`df` command is the OpenSSH sftp statvfs extension; this repository has not verified that a Hetzner Storage Box
-answers it, so confirm with `sftp -F /etc/restic/ssh_config hetzner-storage` and `df`.
+Every run of an sftp job runs `sftp df` against the Storage Box and logs the free space into the summary.
+Below `restic_storage_min_free_percent` it writes `/var/lib/restic/<job>.storage`, and the daily freshness
+run sends a high-priority ntfy "Storage Box at N% used" until a later check finds enough space.
+
+- The backup never fails because of this check: a failing `df` is logged (`storage check: ...`) and retried
+  next run, so a permanently failing check shows only in the log.
+- `restic-job storage <job>` runs it by hand. `df` is the OpenSSH sftp statvfs extension; this repository
+  has not verified that a Hetzner Storage Box answers it (`sftp -F /etc/restic/ssh_config hetzner-storage`,
+  then `df`).
 
 ## Cron hosts
 
@@ -207,26 +198,22 @@ which runs `restic-job cron <job>` as root. The wrapper stands in for the whole 
 
 1. takes `flock -n /run/restic-<job>.lock` (a run still going is skipped and logged);
 2. runs the gate when the job is gated (skips are logged, never notified);
-3. runs `restic-job run <job>` under `timeout --signal=INT` (the job's `timeout`, then SIGKILL 5 min later), `nice`,
-   `ionice` and `setpriv` as the restic user with only `CAP_DAC_READ_SEARCH` and no new privileges, the same
-   privileges the unit's sandbox gives;
+3. runs `restic-job run <job>` under `timeout --signal=INT` (the job's `timeout`, then SIGKILL 5 min later),
+   `nice`, `ionice` and `setpriv` as the restic user with only `CAP_DAC_READ_SEARCH` and no new privileges;
 4. appends the run to `/var/log/restic/<job>.log` (rotated once at 1 MiB);
-5. sends the ntfy message the notify units send (same text, built from the lines of this run in the log).
+5. sends the same ntfy message the notify units send.
 
-A failed ntfy delivery is not retried (the notify unit retries every 15 min); the freshness check alerts when the
-job then stays without a good run. `restic-freshness` runs from `/etc/cron.d/restic-freshness` hourly (minute 7 of every
-hour, so
-a laptop that is off at noon is still checked) and 15 minutes after cron starts, logs to `freshness.log` (rotated like
-the job logs), and sends at most one alert per day per condition: the stamps are root-owned files in
-`/var/lib/restic-alerts` (also used on systemd hosts), outside the state directory the job's user can write. What the
-unit's other hardening does (filesystem and namespace sandbox,
-`MemoryMax`) has no cron counterpart: `memory_max_mib` only sets `GOMEMLIMIT`, a soft ceiling for the Go runtime.
-The wrapper runs the chain in its own session (`setsid`), without the lock descriptor, and after the run kills what is
-left in that session, so a final SIGKILL of `restic-job` does not leave restic or ssh running. Validation fails
-before anything is installed when `flock`, `timeout`, `nice`, `ionice`, `setpriv`, `setsid`, `pkill` or `crontab`
-(and `nmcli` for a `skip_metered` job) is missing. On Gentoo: `sys-apps/util-linux` with `USE=caps` (setpriv; `flock`,
-`ionice`, `setsid` are part of it), `sys-apps/coreutils` (`timeout`, `nice`), `sys-process/procps` (`pkill`),
-`sys-process/cronie` (`crontab`) and `net-misc/networkmanager` (`nmcli`).
+- A failed ntfy delivery is not retried; the freshness check alerts when the job then stays without a good run.
+- `restic-freshness` runs from `/etc/cron.d/restic-freshness` hourly (minute 7) and 15 minutes after cron
+  starts, logs to `freshness.log`, and sends at most one alert per day per condition (stamps in
+  `/var/lib/restic-alerts`, root-owned, also used on systemd hosts).
+- The unit's sandbox and `MemoryMax` have no cron counterpart: `memory_max_mib` only sets `GOMEMLIMIT`.
+- The chain runs in its own session (`setsid`, no lock descriptor) and leftovers are killed afterwards, so a
+  final SIGKILL does not leave restic or ssh running.
+- Validation fails before anything is installed when `flock`, `timeout`, `nice`, `ionice`, `setpriv`,
+  `setsid`, `pkill` or `crontab` (and `nmcli` for a `skip_metered` job) is missing. Gentoo packages:
+  `sys-apps/util-linux` with `USE=caps`, `sys-apps/coreutils`, `sys-process/procps`, `sys-process/cronie`,
+  `net-misc/networkmanager`.
 
 ## Migration and teardown
 
@@ -245,133 +232,88 @@ rewrites a vault-managed key).
 
 ## Applying to a workstation
 
-A host with no stack role (station-arch, whose job is `station`) gets the engine from
-`playbooks/site.yml`'s workstations play. Run
-these on the machine before the first deploy:
-
-1. `ssh backup@<host> 'sudo -n true && echo become-ok'` decides whether the deploy needs `-K`. When the host is
-   reached as `backup`, `sudo -l -U backup` shows where its root grant comes from. If it is a `NOPASSWD: ALL`
-   line inside `/etc/sudoers.d/backup-user`, the role moves that grant unchanged to
-   `/etc/sudoers.d/ansible-backup` and retires the old file. If the old file only holds the restic wildcard rule,
-   it is removed only when another general grant exists; otherwise it is kept and reported as an ignored failure.
-2. Keep a copy of the legacy install, because the role removes it and cannot restore it:
-   `sudo tar -C / -cpzf /root/legacy-backup.tgz --exclude=opt/backup/cache opt/backup etc/sudoers.d/backup-user
-   etc/systemd/system/backup-station-arch.service etc/systemd/system/backup-station-arch.timer`. Read why the last
-   runs failed (`sudo tail -n 40 /opt/backup/logs/*`) and fix a full disk or a revoked key first, or the new job hits
-   the same wall. Deploy outside the legacy run window (10:00 until it finishes), because the play stops a running
-   legacy backup.
-3. The Storage Box key: `sudo test -r /opt/backup/.ssh/hetzner && echo adoptable` (the role copies it to
-   `/etc/ssh/restic_storage_key`), or opt in with `restic_storage_key` from the vault.
-4. Every source and the cache directory's filesystem are mounted: `findmnt -T /data/vault` and
-   `findmnt -T /data/ssd/uni` (given two paths, findmnt reads them as source and target). The role
-   creates `restic_cache_dir` on whatever is mounted at deploy time, so an unmounted RAID would get it on `/`.
-5. Free space where it matters: `df -h /data/vault /var`.
-6. The vault holds `vault_restic_station_arch_password` (the existing repository's password),
-   `vault_backup_storage_known_hosts` and `vault_ntfy_api_key`.
-
-Deploy:
+A host with no stack role (station-arch, job `station`; also `portable`) gets the engine from the
+`workstations` play of `playbooks/site.yml`:
 
 ```
 ansible-playbook -i inventory/production playbooks/site.yml --limit station-arch --tags restic --ask-vault-pass
 ```
 
-Add `-K` when step 1 asked for a password. The play does, in order: validates the job and the host; creates the
-`restic` user and group (no home, nologin); creates `/etc/restic`, `/var/lib/restic` and the cache directory with
-its `tmp/`; installs the pinned binary at `/usr/local/bin/restic` (pacman's `/usr/bin/restic` stays) and the engine
-script, units and ntfy helper; writes or adopts the Storage Box key, the pinned host key and the job files;
-probes the repository with the job's password and stops with the public key to authorize if ssh is refused, or
-with the restic error if the password is wrong; arms `restic-job@station.timer` and the freshness timer; then
-retires the legacy install: it stops and disables `backup-<legacy_name>.{timer,service}` (`backup-station-arch.*`),
-deletes the units, every
-`.service.<pid>.<date>~` copy and the `.backup` files, resets the failed state, moves `/opt/backup/cache` into the
-cache directory (across filesystems) and retires `/etc/sudoers.d/backup-user`: a general grant in it moves to
-`/etc/sudoers.d/ansible-backup` first, and the removal is undone if `backup` can no longer run `sudo -n`
-afterwards. It removes `/opt/backup` unless that is the connection user's home.
-The final tasks list the history the job continues. A first run on a real host also sends a test ntfy message.
+Add `-K` when `ssh backup@<host> 'sudo -n true'` fails. Before the first deploy:
 
-Watch the first run (it covers everything since the last good backup, so it takes a while):
+- Keep a copy of the legacy install; the role removes it and cannot restore it:
+  `sudo tar -C / -cpzf /root/legacy-backup.tgz --exclude=opt/backup/cache opt/backup etc/sudoers.d/backup-user
+  etc/systemd/system/backup-station-arch.*`. Fix whatever made the last legacy runs fail (full disk, revoked
+  key), and deploy outside the legacy run window (10:00 until it finishes): the play stops a running legacy
+  backup.
+- The Storage Box key is adoptable (`sudo test -r /opt/backup/.ssh/hetzner`) or comes from `restic_storage_key`.
+- Every source and the cache directory's filesystem are mounted (`findmnt -T <path>`): the role creates
+  `restic_cache_dir` on whatever is mounted at deploy time.
+- The vault holds `vault_restic_station_arch_password` (the existing repository's password),
+  `vault_backup_storage_known_hosts` and `vault_ntfy_api_key`.
 
-```
-sudo systemctl start --no-block restic-job@station
-journalctl -fu restic-job@station
-systemctl list-timers 'restic-*'
-sudo /usr/local/libexec/restic/restic-job exec station snapshots --host research-station --tag station
-```
+The play validates, creates the `restic` user, `/etc/restic`, `/var/lib/restic` and the cache directory,
+installs the pinned binary at `/usr/local/bin/restic`, the engine script and units, writes the key, host key
+and job files, probes the repository (it stops with the public key to authorize, or the restic error), arms
+`restic-job@station.timer` and the freshness timer, then retires the legacy install
+(`backup-<legacy_name>.*` units, `/opt/backup` unless it is the connection user's home, and
+`/etc/sudoers.d/backup-user`, whose general grant moves to `/etc/sudoers.d/ansible-backup` first; the removal
+is undone if `backup` can no longer run `sudo -n`).
 
-Retag the legacy snapshots before the first run (see Snapshot tags): the deploy arms the timer, so right after it
-run `sudo systemctl stop restic-job@station.timer`, then
-`sudo /usr/local/libexec/restic/restic-job exec station tag --host research-station --set station,arch`
-(the same as `restic tag --host research-station --set station,arch` against this repository), then
-`sudo systemctl start restic-job@station.timer`. The legacy snapshots carry the tag `station-arch`, and `forget` is
-scoped by the `station` tag.
+First-run notes for `station`:
 
-Preview the first `forget` before the first run, because it groups by host only while the legacy job grouped by
-host and paths:
-`sudo /usr/local/libexec/restic/restic-job exec station forget --dry-run --host research-station --tag station
---group-by host --keep-daily 7 --keep-weekly 2 --keep-monthly 2 --keep-yearly 1` (the job's own retention values).
-The first `forget` applies the job's retention to the whole `--host` and `--tag` history, so older snapshots
-beyond it are dropped; the first `prune` follows a week later. Snapshots that lack the `station` tag are never
-forgotten, which is why the retag comes first.
-
-Rollback: `sudo systemctl disable --now restic-job@station.timer restic-freshness.timer`. The repository keeps its
-history (a new snapshot, and forgotten ones if `forget` ran). The role cannot restore the legacy install; the
-logs and key from the pre-flight are what remains of it. `playbooks/restic-teardown.yml` refuses a host marked
-`teardown_protected`, so a protected workstation is cleaned up by hand: remove the timers, `/etc/restic`,
-`/usr/local/libexec/restic`, the cache directory and the `restic` user.
+- Retag the legacy snapshots first (see Snapshot tags): right after the deploy run
+  `sudo systemctl stop restic-job@station.timer`, then
+  `sudo /usr/local/libexec/restic/restic-job exec station tag --host research-station --set station,arch`,
+  then start the timer. The legacy tag is `station-arch` and `forget` is scoped by `station`.
+- Preview the first `forget`: it groups by host only, the legacy job grouped by host and paths:
+  `restic-job exec station forget --dry-run --host research-station --tag station --group-by host
+  --keep-daily 7 --keep-weekly 2 --keep-monthly 2 --keep-yearly 1`. It applies the retention to the whole
+  `--host`/`--tag` history; the first `prune` follows a week later.
+- Watch it: `sudo systemctl start --no-block restic-job@station`, `journalctl -fu restic-job@station`.
+- Rollback: `sudo systemctl disable --now restic-job@station.timer restic-freshness.timer`; the repository
+  keeps its history. `playbooks/restic-teardown.yml` refuses a `teardown_protected` host, so clean a protected
+  workstation by hand (timers, `/etc/restic`, `/usr/local/libexec/restic`, cache directory, `restic` user).
 
 ## Applying to portable
 
-`portable` (Gentoo, OpenRC, NetworkManager, cronie) is in the `workstations_pending` group, which no play targets,
-so a bare `site.yml` run never reports it unreachable; nothing has been applied to it. Before the first run:
+`portable` (Gentoo, OpenRC, NetworkManager, cronie) is live: its first backup (about 43 GiB) has finished.
+On a new machine of this kind, before the first run:
 
-1. Install what the role checks and does not install: `sys-process/cronie` (then `rc-update add cronie default` and
-   `rc-service cronie start`), `net-misc/networkmanager` (`nmcli` must answer), `sys-apps/util-linux` built with
-   `USE=caps` (`setpriv`; also `flock`, `ionice`, `setsid`), `sys-apps/coreutils`, `sys-process/procps` (`pkill`),
-   `sys-apps/bzip2`, openssh, shadow (`useradd`), sudo, Python 3 (`/usr/bin/python3`, as `group_vars` sets).
-   Validation names any missing tool before it changes anything.
-2. Create the Ansible user: `useradd -m -s /bin/bash <user>`, put the controller's key
-   (`~/.ssh/ansible_controller_key.pub`) in its `~/.ssh/authorized_keys`, and grant it `NOPASSWD: ALL` in
-   `/etc/sudoers.d/ansible` (or keep a password and add `-K`). Set `ansible_user` of `portable` in
-   `inventory/production/hosts.yml`, which holds the placeholder `REPLACE_WITH_ANSIBLE_USER`.
-3. `portable.codex.home.arpa` resolves from the controller, and
-   `ansible -i inventory/production portable -m setup -a filter=ansible_service_mgr` reports `openrc`.
-4. Every path in `host_vars/portable.yml` exists (`restic-job` fails a run on a missing source, and on an empty
-   directory it takes for an unmounted one), and `/boot` and `/efi` are mounted when the backup runs.
-5. Vault entries (`vault.yml.example` has the shapes): `vault_restic_portable_password`,
-   `vault_portable_metered_connections` (NetworkManager connection names, usually the SSID, of every hotspot),
-   and, when the key is vault-managed, `vault_restic_storage_key_portable` plus the `restic_storage_key` line
-   uncommented in `host_vars/portable.yml`. Otherwise place the key by hand at `/etc/ssh/restic_storage_key`.
-6. The Storage Box authorizes the key's public half (Hetzner console, or
-   `ssh-copy-id -p 23 -s <user>@<host>`); the first run names the line to add if it does not.
-7. Move `portable` from `workstations_pending` to `workstations` in `inventory/production/hosts.yml` (one move:
-   cut its block and paste it under `workstations:`).
-8. First deploy, with the new repository created once:
+1. Install what the role checks and does not install: `sys-process/cronie` (`rc-update add cronie default`,
+   `rc-service cronie start`), `net-misc/networkmanager` (`nmcli` must answer), `sys-apps/util-linux` with
+   `USE=caps`, `sys-apps/coreutils`, `sys-process/procps`, `sys-apps/bzip2`, openssh, shadow, sudo and
+   `/usr/bin/python3`. Validation names any missing tool before it changes anything.
+2. Create the Ansible user with the controller's key and `NOPASSWD: ALL` in `/etc/sudoers.d/ansible` (or add
+   `-K`), and set `ansible_user` in `inventory/production/hosts.yml`.
+3. `portable.codex.home.arpa` resolves, and `ansible_facts.service_mgr` reports `openrc`.
+4. Every path in `host_vars/portable.yml` exists (`restic-job` fails a run on a missing source, and on an
+   empty directory it takes for an unmounted one), and `/boot` and `/efi` are mounted during the backup.
+5. Vault entries (shapes in `vault.yml.example`): `vault_restic_portable_password`,
+   `vault_portable_metered_connections` (hotspot SSIDs) and `vault_restic_storage_key_portable`.
+6. The Storage Box authorizes the key's public half; the first run names the line to add if it does not.
+7. First deploy with the new repository created once:
    `ansible-playbook -i inventory/production playbooks/site.yml --limit portable --tags restic --ask-vault-pass -e restic_init_repository=true`
 
-The first backup (about 43 GiB) starts at the next hourly cron minute when the laptop is on AC and unmetered, or by
-hand: `sudo /usr/local/libexec/restic/restic-job cron portable`. Follow it with
-`tail -f /var/log/restic/portable.log`. To see a skip, first remove the throttle stamp
-(`sudo rm /var/lib/restic/portable.ok`; the freshness clock then restarts from the env file's age), unplug or tether,
-run the same command and read the last log lines: `skipped: the battery is discharging (on battery)`,
+A run starts at the next hourly cron minute on AC and unmetered, or by hand:
+`sudo /usr/local/libexec/restic/restic-job cron portable`, followed with `tail -f /var/log/restic/portable.log`.
+To see a skip, remove the throttle stamp (`sudo rm /var/lib/restic/portable.ok`), unplug or tether, run the
+same command and read the log: `skipped: the battery is discharging (on battery)`,
 `skipped: link of '<name>' is metered` or `skipped: connection '<name>' is listed as metered`.
-`restic-job exec portable snapshots` lists the history. The cron path has been proven only in the `cron`
-molecule scenario on a Debian image; nothing in this repository has run it on OpenRC.
 
 ## Tests
 
-The `default` molecule scenario starts real systemd units and needs rootful podman. It covers the weekly
-prune and check (and a failing prune), the Storage Box connection files, the refusal to start a new history
-without `restic_init_repository`, the lockout guard for a `backup` connection user, and a vault-managed Storage
-Box key (content, owner, mode, derived public key, and the public key named when the probe fails over ssh).
-`fail-fast-validation`
-runs every `validate*.yml` check; stack roles call `tasks_from: validate_job` from their own validation so a bad
-job fails before anything deploys. The `default` scenario also runs `restic-job gate` against canned `busctl`
-replies and fake `power_supply` trees (`RESTIC_JOB_POWER_DIR`), and `unlock` against a stub restic that fails on
-demand. The `cron` scenario runs the real role with `restic_scheduler: cron` on the Debian image and runs the wrapper
-for real: privileges, lock, log rotation, timeout, notifications, freshness, the gate against canned `nmcli`
-replies (and the real `nmcli`, which answers "not running"), and the cron teardown. It does not run OpenRC (the
-init script `rc-service`/`rc-update` path of `ansible.builtin.service`), cronie, or a Gentoo kernel and userland.
-
-`scripts/restic/validate-clean.sh` and `validate-deploy.sh` are the staging-Pi checks around teardown and deploy.
-They read `/etc/restic`, `/var/lib/restic` and `/var/cache/restic` through `sudo -n`, so the ssh user needs
-passwordless sudo on the host; without it they fail at once.
+- `default` (rootful podman, real systemd units): weekly prune and check (and a failing prune), Storage Box
+  connection files, refusal to start a history without `restic_init_repository`, the lockout guard for a
+  `backup` connection user, a vault-managed key (content, owner, mode, derived public key), `restic-job gate`
+  against canned `busctl` replies and fake `power_supply` trees (`RESTIC_JOB_POWER_DIR`), and `unlock`
+  against a stub restic.
+- `fail-fast-validation`: every `validate*.yml` check; stack roles call `tasks_from: validate_job` from their
+  own validation so a bad job fails before anything deploys.
+- `cron`: the real role with `restic_scheduler: cron` on the Debian image, running the wrapper for real
+  (privileges, lock, log rotation, timeout, notifications, freshness, the gate against canned `nmcli`
+  replies, cron teardown). It does not cover OpenRC's `rc-service`/`rc-update` path, cronie or a Gentoo
+  userland; nothing in this repository has run the cron path on OpenRC under test.
+- `scripts/restic/validate-clean.sh` and `validate-deploy.sh` are the staging-Pi checks around teardown and
+  deploy. They read `/etc/restic`, `/var/lib/restic` and `/var/cache/restic` through `sudo -n`, so the ssh
+  user needs passwordless sudo.

@@ -14,16 +14,19 @@ Ansible fact mapping.
     name: os
 ```
 
-The role is read-only, idempotent and dependency-free - safe to include first.
+The role changes nothing on the host, is idempotent and has no role dependencies, so it is safe to include
+first. It gathers the minimal fact subset itself, so the calling play may set `gather_facts: false`.
+It fails the play when the OS family is not in `os_supported_families` (`Debian`, `RedHat`) or the
+architecture has no `os_arch_download_map` entry. Arch Linux hosts are not supported.
 
 ## Facts published
 
 | Variable             | Meaning                                                              |
 |----------------------|----------------------------------------------------------------------|
-| `os_family`          | OS family (e.g. `Debian`)                                            |
-| `os_name`            | Distribution name (e.g. `Debian`)                                    |
-| `os_version`         | Major version (e.g. `12`)                                            |
-| `os_codename`        | Release codename (e.g. `bookworm`)                                   |
+| `os_family`          | OS family (`Debian` or `RedHat`)                                     |
+| `os_name`            | Distribution name (e.g. `Debian`, `CentOS`)                          |
+| `os_version`         | Major version (e.g. `13`)                                            |
+| `os_codename`        | Release codename (e.g. `trixie`)                                     |
 | `os_is_debian`       | `true` when the OS family is Debian                                  |
 | `os_arch_machine`    | Ansible architecture fact (e.g. `aarch64`, `armv7l`, `x86_64`)       |
 | `os_arch_raw`        | Raw `uname -m` value when available                                  |

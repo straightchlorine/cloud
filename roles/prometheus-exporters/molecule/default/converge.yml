@@ -7,10 +7,23 @@
     prometheus_exporters_firewall_source: "192.168.0.0/16"
   tasks:
     # Binary downloads and service starts cannot run in a container.
+    # The site play applies common first; the unit template reads its defaults and the tasks notify its handlers.
+    - name: Load the common role as the site play does
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: network_facts
+        public: true
+
     - name: Run common_setup
       ansible.builtin.include_role:
         name: prometheus-exporters
         tasks_from: common_setup
+
+    # The container has no vcgencmd; the collector must still write its other series.
+    - name: Set up the Pi hardware metrics collector
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: pi_hardware_metrics
 
     # One-shot arrange steps; the teardown skips silently without teardown_confirmed.
     - name: Install and tear down fake Pi-hole exporter artifacts

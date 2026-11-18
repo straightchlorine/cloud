@@ -61,3 +61,42 @@
         that:
           - "'curl' in ansible_facts.packages"
           - "'jq' in ansible_facts.packages"
+
+    - name: Run the hardware collector as its unit does
+      ansible.builtin.command: systemctl start pi-hardware-metrics.service
+      changed_when: false
+
+    - name: Read the collector output and the kernel's ext4 error counts
+      ansible.builtin.shell: |
+        cat /opt/prometheus-exporters/textfiles/pi_hardware.prom
+        echo ---
+        for f in /sys/fs/ext4/*/errors_count; do [ -r "$f" ] && echo "$f $(cat "$f")"; done
+        true
+      register: prom_exp_hw
+      changed_when: false
+
+    - name: Assert the collector runs without vcgencmd and reports one error series per ext4 filesystem
+      vars:
+        prom: "{{ (prom_exp_hw.stdout.split('---')[0]).splitlines() }}"
+        kernel: "{{ (prom_exp_hw.stdout.split('---')[1] | trim).splitlines() }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            'hw_metrics_source_up{source="vcgencmd"} 0' in prom
+          - >-
+            '# TYPE hw_filesystem_errors gauge' in prom
+          - prom | select('match', 'hw_filesystem_errors[{]') | list | length == kernel | length
+        fail_msg: "collector: {{ prom }} kernel: {{ kernel }}"
+        quiet: true
+
+    - name: Assert each series carries the kernel's count
+      vars:
+        prom: "{{ (prom_exp_hw.stdout.split('---')[0]).splitlines() }}"
+        kernel: "{{ (prom_exp_hw.stdout.split('---')[1] | trim).splitlines() }}"
+        want: >-
+          {{ 'hw_filesystem_errors{device="' ~ item.split('/')[4] ~ '"} ' ~ item.split(' ')[1] }}
+      ansible.builtin.assert:
+        that: want in prom
+        fail_msg: "missing {{ want }} in {{ prom }}"
+        quiet: true
+      loop: "{{ kernel }}"

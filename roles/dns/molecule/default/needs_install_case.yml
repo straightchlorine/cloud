@@ -1,0 +1,16 @@
+---
+# One case of the install decision. Each key is mapped so an absent one falls back to the role default.
+- name: "Decide for case {{ molecule_case.id }}"
+  ansible.builtin.include_role:
+    name: dns
+    tasks_from: needs_install
+  vars:
+    dns_pihole_force_reinstall: "{{ molecule_case.dns_pihole_force_reinstall | default(false) }}"
+    dns_pihole_binary_path: "{{ molecule_case.dns_pihole_binary_path | default('/usr/local/bin/pihole') }}"
+    dns_pihole_gravity_path: "{{ molecule_case.dns_pihole_gravity_path | default('/etc/pihole/gravity.db') }}"
+
+- name: "Record the decision of case {{ molecule_case.id }}"
+  ansible.builtin.copy:
+    content: "{{ dns_pihole_needs_install | bool | string | lower }}\n"
+    dest: "/tmp/molecule-needs-install-{{ molecule_case.id }}"
+    mode: "0644"

@@ -7,8 +7,9 @@ Grafana Alloy on RPM hosts: ships the systemd journal to the fleet Loki and, wit
 
 The CentOS Stream honeypot is the only host that runs it. `roles/honeypot` includes this role
 (`honeypot_alloy_enabled`) and passes `alloy_textfile_directory`, so the honeypot's own metric files
-reach Prometheus. It is dnf-only: the repository task uses `yum_repository` and the package task `dnf`,
-so it does not run on the Debian fleet, which scrapes node exporters instead.
+reach Prometheus. It installs through `yum_repository` and `ansible.builtin.dnf` only, so it cannot run on
+Debian, Arch or Gentoo hosts; the Debian fleet is scraped through node exporters instead. Forwarding
+from the other hosts is planned, not implemented.
 
 ## Inputs
 
@@ -19,5 +20,6 @@ WireGuard encrypts the hop.
 
 ## Tests
 
-No molecule scenario, and the honeypot scenarios leave `honeypot_alloy_enabled` off; `validate.yml` is the only
-automated gate.
+No molecule scenario covers it: the honeypot scenarios run selected task files, not `main.yml`, so
+`honeypot_alloy_enabled` is never exercised. `validate.yml` (full push URLs, absolute textfile path) and the
+post-deploy readiness, sink and textfile checks in `tasks/main.yml` are the only gates.

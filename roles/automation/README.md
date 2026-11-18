@@ -1,332 +1,118 @@
 # Automation Role
 
-Docker compose stack for personal automation services on a Raspberry Pi:
-Vaultwarden (passwords), Firefly III (finance, + MariaDB and its cron sidecar)
-and Watchtower (container updates). TLS terminates at the central reverse
-proxy (moving onto the Kubernetes cluster on a separate node) - this role
-publishes plain HTTP on the host's `primary_ip`, reached over the tailnet.
+Status: off-site backup is wired through `roles/restic` (job `automation`) in host_vars, but the host has not been
+redeployed onto it and still runs the previous backup engine. Check the repository with
+`restic-job exec automation snapshots` first and never init it.
+
+Docker compose stack on a Raspberry Pi: Vaultwarden, Firefly III (+ MariaDB and a cron sidecar), Calibre-Web
+Automated, Watchtower, cAdvisor. TLS terminates at the central reverse proxy; the role publishes plain HTTP on
+`primary_ip`, reached over the tailnet.
 
 ## Services
 
-- **Vaultwarden** (`:8081` on `primary_ip`): password manager (tailnet-only)
-- **Firefly III** (`:8082` on `primary_ip`): finance manager (tailnet-only)
-- **MariaDB** (compose-internal): Firefly's database, pinned `mariadb:11.8.9`.
-  Root is deliberately credential-less: the entrypoint demands a root-password
-  policy on first init, so the stack sets `MARIADB_RANDOM_ROOT_PASSWORD=1`
-  (throwaway password, never written to `.env`). Nothing uses root - backups
-  dump via the `firefly` user, and maintenance uses the image's built-in
-  `unix_socket` auth: `docker exec -it mariadb mariadb`
-- **firefly-cron** (compose-internal): drives Firefly's recurring transactions
-- **Watchtower** (`:8084` on `primary_ip`, monitoring host only): nightly container updates,
-  label-gated; self-updates via the ephemeral orchestrator
-- **cAdvisor** (`:8085` on `primary_ip`, monitoring host only): per-container CPU/memory/IO metrics
-- **Calibre-Web Automated** (`:8083` on `primary_ip`): ebook library - ingest,
-  auto-convert, EPUB-fix, read in-browser and send to e-readers
-- **Monitoring**: node_exporter + hardware textfile metrics, deployed by the `prometheus-exporters`
-  role (not by this one)
+| Service | Port on `primary_ip` | Notes |
+|---|---|---|
+| Vaultwarden | 8081 | signups, invitations and password hints off |
+| Firefly III | 8082 | `automation_trusted_proxies` must not be `**` (`validate.yml`) |
+| Calibre-Web Automated | 8083 | ebook library; ships `admin`/`admin123`, change at first login |
+| Watchtower | 8084 | firewall-limited to the Prometheus scrape source; label-gated nightly updates |
+| cAdvisor | 8085 | firewall-limited to the Prometheus scrape source |
+| MariaDB, firefly-cron | compose-internal | see below |
+
+- **MariaDB** is pinned (`mariadb:11.8.9`) and unlabelled, so DB upgrades are never automatic. Root has a throwaway
+  random password (the entrypoint demands one); nothing uses root. Maintenance: `docker exec -it mariadb mariadb`
+  (unix_socket auth). Backups dump via the `firefly` user.
+- **firefly-cron** (`alpine:3.20`, pinned) does `wget` the cron endpoint, `sleep 60`, exit 0, and Docker restarts it.
+  `State=running` holds only ~60 s of each ~62 s cycle, so health is judged by the last exit code (0 = clean).
+- Other images float (`latest`) under Watchtower.
+- node_exporter and hardware metrics come from `prometheus-exporters`, not this role.
 
 ### Calibre-Web notes
 
-- **Three separate volume dirs** under `automation_data_path/calibre/`
-  (`config`, `ingest`, `library`) - CWA errors when binds are nested in binds
-- `/cwa-book-ingest` is **destructive by design**: anything dropped there is
-  deleted after processing - ideal as a Syncthing folder for drop-from-phone
-  ingestion (a deliberate follow-up, not wired by default)
-- Runs as the stack user (`PUID`/`PGID` resolved on-host from `ansible_user`),
-  never root - root-owned library files break ingestion. The role seeds the
-  three mounts owned by the *host-side mapping* of `PUID`/`PGID` (dockremap
-  base + stack uid), not by the remap base itself: `cps.py` reopens its SQLite
-  databases per request, so re-owning a live container's files to the base
-  would leave them writable only by container-root and each book page would
-  500 on `sqlite3.OperationalError: attempt to write a readonly database`
-  until the container restarts (a stopped container is chowned by CWA's init
-  either way). The post-deploy check probes the mounts as `abc`, not root.
-- **Synced live to other devices** via a dedicated send-only Syncthing folder on
-  `/mnt/data/calibre` (id `calibre`): books, covers, metadata sidecars and the
-  non-database config reach the peer within seconds of ingest, with no second
-  copy on this host. A deployed `.stignore` keeps the rest out of the mesh:
-  `ingest/`, `thumbnails/`, `processed_books/`, `log_archive/` and logs
-  (derived/instance-local), the runtime ingest state files (recreated on
-  start), and every SQLite database - a `.db` is only valid alongside its
-  exact `-wal`, and a file sync ships the two independently.
-- **Snapshotted by the Syncthing backup job**: every `config/*.db` plus
-  `library/metadata.db` (WAL-mode, written live) is copied with an online
-  `sqlite3 .backup` into each dated snapshot's `calibre-databases/`
-  (`<automation_backup_dir>/<stamp>/calibre-databases/`, same 14-run
-  retention as the rest) - this is the *only* place the databases leave
-  the host. A full restore onto
-  another device is: copy the peer's `calibre/config` -> `/config` and
-  `calibre/library` -> `/calibre-library`, overlay a snapshot's
-  `calibre-databases/*` onto the matching live files, then re-apply the role-managed
-  values (PUID/PGID, admin password, ports). Thumbnails and the runtime ingest
-  state are rebuilt on start; the processed-books audit archive starts fresh
-  (its history stays recoverable from restic). Never run CWA
-  against the share in two places at once - the peer folder should be
-  Receive Only, or CWA should run against a copy.
-- Ships with `admin`/`admin123` - change the admin password at first login
-- Optional `vault_hardcover_token` in vault enables Hardcover as a metadata
-  provider (picked up automatically; empty until set)
+- Three separate dirs under `automation_data_path/calibre/` (`config`, `ingest`, `library`): CWA errors on nested
+  binds.
+- `/cwa-book-ingest` is destructive: anything dropped there is deleted after processing.
+- Runs as the stack user, never root. The role seeds the mounts owned by the host-side mapping of `PUID`/`PGID`
+  (dockremap base + stack uid), not the remap base: re-owning a live container's files to the base makes every book
+  page 500 with `attempt to write a readonly database` until restart. Post-deploy probes the mounts as `abc`.
+- A send-only Syncthing folder `calibre` on `/mnt/data/calibre` syncs the live tree to peers. A deployed
+  `.stignore` excludes `ingest/`, `thumbnails/`, `processed_books/`, `log_archive/`, logs, runtime ingest state and
+  every SQLite database (a `.db` is only valid with its exact `-wal`).
+- The Syncthing backup job copies every `config/*.db` and `library/metadata.db` with `sqlite3 .backup` into
+  `<automation_backup_dir>/<stamp>/calibre-databases/` (14-run retention). This is the only place the databases leave
+  the host.
+- Restore on another device: copy the peer's `calibre/config` and `calibre/library` into place, overlay a snapshot's
+  `calibre-databases/*` on the live files, re-apply role-managed values (PUID/PGID, admin password, ports). Never run
+  CWA against the share in two places at once (peer folder Receive Only, or run against a copy).
+- Optional `vault_hardcover_token` enables Hardcover as a metadata provider.
+- Known upstream log noise on a healthy v4.0.6 install, no role workaround: `no such table: book_format_checksums`
+  (upstream #1523; KOReader/Kobo checksum history is not recorded), `'CWA_DB' object has no attribute 'close'` on
+  delete, `Author '<sort>' not found`, `scholarly`/`amazonjp` provider warnings (disable the providers in CWA), and
+  `Another calibre program ... is running` followed by `Failed to add format` (ingest racing the web app; retries).
 
-### Known upstream CWA issues
+## Inputs
 
-Noise you will see in this container's logs on a healthy install. Verified
-against v4.0.6 (image == current stable) and the upstream sources; none of them
-follow from this role's compose config, so the role carries no workaround:
+Defaults in `defaults/main.yml`; per-host values in `inventory/production/host_vars/pi-automation.yml`.
 
-- `no such table: book_format_checksums` - `cwa-init` only creates schema in
-  `/config` and nothing creates this table in `metadata.db`; upstream tracks it
-  under the missing `foreign_keys` pragma
-  (crocodilestick/Calibre-Web-Automated#1523). Cost: KOReader/Kobo checksum
-  *history* is not recorded.
-- `'CWA_DB' object has no attribute 'close'` on book deletion
-  (`cps.editbooks:1398`) - the method does not exist upstream, so the duplicate
-  cache is not invalidated until restart.
-- `Author '<sort>' not found to display name in right order` (`cps.db:1103`) -
-  `order_authors()` splits `author_sort` on `&`; a book whose author is stored
-  as one `Nanigashi Shima and raemz`-style name is looked up whole and misses.
-  Library data, not config; the page renders regardless.
-- `scholarly` / `amazonjp` provider warnings - optional metadata providers with
-  no browser (Scholar needs Chrome/Firefox) or a timeout-prone endpoint. Turn
-  the providers off in CWA's metadata settings if the noise is unwanted.
-- `calibredb ... Another calibre program such as calibre-server ... is running`,
-  followed by `Failed to add format` - CWA's ingest processor racing its own web
-  app for the library lock. Transient (the format lands on retry) and the ingest
-  service logs `Successfully processed` either way.
+| Variable | Purpose |
+|---|---|
+| `automation_stack_home`, `automation_backup_owner` | default to `/home/{{ ansible_user }}/stack` and `ansible_user` (inventory variable, not the `ansible_user_dir` fact, which resolves to root's home under `become`) |
+| `automation_data_path` | stack data path (`/mnt/data` in production) |
+| `automation_ssd_format` | `true` wipes the detected drive (destructive, opt-in) |
+| `automation_trusted_proxies` | tailnet CIDR(s) for Firefly |
+| `automation_backup_enabled`, `automation_backup_dir` | Syncthing-replicated local snapshots (needs `common_syncthing_enabled`); dumps at 02:30 |
+| `automation_restic_enabled`, `automation_restic_repository`, `automation_restic_password` | off-site job, ships the 02:30 dumps |
 
-## Deployment
+Vault: `vault_vaultwarden_admin_token`, `vault_firefly_app_key` (exactly 32 alphanumeric chars; a bare base64 key
+500s every route), `vault_firefly_static_cron_token`, `vault_firefly_db_password`, `vault_watchtower_api_token`,
+`vault_restic_automation_password`.
 
-### Prerequisites
+## Storage
 
-- Raspberry Pi 4B (production) with an optional SSD (auto-detected if attached - the
-  stack runs on the SD card without one; see "Storage" below)
-- Reverse proxy in place fronting `vaultwarden.*` / `firefly.*` over the tailnet
+The SSD is optional (mirrors dns). With a drive (auto-detected or already mounted at `automation_data_path`) the
+stack data, Docker `data-root` and journald live on it; without, the stack runs from the SD card. Bind mounts only,
+no named volumes.
 
-### Deploy
+## Operator commands
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
-  --limit automation --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit automation --ask-vault-pass
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml --limit automation --tags validation --ask-vault-pass
 ```
 
-### Validation Only
+Teardown and re-test on a disposable host (`pi-automation` is `teardown_protected` and refused):
 
 ```bash
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/site.yml --limit automation --tags validation --ask-vault-pass
-```
-
-## Configuration
-
-### Required Variables (vault.yml)
-
-```yaml
-vault_vaultwarden_admin_token: "openssl rand -base64 32"
-# APP_KEY - exactly 32 random alnum chars (NO bare base64 output - a bare
-# 'openssl rand -base64 32' without the base64: prefix 500s every route):
-vault_firefly_app_key: "head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32"
-vault_firefly_static_cron_token: "openssl rand -hex 16"
-vault_firefly_db_password: "openssl rand -base64 32"
-vault_watchtower_api_token: "openssl rand -base64 32"
-```
-
-### Host Variables (host_vars/pi-automation.yml)
-
-`automation_stack_home` and `automation_backup_owner` are **derived from the
-inventory's `ansible_user`** (role defaults: `/home/{{ ansible_user }}/stack`
-and `{{ ansible_user }}`). Set the SSH/stack user once in `hosts.yml` and both
-follow automatically - this is why the test host (`ansible`) lands on
-`/home/ansible/stack` while production (`automation`) uses
-`/home/automation/stack`. (These derive from the inventory variable,
-not the `ansible_user_dir`/`ansible_user_id` facts - those reflect the `become`
-root user and would resolve to `/root`.)
-
-Example for production:
-
-```yaml
-device_type: rpi4b
-automation_data_path: "/mnt/data"   # stack data path (on the optional SSD when present)
-# automation_stack_home derives from ansible_user (=> /home/automation here).
-# Override only to pin a dedicated stack account.
-# Optional SSD (mirrors DNS): auto-detected if attached; wipe/format it here.
-# Only set automation_ssd_format: true for a blank disk (DESTRUCTIVE).
-automation_trusted_proxies: "100.64.0.0/10"    # tailnet CIDR for Firefly
-
-# Secondary local backup: Syncthing replicates automation_backup_dir. The
-# live Calibre tree rides its own send-only folder (see the role's README) -
-# enabled with these same two flags, nothing extra to set.
-common_syncthing_enabled: true
-automation_backup_enabled: true
-automation_backup_dir: "/mnt/data/syncthing/backup"
-
-# Off-site restic backup (roles/restic job "automation"); needs the 02:30 dumps above
-automation_restic_enabled: true
-automation_restic_repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/automation"
-automation_restic_password: "{{ vault_restic_automation_password }}"
-```
-
-## Security
-
-- **Secrets**: only in vault; rendered to a 0600 `.env` next to the compose
-  file and interpolated via `${VAR}` - the compose file itself stays secretless
-- **Signup hardening**: `SIGNUPS_ALLOWED=false`, `INVITATIONS_ALLOWED=false`,
-  `SHOW_PASSWORD_HINT=false` on Vaultwarden
-- **TRUSTED_PROXIES**: scoped to the tailnet CIDR (validate.yml refuses `**`)
-- **Watchtower**: opt-in per container (`com.centurylinklabs.watchtower.enable=true`);
-  MariaDB is pinned and unlabelled - DB upgrades are never automatic. Its own
-  image self-updates via the ephemeral orchestrator, so the published metrics port
-  does not disable self-update
-- **Ports**: service ports bound to `primary_ip` (tailnet-reachable), Watchtower
-  metrics API bound to `primary_ip` too
-- **Storage**: a dedicated SSD is optional, mirroring the dns role. When a drive
-  is present (auto-detected, or already mounted at `automation_data_path`) the
-  stack data, Docker's `data-root` and journald all live on it - off the SD card;
-  with no drive the stack runs from the SD card. No named volumes, bind mounts
-  only. The drive is never wiped unless you set `automation_ssd_format: true`
-  (opt-in, DESTRUCTIVE).
-
-## Tag policy
-
-Application images float (`latest`) - that is what Watchtower updates. The
-known exception: `mariadb:11.8.9` and the `alpine:3.20` cron sidecar are
-minor-pinned and excluded from auto-update; bump them deliberately.
-
-## Teardown & Re-test
-
-The role ships a repeatable teardown for disposable test hosts, so the same
-box can be re-deployed and re-tested end-to-end.
-
-```bash
-# 1. Tear down the automation role on the test host
 ansible-playbook -i inventory/production playbooks/automation-teardown.yml \
-  --limit <your-test-host> -e automation_teardown_confirm=true
-
-# 2. Verify the box is clean enough for a fresh test
-./scripts/automation/validate-clean.sh <your-test-host>
-
-# 3. Re-deploy, then verify the box is actually healthy end-to-end
-ansible-playbook -i inventory/production playbooks/site.yml \
-  --limit <your-test-host> --tags automation --ask-vault-pass
-./scripts/automation/validate-deploy.sh <your-test-host>
+  --limit <test-host> -e automation_teardown_confirm=true
+./scripts/automation/validate-clean.sh <test-host>
+ansible-playbook -i inventory/production playbooks/site.yml --limit <test-host> --tags automation --ask-vault-pass
+./scripts/automation/validate-deploy.sh <test-host>
 ```
 
-The teardown playbook refuses to run without
-`automation_teardown_confirm=true` and refuses a host marked
-`teardown_protected: true` (`pi-automation`). It stops and removes the systemd unit,
-the compose project (when a Docker daemon answers), the management script, the
-backup script + cron and Syncthing, and ends with a self-check that fails if
-any role artifact survives. `automation_data_path` (user data) intentionally
-stays.
+Teardown removes the unit, compose project, management script, backup script/cron and Syncthing, then self-checks.
+`automation_data_path` stays.
 
 ## Validation
 
-Pre-deployment (`validate.yml`) checks that:
+- `validate.yml`: required variables set and not vault placeholders, Debian-family OS, parent dirs of stack paths
+  exist, `automation_trusted_proxies` is not `**`.
+- `post_deploy_validate.yml`: vaultwarden, firefly, mariadb, watchtower running; firefly-cron last exit code 0;
+  Vaultwarden `/alive` and Firefly frontend answer; `mariadb-admin ping`.
 
-- Required variables are defined and contain no vault placeholder values
-- The host runs a Debian-family OS
-- The parent directories of the stack paths exist
-- `automation_trusted_proxies` is not the `**` catch-all
+## Constraints
 
-Post-deployment (`post_deploy_validate.yml`) checks that:
-
-- All critical long-lived compose containers report running (vaultwarden,
-  firefly, mariadb, watchtower)
-- The `firefly-cron` sleep-sidecar is healthy - judged by its **last exit code**
-  (0 = clean wget+sleep cycle), never by `State=running` (it only reports
-  `running` ~60s of every ~62s cycle by design)
-- Vaultwarden answers `/alive` and Firefly serves its frontend on `primary_ip`
-- MariaDB answers `mariadb-admin ping`
-
-## Operational notes
-
-### Deploy order: the stack brings up LAST
-
-The automation role runs the Docker stack bring-up (`docker compose up -d` +
-the critical-service poll) **after** every security/configuration step -
-packages, storage, Docker, the backup files, the ntfy helper and the **firewall**
-all land first, so containers never run freely ahead of the host hardening
-(fail2ban and the base firewall run in the `site.yml` base play, before this
-role). The only tasks after the bring-up are: starting the `stack.service`
-auto-start unit (which proves the boot path works) and post-deploy validation.
-Keep it that way: the stack is the finishing step, not a mid-play side effect.
-
-### firefly-cron: a sleep-sidecar, not a daemon
-
-`firefly-cron` does one thing: `wget` Firefly's cron endpoint, `sleep 60`, exit
-0. Docker's restart policy then re-runs it. Consequences for every health
-check: `State=running` only holds ~60s of every ~62s cycle, and a sample taken
-during the restart gap will show `restarting` on a perfectly healthy box - a
-`running`-state check is a false positive. What proves health is the last exit
-code (0 = the sidecar finished its cycle; a failed wget aborts before the sleep
-with exit 8/4/1).
-
-### Resource limits vs. cgroup availability
-
-The compose services declare `deploy.resources` (memory/CPU) limits. On kernels
-where Docker cannot enforce memory limits - e.g. many Raspberry Pi/VM hosts -
-Docker logs at every `compose up`:
-
-```
-[WARNING]: Docker compose: unknown <service>: Your kernel does not support memory
-limit capabilities or the cgroup is not mounted. Limitation discarded.
-```
-
-This means the **memory limits are not enforced** (each container may use up to
-all free RAM), it does not stop or harm any container. To get real enforcement:
-
-1. Confirm the diagnosis: `docker info | grep -i cgroup` shows one or both of
-   `WARNING: No memory limit support` / `No swap limit support`.
-2. cgroup **v1** hosts (or 32-bit Pi OS): add to
-   `/boot/firmware/cmdline.txt` (older: `/boot/cmdline.txt`):
-   `cgroup_enable=memory cgroup_memory=1` - then reboot.
-3. cgroup **v2** hosts (what the automation Pis run - `Cgroup Version: 2`,
-   systemd driver): check `cat /sys/fs/cgroup/cgroup.controllers`. If `memory`
-   is not listed there, the controller is disabled at kernel/boot level -
-   `docker info` cannot fix it. The automation Pi shows exactly
-   `cpuset cpu io pids` = confirmed disabled. On Raspberry Pi/RPi-kernel
-   distros the well-known trial fix is still the classic boot args
-   `cgroup_enable=memory cgroup_memory=1` (the kernel then mounts the memory
-   controller; on Bookworm+ systemd may answer by booting hybrid/legacy
-   cgroup - either way `docker info` regains memory support). If even those
-   don't help, the running kernel may lack `CONFIG_MEMCG` entirely - verify
-   with `zgrep MEMCG /proc/config.gz` (kernel build is then the fix).
-4. Either way, re-verify with `docker info | grep -i cgroup` after the fix -
-   both warnings must be gone for limits to be honored.
-
-Both `scripts/automation/validate-deploy.sh` (hard FAIL) and this role's
-post-deploy validation (WARNING) check for `No memory limit support` on every
-deploy, so a regression is always surfaced.
-
-On this stack the warnings are benign but real: with limits discarded for good
-on an SD-card Pi, aggressive containers could exhaust RAM (zram then swaps).
-If you want the limits honored, apply the fix above; accept the warnings
-otherwise.
-
-### USB-attached SSD dropping out under load (Pi4)
-
-Symptoms: the drive vanishes from `lsblk` (sometimes renaming `sda` to `sdb`
-on reappearance, sometimes not reappearing without a reboot), `dmesg` shows a
-cascade from `uas_eh_device_reset_handler` through `USB disconnect` to ext4
-forcing the filesystem read-only, and in the worse case
-`xhci_hcd ...: Host System Error` / `HC died; cleaning up` - the Pi4's own
-USB3 controller (a VL805 chip on an internal PCIe link), not just the drive,
-crashing. Confirmed not the drive/enclosure itself if it works fine plugged
-into another machine.
-
-Fix, in order of most to least likely to be the actual cause:
-
-1. Update the VL805 controller's own firmware (separate from the main
-   bootloader EEPROM): `sudo rpi-eeprom-update -a` then `sudo reboot`.
-2. Raise the Pi's conservative default USB power budget - add to
-   `/boot/firmware/config.txt`: `max_usb_current=1` - then reboot.
-3. Force the specific drive off UAS (USB Attached SCSI): some USB-SATA
-   bridge chips have firmware bugs in UAS that destabilize the host
-   controller under sustained write load, while the older bulk-only-transport
-   mode is stable. Find the device's vendor:product ID with `lsusb`, then
-   append (same line, space-separated - `cmdline.txt` must stay one line) to
-   `/boot/firmware/cmdline.txt`: `usb-storage.quirks=VVVV:PPPP:u`.
-4. If none of the above help, `pcie_aspm=off` on the kernel cmdline is a
-   further mitigation some Pi4 boards need for VL805-related instability -
-   try last, since it disables power management on that link entirely.
-
-Confirmed fix for one OWC USB3-to-SATA adapter (`lsusb` ID `7825:a2a4`):
-steps 1+2+3 together, in the same reboot cycle.
+- The stack comes up last: packages, storage, Docker, backup files, ntfy helper and firewall land first, then
+  `docker compose up -d` and the poll, then the `stack.service` auto-start unit and post-deploy validation. Keep
+  that order.
+- Secrets live in a 0600 `.env` beside the compose file, interpolated via `${VAR}`.
+- **Memory limits may not be enforced.** On kernels without the memory cgroup controller, `compose up` logs
+  `Your kernel does not support memory limit capabilities ... Limitation discarded.` Diagnose with
+  `docker info | grep -i cgroup` and `cat /sys/fs/cgroup/cgroup.controllers` (v2; `memory` missing means disabled at
+  boot). The usual fix on Pi OS is `cgroup_enable=memory cgroup_memory=1` in `/boot/firmware/cmdline.txt` and a
+  reboot; if that fails, check `zgrep MEMCG /proc/config.gz`. `validate-deploy.sh` fails and post-deploy warns on
+  this.
+- **USB SSD dropping out under load (Pi4, VL805):** try in order `sudo rpi-eeprom-update -a` + reboot,
+  `max_usb_current=1` in `/boot/firmware/config.txt`, then `usb-storage.quirks=VVVV:PPPP:u` (from `lsusb`, same
+  line) in `cmdline.txt` to force the drive off UAS, last `pcie_aspm=off`. One OWC adapter (`7825:a2a4`) needed the
+  first three together.

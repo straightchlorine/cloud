@@ -56,7 +56,8 @@ The Kubernetes side - the Hetzner and OCI clusters, the Talos node - lives in
 - Runs a music pipeline on a Pi 3B: yt-dlp playlist downloads, beets tagging
   against MusicBrainz, Navidrome streaming and an interactive library review
 - Runs Vaultwarden and Firefly III with MariaDB on a Pi 4B, kept current by Watchtower
-- Runs Prometheus, Grafana, Loki and Alertmanager on a Debian VM, scraping node,
+- Defines a Prometheus, Grafana, Loki and Alertmanager stack for a Debian VM
+  (experimental, never deployed), scraping node,
   Docker, Pi-hole and NVIDIA exporters
 - Prepares a GPU host for [quantum-pipeline](https://github.com/straightchlorine/quantum-pipeline)
   benchmark runs, and holds the kernel and NVIDIA stack while one is pending
@@ -88,26 +89,27 @@ ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
 
 The honeypot has its own play, `playbooks/honeypot.yml`, run from a machine on the
 tailnet. Teardowns are plays as well:
-`playbooks/{dns,media,automation,gpu-qp,honeybench}-teardown.yml`.
+`playbooks/{dns,media,automation,gpu-qp,honeybench,restic,backup}-teardown.yml`.
 
 ## Roles
 
 | Role | What it is |
 |---|---|
-| `common` | The base every host gets: packages, Docker, network facts, backups, ntfy, Syncthing, board tuning |
+| `common` | The base every host gets: packages, Docker, network facts, stack snapshots, ntfy, Syncthing, board tuning |
 | `os` | Normalises OS and CPU facts (`os_*`), so roles validate instead of assuming |
 | `hardware` | Resource limits for every container, from the host's `device_type` |
 | `firewall` | UFW rules |
 | `dns` | Pi-hole + Chrony NTP |
 | `media` | Navidrome + yt-dlp + beets pipeline |
 | `automation` | Vaultwarden + Firefly III + MariaDB + Watchtower |
-| `monitoring` | Prometheus + Grafana + Loki + Alertmanager |
+| `monitoring` | Prometheus + Grafana + Loki + Alertmanager (experimental, never deployed) |
 | `prometheus-exporters` | Node, Docker, Pi-hole and NVIDIA exporters |
 | `gpu-qp` | GPU host for quantum-pipeline: driver, container toolkit, benchmark tooling |
 | `honeypot` | The honeywatch VPS: sshd, firewalld, SELinux, updates, image pruning |
 | `alloy` | Grafana Alloy: the journal and host metrics to the fleet cluster over the tailnet |
 | `honeybench` | CentOS Stream 10 VM for benchmarking honeywatch |
-| `backup`, `restic` | Teardown of the retired coordinator; the restic engine for every backup |
+| `restic` | The restic engine: one hardened unit per backup job |
+| `backup` | Teardown of the retired coordinator only |
 
 `roles/dns` is the reference role: structure, fail-fast validation, post-deploy
 checks, teardown and Molecule scenarios. Where an older role does it differently,
@@ -118,12 +120,16 @@ checks, teardown and Molecule scenarios. Where an older role does it differently
 | Group | Hosts | Drives |
 |---|---|---|
 | `fleet` | `services`, `monitoring`, `backup_primary`, `gpu_qp` | the Debian-family hosts that get the base plays (`common`, `firewall`, `prometheus-exporters`) |
-| `services` | `dns`, `media`, `pi-test-media`, `pi-automation` | the stack plays and the exporter fleet |
+| `services` | `dns_servers`, `music`, `automation` | the stack plays and the exporter fleet |
+| `dns_servers` | `dns` | the dns play |
+| `automation` | `pi-automation` | the automation play |
 | `music` | `media`, `pi-test-media` | the media play; `pi-test-media` is disposable staging |
 | `monitoring` | `debian-monitoring` | the monitoring play |
-| `prometheus` | `services`, `backup_primary`, `workstations`, `gpu_qp` | Node Exporter and scrape targets |
+| `prometheus` | `services`, `backup_primary`, `gpu_qp`, `station-arch` | Node Exporter and scrape targets |
 | `gpu_qp` | `gpu-station` | the GPU host play |
-| `workstations` | `station-arch` | the restic play and monitoring; Arch, so outside `fleet` |
+| `backup_primary` | `backup_wyse` | Debian base plays; the retired coordinator host |
+| `workstations` | `station-arch`, `portable` | the restic play; Arch and Gentoo, so outside `fleet` |
+| `opnsense` | `firewall` | no play targets it |
 | `honeypot` | `centos-honeypot` | `playbooks/honeypot.yml`; outside `fleet` (CentOS, no apt or ufw) |
 | `bench` | `honeybench` | `playbooks/honeybench.yml`; outside `fleet` |
 
@@ -152,7 +158,7 @@ scenario where the role has one. For what a container cannot prove,
 
 CI is Woodpecker on Codeberg. `.woodpecker/lint.yaml` runs the linters on every
 push; `.woodpecker/test.yaml` runs Molecule for `dns`, `automation`, `media`,
-`honeypot`, `honeybench`, `gpu-qp`, `restic`, `common`, `os`, `hardware` and
+`honeypot`, `honeybench`, `gpu-qp`, `restic`, `firewall`, `common`, `os`, `hardware` and
 `prometheus-exporters`. A role joins that matrix once its
 tests converge the real role rather than fixtures.
 
@@ -160,7 +166,7 @@ tests converge the real role rather than fixtures.
 
 There is no docs site. Each role's `README.md` covers its variables, deploy steps
 and recovery runbook, and `CLAUDE.md` holds the standards every role follows.
-`docs/` holds the testing, backup and monitoring write-ups; `docs/wip/` is
+`docs/` holds the role recipe and the testing, backup and monitoring write-ups; `docs/wip/` is
 gitignored drafts.
 
 ---

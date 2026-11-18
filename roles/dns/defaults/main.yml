@@ -1,9 +1,14 @@
 ---
 dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-dns_pihole_version: "v6.4.3"  # Pinned release; a host_vars override is allowed.
-# A version change or this flag wipes /etc/pihole and reinstalls.
+# Tag of the repository the installer script is run from. basic-install.sh then fetches the current Pi-hole itself,
+# so this pins the installer and not the installed release, and changing it does not reinstall.
+dns_pihole_version: "v6.4.3"
+# This flag wipes /etc/pihole and reinstalls; an installed host is otherwise never reinstalled.
 # Settings made in the web interface are lost, so restore them from the nightly Teleporter snapshot.
 dns_pihole_force_reinstall: false
+# What marks Pi-hole as installed; only molecule points these elsewhere.
+dns_pihole_binary_path: /usr/local/bin/pihole
+dns_pihole_gravity_path: /etc/pihole/gravity.db
 # vault_pihole_webpassword has no default and must be set in the vault or host_vars.
 dns_pihole_interface: "{{ primary_interface }}"
 # dns_pihole_dns_servers has no default and must be set in host_vars.
@@ -32,3 +37,9 @@ dns_optional_drive_mount_path: "/mnt/data"
 dns_optional_drive_filesystem: "ext4"
 dns_optional_drive_format: false  # True lets the role wipe the drive.
 dns_optional_drive_journald_enabled: true
+
+# The backup supervisor pulls dns_backup_dir over sshfs. Its read-only key is forced to sftp-server -R and limited to
+# the supervisor's address; dns_backup_pull_pubkey and dns_backup_pull_from have no defaults and must be set in
+# host_vars when the pull is enabled.
+dns_backup_pull_enabled: false
+dns_backup_pull_sftp_server: /usr/lib/openssh/sftp-server

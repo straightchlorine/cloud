@@ -5,3 +5,65 @@
   tasks:
     - name: Prepare platform
       ansible.builtin.include_tasks: ../shared/prepare_platform.yml
+
+    # configure.yml needs a running Pi-hole, so its two file-level pins run against these stand-ins.
+    - name: Create the configuration directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [/etc/pihole, /var/tmp/molecule-ftl]
+
+    - name: Create a pihole.toml as a restored Teleporter archive leaves it
+      # The 3B+ archive carries a plain "80", which the installer-era pattern "80o,..." did not match.
+      ansible.builtin.copy:
+        content: |
+          [dns]
+            interface = "eth0" ### CHANGED, default = ""
+            port = 53
+          [webserver]
+            port = "80" ### CHANGED, default = "80o,443os,[::]:80o,[::]:443os"
+        dest: /etc/pihole/pihole.toml
+        mode: "0644"
+
+    - name: Create the pihole-FTL stand-in that keeps `--config key [value]` in files
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          if [ -n "$3" ]; then echo "$3" > "/var/tmp/molecule-ftl/$2"; else cat "/var/tmp/molecule-ftl/$2"; fi
+        dest: /usr/local/bin/pihole-FTL
+        mode: "0755"
+
+    - name: Start FTL's NTP settings at their defaults
+      ansible.builtin.copy:
+        content: "true\n"
+        dest: "/var/tmp/molecule-ftl/{{ item }}"
+        mode: "0644"
+      loop: [ntp.ipv4.active, ntp.ipv6.active, ntp.sync.active]
+
+    - name: Create an installed Pi-hole whose version probe reports null, as after a cron run by the pihole user
+      ansible.builtin.copy:
+        content: "#!/bin/sh\necho 'Core version is null'\n"
+        dest: /usr/local/bin/pihole
+        mode: "0755"
+
+    - name: Create its gravity database
+      ansible.builtin.copy:
+        content: ""
+        dest: /etc/pihole/gravity.db
+        force: false
+        mode: "0644"
+
+    - name: Create the pihole-FTL unit the restart handler targets
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Pi-hole FTL (molecule stand-in)
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/pihole-FTL.service
+        mode: "0644"

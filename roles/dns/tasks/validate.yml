@@ -48,6 +48,30 @@
     - dns_backup_dir
     - dns_backup_owner
 
+- name: Validate the off-site pull is fully specified
+  vars:
+    dns_pull_pubkey_value: "{{ lookup('ansible.builtin.vars', 'dns_backup_pull_pubkey', default='') | default('') }}"
+    dns_pull_from_value: "{{ lookup('ansible.builtin.vars', 'dns_backup_pull_from', default='') | default('') }}"
+  ansible.builtin.fail:
+    msg: "{{ item.msg }}"
+  when:
+    - dns_backup_pull_enabled
+    - item.fail
+  loop:
+    - msg: "dns_backup_pull_enabled needs dns_backup_enabled: the pull reads dns_backup_dir"
+      fail: "{{ not dns_backup_enabled }}"
+    - msg: "dns_backup_pull_pubkey must be set in host_vars when dns_backup_pull_enabled is true"
+      fail: "{{ dns_pull_pubkey_value == '' }}"
+    - msg: "dns_backup_pull_from must be set in host_vars when dns_backup_pull_enabled is true"
+      fail: "{{ dns_pull_from_value == '' }}"
+    - msg: "dns_backup_pull_pubkey must be a public key line (ssh-ed25519 ...), not a private key or a placeholder"
+      # A missing key is reported by the check above, so this one only judges a value that is set.
+      fail: >-
+        {{ dns_pull_pubkey_value != ''
+           and dns_pull_pubkey_value is not match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9]+) +[A-Za-z0-9+/=]{20,}') }}
+  loop_control:
+    label: "{{ item.msg }}"
+
 - name: Validate specified interface exists
   ansible.builtin.fail:
     msg: |

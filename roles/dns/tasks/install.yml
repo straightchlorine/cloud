@@ -1,28 +1,8 @@
 ---
-# Installs Pi-hole when it is missing, at another version, or a reinstall is forced, with a
+# Installs Pi-hole when it is missing or a reinstall is forced, with a
 # rollback of /etc/pihole on failure. Publishes dns_pihole_needs_install for configure.yml.
-- name: Check the installed Pi-hole version
-  ansible.builtin.command: pihole -v -c
-  register: dns_pihole_installed_version
-  changed_when: false
-  # A missing pihole binary must not fail the play, it just means a first install.
-  failed_when: false
-  become: true
-
-- name: Check for an existing Pi-hole gravity database
-  ansible.builtin.stat:
-    path: /etc/pihole/gravity.db
-  register: dns_pihole_gravity
-  become: true
-
 - name: Decide whether Pi-hole needs (re)installing
-  # A reinstall wipes /etc/pihole, so it only runs for a first install, a version change or a forced request.
-  ansible.builtin.set_fact:
-    dns_pihole_needs_install: >-
-      {{ dns_pihole_force_reinstall
-      or not dns_pihole_gravity.stat.exists
-      or (dns_pihole_installed_version.stdout | default(''))
-      is not search('Core version is ' ~ (dns_pihole_version | regex_escape) ~ '(?![0-9.])') }}
+  ansible.builtin.include_tasks: needs_install.yml
 
 - name: Deploy Pi-hole with rollback on failure
   when: dns_pihole_needs_install

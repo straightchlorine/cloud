@@ -8,7 +8,8 @@ existing violations should be fixed when encountered.
 
 ```
 inventory/production/   hosts.yml, group_vars/, host_vars/, vault.yml.example
-playbooks/              site.yml (fleet), per-stack plays, per-role *-teardown.yml,
+playbooks/              site.yml (fleet), per-stack plays, per-role *-teardown.yml
+                        (incl. restic-teardown.yml, backup-teardown.yml),
                         bootstrap.yml (creates the Ansible connection user on a new host)
 roles/                  common os hardware firewall prometheus-exporters  (base)
                         dns automation media gpu-qp monitoring            (stacks)
@@ -16,7 +17,7 @@ roles/                  common os hardware firewall prometheus-exporters  (base)
                         honeypot honeybench alloy                         (dnf hosts)
 scripts/                per-role host tooling: validate-clean.sh / validate-deploy.sh
                         (scripts/dns, automation, media, gpu-qp), media pipeline
-                        helpers and tests, honeypot/restic helpers
+                        helpers and tests, honeypot helpers, scripts/restic
 docs/                   flat topic docs + sections testing/, backup/, monitoring/;
                         docs/wip/ holds gitignored drafts
 .woodpecker/            lint.yaml, test.yaml
@@ -329,9 +330,9 @@ interrupted; prune and `check` run weekly. Inspect or restore with
 `restic-job exec <job> snapshots|restore ...`. Job schema and operator
 commands: `roles/restic/README.md`.
 
-Hosts that cannot run the engine themselves (the dns Pi) are not backed up
-yet: their pull job on backup_wyse replaces the retired coordinator
-(`roles/backup` keeps only its teardown).
+The dns Pi cannot run the engine. It keeps a local Teleporter snapshot
+shared over Syncthing; an off-site pull job from backup_wyse is planned.
+`roles/backup` keeps only its teardown, run by `playbooks/backup-teardown.yml`.
 
 ---
 

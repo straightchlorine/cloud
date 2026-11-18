@@ -1,0 +1,10 @@
+---
+- name: Authorize the backup supervisor's read-only pull key
+  # The forced command makes the key sftp-only and read-only, but sftp-server reads whatever dns_backup_owner can,
+  # so the supervisor's sshfs mount (not this key) is what limits the pull to dns_backup_dir.
+  ansible.posix.authorized_key:
+    user: "{{ dns_backup_owner }}"
+    key: "{{ dns_backup_pull_pubkey }}"
+    key_options: 'restrict,from="{{ dns_backup_pull_from }}",command="{{ dns_backup_pull_sftp_server }} -R"'
+    exclusive: false
+  become: true

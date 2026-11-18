@@ -5,3 +5,7 @@ common_ntp_upstream_server: pool.ntp.org
 dns_backup_dir: /tmp/molecule-syncthing-backup
 dns_backup_retention: 14
 dns_backup_owner: molecule
+dns_backup_pull_enabled: true
+dns_backup_pull_from: 192.168.101.10
+# A throwaway key; verify compares the deployed authorized_keys line to it.
+dns_backup_pull_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMoleculePullKeyMoleculePullKeyMoleculePk x@molecule"

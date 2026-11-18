@@ -116,3 +116,60 @@
         that: dns_chrony_unit.status.UnitFileState == 'enabled'
         fail_msg: "chrony UnitFileState is {{ dns_chrony_unit.status.UnitFileState }}"
         quiet: true
+
+    - name: Read the pull key's authorized_keys file
+      ansible.builtin.slurp:
+        src: /home/molecule/.ssh/authorized_keys
+      register: dns_pull_authorized_keys
+
+    # restrict drops the pty, forwarding and agent; command pins the key to the read-only sftp server;
+    # from pins it to the supervisor's address.
+    - name: Assert the pull key is read-only, sftp-only and source-limited
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('restrict,from="192.168.101.10",command="/usr/lib/openssh/sftp-server -R" ' ~ dns_backup_pull_pubkey)
+            in (dns_pull_authorized_keys.content | b64decode).splitlines()
+        fail_msg: "authorized_keys wrong: {{ dns_pull_authorized_keys.content | b64decode }}"
+        quiet: true
+
+    - name: Read the pinned pihole.toml
+      ansible.builtin.slurp:
+        src: /etc/pihole/pihole.toml
+      register: dns_toml
+
+    # A pattern that missed the restored "80" would have appended a third port line instead of replacing it.
+    - name: Assert the web port was replaced in place and dns.port was left alone
+      vars:
+        port_lines: "{{ (dns_toml.content | b64decode).splitlines() | select('match', '^  port = ') | list }}"
+      ansible.builtin.assert:
+        that:
+          - port_lines == ['  port = 53', '  port = "80o,[::]:80o,[::]:443os,443os"']
+        fail_msg: "port lines: {{ port_lines }}"
+        quiet: true
+
+    - name: Read FTL's NTP settings back from the stand-in
+      ansible.builtin.command: "pihole-FTL --config {{ item }}"
+      loop: [ntp.ipv4.active, ntp.ipv6.active, ntp.sync.active]
+      register: dns_ntp_after
+      changed_when: false
+
+    - name: Assert all three NTP switches are off
+      ansible.builtin.assert:
+        that: dns_ntp_after.results | map(attribute='stdout') | unique | list == ['false']
+        fail_msg: "ntp switches: {{ dns_ntp_after.results | map(attribute='stdout') | list }}"
+        quiet: true
+
+    - name: Read the install decisions converge recorded
+      ansible.builtin.slurp:
+        src: "/tmp/molecule-needs-install-{{ item }}"
+      loop: [installed, forced, no-binary, no-gravity]
+      register: dns_needs_install
+
+    - name: Assert only a missing, incomplete or forced install is reinstalled
+      vars:
+        decisions: "{{ dns_needs_install.results | map(attribute='content') | map('b64decode') | map('trim') | list }}"
+      ansible.builtin.assert:
+        that: decisions == ['false', 'true', 'true', 'true']
+        fail_msg: "install decisions (installed, forced, no-binary, no-gravity): {{ decisions }}"
+        quiet: true

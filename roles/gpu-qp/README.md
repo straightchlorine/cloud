@@ -1,405 +1,220 @@
 # gpu-qp Role
 
-Prepares a GPU host (bare metal or a cloud GPU VM) to run the
-[quantum-pipeline](https://github.com/straightchlorine/quantum-pipeline) VQE
-solver with NVIDIA GPU acceleration. Software only: Docker, the NVIDIA driver
-(optional), the NVIDIA container toolkit, a locally compiled GPU image and a
-compose stack. No provider/cloud provisioning lives here - buy the VM, run the
-role, run simulations.
+Prepares a GPU host (bare metal or cloud VM) to run the
+[quantum-pipeline](https://github.com/straightchlorine/quantum-pipeline) VQE solver on NVIDIA GPUs. Software only:
+Docker, NVIDIA driver (optional), container toolkit, a locally compiled GPU image and a compose stack. No provider
+provisioning.
 
-## What it does
+Deploy order: GPU present and `gpu_qp_cuda_arch` matches; driver + DKMS (skippable for provider images); Docker
+then toolkit with the `nvidia` runtime; build (or pull) the image and render `molecules.json`; compose stack (an
+on-demand worker plus `nvidia_gpu_exporter` on `:9835`); `gpu-qp check` plus a short real VQE as post-deploy.
 
-1. Confirms an NVIDIA device is present and `gpu_qp_cuda_arch` matches it.
-2. Installs the NVIDIA driver and its DKMS module (skippable for provider
-   images, which ship the driver).
-3. Installs Docker (via `common`) then the NVIDIA container toolkit, registering
-   the `nvidia` runtime with the daemon.
-4. Builds the quantum-pipeline GPU image for `gpu_qp_cuda_arch` (or pulls a
-   prebuilt one) and renders `molecules.json`.
-5. Brings up a compose stack: an on-demand GPU worker plus
-   `nvidia_gpu_exporter` (`:9835`) for Prometheus.
-6. Proves a GPU container can see the device and runs a short real GPU VQE.
+- The exporter is not wired to monitoring: no firewall rule opens `:9835`, no Prometheus target (host_vars opens
+  only node-exporter `:9100`).
+- Retention: nothing backs up the host. `gpu-qp fetch` is the only way results leave it; fetch before teardown or a
+  disk wipe.
 
-## Build or pull
+## Inputs
 
-`gpu_qp_image_mode: build` (the default) compiles qiskit-aer for
-`gpu_qp_cuda_arch` only, from the checkout's `docker/Dockerfile.gpu` - about 4x
-faster than the published image's build, and the way to test a branch.
-`pull` uses the published `:gpu` tag, which from 2.3.0 runs on every GPU from
-Pascal (6.1) on. Tags before 2.3.0 are Ampere (sm_86) only and fail elsewhere
-with `CUDA error: no kernel image is available`.
+Defaults in `defaults/main.yml`. Required in host_vars: `gpu_qp_cuda_arch` (`6.1` Pascal, `7.5` Turing, `8.6`
+Ampere, `8.9` Ada).
 
-## Required host_vars
+| Variable | Purpose |
+|---|---|
+| `gpu_qp_image_mode` | `build` (default): compile qiskit-aer for `gpu_qp_cuda_arch` only from the checkout's `docker/Dockerfile.gpu`; `pull`: published `:gpu` tag (Pascal+ from 2.3.0; earlier tags are sm_86 only and fail with `no kernel image is available`) |
+| `gpu_qp_image_ref`, `gpu_qp_image_force_rebuild` | source ref; bump the latter to rebuild regardless of the fingerprint |
+| `gpu_qp_driver_install` | `false` for provider images that ship the driver |
+| `gpu_qp_kernel_guard` | kernel pin, see below |
+| `gpu_qp_smoke_test_*` | post-deploy GPU run |
+| `gpu_qp_bench_min_free_gb`, `gpu_qp_side_margin_gb` | disk floor for benchmark runs / side checkouts |
+| `gpu_qp_protected_images` | images a side checkout may not rebuild |
+| `gpu_qp_teardown_keep_image`, `gpu_qp_teardown_discard_bench` | teardown opt-ins |
 
-- `gpu_qp_cuda_arch` - `6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada.
+Aer version and the CUDA toolkit (digest-pinned `FROM`) come from `Dockerfile.gpu`, never from the role.
 
-## Image build knobs
-
-`gpu_qp_cuda_arch` is the `CUDA_ARCH` build arg (compute capability): the card,
-`6.1` Pascal, `7.5` Turing, `8.6` Ampere, `8.9` Ada. The Aer version comes from
-`Dockerfile.gpu` itself (tied to the locked `qiskit-aer`), not the role. The role never rewrites
-the Dockerfile. The CUDA toolkit version is pinned in `Dockerfile.gpu` itself (a digest-pinned
-`FROM`), not by the role.
-
-**No forward-compat `libcuda`.** NVIDIA's CUDA base images ship a
-forward-compatibility `libcuda` that `ldconfig` resolves ahead of the driver's
-own. It only works on datacenter GPUs: on GeForce, `cuInit` fails with
-`CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE` (804), which qiskit-aer reports as
-`No CUDA device available!` while `nvidia-smi` keeps working. `Dockerfile.gpu`
-therefore compiles on a CUDA image but runs on plain Ubuntu, and `gpu-qp build`
-refuses a revision whose last `FROM` is an `nvidia/cuda` image.
-
-**Build fingerprint.** `gpu-qp build` records a fingerprint of the effective
-build definition (the build args and the source revision) and skips the build
-while it matches - a rebuild is still fast, since Docker's layer cache is
-untouched. The deploy runs the same command; bump `gpu_qp_image_force_rebuild`
-(or pass `--force`) to build regardless.
+**No forward-compat `libcuda`.** NVIDIA CUDA base images ship one that `ldconfig` resolves ahead of the driver's.
+On GeForce it fails (`CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE`, reported by Aer as `No CUDA device available!`
+while `nvidia-smi` works). `Dockerfile.gpu` therefore compiles on a CUDA image but runs on plain Ubuntu, and
+`gpu-qp build` refuses a revision whose last `FROM` is `nvidia/cuda`.
 
 ## Host tool
 
-The role installs one command, `/usr/local/bin/gpu-qp`, plus the helper directory
-`/usr/local/lib/gpu-qp` that the benchmark-run commands use (see
-[Benchmark runs](#benchmark-runs)). `gpu-qp help` (or `-h` on any command) shows
-the options.
+`/usr/local/bin/gpu-qp` (helpers in `/usr/local/lib/gpu-qp`); `gpu-qp help` or `-h` per command shows options.
 
 | Command | Does |
 |---|---|
-| `gpu-qp pull [--reset] [BRANCH]` | fetches the source checkout's origin and fast-forwards it, switching to `BRANCH` first. `--reset` hard-resets to origin instead, for a branch that was rebased or amended. |
-| `gpu-qp patch [--reset]` | applies a unified diff from stdin to the checkout (`git apply --index`, new files included) to test uncommitted workstation changes. Records a patch hash, so the build revision reads `<sha>+patched-<hash>` and `gpu-qp build` rebuilds. Refuses empty input. `--reset` first drops everything uncommitted (`git reset --hard` + `git clean -fd`). While a patch is applied, `gpu-qp pull` requires `--reset`. |
-| `gpu-qp build [--force]` | builds the image from the checkout, passing `CUDA_ARCH` as a build arg. Skipped while the fingerprint matches; refuses a revision whose `Dockerfile.gpu` ends on an `nvidia/cuda` image. Logs to `logs/build-<UTC timestamp>.log` (`build-latest.log` is the newest). |
-| `gpu-qp check` | proves the image runs on the GPU: Aer's `available_devices()`, a Bell circuit executed with `device="GPU"` - which cannot silently fall back to the CPU - and `ldd` over Aer's shared objects. Prints image size, driver and compute capability. |
-| `gpu-qp run [--cpu] [OPTION]...` | one simulation, on the GPU by default (`--gpu` and the role's optimizer are injected). Options are appended to the role's defaults, so they override them by name. `--cpu` omits `--gpu` (CPU / fast-path cases); an `--optimizer` you pass replaces the default one. With no arguments the run is unchanged. Each run gets its own `gen/<UTC timestamp>/` holding `run.log` (teed live), `run.json` (arguments, exit status, image id, source revision, driver) and the report and plots. |
-| `gpu-qp bench [ARG]...` | the fast-path script, not a benchmark run (those are `gpu-qp start`): runs `scripts/benchmark_fast_path.py` from the checkout inside the image, as the calling user, ARGs passed through. Mounts the checkout's `scripts/` and `data/` read-only (so `data/molecules.thesis.json` is available) and a writable `benchmarks/` under the run directory; defaults `--output` to `gen/<UTC timestamp>/bench.json`, log in `bench.log`. Reports the missing script if the checkout lacks it. |
-| `gpu-qp matrix [--group NAME]... [--only ID]... [--list]` | runs the phase-02 validation matrix (143 single-command cases from `files/matrix-cases.tsv`, installed as `matrix-cases.tsv` next to the compose file) against the image: one container run per case through `qpcase.sh`, 600 s limit each. `--group` / `--only` select (repeatable, union), `--list` prints the cases and runs nothing. Verdict per case: **pass** when the exit code equals the expected one (if given) and the expected log substring is present (if given; a leading `!` means absent); **fail** otherwise; **env** instead of fail when the log shows a known host limit (`IBM connection failed`, `Invalid combination of simulation method and device`, `KafkaProducerError`); **info** for record-only cases. Writes `gen/matrix-<UTC timestamp>/` with `<id>.log` per case and `summary.tsv` (id, group, exit, secs, verdict, decisive line); prints a per-group count table and the failing ids; exits 1 on any fail. Groups: `opt-fast opt-gpu opt-shots sim noise init budget io repro scale errors doc-example`. |
-| `gpu-qp scan [--all] [IMAGE]` | scans the image with Trivy (`gpu_qp_trivy_image`, the version CI pins), filtered the way CI uploads: HIGH/CRITICAL with a fix, minus the checkout's `.trivyignore`. Prints counts by severity, source and package; saves the JSON report to `logs/scan-<UTC timestamp>.json`. `--all` drops every filter. |
-
-The deploy runs `gpu-qp build`, then `gpu-qp check` and a two-iteration
-`gpu-qp run` as its post-deploy validation.
+| `pull [--reset] [BRANCH]` | fast-forward the source checkout (switching branch first); `--reset` hard-resets to origin |
+| `patch [--reset]` | apply a unified diff from stdin (`git apply --index`); build revision becomes `<sha>+patched-<hash>`; while patched, `pull` needs `--reset` |
+| `build [--force]` | build the image with `CUDA_ARCH`; skipped while the build fingerprint (args + source revision) matches; log in `logs/build-<UTC>.log` |
+| `check` | proves the image runs on the GPU (Bell circuit with `device="GPU"`, no CPU fallback; `ldd` over Aer) |
+| `run [--cpu] [OPTION]...` | one simulation, GPU by default; options override the role's defaults by name; output in `gen/<UTC>/` (`run.log`, `run.json`, report) |
+| `bench [ARG]...` | the fast-path script from the checkout (not a benchmark run), default output `gen/<UTC>/bench.json` |
+| `matrix [--group NAME]... [--only ID]... [--list]` | the 143-case validation matrix (`files/matrix-cases.tsv`), 600 s per case; verdicts pass / fail / env (known host limit) / info; writes `gen/matrix-<UTC>/summary.tsv`; exits 1 on any fail; all groups take ~2 h |
+| `scan [--all] [IMAGE]` | Trivy scan (`gpu_qp_trivy_image`) filtered as CI uploads (HIGH/CRITICAL with a fix, minus `.trivyignore`); JSON in `logs/scan-<UTC>.json` |
 
 ```bash
-# on the host
-gpu-qp run                                          # defaults
-gpu-qp run --cpu --optimizer COBYLA                 # CPU case, own optimizer
-gpu-qp run --molecule-index 1 --basis cc-pvdz --max-iterations 250
 gpu-qp pull fix/gpu-build && gpu-qp build && gpu-qp check   # test a branch
-gpu-qp scan                                         # vulnerabilities, as CI counts them
-gpu-qp bench [ARG]...                               # fast-path benchmark, args pass through
-gpu-qp matrix --group opt-fast                      # validation matrix, one group (all: ~2 h)
-```
-
-The validation matrix from the workstation, in one line; `gpu-qp matrix` exits
-non-zero on any fail:
-
-```bash
 ssh gpu 'gpu-qp matrix --group opt-fast'
-```
-
-Test uncommitted workstation work (the host cannot reach the workstation, so
-the diff is piped over SSH; untracked files are added as new-file diffs):
-
-```bash
+# uncommitted workstation work (the host cannot reach the workstation)
 (git diff HEAD; git ls-files -o --exclude-standard -z | xargs -0 -n1 git diff --no-index /dev/null) | ssh gpu 'gpu-qp patch --reset'
-ssh gpu 'gpu-qp build && gpu-qp check && gpu-qp run'
+./scripts/gpu-qp/collect.sh gpu-station [DEST]              # runs -> ~/gpu-qp-results/gpu-station
 ```
 
-The deploy clones the source once; after that `gpu-qp pull` owns the checkout,
-so a re-deploy never resets a pulled branch.
-
-Runs are collected from your workstation, which is where they are wanted - the
-host cannot reach it:
-
-```bash
-./scripts/gpu-qp/collect.sh gpu-station            # -> ~/gpu-qp-results/gpu-station
-./scripts/gpu-qp/collect.sh gpu-station /tmp/qp    # or a destination of your own
-```
+The deploy clones the source once; afterwards `gpu-qp pull` owns the checkout, so a re-deploy never resets a pulled
+branch.
 
 ## Benchmark runs
 
-The thesis benchmark (phases of molecule x seed cells over CPU and GPU lanes, each cell one container) runs
-under one set of commands. One run at a time holds the host. A run keeps the code, lane matrix and compose
-override it started with, so a deploy never changes it. The commands live in `/usr/local/lib/gpu-qp`; the run
-trees under `~/gpu-qp/bench` hold data only.
+The thesis benchmark (phases of molecule x seed cells over CPU and GPU lanes, one container per cell). One run at a
+time holds the host. A run keeps the code, lane matrix and compose override it started with, so a deploy never
+changes it. Run trees under `~/gpu-qp/bench` hold data only.
 
 | Command | Does |
 |---|---|
-| `gpu-qp status [--run NAME] [SECTION]... [PHASE]...` | host and GPU, processes, per-phase progress, newest errors and the remaining-time estimate for the active run. `--pipe`, `--airflow`, `--iceberg`, `--monitor` and `--batch` probe the stack and are off by default; `--all` shows every section. Exits 0 for valid arguments, "no runs" included. |
-| `gpu-qp start (--run NAME \| --check) [--upgrade-lib] [--allow-host-change] [--phases "P1 [P2...]"] [PHASE]...` | starts run NAME in the background, or resumes it (done cells are skipped). Phases are required the first time and stored; a resume must give the same ones or none, or `--phases` to run only some of them (see "Resuming around power-offs"). Run it as the bench owner. Refuses a done run, a closed run, a legacy run, a second run and a failed preflight. Before the preflight it starts the stack containers that exist but are stopped (see "Host record and stack restore"). `--check` only runs the preflight: one `ok` or `FAIL` line per check (disk floor, Docker, GPU count, `host`, both images, stack services, leftover cell containers, a running side stack), no lock taken, nothing restarted. A resumed run keeps the helper snapshot it started with; `--upgrade-lib` replaces it with the installed one and logs each changed file in `supervise.log`. |
-| `gpu-qp resume [--run NAME [--phases "P1 [P2...]"]] [--allow-host-change] [--dry-run]` | starts again what a power-off or a stop left unfinished (see "Resuming around power-offs"). `--dry-run` lists what is left, plus a `stack` row for each stopped stack container a start would restart, and changes nothing. |
-| `gpu-qp close --run NAME` | gives an abandoned run (stopped, cut off, failed, blocked) the final state `CLOSED`: `resume`, `start` and the kernel pin skip it. Refuses a run in progress, a done run and a legacy run. |
-| `gpu-qp stop [--run NAME] [--now]` | graceful by default: no new cell starts, the cell in flight finishes (hours, there is no checkpoint) and the run ends `STOPPED`. `--now` signals the run's process group and runs `docker stop` on its cell containers; those cells rerun on resume. |
-| `gpu-qp stop (--by TIME \| --cancel)` | the one host-wide power-off cap: `--by` stops the running run gracefully now and hard-stops whatever runs at TIME; `--cancel` undoes it. See "Resuming around power-offs". |
-| `gpu-qp runs` | one tab-separated row per run: `NAME STATE DONE EXPECTED CURRENT NOTE`. For a poller: `gpu-qp runs \| awk -F'\t' '$1=="final"{print $2}'`. |
-| `gpu-qp fetch --run NAME [--full]` | the run as tar.gz on stdout: code snapshot, tables, extracted `out/` and driver logs. The cell directories are left out unless `--full`. From the workstation: `ssh gpu 'gpu-qp fetch --run final' \| tar xzf -`. |
-| `gpu-qp fingerprint` | a read-only digest of the benchmark environment: one line per section (`checkout images containers volumes networks gpuqp bench host`; `host` is the kernel, driver, nvidia-ctk and Docker versions) with a 16-hex hash, then `FINGERPRINT <hash>`. Side stacks are left out, and the checkout's `.git/index` is not touched. Compare two outputs with `diff`. |
-| `gpu-qp side check DIR` | validates a side checkout before it is brought up by hand (see "Side environment"). |
+| `status [--run NAME] [SECTION]... [PHASE]...` | host, GPU, per-phase progress, newest errors, remaining-time estimate; `--pipe/--airflow/--iceberg/--monitor/--batch` probe the stack (off by default), `--all` shows everything |
+| `start (--run NAME \| --check) [--upgrade-lib] [--allow-host-change] [--phases "P1 P2"] [PHASE]...` | start or resume a run in the background (done cells skipped); phases required the first time; refuses a done, closed or legacy run, a second run, or a failed preflight; first restarts stopped stack containers; `--check` prints one ok/FAIL line per preflight check and changes nothing |
+| `resume [--run NAME [--phases ...]] [--allow-host-change] [--dry-run]` | restart what a power-off or stop left unfinished |
+| `stop [--run NAME] [--now]` | graceful: the cell in flight finishes (hours), run ends `STOPPED`; `--now` kills the process group and `docker stop`s cells (rerun on resume) |
+| `stop (--by TIME \| --cancel)` | host-wide power-off cap: graceful stop now, hard stop at TIME (anything `date -d` reads); `--cancel` undoes it |
+| `close --run NAME` | mark an abandoned run `CLOSED`; `resume`, `start` and the kernel pin skip it |
+| `runs` | tab-separated `NAME STATE DONE EXPECTED CURRENT NOTE`; poll with `gpu-qp runs \| awk -F'\t' '$1=="final"{print $2}'` |
+| `fetch --run NAME [--full]` | run as tar.gz on stdout (cell dirs only with `--full`): `ssh gpu 'gpu-qp fetch --run final' \| tar xzf -` |
+| `fingerprint` | read-only per-section hash of the benchmark environment (`checkout images containers volumes networks gpuqp bench host`); compare with `diff` |
+| `side check DIR` | validate a side checkout (see below) |
 
-States of a run: `RUNNING`, `ORPHANED` (the lock is held but supervise is gone; `stop --now` clears it), `DONE`,
-`FAILED`, `BLOCKED` (the disk floor stopped it), `STOPPED`, `CLOSED` (`gpu-qp close`), `INCOMPLETE` (rebooted or
-killed, never finished).
-The NOTE column reads `stalled Nm` when a running run's newest cell log is older than `GPU_QP_STALL_MIN` (30)
-minutes.
+States: `RUNNING`, `ORPHANED` (lock held, supervise gone; `stop --now` clears), `DONE`, `FAILED`, `BLOCKED` (disk
+floor), `STOPPED`, `CLOSED`, `INCOMPLETE` (rebooted or killed). NOTE shows `stalled Nm` when the newest cell log is
+older than `GPU_QP_STALL_MIN` (30).
 
-**Choosing the run.** `--run NAME`, else `GPU_QP_RUN`, else the run holding the lock, else the `bench/current`
-link. `pilot` names the bench root itself (the first rerun, left in place); any other NAME is `bench/NAME`. Run
-names are lowercase letters, digits and `-`, up to 31 characters, and not `pilot`, `current`, `out` or `lib`.
-The role never writes `current`; `start` points it at the run it launches.
-
-**Run tree.** `bench/<run>/` holds `phases`, `lib/` (the snapshot), `supervise.log`, `supervise.out`,
-`supervise.done` (the verdict), `stop.request`, `out/` (the extracted tables, rebuilt after every phase) and one
-directory per phase with `state.tsv` (one row per attempt of a cell, the latest row counts), `phase.log`, the
-`<lane>.driver.log` files, the sampler CSVs and one directory per lane with the cell logs. A cell's own
-`<cell>.gen/` is mounted as `gen/` in its container, so no two cells share a spool. A legacy run (no `lib/`:
-`pilot`, `conv`, `final`) is read-only to `start`, but `status`, `runs` and `fetch` read it. Re-extract a run by
-hand with `python3 <run>/lib/extract.py <run> <run>/out`; the script clears the stale `out/iterations/` files
-first. A graceful stop ends a phase's `phase.log` with `PHASE_STOPPED` instead of `PHASE_DONE`.
-
-**Lock.** `bench/.lock` is held by supervise, its lanes and their `docker compose run` clients for the whole
-run, and `bench/.active` names the holder (`run pid starttime`). While it is held, `pull patch sync build check
-run bench matrix scan` refuse to start (`benchmark run in progress (NAME)`), because they disturb the timings.
-`-h`/`--help`, `matrix --list` and `sync --check` are exempt, and `GPU_QP_IGNORE_RUN=1` overrides with a note on
-stderr. `status`, `runs` and the deploy guard only probe the lock and never block a `start`.
-
-**Lane matrix.** `lanes.tsv` in the helper directory has one row per phase, lane and group of cells: `phase lane
-service extra_args basis seeds molecules budget init step` (tab-separated, `-` for empty; `seeds` and
-`molecules` are comma lists; `budget` is `N` for `--max-iterations N` or `conv:N` for a convergence run capped at
-N evaluations; lanes with the same `step` run concurrently). Exceptions are rows, not code: A2 runs NH3 with one
-seed on the Aer lanes because a converged cell takes 5-8 hours. Cells run molecules outer, seeds inner. The
-columns are frozen. A run reads the table in its own snapshot, so a later edit never changes the expected counts
-of a run in flight. `bench.env` (rendered from role variables) and the `GPU_QP_SAMPLE_INTERVAL`,
-`GPU_QP_PROBE_TIMEOUT`, `GPU_QP_STALL_MIN` and `GPU_QP_GPU_COUNT` defaults in `env.sh` set the rest.
-
-### Resuming around power-offs
-
-```bash
-gpu-qp stop --by "fri 20:30"           # before the power-off
-gpu-qp resume                          # after the power-on
-gpu-qp resume --dry-run                # what is left, changes nothing
-```
-
-`stop --by TIME` is the one power-off cap of the host (TIME is anything `date -d` reads, parsed once). The running
-run gets a graceful stop at once; at TIME a detached sleeper (`bench/stop.by`, shown by `status`) kills the resume
-waiters and runs `stop --now` on whatever holds the lock. `gpu-qp stop --cancel` undoes all of it.
-
-`resume` starts every `STOPPED`, `ORPHANED` or `INCOMPLETE` (power loss) run that has cells left, oldest first. A
-queued run starts only when the one before ended `DONE` or `FAILED`; anything else ends the chain. It refuses, and
-starts nothing, while a cap is armed (`gpu-qp stop --cancel` first), while runs are queued, while something that is not
-a run holds the bench lock, and when another `resume` runs. Stale `stop.by` and `start.after` files from before a
-reboot are ignored and removed. Pids are matched by start time too, so a reused pid is never touched.
-
-### Host record and stack restore
-
-Results are comparable only on the same host software. A run's first `start` writes `<run>/host`: `kernel=`,
-`driver=` (the loaded NVIDIA module, else `nvidia-smi`), `nvidia-ctk=` and `docker=` (server version). The
-preflight row `host`, used by `start` and `resume`, compares the current values with that record and FAILs on a
-difference, naming the fields. `--allow-host-change` accepts the change: a line in `supervise.log`, the change
-appended to `<run>/host.changes`, and the new values become the record (the first `host.changes` entry still says
-what the run began on). A run from before the record (`c2`, `c2h`) gets one at its next start, with an `INFO`
-line in `supervise.log` and no comparison.
-
-After a clean power-off, containers with `restart: on-failure` that exited 0 (`ml-redpanda-connect`) do not come
-back. Before the preflight, `start` (so `resume`, and a queued waiter) runs `docker start` on each
-`GPU_QP_STACK_SERVICES` container of the `ml` project that exists but is `exited` or `created`, waits up to
-`GPU_QP_STACK_WAIT_SEC` (120) per container for it to be healthy (running, with no healthcheck), and logs
-`restarted stopped stack container NAME`. It is the same container: never `compose up`, never a recreate. A
-missing container still fails the `stack` row. `resume --dry-run` prints what it would restart.
+- **Choosing the run:** `--run NAME`, else `GPU_QP_RUN`, else the lock holder, else the `bench/current` link
+  (`start` sets it; the role never does). `pilot` is the bench root itself; other names are `bench/NAME`
+  (lowercase, digits, `-`, up to 31 chars; not `pilot`, `current`, `out`, `lib`).
+- **Run tree:** `bench/<run>/` holds `phases`, `lib/` (helper snapshot; a run without it is legacy and read-only to
+  `start`), `supervise.{log,out,done}`, `stop.request`, `out/` (tables, rebuilt per phase), and per phase
+  `state.tsv`, `phase.log`, driver logs, sampler CSVs, lane cell logs. A cell's `<cell>.gen/` mounts as `gen/`.
+  Re-extract by hand: `python3 <run>/lib/extract.py <run> <run>/out`.
+- **Lock:** `bench/.lock` (holder in `bench/.active`) blocks `pull patch sync build check run bench matrix scan`
+  (`benchmark run in progress`) because they disturb timings. `--help`, `matrix --list`, `sync --check` are exempt;
+  `GPU_QP_IGNORE_RUN=1` overrides.
+- **Lane matrix:** `lanes.tsv` in the helper dir, one row per phase/lane/cell group: `phase lane service extra_args
+  basis seeds molecules budget init step` (tab-separated, `-` empty; `budget` is `N` iterations or `conv:N`
+  evaluations; equal `step` lanes run concurrently). Columns are frozen; a run reads its own snapshot. `bench.env`
+  (from role variables) and the `GPU_QP_*` defaults in `env.sh` set the rest.
+- **Host record:** the first `start` writes `<run>/host` (kernel, driver, nvidia-ctk, docker). The `host` preflight
+  row FAILs on a difference; `--allow-host-change` accepts it (logged, appended to `host.changes`).
+- **Stack restore:** after a clean power-off, `restart: on-failure` containers that exited 0 (`ml-redpanda-connect`)
+  stay down. `start` runs `docker start` on stopped `GPU_QP_STACK_SERVICES` containers of project `ml` and waits up
+  to `GPU_QP_STACK_WAIT_SEC` (120); never `compose up`. A missing container still fails the `stack` row.
+- **Resume rules:** `resume` starts every `STOPPED`/`ORPHANED`/`INCOMPLETE` run with cells left, oldest first; a
+  queued run starts only after one ended `DONE` or `FAILED`. It refuses while a cap is armed, runs are queued, a
+  non-run holds the lock, or another `resume` runs. Typical: `gpu-qp stop --by "fri 20:30"`, then `gpu-qp resume`
+  after power-on.
 
 ### Kernel pin
 
-While benchmark work is pending, the kernel and the NVIDIA stack must not change under it: on 2026-10-25 an
-unattended kernel upgrade (6.12.113) had no NVIDIA module, the host booted it, and the driver, the stack and the
-preflight all failed. `gpu_qp_kernel_guard` (default `true`) installs `gpu-qp-kernel-guard.timer` (1 min after boot,
-then hourly), and a drop-in that runs the guard before every `apt-daily-upgrade`. The guard, root-owned in
-`/usr/local/lib/gpu-qp/kernel-guard.sh`, asks the bench user which runs are pending: managed runs that are
-`RUNNING`, or that `gpu-qp resume` would pick up (`STOPPED`, `ORPHANED`, `INCOMPLETE`), with cells left. Done,
-failed, blocked, closed (`gpu-qp close --run NAME`) and legacy runs do not count. With work pending it
+An unattended kernel upgrade without an NVIDIA module broke a pending run (2026-10-25). `gpu_qp_kernel_guard`
+(default `true`) installs `gpu-qp-kernel-guard.timer` (1 min after boot, then hourly) and a drop-in running the
+guard before `apt-daily-upgrade`. With managed runs pending (`RUNNING`, or resumable with cells left), it:
 
-- picks the kernel of the oldest pending run's `host` record (else the one in `bench/kernel.pin`, else the running
-  kernel) and requires `/boot/vmlinuz-K` and an NVIDIA DKMS module under `/lib/modules/K/updates/dkms`; otherwise it
-  logs an error and changes nothing;
-- sets `GRUB_DEFAULT="<submenu id>><entry id>"` (ids read from `grub.cfg`) in `/etc/default/grub` with a
-  `# gpu-qp kernel pin` marker, and runs `update-grub` only when that line changed;
-- writes `/etc/apt/apt.conf.d/52gpu-qp-kernel-pin`, adding `linux-image-`, `linux-headers-`, `.*nvidia`, `libcuda`
-  and `libnvcuvid` to unattended-upgrades' `Package-Blacklist` (the entries are regexes matched at the start of the
-  package name; list options merge across files, so `roles/common`'s file is untouched). Manual `apt` still works;
-- writes `bench/kernel.pin` (`K RUN...`), which `gpu-qp status` shows as `kernel pinned to K (pending: RUNS)`.
+- selects the kernel of the oldest pending run's `host` record (else `bench/kernel.pin`, else the running kernel),
+  requires `/boot/vmlinuz-K` and an NVIDIA DKMS module under `/lib/modules/K/updates/dkms`, else logs an error and
+  changes nothing;
+- sets a marked `GRUB_DEFAULT` in `/etc/default/grub` (`update-grub` only on change);
+- writes `/etc/apt/apt.conf.d/52gpu-qp-kernel-pin` adding kernel, headers, nvidia, libcuda packages to
+  unattended-upgrades' `Package-Blacklist` (manual `apt` still works);
+- writes `bench/kernel.pin`, shown by `status`.
 
-With nothing pending it removes the apt file and `kernel.pin` and resets `GRUB_DEFAULT` to `0` only when the marker
-is there, so kernel and driver updates flow again. It never reboots; a running kernel that differs from the pin is
-logged ("applies at the next reboot"). `journalctl -u gpu-qp-kernel-guard` shows each pass. `gpu_qp_kernel_guard:
-false` removes the timer and undoes the pin.
-
-One-time plan trim: `c2` was started with `C2 C2H`, but run `c2h` covers `C2H`.
-
-```bash
-gpu-qp resume --run c2 --phases C2     # c2 keeps the plan "C2" (first list in phases.orig); resumes it
-gpu-qp resume                          # c2h is queued behind c2
-```
+With nothing pending it removes the pin and resets `GRUB_DEFAULT` only if the marker is present. It never reboots.
+`journalctl -u gpu-qp-kernel-guard`; `gpu_qp_kernel_guard: false` removes the timer and the pin.
 
 ### Side environment
 
-To test another version in a separate checkout while a benchmark runs, without touching the benchmark
-environment, bring the checkout's stack up under its own compose project, `qpside-<directory name>`. The checkout
-needs a `compose/side.override.yml` that gives it its own names. `gpu-qp side check DIR` renders the checkout's
-`config` with that override (read-only, nothing starts) and fails, one `FAIL` line per problem, when:
+To test another version while a benchmark runs, bring a checkout up under its own compose project
+`qpside-<directory>`; the checkout needs `compose/side.override.yml`. `gpu-qp side check DIR` renders the config
+read-only and prints one `FAIL` per problem (else `OK`) when:
 
-- the bench lock is held (a run is in progress; side work would disturb its timings);
-- a bind mount's source is under `~/gpu-qp` but not inside `DIR`, after resolving relative paths and `..`;
-- a service has a `network_mode` other than a `qpside` container's (`host`, `container:ml-*`);
-- a volume is named like a bench volume (`quantum-ml-*`, `quantum-garage-*` or one of the project `ml`);
-- the network is the bench network `quantum-ml-network`;
-- a service mounts `/var/run/docker.sock` (the batch DAG builds and tags images there);
-- a service has a `build:` section whose `image:` is protected (`gpu_qp_protected_images`: the CPU and GPU images
-  and the Spark image, and any `ml-*`), because it would retag the bench image. A protected image used without
-  `build:` is allowed and printed as `INFO`;
-- an environment value equals the bench `.env`'s `S3_ENDPOINT`, or a non-empty `R2_*` value equals the bench's
-  (values are never printed);
-- there is less free disk on `/` than the floor plus `gpu_qp_side_margin_gb` (5).
+- the bench lock is held;
+- a bind source under `~/gpu-qp` lies outside `DIR`;
+- a `network_mode` is `host` or `container:ml-*`;
+- a volume is named like a bench volume (`quantum-ml-*`, `quantum-garage-*`, project `ml`) or the network is
+  `quantum-ml-network`;
+- a service mounts `/var/run/docker.sock`;
+- a `build:` section targets a protected image (`gpu_qp_protected_images`, any `ml-*`);
+- an environment value equals the bench `S3_ENDPOINT` or a non-empty `R2_*` value;
+- free disk on `/` is below the floor plus `gpu_qp_side_margin_gb` (5).
 
-It prints `OK` when none applies. A `container_name` or published port that clashes with the bench is refused by
-compose itself, without touching the bench. Never run `gpu-qp build` for the side checkout: it always tags
-`quantum-pipeline:gpu`. While any container of a `qpside-*` project runs, the `start` preflight fails its `side`
-row, so a run cannot start beside it. `gpu-qp fingerprint` leaves the side stack out (containers, images with
-`qpside` in the repository or tag, volumes and networks with the `qpside-` prefix), so a fingerprint taken before
-the side test must match the one after it: `gpu-qp fingerprint > before`, test, `diff before <(gpu-qp fingerprint)`.
-The `bench` section includes the cell state files, so it differs by design while a run writes them.
+Never run `gpu-qp build` for a side checkout (it always tags `quantum-pipeline:gpu`). While any `qpside-*`
+container runs, the `start` preflight fails its `side` row; `fingerprint` excludes the side stack, so a fingerprint
+before and after a side test must match.
 
 ### Deploying while a run is live
 
-The deploy refuses to run over a benchmark run. A guard in front of every task (tag `always`, so a `--tags` run
-meets it too) fails when the lock is held or a `supervise`, `phase` or `lane` script is running, the legacy
-`gpu-qp-*` names included. `--skip-tags bench-guard` skips it; use that only when you know the run is dead. The
-teardown refuses while the lock is held, and refuses to delete run trees unless
-`gpu_qp_teardown_discard_bench: true` is set; copy them off first with `gpu-qp fetch --run NAME --full`.
+The deploy refuses to run over a benchmark run: a guard (tag `always`) fails when the lock is held or a `supervise`,
+`phase` or `lane` script runs. `--skip-tags bench-guard` skips it; use only when the run is dead. Teardown refuses
+while the lock is held and refuses to delete run trees unless `gpu_qp_teardown_discard_bench: true` (copy off with
+`gpu-qp fetch --run NAME --full` first).
 
-The guard covers the gpu-qp play only. `playbooks/site.yml` runs the base play (chrony, package cache, firewall,
-exporters) on the host first and can reload ufw or restart services under the cells. During a run, fleet-wide
-runs take `--limit '!gpu_qp'`, and the gpu-qp tags go to the host only when `gpu-qp runs` shows no `RUNNING` or
-`ORPHANED` row. A deploy changes what the next `start` snapshots and nothing about a run in flight.
+The guard covers the gpu-qp play only; `playbooks/site.yml`'s base play (chrony, firewall, exporters) can reload ufw
+or restart services under the cells. During a run use `--limit '!gpu_qp'` for fleet runs and apply gpu-qp tags only
+when `gpu-qp runs` shows no `RUNNING`/`ORPHANED` row.
 
 ### First run on a fresh host
 
-1. `gpu-qp pull` for the source checkout, then `scripts/ml-setup.sh` in it (object-store layout, key, buckets)
-   with a `.env` copied from `.env.ml.example`.
-2. `gpu-qp build` for the GPU image, and the CPU image from the checkout
-   (`docker build -f docker/Dockerfile.cpu -t quantum-pipeline:cpu .`).
-3. The ML stack up with the role's override as the second compose file:
-   `docker compose -p ml --env-file .env -f compose/docker-compose.ml.yaml -f /usr/local/lib/gpu-qp/override.yml up -d`.
-4. `gpu-qp start --check` until every line is `ok`, then `gpu-qp start --run NAME PHASE...`.
+1. `gpu-qp pull`, then `scripts/ml-setup.sh` in the checkout with a `.env` from `.env.ml.example`.
+2. `gpu-qp build`, and the CPU image: `docker build -f docker/Dockerfile.cpu -t quantum-pipeline:cpu .`
+3. `docker compose -p ml --env-file .env -f compose/docker-compose.ml.yaml -f /usr/local/lib/gpu-qp/override.yml up -d`
+4. `gpu-qp start --check` until all `ok`, then `gpu-qp start --run NAME PHASE...`.
 
-### Migrating a host that ran the benchmark by hand
+For a host that ran the benchmark by hand, wait for the old run to finish and copy its data off before the first
+deploy; then per legacy run: create `bench/<run>/lib/` with `lanes.tsv` copied in, write `bench/<run>/phases`
+(and `supervise.done` for a run stopped by hand), point `bench/current` at it, and remove the old hand-copied
+scripts from `bench/`. The pilot tree (`A A2 B C H S out`) stays as run `pilot`.
 
-Wait for the old run to finish (the guard refuses a live one) and copy its data off before the first deploy of
-this layout. After the deploy, once per legacy run that should stay readable (shown for `final` and `conv`):
+### Open limits
 
-```bash
-mkdir -p bench/final/lib && cp /usr/local/lib/gpu-qp/lanes.tsv bench/final/lib/   # expected counts
-echo 'B A C A2 H' > bench/final/phases
-echo stopped > bench/conv/supervise.done                                            # stopped by hand
-ln -sfn final bench/current
-```
+- The ML stack's Prometheus export path is unverified; the benchmark reads the JSON export
+  (`MONITORING_EXPORT_FORMAT=json`).
+- Fixed budgets (A, B, C) starve finite-difference Aer lanes to 10-40 optimiser steps; only the convergence phases
+  (A2, H, C2, C2H) give converged energies. Convergence rows are capped (`conv:18000`).
+- No host-side alerting: a stalled, `BLOCKED` or `FAILED` run is visible only to a poller of `gpu-qp runs` (the
+  notification key is root-only).
+- `gpu_qp_workers`: the override defines `quantum-pipeline-gpu1/-gpu2` by hand and the single-worker compose
+  reserves all devices, so pinning one card per worker needs one service block per device.
+- The ML stack's `.env` is hand-edited (`S3_ENDPOINT`, region, key); Garage stays at `profiles: [disabled]`.
+- The build fingerprint ignores the exported requirements hash, so a relock alone does not rebuild.
+- `status --pipe/--airflow/--iceberg` have no per-call timeout on `docker exec`/`compose ps`; a daemon that hangs
+  there still blocks the section.
+- A `phase.log` ends `PHASE_STOPPED` after a graceful stop, so a poller grepping `PHASE_DONE` waits forever (use
+  `gpu-qp runs`).
+- `read_only_call` exempts only `matrix --list` and `sync --check`, so `build --help` refuses during a run.
 
-Then remove the old hand-copied scripts from `bench/` (`gpu-qp-*.sh`, `*.py`, `smoke*.sh`, `watch-phase.sh`).
-The pilot tree (`A A2 B C H S out`) stays in place and is the run `pilot`.
+`dump_versions.py`, plotting and the pollers live in the workstation's benchmark scripts; the GPU host has no
+plotting stack.
 
-### Gotchas and open limits
-
-| Gotcha | State |
-|---|---|
-| The ML stack's Prometheus export path is unverified; the benchmark reads the JSON export (`MONITORING_EXPORT_FORMAT=json`). | open |
-| Fixed evaluation budgets (A, B, C) starve the finite-difference Aer lanes to 10-40 optimiser steps, because a step costs `n_params + 1` evaluations. Only the convergence phases (A2, H, C2, C2H) give converged energies. | by design, see `lanes.tsv` |
-| Convergence on the Aer lanes can run for days (NH3 at the measured seconds per evaluation: about 1170 h). | capped: every convergence row carries `conv:18000` |
-| One shared `run_configs` mount made cells overwrite each other's dump. | fixed: each cell mounts its own `<cell>.gen/` |
-| The unattended-upgrades job (01:00) can update the kernel or the NVIDIA driver under a run; the loaded module and the new NVML then disagree and every GPU cell fails. | guarded: while work is pending the kernel guard blocks those packages and pins the kernel (see "Kernel pin"); the `gpu` and `host` preflight rows refuse a start on a mismatch |
-| No host-side alerting. A stalled, `BLOCKED` or `FAILED` run is only visible to a poller of `gpu-qp runs`; the fleet's notification key is root-only, so supervise (running as the bench owner) cannot use it. | open |
-| `status --pipe`, `--airflow` and `--iceberg` bound the Docker daemon with one `docker info` probe; a daemon that answers it but hangs on `exec` still blocks the section. | open; the sections are opt-in |
-| `gpu_qp_workers`: the override defines `quantum-pipeline-gpu1` and `-gpu2` by hand, and the role's single-worker compose reserves `devices: count: all`, so `NVIDIA_VISIBLE_DEVICES` cannot isolate a card. Pinning `device_ids` per worker needs one service block per device. | open |
-| The ML stack's `.env` is hand-edited (`S3_ENDPOINT`, region, key). A `gpu_qp_s3_endpoint` and `gpu_qp_s3_region` pair with a vault key would render it, and the Garage service stays at `profiles: [disabled]`. | open |
-| Image pinning: the `build` fingerprint does not include the hash of the exported requirements, so a relock alone does not trigger a rebuild. | open |
-| A bind-mount source that Docker creates itself is owned by the remapped root and unwritable for `--user` cells. The lanes create the per-cell directories as the calling user, but there is no general `mkdir` + `chmod 1777` helper, and no bounded route probe beyond the time limits on `gpu-qp pull`. | open |
-| No `--deadline` for a long convergence run. | graceful `gpu-qp stop` replaces it: the cell in flight finishes and the run resumes later |
-
-### Open work
-
-Carried over from the retired CLI plan; none changes argv, state rows or run ids.
-
-Resilience fixes not built yet (run after the first deploy of this layout, before a new run):
-
-- `lane.sh` builds cells and argv from `lanes.py` (`lanes.py row`) instead of its own case block; the golden
-  argv test must stay unchanged.
-- Containers named `qp-<run>-<phase>-<lane>` with label `qp.cell=<mol>_seed<S>`, so a killed lane cannot orphan a
-  container and a resume cannot start a second one on the same cell.
-- A TERM trap on the lane that `docker stop`s its container and writes no state row (`stop --now` is blunt today).
-- After a failed attempt, re-run the infrastructure preflight (docker, gpu, images, stack, disk) and wait instead of
-  marking every remaining cell failed during a Docker outage or driver update.
-- Torn `state.tsv` rows: add the missing newline before each append, require 7 fields in every reader.
-- Keep a retried cell's first log as `<cell>.log.attempt1`; log `KAFKA_SUSPECT` after three consecutive
-  done-unstreamed cells.
-
-Small known gaps:
-
-- `read_only_call` exempts only `matrix --list` and `sync --check`, so `gpu-qp build --help` refuses during a run;
-  `start/stop/fetch --help` exit 2; `runs` and `holder` ignore unknown flags.
-- `gpu-qp start S` without `--run` prints bare usage; it should say "start needs --run NAME".
-- `git_net` reports "route to origin down" only for a timeout (124); other git failures are git's own message.
-- `tests/bench/test_run.sh` line 50 expands the row count once (`wait_for 3 test "$(rows ...)" -ge 3`); wrap it in a
-  function.
-- The teardown bench gate checks the lock only; the deploy guard checks the lock and the bench processes.
-- `status --pipe/--airflow/--iceberg`: `docker exec` and `compose ps` have no per-call timeout.
-- `extract.py` deletes `out/iterations/iterations_run*.csv` before writing, and a graceful stop ends `phase.log`
-  with `PHASE_STOPPED`; a poller that greps `PHASE_DONE` waits forever (use `gpu-qp runs`).
-
-Outside the role (separate approval): `scripts/gpu-qp/validate-deploy.sh` (`gpu-qp status` rc 0, `gpu-qp runs`) and
-`validate-clean.sh` (`/usr/local/lib/gpu-qp` absent) still need updating for this layout.
-
-`dump_versions.py`, the plotting and the pollers live in the workstation's benchmark scripts, not in this role:
-the GPU host has no plotting stack.
-
-## Deploy / teardown
+## Deploy and teardown
 
 ```bash
-ansible-playbook -i inventory/production playbooks/site.yml \
-  --limit gpu-station --tags gpu-qp --ask-vault-pass
-
-ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml \
-  --limit gpu-station -e gpu_qp_teardown_confirm=true
+ansible-playbook -i inventory/production playbooks/site.yml --limit gpu-station --tags gpu-qp --ask-vault-pass
+ansible-playbook -i inventory/production playbooks/gpu-qp-teardown.yml --limit gpu-station -e gpu_qp_teardown_confirm=true
 ```
 
-**Node Exporter comes from the base play.** `--tags gpu-qp` runs only the gpu-qp
-play, which skips `playbooks/site.yml`'s base play (`hosts: all:!honeypot`) - the
-place the `prometheus-exporters` role installs Node Exporter. The gpu-qp play does
-run the firewall role itself, so the ufw rule from host_vars applies either way,
-but a deploy that must (re)install Node Exporter has to include the base play:
+`--tags gpu-qp` skips the base play (`hosts: all:!honeypot`) where `prometheus-exporters` installs Node Exporter;
+the gpu-qp play runs the firewall role itself. To (re)install Node Exporter, run `site.yml --limit gpu-station`
+without the tag.
 
-```bash
-ansible-playbook -i inventory/production playbooks/site.yml \
-  --limit gpu-station --ask-vault-pass
-```
-
-The teardown removes the stack, the wrapper and the local image but **keeps the
-NVIDIA driver and toolkit** - they are host prerequisites, and reinstalling the
-driver is expensive. Set `-e gpu_qp_teardown_keep_image=true` to also keep the
-built image across a teardown/redeploy cycle (rebuilding it compiles qiskit-aer
-from source, ~40 min).
+Teardown removes the stack, wrapper and local image but keeps the NVIDIA driver and toolkit.
+`-e gpu_qp_teardown_keep_image=true` also keeps the image (a rebuild compiles qiskit-aer, ~40 min).
 
 ## Testing
 
 ```bash
 cd roles/gpu-qp
-molecule test -s default                # real validate.yml + data.yml + compose render
-molecule test -s fail-fast-validation   # real validate.yml per case
-molecule test -s teardown               # real teardown, gate satisfied
+molecule test -s default                # real validate.yml + data.yml + compose render + bench suite
+molecule test -s fail-fast-validation
+molecule test -s teardown
+bash tests/bench/run.sh                 # benchmark commands against fake docker/nvidia-smi/curl, ~1 min
 ```
 
-The benchmark commands have their own suite, with a fake `docker`, `nvidia-smi` and `curl` (no host, no GPU):
-
-```bash
-bash tests/bench/run.sh                 # ALL PASSED, about a minute
-```
-
-`tests/bench/golden/argv.txt` is the compose command line of every cell; a change to the lane script that alters
-a cell's argv fails `test_golden.sh`. The default molecule scenario installs the lib and runs the same suite
-against it.
-
-Molecule cannot exercise the driver, toolkit, image build or the GPU smoke test
-(no GPU, no docker daemon in a container) - those run on a real host and are
-gated by `post_deploy_validate.yml`.
+`tests/bench/golden/argv.txt` holds every cell's compose command line; a lane-script change that alters it fails
+`test_golden.sh`. Molecule cannot exercise the driver, toolkit, image build or GPU smoke test; those run on a real
+host via `post_deploy_validate.yml`.

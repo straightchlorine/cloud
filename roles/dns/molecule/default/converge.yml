@@ -24,6 +24,39 @@
         name: dns
         tasks_from: validate
 
+    - name: Authorize the supervisor's read-only pull key
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: backup_pull_key
+
+    # configure.yml itself stays out (it runs the real pihole-FTL); its two file-level pins run through the stand-ins
+    # that prepare.yml created.
+    - name: Pin the web port in a restored archive's pihole.toml
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: web_port
+
+    - name: Pin FTL's built-in NTP off
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: ntp_off
+      loop: [ntp.ipv4.active, ntp.ipv6.active, ntp.sync.active]
+      loop_control:
+        loop_var: dns_ntp_key
+
+    # An installed host must not be reinstalled, whatever its version probe says: a reinstall wipes /etc/pihole and
+    # discards a restored Teleporter archive. The missing-file cases point the paths at files that do not exist.
+    - name: Decide whether Pi-hole needs installing, in each situation
+      ansible.builtin.include_tasks: needs_install_case.yml
+      loop:
+        - { id: installed, expect: false }
+        - { id: forced, expect: true, dns_pihole_force_reinstall: true }
+        - { id: no-binary, expect: true, dns_pihole_binary_path: /nonexistent/pihole }
+        - { id: no-gravity, expect: true, dns_pihole_gravity_path: /nonexistent/gravity.db }
+      loop_control:
+        loop_var: molecule_case
+        label: "{{ molecule_case.id }}"
+
     - name: Deploy chrony, auto-updates and the backup
       ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/deploy.yml"
 

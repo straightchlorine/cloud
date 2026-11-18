@@ -85,6 +85,35 @@ if [ -n "$PRIMARY_IP" ]; then
   else
     note_left "Pi-hole did NOT block doubleclick.net (got: $blocked)"
   fi
+
+  # dns_pihole_interface is primary_interface, the default-route device. A restored Teleporter
+  # archive can carry the old board's interface (eth0 on the 3B+), which answers on loopback only.
+  PRIMARY_IF="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n 1)"
+  ftl_if="$(sudo -n pihole-FTL --config dns.interface 2>/dev/null | tr -d ' ' || true)"
+  if [ -n "$ftl_if" ] && [ "$ftl_if" = "$PRIMARY_IF" ]; then
+    note_ok "Pi-hole dns.interface is $ftl_if"
+  else
+    note_left "Pi-hole dns.interface is '$ftl_if', expected '$PRIMARY_IF'"
+  fi
+  # Both survive a Teleporter restore from another board, so they are asserted rather than assumed.
+  web_port="$(sudo -n pihole-FTL --config webserver.port 2>/dev/null | tr -d ' ' || true)"
+  if [ "$web_port" = '80o,[::]:80o,[::]:443os,443os' ]; then
+    note_ok "Pi-hole webserver.port is pinned"
+  else
+    note_left "Pi-hole webserver.port is '$web_port'"
+  fi
+  for ntp_key in ntp.ipv4.active ntp.ipv6.active ntp.sync.active; do
+    if [ "$(sudo -n pihole-FTL --config "$ntp_key" 2>/dev/null | tr -d ' ')" = false ]; then
+      note_ok "Pi-hole $ntp_key is off (chrony owns the clock and UDP 123)"
+    else
+      note_left "Pi-hole $ntp_key is not off"
+    fi
+  done
+  if dig +short +time=3 +tries=1 @"$PRIMARY_IP" google.com A 2>/dev/null | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+    note_ok "Pi-hole answers on $PRIMARY_IP"
+  else
+    note_left "Pi-hole did not answer on $PRIMARY_IP (clients cannot use it)"
+  fi
 fi
 
 echo "-- Web + exporters --"

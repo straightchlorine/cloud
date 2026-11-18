@@ -1,248 +1,186 @@
 # DNS Role
 
-Pi-hole DNS server service on Raspberry Pi (3B+, Zero 2 W, or any
-Debian-family board).
+Pi-hole v6 DNS server with a chrony NTP server on a Debian-family Raspberry Pi.
+
+## Hosts
+
+- Inventory group `dns_servers`, host `dns`: a Pi Zero 2 W at 192.168.20.2, connection user
+  `ansible` (see `inventory/production/hosts.yml`, `host_vars/dns.yml`).
+- The resolver the LAN uses today is still a Pi 3B+ that is not in the inventory. Cutting clients
+  over to `dns` is planned, not done.
+- `dns` carries `teardown_protected: true`, so the teardown playbook refuses it unless that is
+  overridden (see Teardown).
 
 ## Services
 
-- **Pi-hole DNS Server** (:53): Ad-blocking DNS resolver
-- **Pi-hole Web Interface** (:80/:443): Admin UI + v6 REST API; the installer's
-  8080/8443 fallback is explicitly re-pinned to 80/443 on every deploy
-  (firewall rules, the pihole-exporter and post-deploy validation all expect
-  port 80)
-- **Network Time Protocol** (:123): NTP server for time synchronization
-- **Monitoring**: Node Exporter and Pi-hole Exporter, deployed by the
-  `prometheus-exporters` role (not by this one)
+- **Pi-hole DNS** (:53): ad-blocking resolver
+- **Pi-hole web interface** (:80): admin UI and v6 REST API. The installer may fall back to
+  8080/8443; `configure.yml` re-pins 80/443 on every deploy because the firewall rules, the
+  pihole-exporter and post-deploy validation expect port 80.
+- **NTP** (:123): served to `common_ntp_allowed_networks` when `common_ntp_server_enabled` is set
+- **Monitoring**: node exporter and Pi-hole exporter, deployed by the `prometheus-exporters`
+  role, not by this one
 
 ## Deployment
 
-### Prerequisites
-
-- Raspberry Pi 3B+, Zero 2 W, or later (any Debian-family host the
-  `validate.yml` checks pass on)
-- Network connectivity
-- DNS and NTP ports available
-
-### Deploy
+Prerequisites: a Debian-family Pi with the connection user in place (`playbooks/bootstrap.yml`,
+see the Zero section), reachable on the network. `validate.yml` rejects any other OS family.
 
 ```bash
 ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
   --limit dns --ask-vault-pass
+
+# validation only
+ansible-playbook -i inventory/production/hosts.yml playbooks/site.yml \
+  --limit dns --tags validation --ask-vault-pass
 ```
 
-### Validation Only
-
-```bash
-ansible-playbook -i inventory/production/hosts.yml \
-  playbooks/site.yml --limit dns --tags validation --ask-vault-pass
-```
+`main.yml` runs: os facts, network facts, `validate.yml`, packages, optional drive, Pi-hole
+install, configure, admin password sync, weekly update cron, local backup, firewall, NTP firewall
+rule, ntfy re-apply, `post_deploy_validate.yml`. The fleet play in `site.yml` applies the common
+base (chrony, fail2ban, zram, Wi-Fi power save) before this role.
 
 ## Configuration
 
-### Required Variables (vault.yml)
+Committed host values live in `inventory/production/host_vars/dns.yml`; role defaults in
+`defaults/main.yml`.
 
-```yaml
-# Pi-hole authentication
-vault_pihole_webpassword: "secure_password"
+Required, with no default (`validate.yml` fails without them):
 
-# Off-site backup password (for the planned pull job on backup_wyse)
-vault_restic_dns_password: "32_character_secure_password"
-vault_backup_repository_base: "/home/backup/restic-repos"
-```
+- `vault_pihole_webpassword` (vault; the vault placeholder is rejected)
+- `dns_pihole_dns_servers` (upstream list; `dns` uses the OPNsense resolver 192.168.20.1 only)
+- `common_ntp_server_enabled`, `common_ntp_upstream_server`; `common_ntp_allowed_networks`
+  non-empty when serving NTP
+- `dns_backup_dir` and `dns_backup_owner` when `dns_backup_enabled` is true
 
-### Host Variables (host_vars/dns.yml)
+Others:
 
-```yaml
-# Device configuration
-device_type: rpizero2w
+| Variable | Meaning |
+|---|---|
+| `dns_pihole_interface` | Interface Pi-hole binds; must exist on the host (default `primary_interface`) |
+| `dns_pihole_version`, `dns_pihole_git_repo` | Tag and source of the installer script (the installer fetches the current Pi-hole itself) |
+| `dns_pihole_force_reinstall` | Wipe `/etc/pihole` and reinstall an installed host |
+| `dns_auto_updates_enabled`, `dns_auto_update_day`, `dns_auto_update_time` | Weekly `pihole -up` and `pihole -g` cron (`dns`: Monday 2:00) |
+| `dns_backup_enabled`, `dns_backup_retention`, `dns_backup_schedule_hour/minute` | Nightly local snapshot (below) |
+| `dns_optional_drive_*` | Optional attached drive mount, journald relocation, opt-in format |
 
-# Board tuning for low-power wireless operation
-common_wifi_powersave_tuning_enabled: true
-common_zram_enabled: true
+The package updates and the reboot window come from the common role: `dns` reboots at 04:45 only
+when a reboot is required (`common_auto_updates_reboot_time`), the earliest in the fleet. Either
+the Monday update or that reboot can take the only resolver down.
 
-# Pi-hole configuration
-dns_pihole_interface: "{{ primary_interface }}"
-dns_pihole_dns_servers:
-  - "192.168.20.1"
+## Installation
 
-# Weekly Pi-hole self-update
-dns_auto_updates_enabled: true
-dns_auto_update_time: "2:00"
-dns_auto_update_day: "Monday"
+The role clones the Pi-hole repository at `dns_pihole_version` and runs `basic-install.sh
+--unattended` with a rendered `setupVars.conf`, inside a block that restores `/etc/pihole` and
+sends an ntfy alert if the install fails. It then sets the admin password, rebuilds gravity and
+removes the clone.
 
-# NTP server (chrony sync itself is fleet-wide via the common role)
-common_ntp_server_enabled: true
-common_ntp_upstream_server: "192.168.20.1"
-common_ntp_allowed_networks:
-  - "192.168.20.0/24"
+Install runs on a first install (no `pihole` binary or no `gravity.db`) or `dns_pihole_force_reinstall`.
+Both wipe `/etc/pihole`, so settings made in the web interface are lost; restore them from a
+Teleporter snapshot (`docs/backup/restore.md`). The installed version is never compared, so a restored
+archive and a Pi-hole that updated itself survive a deploy. On an installed host, `configure.yml` only
+applies interface, upstreams and web ports.
 
-# Secondary local backup (Teleporter + FTL DB) into a Syncthing folder
-common_syncthing_enabled: true
-dns_backup_enabled: true
-dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
-dns_backup_owner: "{{ ansible_user }}"
+The admin interface is password protected at `http://<ip>/admin`, SSH is fail2ban protected, and
+`firewall_common_ports` in `host_vars/dns.yml` lists the open ports (22, 53, 80, 9100, 9617).
 
-# Off-site backup: not wired yet; a pull job on backup_wyse will read vault_restic_dns_password.
-```
+## Backup
 
-## Security Enhancements
+- Local: with `dns_backup_enabled`, a nightly cron (default 03:30) writes a Teleporter archive
+  (`pihole-FTL --teleporter`) and one rolling `pihole-FTL.db` copy into `dns_backup_dir`. The
+  folder is shared through Syncthing (`common_syncthing_enabled`); pairing with portable is pending,
+  so the snapshot is not yet replicated off the host.
+- Off-site: with `dns_backup_pull_enabled`, the role authorizes the `backup_wyse` supervisor's
+  read-only key (`dns_backup_pull_pubkey`, limited to `dns_backup_pull_from`) for the backup owner.
+  The key runs only `sftp-server -R`. The supervisor mounts `dns_backup_dir` over sshfs and backs it
+  up with restic (`roles/supervisor`). Generate the pair on the controller
+  (`ssh-keygen -t ed25519 -N "" -C restic-pull@backup_wyse -f dns-pull`), put the private half in the
+  vault as `vault_supervisor_dns_pull_key` and the public line in `host_vars/dns.yml`.
+- Restore: `docs/backup/restore.md`; design: `docs/backup/index.md`.
 
-### Pi-hole Security
+## Cutover from the Pi 3B+ (IP swap)
 
-The role provides the
-[recommended](https://docs.pi-hole.net/main/basic-install/) way of installation:
+OPNsense serves DHCP and hands clients 192.168.20.10, held by the 3B+ (not in the inventory). The
+cutover moves that reservation to the zero's `wlan0` MAC, so no client setting changes.
 
-```bash
-git clone --depth 1 --branch v6.4.3 \
-  https://github.com/pi-hole/pi-hole.git
-cd pi-hole/automated\ install/
-bash basic-install.sh --unattended
-```
+- Swap on a weekday morning; end the soak and keep the 3B+ reserved before the first Monday on the
+  zero (the 02:00 update and 04:45 reboot can each take a sole resolver down).
+- Check Wi-Fi first: `iw dev wlan0 link`, signal better than -70 dBm.
 
-### Configuration Variables
+1. **Import** the prepared archive `..._zero-full.zip`, the 3B+ export with the zero's interface, web port, NTP and
+   gravity temp directory already set, 2FA off and the adlists pruned, while the zero is off the live address. The
+   role then re-pins what it owns and syncs the web password to the vault (it sees the 3B+ hash as a 401). Keep 2FA
+   off: the exporter and the role's password check log in without a TOTP code and would fail on every run.
 
-#### Security Configuration
+   ```bash
+   scp pi-hole_pihole_teleporter_<date>_zero-full.zip ansible@zero:/tmp/
+   ssh zero 'sudo pihole-FTL --teleporter /tmp/pi-hole_pihole_teleporter_<date>_zero-full.zip'
+   # a detached unit survives a dropped ssh session; the kernel runs with cgroup_disable=memory, so no MemoryMax
+   ssh zero 'sudo systemd-run --unit=gravity-rebuild pihole -g'
+   ssh zero 'journalctl -fu gravity-rebuild; free -m'   # the first build is long; watch for OOM kills
+   ansible-playbook -i inventory/production playbooks/site.yml --limit dns --tags dns
+   ```
 
-```yaml
-dns_pihole_git_repo: "https://github.com/pi-hole/pi-hole.git"
-dns_pihole_version: "v6.4.3"
-```
+   If the build is OOM-killed or never ends, import `..._zero-lean.zip` instead: no Prigent-Adult and the `.medium`
+   variants of `tif` and `gambling`, about 1.5 M rows instead of 8 M. Downloads go to `/var/tmp` (the archive sets
+   `files.gravity_tmp`), because the zero's `/tmp` is a 232 MB tmpfs.
 
-#### Required Variables (must be in vault)
+2. **Compare**: `./scripts/dns/validate-deploy.sh dns`, adlist count, `dig @<zero>` for a blocked and
+   an unblocked domain.
+3. **Swap** in OPNsense (static mappings): zero's MAC on 192.168.20.10, the 3B+ on another address
+   that is also the second DHCP DNS server (warm standby). Reboot the 3B+, then the zero.
+4. **Verify** from a client, then set `ansible_host: 192.168.20.10` and the Hosts line above, rerun
+   `dns` and update the Prometheus target.
+5. **Soak** 48 hours (query counts, FTL restarts, Wi-Fi drops). **Rollback**: swap the MACs back.
+6. **Retire** the 3B+ afterwards; keep its last export.
 
-```yaml
-vault_pihole_webpassword: "secure-admin-password"
-```
+### Adlist sizing
 
-## Installation Process
+The Teleporter archive holds the adlist definitions, not the gravity table, so the first `pihole -g` after an
+import downloads every list and builds the database on the zero's SD card. Pi-hole stores one row per domain and
+list, so build time, `gravity.db` size and page-cache pressure on a 512 MB board follow the sum of the lists
+(`select sum(number) from adlist where enabled=1`). Prefer Hagezi's `.medium` or `.mini` variants of `tif` and
+`gambling` here, and keep a long rebuild clear of the 04:45 reboot window: Pi-hole's own `updateGravity` cron
+runs on Sundays, separate from the role's Monday 02:00 update.
 
-1. **Repository Clone**: Downloads official Pi-hole repository at the pinned tag
-1. **Installation**: Runs unattended installation from verified source
-1. **Configuration**: Applies Pi-hole settings from templates
-1. **Cleanup**: Removes temporary repository after installation
+## Raspberry Pi Zero 2 W
 
-## Dependencies
+`host_vars/dns.yml` sets, for the 512MB Wi-Fi-only board:
 
-- `git` package (automatically installed)
-- Network connectivity
-- Sudo privileges for Pi-hole installation
+- `device_type: rpizero2w` (read by `hardware` and `rpi_cgroups.yml`, not by this role).
+- `common_wifi_powersave_tuning_enabled: true`: power save off, otherwise DNS answers gain latency and
+  UDP bursts drop.
+- `common_zram_enabled: true`: keeps apt and `pihole -g` peaks from OOM-killing pihole-FTL. On
+  Raspberry Pi OS trixie `common/tasks/zram.yml` uses rpi-swap (applied after a reboot), else zram-tools.
+- `common_cloud_init_disabled`, `common_rpi_headless_enabled`: headless trim.
+- Syncthing and the local backup stay on (about 50-80MB RAM, 14 archives on the SD card).
 
-### Access Control
+Provision Wi-Fi at flash time (Imager options or `firstrun.sh`), name the first user `ansible` and add
+the controller's key. Imager grants no passwordless sudo: run `playbooks/bootstrap.yml --limit dns -K`
+once before the first deploy. Without a USB drive `storage.yml` stays on the SD card and still caps
+the journal.
 
-- **Admin Interface**: Password protected at `http://<ip>/admin`
-- **DNS Interface**: Bound to specific network interface
-- **SSH**: Fail2ban protection enabled
+## Teardown and re-test
 
-## Network Configuration
-
-### Client Setup
-
-Configure devices to use selected `ip` as primary DNS server for ad-blocking.
-
-### Router Configuration
-
-Set Pi-hole as upstream DNS in router settings, or configure DHCP to provide
-Pi-hole as DNS server.
-
-### Upstream DNS
-
-Pi-hole forwards to firewall/router DNS by default. Modify `dns_pihole_dns_servers` in
-host_vars to change upstream servers.
-
-## Raspberry Pi Zero 2 W hosts
-
-At 512MB RAM and Wi-Fi-only, a Zero 2 W needs a few host_vars changes beyond
-`dns.yml`'s defaults (all already set in the committed `host_vars/dns.yml`):
-
-```yaml
-# host_vars/dns.yml
-device_type: rpizero2w        # hardware role: 512MB-sized container caps
-
-# Wi-Fi-only board: power save must stay off or DNS answers suffer tens of ms
-# of latency and dropped UDP bursts (boot-time unit, common role).
-common_wifi_powersave_tuning_enabled: true
-
-# 512MB: compressed RAM swap keeps apt/pihole -g peaks from OOM-killing
-# pihole-FTL (zram-tools, common role).
-common_zram_enabled: true
-
-# Syncthing stays on: at ~50-80MB it fits the Zero's headroom (Pi-hole peaks
-# ~150MB), and the default 14-archive retention costs ~50-80MB of the SD card.
-common_syncthing_enabled: true
-dns_backup_enabled: true
-dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
-dns_backup_owner: "{{ ansible_user }}"
-```
-
-The `hardware` role maps `rpizero2w` (aliases `rpi02w`, `rpizero2`) to the
-`rpizero2w` hardware profile - without it the `prometheus-exporters` dependency
-on `hardware` fails the deploy on the unknown platform.
-
-Before Ansible can reach the host at all, Wi-Fi has to be provisioned at flash
-time: Raspberry Pi Imager's advanced options (or `firstrun.sh` on the boot
-partition) set the SSID, key and country. Nothing in this repo can do that over
-a network that does not exist yet. The deploy user is the board's first user
-(`ansible`, see `hosts.yml`): name it so in Raspberry Pi Imager with the controller's SSH key and a password.
-Imager does not grant it passwordless sudo, so run `playbooks/bootstrap.yml --limit dns -K` once before the
-first deploy.
-
-The optional USB drive still works through an OTG adapter, but on a Zero it is
-usually skipped - `storage.yml` falls back to SD-card-only and the journal size
-cap it applies then matters more, not less (systemd would otherwise take 10% of
-the card for logs).
-
-## Teardown & Re-test
-
-The role ships a repeatable teardown, so a staging box (the Zero at its
-staging IP) can be re-deployed and re-tested end-to-end:
+`dns` is `teardown_protected`, so the cycle needs `-e teardown_protected=false`; do it only before
+clients use the host, otherwise use another host.
 
 ```bash
-# 1. Tear down the DNS role + Pi-hole exporter on the staging host
 ansible-playbook -i inventory/production playbooks/dns-teardown.yml \
-  --limit dns -e dns_teardown_confirm=true
-
-# 2. Verify the box is clean enough for a fresh test
-./scripts/dns/validate-clean.sh dns
-
-# 3. Re-deploy, then verify the box is actually healthy end-to-end
+  --limit dns -e dns_teardown_confirm=true -e teardown_protected=false
+./scripts/dns/validate-clean.sh dns      # exit 1 on any leftover
 ansible-playbook -i inventory/production playbooks/site.yml --limit dns --tags dns
-./scripts/dns/validate-deploy.sh dns
+./scripts/dns/validate-deploy.sh dns     # exit 1 on any failure
 ```
 
-The two scripts form the full test cycle: `validate-clean.sh` proves the
-host is back to a near-bare state (exit 1 on any leftover), and
-`validate-deploy.sh` proves Pi-hole DNS + ad-blocking, the web UI, both
-exporters, chrony sync, the journal size cap and the firewall rules are all
-working (exit 1 on any failure). Its drive and Syncthing checks are
-presence-driven: an SD-only host (no non-mmcblk disk attached) skips the
-mount/relocation checks, and a host with `dns_backup_enabled: false` skips the
-local-backup script/cron checks - both are legitimate Zero 2 W shapes.
-
-The teardown playbook refuses to run without `dns_teardown_confirm=true` and
-refuses a host marked `teardown_protected: true` (the production `dns` host) -
-a staging host leaves it unset, so the cycle above works on the Zero before cutover. It removes
-Pi-hole, its cron jobs, auto-update/backup scripts, chrony (restoring
-`systemd-timesyncd`), zram swap (the role's zramswap **and** any foreign zram a
-hand-configured box carried - `zram_teardown.yml` swaps it off, purges
-`zram-tools`/`systemd-zram-generator` and deletes hand-rolled units), reverses
-the journald relocation and optional-drive mount, restores working DNS, and
-ends with a self-check that fails if Pi-hole artifacts or ports 53/80 are
-still present.
-
-What intentionally stays (shared/fleet state, re-applied idempotently by the next
-`site.yml` run):
-
-- UFW rules (reversing them risks locking out SSH - `ufw --force reset` by hand
-  for a truly bare firewall)
-- `node-exporter` / the `prometheus` user and directories
-- `unattended-upgrades`, `fail2ban` and other common-role state
-
-`scripts/dns/validate-clean.sh` verifies all of the above and exits non-zero
-on any leftover. On a box whose full deploy never completed (a fresh Zero
-after tearing down a manual Pi-hole install), the shared fleet state checks
-(node-exporter, prometheus user, ufw) report as "not deployed yet" instead of
-failing - ufw's presence is the marker that the fleet play has run here at
-least once.
+- Teardown removes Pi-hole, its cron jobs and scripts, chrony (restoring `systemd-timesyncd`), zram
+  (including foreign zram), the journald relocation and drive mount, then restores working DNS and
+  self-checks that Pi-hole artifacts are gone and ports 53/80 are free.
+- It keeps shared fleet state, re-applied by the next `site.yml`: UFW rules (`ufw --force reset` by
+  hand for a bare firewall), node-exporter and the `prometheus` user, unattended-upgrades, fail2ban.
+- `validate-deploy.sh` skips the drive checks on an SD-only host and the local-backup checks when
+  `dns_backup_enabled` is false. `validate-clean.sh` reports the shared-state checks as "not deployed
+  yet" on a box whose fleet play never ran (UFW present marks that it did).
 
 ## Validation
 
@@ -251,6 +189,8 @@ Pre-deployment (`validate.yml`) checks that:
 - Required variables are defined and contain no vault placeholder values
 - The configured `dns_pihole_interface` exists on the host
 - `common_ntp_allowed_networks` is non-empty when this host serves NTP
+- `dns_backup_dir` and `dns_backup_owner` are set when the local backup is enabled
+- The OS family is Debian
 
 Post-deployment (`post_deploy_validate.yml`) checks that:
 
@@ -258,3 +198,4 @@ Post-deployment (`post_deploy_validate.yml`) checks that:
 - DNS resolution works through Pi-hole
 - Gravity has a non-empty blocklist and a known ad domain is blocked
 - chrony is active
+- The Pi-hole exporter answers (through the `prometheus-exporters` role)

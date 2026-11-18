@@ -36,14 +36,18 @@
       != dns_pihole_dns_servers | sort
 
 - name: Pin the web interface to ports 80/443
-  # The installer falls back to alternate web ports when the default ones look busy, but the firewall,
-  # exporter and validation expect the defaults. The regexp skips the dns.port line, which has no flag suffix.
-  ansible.builtin.lineinfile:
-    path: /etc/pihole/pihole.toml
-    regexp: '^  port = "[0-9]+o.*'
-    line: '  port = "80o,[::]:80o,[::]:443os,443os"'
-  become: true
-  notify: Restart pihole-FTL
+  ansible.builtin.include_tasks: web_port.yml
+
+- name: Pin Pi-hole's built-in NTP off
+  # FTL's NTP server would compete with chrony for UDP 123 and its sync client sets the clock from the public pool,
+  # a second clock authority next to chrony's OPNsense upstream. Both are on by default and in a restored archive.
+  ansible.builtin.include_tasks: ntp_off.yml
+  loop:
+    - ntp.ipv4.active
+    - ntp.ipv6.active
+    - ntp.sync.active
+  loop_control:
+    loop_var: dns_ntp_key
 
 - name: Flush handlers so FTL rebinds before validation
   # Without this flush the restart would fire at the end of the play, after validation has already waited on port 80.
