@@ -1,0 +1,23 @@
+---
+- name: Prove each pull mounts read-only and the remote refuses writes
+  ansible.builtin.include_tasks: post_deploy_pull.yml
+  loop: "{{ supervisor_pulls }}"
+  loop_control:
+    loop_var: supervisor_pull
+    label: "{{ supervisor_pull.name }}"
+
+- name: Run the watchdog once against the real Storage Box
+  # Proves the listing parses; a stale or missing repository also fails here and alerts.
+  ansible.builtin.command: "{{ supervisor_libexec_dir }}/repo-watch"
+  changed_when: false
+
+- name: Read the watchdog timer state
+  ansible.builtin.systemd:
+    name: supervisor-repo-watch.timer
+  register: supervisor_watch_timer
+
+- name: Require the watchdog timer to be active
+  ansible.builtin.assert:
+    that: supervisor_watch_timer.status.ActiveState == 'active'
+    fail_msg: "supervisor-repo-watch.timer is {{ supervisor_watch_timer.status.ActiveState }}"
+    quiet: true

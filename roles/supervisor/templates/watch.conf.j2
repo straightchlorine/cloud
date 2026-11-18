@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# name  repository path on the Storage Box  max age of the newest snapshot (hours)
+{% for entry in supervisor_watch %}
+{{ entry.name }} {{ entry.path }} {{ entry.max_age_hours }}
+{% endfor %}

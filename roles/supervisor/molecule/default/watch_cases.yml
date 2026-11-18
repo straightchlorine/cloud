@@ -1,0 +1,119 @@
+---
+# Runs the deployed repo-watch with a stub sftp that answers from /srv/molecule-listings/<repository directory>,
+# and the notice stub as the notifier, so the real script's parsing and alert logic is what is under test.
+- name: Create the stub and listings directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ molecule_stubs }}"
+    - "{{ molecule_listings }}"
+
+- name: Install the sftp stub
+  ansible.builtin.copy:
+    dest: "{{ molecule_stubs }}/sftp"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # Reads "ls -lt <repository>/snapshots" from stdin and answers with the listing named after the repository.
+      read -r _ _ path
+      listing={{ molecule_listings }}/$(basename "$(dirname "$path")")
+      [[ -f $listing ]] || exit 1
+      echo "sftp> ls -lt $path"
+      cat "$listing"
+
+# Each listing is newest first, as ls -lt sorts. A stale second line behind a fresh first one proves only the
+# first line counts; the date is the file's ls -l date.
+- name: Write the canned listings
+  ansible.builtin.shell: |
+    set -eu
+    cd {{ molecule_listings }}
+    line() { printf -- '-rw-------    1 u1 u1  411 %s %s\n' "$1" "$2"; }
+    { line "$(date -d '2 hours ago' '+%b %e %H:%M')" fresh1; line 'Jan  1 2020' old1; } > fresh
+    # A stamp 3 hours ahead is clock skew, not last year.
+    line "$(date -d '3 hours' '+%b %e %H:%M')" skew1 > skewed
+    line "$(date -d '50 hours ago' '+%b %e %H:%M')" stale1 > stale
+    line 'Nov 14 2024' ancient1 > ancient
+    # A month and day well ahead of today can only be last year.
+    line "$(date -d '40 days' '+%b %e %H:%M')" wrap1 > wrapped
+    : > empty
+    rm -f gone
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Write a watch list that holds every case
+  ansible.builtin.copy:
+    dest: /tmp/molecule-watch-all.conf
+    mode: "0644"
+    content: |
+      # name path max_age_hours
+      fresh /box/fresh 30
+      skewed /box/skewed 30
+      stale /box/stale 30
+      ancient /box/ancient 30
+      wrapped /box/wrapped 30
+      empty /box/empty 30
+      gone /box/gone 30
+- name: Write a watch list of healthy repositories only
+  ansible.builtin.copy:
+    dest: /tmp/molecule-watch-ok.conf
+    mode: "0644"
+    content: |
+      fresh /box/fresh 30
+      skewed /box/skewed 30
+
+- name: Run the watchdog on the healthy list
+  ansible.builtin.command: /usr/local/libexec/supervisor/repo-watch
+  environment:
+    SUPERVISOR_WATCH_CONF: /tmp/molecule-watch-ok.conf
+    SUPERVISOR_SFTP: "{{ molecule_stubs }}/sftp"
+    SUPERVISOR_NOTIFY: /usr/local/bin/molecule-notice
+  register: supervisor_watch_ok
+  changed_when: false
+  failed_when: false
+
+- name: Run the watchdog on the full list
+  ansible.builtin.command: /usr/local/libexec/supervisor/repo-watch
+  environment:
+    SUPERVISOR_WATCH_CONF: /tmp/molecule-watch-all.conf
+    SUPERVISOR_SFTP: "{{ molecule_stubs }}/sftp"
+    SUPERVISOR_NOTIFY: /usr/local/bin/molecule-notice
+  register: supervisor_watch_all
+  changed_when: false
+  failed_when: false
+
+- name: Read what the notifier received
+  ansible.builtin.slurp:
+    src: /var/log/molecule-notice.log
+  register: supervisor_notices
+
+- name: Assert the healthy list is silent and the full list alerts on every bad repository only
+  vars:
+    notices: "{{ (supervisor_notices.content | b64decode).splitlines() | select('search', 'need attention') | list }}"
+    problems: "{{ supervisor_watch_all.stderr_lines }}"
+  ansible.builtin.assert:
+    that:
+      - supervisor_watch_ok.rc == 0
+      - supervisor_watch_ok.stderr == ''
+      - supervisor_watch_all.rc == 1
+      - problems | length == 5
+      - >-
+        problems | select('match', '^stale: newest snapshot is 50 h old \\(limit 30 h\\)$') | list | length == 1
+      - >-
+        problems | select('match', '^ancient: newest snapshot is [0-9]+ h old') | list | length == 1
+      - >-
+        problems | select('match', '^wrapped: newest snapshot is [0-9]+ h old') | list | length == 1
+      - >-
+        problems | select('match', '^empty: no snapshots in /box/empty/snapshots$') | list | length == 1
+      - >-
+        problems | select('match', '^gone: cannot list /box/gone/snapshots$') | list | length == 1
+      - notices | length == 1
+      - >-
+        notices[0] is match('^[^|]+: backup repositories need attention\|high\|')
+      - "'stale: newest snapshot is 50 h old' in notices[0]"
+    fail_msg: >-
+      ok rc {{ supervisor_watch_ok.rc }}; all rc {{ supervisor_watch_all.rc }},
+      stderr {{ problems }}, notices {{ notices }}
+    quiet: true

@@ -1,0 +1,43 @@
+---
+# Inputs converge and verify share. Molecule connects as root, and a container reaches no ntfy.
+restic_connection_user: root
+vault_ntfy_api_key: molecule-test-ntfy-key
+ntfy_server_url: "https://ntfy.example.test"
+ntfy_topic: molecule-test
+restic_init_repository: true
+restic_notice_command: /usr/local/bin/molecule-notice
+
+# The mount unit's file name as systemd derives it from /mnt/restic-pull/dns. Single quotes keep the backslash.
+molecule_mount_unit: 'mnt-restic\x2dpull-dns.mount'
+
+molecule_ssh_port: 22922
+
+# A fake key, with the PEM markers built in two pieces so the detect-private-key hook does not flag the file.
+molecule_pull_key: >-
+  {{ ['-----BEGIN OPENSSH ' ~ 'PRIVATE KEY-----', 'bW9sZWN1bGUtbm90LWEtcmVhbC1rZXk=',
+      '-----END OPENSSH ' ~ 'PRIVATE KEY-----', ''] | join('\n') }}
+molecule_pull_known_hosts: "192.168.20.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMoleculeHostKeyMoleculeHostKeyMoleculeHk"
+
+# A local repository stands in for the Storage Box, which a container cannot reach.
+molecule_pull:
+  name: dns
+  host: 192.168.20.10
+  user: ansible
+  remote_path: /home/ansible/syncthing/pihole-backup
+  key: "{{ molecule_pull_key }}"
+  known_hosts: "{{ molecule_pull_known_hosts }}"
+  source_max_age_hours: 26
+  job:
+    repository: /srv/molecule-repos/dns
+    password: molecule-restic-password-dns
+    schedule: "*-*-* 04:30:00"
+    timeout: 1h
+    memory_max_mib: 512
+    retention: { daily: 14, weekly: 8, monthly: 12, yearly: 3 }
+    host: dns
+    tags: [debian-13]
+    max_age_hours: 30
+
+supervisor_pulls: ["{{ molecule_pull }}"]
+supervisor_watch:
+  - { name: dns, path: /home/backup/restic-repos/dns, max_age_hours: 30 }

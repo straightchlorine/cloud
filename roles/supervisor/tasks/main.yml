@@ -1,0 +1,24 @@
+---
+- name: Run supervisor validation
+  ansible.builtin.include_tasks: validate.yml
+  tags: [validation]
+
+- name: Install the pull packages
+  ansible.builtin.include_tasks: packages.yml
+  tags: [packages]
+
+- name: Set up each pull and its restic job
+  ansible.builtin.include_tasks: pull.yml
+  loop: "{{ supervisor_pulls }}"
+  loop_control:
+    loop_var: supervisor_pull
+    label: "{{ supervisor_pull.name }}"
+  tags: [backup]
+
+- name: Install the repository freshness watchdog
+  ansible.builtin.include_tasks: watch.yml
+  tags: [backup, watch]
+
+- name: Run post-deployment validation
+  ansible.builtin.include_tasks: post_deploy_validate.yml
+  tags: [post_validation]

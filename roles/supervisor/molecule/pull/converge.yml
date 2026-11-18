@@ -1,0 +1,68 @@
+---
+- name: Converge supervisor pull
+  hosts: all
+  become: true
+  vars_files: [../shared/vars.yml]
+  tasks:
+    # Skipped on purpose: the watchdog's real Storage Box run (post_deploy_validate.yml runs the rest of it).
+    - name: Read the key pair and the server's host key from prepare
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /root/molecule-pull-key
+        - /root/molecule-pull-key.pub
+        - /etc/ssh/ssh_host_ed25519_key.pub
+      register: molecule_pull_files
+      no_log: true
+
+    - name: Split the server's host key line
+      ansible.builtin.set_fact:
+        molecule_pull_pubkey: "{{ molecule_pull_files.results[1].content | b64decode | trim }}"
+        molecule_host_key_fields: "{{ (molecule_pull_files.results[2].content | b64decode).split()[0:2] }}"
+
+    - name: Point the pull at the local sshd
+      ansible.builtin.set_fact:
+        supervisor_pulls:
+          - "{{ molecule_pull | combine({
+               'host': '127.0.0.1', 'port': molecule_ssh_port, 'user': 'puller', 'remote_path': '/home/puller/export',
+               'key': molecule_pull_files.results[0].content | b64decode,
+               'known_hosts': '[127.0.0.1]:' ~ molecule_ssh_port ~ ' ' ~ molecule_host_key_fields | join(' ')}) }}"
+      no_log: true
+
+    - name: Authorize the key the way roles/dns does on the Zero
+      ansible.builtin.include_role:
+        name: dns
+        tasks_from: backup_pull_key
+      vars:
+        dns_backup_owner: puller
+        dns_backup_pull_pubkey: "{{ molecule_pull_pubkey }}"
+        dns_backup_pull_from: 127.0.0.1
+        dns_backup_pull_sftp_server: /usr/lib/openssh/sftp-server
+
+    - name: Validate the supervisor variables
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: validate
+
+    - name: Install the pull packages
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: packages
+
+    - name: Set up each pull and its restic job
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: pull
+      loop: "{{ supervisor_pulls }}"
+      loop_control:
+        loop_var: supervisor_pull
+        label: "{{ supervisor_pull.name }}"
+
+    - name: Prove each pull mounts read-only and the remote refuses writes
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: post_deploy_pull
+      loop: "{{ supervisor_pulls }}"
+      loop_control:
+        loop_var: supervisor_pull
+        label: "{{ supervisor_pull.name }}"

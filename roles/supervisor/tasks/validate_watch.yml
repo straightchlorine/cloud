@@ -1,0 +1,15 @@
+---
+# One entry of supervisor_watch arrives as supervisor_watch_entry.
+- name: Check the watched repository
+  ansible.builtin.assert:
+    that:
+      - supervisor_watch_entry is mapping
+      - supervisor_watch_entry.name is defined and supervisor_watch_entry.name is match('^[a-z0-9][a-z0-9-]{0,31}\\Z')
+      - supervisor_watch_entry.path is defined and supervisor_watch_entry.path is match('^/[A-Za-z0-9._/@+-]+\\Z')
+      - supervisor_watch_entry.max_age_hours is defined and supervisor_watch_entry.max_age_hours is integer
+      - supervisor_watch_entry.max_age_hours >= 24
+    fail_msg: >-
+      supervisor_watch[{{ supervisor_watch_entry.name | default('?') }}]: needs name (lowercase, digits, hyphen),
+      an absolute plain repository path on the Storage Box and integer max_age_hours >= 24 (the listing carries
+      no year or time zone, so a tighter limit would flap)
+    quiet: true

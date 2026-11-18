@@ -1,0 +1,70 @@
+---
+# Each case overrides one field of an otherwise valid configuration (../shared/vars.yml), so the failure it
+# expects can only come from that field.
+molecule_case_defaults:
+  supervisor_pulls: ["{{ molecule_pull }}"]
+  supervisor_watch: "{{ supervisor_watch_ok }}"
+  supervisor_pull_mount_root: /mnt/restic-pull
+  supervisor_watch_schedule: "*-*-* 12:30:00"
+supervisor_watch_ok:
+  - { name: dns, path: /home/backup/restic-repos/dns, max_age_hours: 30 }
+# Variants of the valid job and host key that the cases below plug into molecule_pull.
+molecule_job_without_host: "{{ molecule_pull.job | dict2items | rejectattr('key', 'eq', 'host') | items2dict }}"
+molecule_job_without_tags: "{{ molecule_pull.job | dict2items | rejectattr('key', 'eq', 'tags') | items2dict }}"
+molecule_job_with_sources: "{{ molecule_pull.job | combine({'sources': ['/etc']}) }}"
+molecule_job_zero_retention: >-
+  {{ molecule_pull.job | combine({'retention': {'daily': 0, 'weekly': 0, 'monthly': 0, 'yearly': 0}}) }}
+molecule_placeholder_known_hosts: 192.168.20.10 ssh-ed25519 AAAAreplaceAAAAAAAAAAAAAAAAAAAAAAAA
+
+molecule_cases:
+  - id: pulls-undefined
+    expect: "[supervisor] Required backup supervisor variable 'supervisor_pulls' is not defined or empty"
+    supervisor_pulls: ""
+  - id: watch-undefined
+    expect: "[supervisor] Required backup supervisor variable 'supervisor_watch' is not defined or empty"
+    supervisor_watch: ""
+  - id: mount-root-bad
+    expect: "supervisor_pull_mount_root: needs an absolute path"
+    supervisor_pull_mount_root: "/mnt/restic pull"
+  - id: duplicate-pull-names
+    expect: "supervisor_pulls and supervisor_watch: names must be unique"
+    supervisor_pulls: ["{{ molecule_pull }}", "{{ molecule_pull }}"]
+  - id: pull-name-bad
+    expect: "supervisor_pulls[Dns]: needs name"
+    supervisor_pulls: ["{{ molecule_pull | combine({'name': 'Dns'}) }}"]
+  - id: pull-remote-path-relative
+    expect: "supervisor_pulls[dns]: needs name"
+    supervisor_pulls: ["{{ molecule_pull | combine({'remote_path': 'home/ansible'}) }}"]
+  - id: pull-max-age-zero
+    expect: "supervisor_pulls[dns]: needs name"
+    supervisor_pulls: ["{{ molecule_pull | combine({'source_max_age_hours': 0}) }}"]
+  - id: pull-key-not-private
+    expect: "supervisor_pulls[dns]: key must be a private key"
+    supervisor_pulls: ["{{ molecule_pull | combine({'key': 'your-private-key'}) }}"]
+  - id: pull-known-hosts-placeholder
+    expect: "supervisor_pulls[dns]: key must be a private key"
+    supervisor_pulls: ["{{ molecule_pull | combine({'known_hosts': molecule_placeholder_known_hosts}) }}"]
+  - id: pull-job-host-missing
+    expect: "supervisor_pulls[dns].job: set host and tags explicitly"
+    supervisor_pulls: ["{{ molecule_pull | combine({'job': molecule_job_without_host}) }}"]
+  - id: pull-job-tags-missing
+    expect: "supervisor_pulls[dns].job: set host and tags explicitly"
+    supervisor_pulls: ["{{ molecule_pull | combine({'job': molecule_job_without_tags}) }}"]
+  - id: pull-job-sources-given
+    expect: "supervisor_pulls[dns].job: set host and tags explicitly"
+    supervisor_pulls: ["{{ molecule_pull | combine({'job': molecule_job_with_sources}) }}"]
+  - id: pull-job-retention-bad
+    expect: "restic_job.retention: needs integer"
+    supervisor_pulls: ["{{ molecule_pull | combine({'job': molecule_job_zero_retention}) }}"]
+  - id: watch-name-bad
+    expect: "supervisor_watch[Dns]: needs name"
+    supervisor_watch: [{ name: Dns, path: /home/backup/restic-repos/dns, max_age_hours: 30 }]
+  - id: watch-path-relative
+    expect: "supervisor_watch[dns]: needs name"
+    supervisor_watch: [{ name: dns, path: home/backup/restic-repos/dns, max_age_hours: 30 }]
+  - id: watch-limit-under-24
+    expect: "supervisor_watch[dns]: needs name"
+    supervisor_watch: [{ name: dns, path: /home/backup/restic-repos/dns, max_age_hours: 12 }]
+  - id: pull-port-bad
+    expect: "supervisor_pulls[dns]: port must be"
+    supervisor_pulls: ["{{ molecule_pull | combine({'port': 70000}) }}"]

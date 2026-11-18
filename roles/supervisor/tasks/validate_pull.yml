@@ -1,0 +1,61 @@
+---
+# One entry of supervisor_pulls arrives as supervisor_pull.
+- name: Check the pull's fields
+  ansible.builtin.assert:
+    that:
+      - supervisor_pull is mapping
+      - supervisor_pull.name is defined and supervisor_pull.name is match('^[a-z0-9][a-z0-9-]{0,31}\\Z')
+      - supervisor_pull.host is defined and supervisor_pull.host is match('^[A-Za-z0-9][A-Za-z0-9._-]*\\Z')
+      - supervisor_pull.user is defined and supervisor_pull.user is match('^[a-z_][a-z0-9_-]*\\Z')
+      - supervisor_pull.remote_path is defined and supervisor_pull.remote_path is match('^/[A-Za-z0-9._/@+-]*\\Z')
+      - supervisor_pull.source_max_age_hours is defined and supervisor_pull.source_max_age_hours is integer
+      - supervisor_pull.source_max_age_hours >= 1
+      - supervisor_pull.job is defined and supervisor_pull.job is mapping
+    fail_msg: >-
+      supervisor_pulls[{{ supervisor_pull.name | default('?') }}]: needs name (lowercase, digits, hyphen), host,
+      user, an absolute plain remote_path, integer source_max_age_hours >= 1 and a job mapping
+    quiet: true
+
+- name: Check the optional ssh port
+  ansible.builtin.assert:
+    that: supervisor_pull.port is integer and 1 <= supervisor_pull.port <= 65535
+    fail_msg: "supervisor_pulls[{{ supervisor_pull.name }}]: port must be an integer from 1 to 65535"
+    quiet: true
+  when: supervisor_pull.port is defined
+
+- name: Check the key and the pinned host key
+  ansible.builtin.assert:
+    that:
+      - supervisor_pull.key is defined and supervisor_pull.key is string
+      - "'PRIVATE KEY-----' in supervisor_pull.key"
+      - supervisor_pull.known_hosts is defined and supervisor_pull.known_hosts is string
+      - supervisor_pull.known_hosts is search('(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9]+) +[A-Za-z0-9+/=]{20,}')
+      - supervisor_pull.known_hosts is not search('your-|replace|changeme', ignorecase=True)
+    fail_msg: >-
+      supervisor_pulls[{{ supervisor_pull.name }}]: key must be a private key (the vault value is a
+      placeholder or empty) and known_hosts must hold a real pinned host key line
+    quiet: true
+
+- name: Check the job leaves the pulled data to the role
+  # A pull job's snapshot host and tags default to the Wyse's own, which would file the pulled host's data under it.
+  ansible.builtin.assert:
+    that:
+      - supervisor_pull.job.host is defined
+      - supervisor_pull.job.tags is defined
+      - supervisor_pull.job.name is not defined
+      - supervisor_pull.job.sources is not defined
+      - supervisor_pull.job.fresh is not defined
+    fail_msg: >-
+      supervisor_pulls[{{ supervisor_pull.name }}].job: set host and tags explicitly (else the snapshots carry
+      this host's name and OS), and leave name, sources and fresh to the role
+    quiet: true
+
+- name: Derive the job
+  ansible.builtin.include_tasks: pull_facts.yml
+
+- name: Validate the derived restic job the way a stack role's pre-validation does
+  ansible.builtin.include_role:
+    name: restic
+    tasks_from: validate_job
+  vars:
+    restic_job: "{{ supervisor_pull_job }}"

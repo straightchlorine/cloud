@@ -1,0 +1,136 @@
+---
+- name: Verify supervisor default
+  hosts: all
+  become: true
+  vars_files: [../shared/vars.yml]
+  vars:
+    molecule_stubs: /usr/local/lib/molecule-supervisor
+    molecule_listings: /srv/molecule-listings
+  tasks:
+    - name: Assert the deployed files
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_paths.yml"
+      vars:
+        molecule_paths:
+          - { path: /etc/supervisor, state: directory, mode: "0755", owner: root }
+          - { path: /etc/supervisor/dns-pull.key, state: file, mode: "0400", owner: root, group: root }
+          - { path: /etc/supervisor/dns-pull.known_hosts, state: file, mode: "0644", owner: root }
+          - { path: /mnt/restic-pull/dns, state: directory, mode: "0755", owner: root }
+          - { path: "/etc/systemd/system/{{ molecule_mount_unit }}", state: file, mode: "0644", owner: root }
+          - { path: /usr/local/libexec/supervisor/repo-watch, state: file, mode: "0755", owner: root }
+          - { path: /etc/supervisor/watch.conf, state: file, mode: "0644", owner: root }
+          - { path: /etc/systemd/system/supervisor-repo-watch.service, state: file, mode: "0644" }
+          - { path: /etc/systemd/system/supervisor-repo-watch.timer, state: file, mode: "0644" }
+          - { path: /etc/restic/dns.sources, state: file, mode: "0640", owner: root, group: restic }
+
+    - name: Read the deployed files
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /etc/supervisor/dns-pull.key
+        - /etc/supervisor/dns-pull.known_hosts
+        - "/etc/systemd/system/{{ molecule_mount_unit }}"
+        - /etc/supervisor/watch.conf
+        - /etc/systemd/system/supervisor-repo-watch.timer
+        - /etc/restic/dns.sources
+        - /etc/restic/dns.env
+      register: supervisor_slurped
+
+    - name: Decode the files by path
+      ansible.builtin.set_fact:
+        supervisor_content: >-
+          {{ dict(supervisor_slurped.results | map(attribute='item')
+             | zip(supervisor_slurped.results | map(attribute='content') | map('b64decode'))) }}
+
+    - name: Assert the key and the pinned host key
+      ansible.builtin.assert:
+        that:
+          - supervisor_content['/etc/supervisor/dns-pull.key'] == molecule_pull_key | trim ~ '\n'
+          - supervisor_content['/etc/supervisor/dns-pull.known_hosts'] == molecule_pull_known_hosts ~ '\n'
+        fail_msg: "key or known_hosts wrong"
+        quiet: true
+      no_log: true
+
+    - name: Assert the mount unit is a read-only, pinned, on-demand sshfs mount
+      vars:
+        unit: "{{ supervisor_content['/etc/systemd/system/' ~ molecule_mount_unit] }}"
+      ansible.builtin.assert:
+        that:
+          - "'What=ansible@192.168.20.10:/home/ansible/syncthing/pihole-backup' in unit"
+          - "'Where=/mnt/restic-pull/dns' in unit"
+          - "'Type=fuse.sshfs' in unit"
+          - "'Options=ro,allow_other,' in unit"
+          - "'IdentityFile=/etc/supervisor/dns-pull.key' in unit"
+          - "'UserKnownHostsFile=/etc/supervisor/dns-pull.known_hosts' in unit"
+          - "'StrictHostKeyChecking=yes' in unit"
+          - "'IdentitiesOnly=yes' in unit"
+          - "'StopWhenUnneeded=yes' in unit"
+          - unit is not search('(?m)^\\[Install\\]')
+        fail_msg: "mount unit rendered wrong:\n{{ unit }}"
+        quiet: true
+
+    - name: Assert the job backs up the mount and nothing else
+      vars:
+        env: "{{ supervisor_content['/etc/restic/dns.env'] }}"
+      ansible.builtin.assert:
+        that:
+          - supervisor_content['/etc/restic/dns.sources'] == '/mnt/restic-pull/dns\n'
+          - env is search("RESTIC_JOB_FRESH='/mnt/restic-pull/dns:26'")
+          - "'RESTIC_JOB_HOST=dns' in env.splitlines()"
+          - env is search("RESTIC_JOB_TAGS='debian-13'")
+        fail_msg: "job env or sources wrong:\n{{ env }}"
+        quiet: true
+
+    - name: Look for the sshfs mount helper
+      ansible.builtin.command: sshfs --version
+      register: supervisor_sshfs
+      changed_when: false
+
+    - name: Ask systemd what the job waits for
+      ansible.builtin.command:
+        argv: [systemctl, show, restic-job@dns.service, "--property=Requires,After"]
+      register: supervisor_job_deps
+      changed_when: false
+
+    # The pairing is the whole point: systemd derives the mount unit from the job's source path, so a mount unit
+    # named differently from that derivation would silently leave the job reading an empty directory.
+    # systemctl show quotes the name and doubles its backslash, so the match allows one or more.
+    - name: Assert the job requires and follows the mount unit
+      ansible.builtin.assert:
+        that:
+          - >-
+            supervisor_job_deps.stdout_lines
+            | select('search', '^Requires=.*mnt-restic\\\\+x2dpull-dns[.]mount') | list | length == 1
+          - >-
+            supervisor_job_deps.stdout_lines
+            | select('search', '^After=.*mnt-restic\\\\+x2dpull-dns[.]mount') | list | length == 1
+        fail_msg: "job does not depend on {{ molecule_mount_unit }}: {{ supervisor_job_deps.stdout }}"
+        quiet: true
+
+    - name: Assert the mount is not enabled at boot
+      ansible.builtin.command:
+        argv: [systemctl, is-enabled, "{{ molecule_mount_unit }}"]
+      register: supervisor_mount_enabled
+      changed_when: false
+      failed_when: supervisor_mount_enabled.stdout != 'generated' and supervisor_mount_enabled.stdout != 'static'
+
+    - name: Assert the watch list and the timer
+      ansible.builtin.assert:
+        that:
+          - "'dns /home/backup/restic-repos/dns 30' in supervisor_content['/etc/supervisor/watch.conf']"
+          - "'OnCalendar=*-*-* 12:30:00' in supervisor_content['/etc/systemd/system/supervisor-repo-watch.timer']"
+        fail_msg: "watch.conf or timer wrong"
+        quiet: true
+
+    - name: Read the watchdog timer's unit file state
+      ansible.builtin.systemd:
+        name: supervisor-repo-watch.timer
+      register: supervisor_watch_timer
+
+    - name: Assert the watchdog timer is enabled
+      ansible.builtin.assert:
+        that: supervisor_watch_timer.status.UnitFileState == 'enabled'
+        fail_msg: "timer UnitFileState is {{ supervisor_watch_timer.status.UnitFileState }}"
+        quiet: true
+
+    - name: Run the watchdog against canned listings
+      ansible.builtin.include_tasks: watch_cases.yml

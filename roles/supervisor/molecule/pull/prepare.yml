@@ -1,0 +1,66 @@
+---
+- name: Prepare supervisor pull
+  hosts: all
+  become: true
+  vars_files: [../shared/vars.yml]
+  tasks:
+    - name: Install an ssh server, the client and fuse
+      ansible.builtin.apt:
+        name: [openssh-server, openssh-client, fuse3]
+        update_cache: true
+
+    - name: Create the account the pull key is authorized for
+      ansible.builtin.user:
+        name: puller
+        create_home: true
+        shell: /bin/bash
+
+    - name: Create the exported directory
+      ansible.builtin.file:
+        path: /home/puller/export
+        state: directory
+        owner: puller
+        mode: "0750"
+
+    - name: Create the exported data
+      ansible.builtin.copy:
+        content: "exported\n"
+        dest: /home/puller/export/data.txt
+        owner: puller
+        mode: "0640"
+        force: false
+
+    - name: Generate the pull key pair the vault would hold
+      ansible.builtin.command:
+        argv: [ssh-keygen, -q, -t, ed25519, -N, "", -C, restic-pull@molecule, -f, /root/molecule-pull-key]
+        creates: /root/molecule-pull-key
+
+    - name: Move sshd off port 22
+      # The container shares the host's network namespace and an unprivileged user cannot bind port 22.
+      ansible.builtin.copy:
+        content: "Port {{ molecule_ssh_port }}\nListenAddress 127.0.0.1\n"
+        dest: /etc/ssh/sshd_config.d/molecule-port.conf
+        mode: "0644"
+
+    - name: Stop the socket activation that would bind port 22
+      ansible.builtin.systemd_service:
+        name: ssh.socket
+        state: stopped
+        enabled: false
+        masked: true
+
+    - name: Start sshd
+      ansible.builtin.systemd_service:
+        name: ssh.service
+        state: started
+        enabled: true
+
+    - name: Create the repository parent
+      ansible.builtin.file:
+        path: /srv/molecule-repos
+        state: directory
+        mode: "1777"
+
+    - name: Install the deploy-time notice stub
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../restic/molecule/shared/notice_stub.yml"

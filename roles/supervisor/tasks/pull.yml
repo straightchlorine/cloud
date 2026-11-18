@@ -1,0 +1,62 @@
+---
+# One entry of supervisor_pulls arrives as supervisor_pull.
+- name: Derive the mount point and the restic job
+  ansible.builtin.include_tasks: pull_facts.yml
+
+- name: Name the mount unit
+  # systemd derives the unit name from the path, so a path with a hyphen needs the escaped form.
+  ansible.builtin.command:
+    argv: [systemd-escape, --path, --suffix=mount, "{{ supervisor_pull_mountpoint }}"]
+  register: supervisor_pull_unit
+  changed_when: false
+
+- name: Create the config directory and the mount point
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ supervisor_config_dir }}"
+    - "{{ supervisor_pull_mount_root }}"
+    - "{{ supervisor_pull_mountpoint }}"
+
+- name: Write the pull key
+  ansible.builtin.copy:
+    # One trailing newline: ssh refuses a key without it.
+    content: "{{ supervisor_pull.key | trim }}\n"
+    dest: "{{ supervisor_config_dir }}/{{ supervisor_pull.name }}-pull.key"
+    owner: root
+    group: root
+    mode: "0400"
+  no_log: true
+
+- name: Pin the pulled host's ssh key
+  ansible.builtin.copy:
+    content: "{{ supervisor_pull.known_hosts | trim }}\n"
+    dest: "{{ supervisor_config_dir }}/{{ supervisor_pull.name }}-pull.known_hosts"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render the mount unit
+  ansible.builtin.template:
+    src: pull.mount.j2
+    dest: "/etc/systemd/system/{{ supervisor_pull_unit.stdout }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd units
+
+- name: Load the mount unit before the job's drop-in refers to it
+  ansible.builtin.meta: flush_handlers
+
+- name: Configure the off-site restic backup of the pulled data
+  ansible.builtin.include_role:
+    name: restic
+    tasks_from: job
+    apply:
+      tags: [backup]
+  vars:
+    restic_job: "{{ supervisor_pull_job }}"

@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Watch every restic repository (daily)
+
+[Timer]
+OnCalendar={{ supervisor_watch_schedule }}
+# A Wyse that was off at the scheduled time checks on its next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

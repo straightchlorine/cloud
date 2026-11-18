@@ -1,0 +1,10 @@
+---
+- name: Verify supervisor fail-fast-validation
+  hosts: all
+  vars_files:
+    - cases.yml
+  tasks:
+    - name: Assert every case recorded its marker
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_markers.yml"
+      vars:
+        molecule_case_ids: "{{ molecule_cases | map(attribute='id') | list }}"

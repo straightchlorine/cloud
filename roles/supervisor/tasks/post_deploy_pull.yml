@@ -1,0 +1,35 @@
+---
+# One entry of supervisor_pulls arrives as supervisor_pull.
+- name: Derive the mount point
+  ansible.builtin.include_tasks: pull_facts.yml
+
+- name: Inspect the pull from a transient unit that requires the mount, as the restic job does
+  # A mount started by hand would be stopped again at once, because the unit has StopWhenUnneeded=yes and nothing
+  # requires it. The transient service holds it for the checks and releases it when it ends.
+  ansible.builtin.command:
+    argv:
+      - systemd-run
+      - --quiet
+      - --wait
+      - --collect
+      - --pipe
+      - "--property=RequiresMountsFor={{ supervisor_pull_mountpoint }}"
+      - /bin/sh
+      - -c
+      - |
+        findmnt --noheadings --output FSTYPE,OPTIONS --target "$1"
+        echo "entries=$(ls -A "$1" | wc -l)"
+        if touch "$1/.supervisor-write-test" 2>/dev/null; then echo write=allowed; else echo write=refused; fi
+      - sh
+      - "{{ supervisor_pull_mountpoint }}"
+  register: supervisor_pull_inspect
+  changed_when: false
+
+- name: Require a read-only sshfs mount with data and no write access
+  ansible.builtin.assert:
+    that:
+      - supervisor_pull_inspect.stdout_lines[0] is match('^fuse.sshfs +ro,')
+      - "'entries=0' not in supervisor_pull_inspect.stdout_lines"
+      - "'write=refused' in supervisor_pull_inspect.stdout_lines"
+    fail_msg: "pull {{ supervisor_pull.name }}: {{ supervisor_pull_inspect.stdout }}"
+    quiet: true

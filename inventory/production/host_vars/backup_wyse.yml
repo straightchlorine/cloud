@@ -1,6 +1,45 @@
 ---
-# Dell Wyse thin client (7 GB eMMC). Its legacy coordinator install is retired by playbooks/backup-teardown.yml.
+# Dell Wyse thin client (7 GB eMMC): the backup supervisor. It pulls the dns host's Teleporter export
+# and watches every repository on the Storage Box. Its legacy coordinator install is retired by
+# playbooks/backup-teardown.yml.
 device_role: backup
 device_type: debian
 prometheus_role: backup
 prometheus_exporters_node_exporter_enabled: true
+
+restic_storage_key: "{{ vault_restic_storage_key_backup_wyse }}"
+
+# The repository is named after the host group it serves. A second DNS host would get dns-<pi model>.
+# `dns` is a new repository, so the first deploy needs -e restic_init_repository=true once; the old pi-dns
+# repository stays untouched until it is removed by hand.
+supervisor_pulls:
+  - name: dns
+    host: "{{ hostvars['dns'].ansible_host }}"
+    user: "{{ hostvars['dns'].dns_backup_owner }}"
+    remote_path: "{{ hostvars['dns'].dns_backup_dir }}"
+    key: "{{ vault_supervisor_dns_pull_key }}"
+    # Pinned from /etc/ssh/ssh_host_ed25519_key.pub on the Zero, so the mount refuses an impostor on its address.
+    known_hosts: >-
+      {{ hostvars['dns'].ansible_host }}
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+TxJmiI9oxp6mEMwmkTo16qNP5b3JCnd6XraeG4Cv+
+    # The export runs at 03:30 and the job at 04:30; the job refuses a source untouched for over a day plus slack.
+    source_max_age_hours: 26
+    job:
+      repository: "sftp:hetzner-storage:{{ vault_backup_repository_base }}/dns"
+      password: "{{ vault_restic_dns_password }}"
+      schedule: "*-*-* 04:30:00"
+      timeout: 1h
+      memory_max_mib: 512
+      retention: { daily: 14, weekly: 8, monthly: 12, yearly: 3 }
+      # The snapshots belong to the Zero, not to this host.
+      host: dns
+      tags: [debian-13]
+      max_age_hours: 30
+
+# One entry per repository. A job that skips weekends or runs on a laptop gets the limit of its own max_age_hours.
+supervisor_watch:
+  - { name: dns, path: "{{ vault_backup_repository_base }}/dns", max_age_hours: 30 }
+  - { name: automation, path: "{{ vault_backup_repository_base }}/automation", max_age_hours: 30 }
+  - { name: music, path: "{{ vault_backup_repository_base }}/music", max_age_hours: 30 }
+  - { name: station-arch, path: "{{ vault_backup_repository_base }}/station-arch", max_age_hours: 96 }
+  - { name: portable, path: "{{ vault_backup_repository_base }}/portable", max_age_hours: 72 }

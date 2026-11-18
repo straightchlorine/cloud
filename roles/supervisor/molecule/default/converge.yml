@@ -1,0 +1,32 @@
+---
+- name: Converge supervisor default
+  hosts: all
+  become: true
+  vars_files: [../shared/vars.yml]
+  tasks:
+    # Skipped on purpose: post_deploy_validate.yml, because a container has no route to the pulled host and the
+    # Storage Box (scripts/supervisor/validate-deploy.sh covers it on the real Wyse), and the os role's
+    # discovery, which validate.yml runs itself.
+    - name: Validate the supervisor variables
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: validate
+
+    - name: Install the pull packages
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: packages
+
+    - name: Set up each pull and its restic job
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: pull
+      loop: "{{ supervisor_pulls }}"
+      loop_control:
+        loop_var: supervisor_pull
+        label: "{{ supervisor_pull.name }}"
+
+    - name: Install the repository freshness watchdog
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: watch

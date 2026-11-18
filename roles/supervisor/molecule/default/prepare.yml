@@ -1,0 +1,14 @@
+---
+- name: Prepare supervisor default
+  hosts: all
+  become: true
+  tasks:
+    - name: Create the repository parent
+      ansible.builtin.file:
+        path: /srv/molecule-repos
+        state: directory
+        mode: "1777"
+
+    - name: Install the deploy-time notice stub
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../restic/molecule/shared/notice_stub.yml"

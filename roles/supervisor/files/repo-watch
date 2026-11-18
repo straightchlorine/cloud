@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Alerts when the newest file in a repository's snapshots/ directory is older than its limit. It lists
+# directories only, so it needs no repository password, and it catches hosts whose own freshness
+# check never runs because the host is down.
+set -uo pipefail
+
+conf=${SUPERVISOR_WATCH_CONF:-/etc/supervisor/watch.conf}
+ssh_config=${SUPERVISOR_SSH_CONFIG:-/etc/restic/ssh_config}
+sftp=${SUPERVISOR_SFTP:-sftp}
+notify=${SUPERVISOR_NOTIFY:-/usr/local/bin/ntfy-notify}
+
+now=$(date +%s)
+problems=()
+
+while read -r name path hours; do
+    [[ -z $name || $name == \#* ]] && continue
+    if ! listing=$(printf 'ls -lt %s/snapshots\n' "$path" | "$sftp" -q -b - -F "$ssh_config" hetzner-storage 2>&1); then
+        problems+=("$name: cannot list $path/snapshots")
+        continue
+    fi
+    # ls -lt sorts newest first. The last three fields are month, day and time (or year, for files older than
+    # about six months), then the file name.
+    stamp=$(awk '/^-/ { print $(NF-3), $(NF-2), $(NF-1); exit }' <<<"$listing")
+    if [[ -z $stamp ]]; then
+        problems+=("$name: no snapshots in $path/snapshots")
+        continue
+    fi
+    if ! ts=$(date -d "$stamp" +%s 2>/dev/null); then
+        problems+=("$name: unreadable listing date '$stamp'")
+        continue
+    fi
+    # A listing without a year means the current year, unless that puts the file in the future.
+    ((ts > now + 86400)) && ts=$(date -d "$stamp last year" +%s)
+    # ponytail: the listing has no time zone, so it is read in this host's zone; limits of 24 h or more absorb
+    # the offset. Compare against restic's own snapshot time if a tighter limit is ever needed.
+    age=$(((now - ts) / 3600))
+    ((age > hours)) && problems+=("$name: newest snapshot is $age h old (limit $hours h)")
+done <"$conf"
+
+((${#problems[@]})) || exit 0
+
+body=$(printf '%s\n' "${problems[@]}")
+echo "$body" >&2
+NTFY_STRICT=1 "$notify" "$(uname -n): backup repositories need attention" "$body" high rotating_light
+exit 1

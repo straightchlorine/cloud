@@ -36,6 +36,12 @@
             tasks_from: validate
           when: "'monitoring' in group_names"
 
+        - name: Supervisor validation for backup hosts
+          ansible.builtin.include_role:
+            name: supervisor
+            tasks_from: validate
+          when: "'backup_primary' in group_names"
+
         - name: GPU validation for gpu_qp hosts
           ansible.builtin.include_role:
             name: gpu-qp
@@ -127,6 +133,15 @@
   roles:
     - role: restic
       tags: [restic, backup]
+
+- name: Configure the backup supervisor
+  hosts: backup_primary
+  become: true
+  gather_facts: true
+  module_defaults: *apt_waits_for_dpkg
+  roles:
+    - role: supervisor
+      tags: [supervisor, backup]
 
 - name: Configure the GPU hosts
   hosts: gpu_qp

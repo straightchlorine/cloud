@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Read-only pull of {{ supervisor_pull.user }}@{{ supervisor_pull.host }}:{{ supervisor_pull.remote_path }}
+Wants=network-online.target
+After=network-online.target
+# The unit has no [Install] section: the restic job's RequiresMountsFor= starts it, and this stops it again once
+# the job ends, so the key and the session exist only during a run.
+StopWhenUnneeded=yes
+
+[Mount]
+What={{ supervisor_pull.user }}@{{ supervisor_pull.host }}:{{ supervisor_pull.remote_path }}
+Where={{ supervisor_pull_mountpoint }}
+Type=fuse.sshfs
+# root mounts, so allow_other lets the restic user read without /etc/fuse.conf's user_allow_other.
+# ro is only the client's view; the remote key is forced to sftp-server -R.
+Options=ro,allow_other,reconnect,{{ 'Port=' ~ supervisor_pull.port ~ ',' if supervisor_pull.port is defined else '' }}ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile={{ supervisor_config_dir }}/{{ supervisor_pull.name }}-pull.key,IdentitiesOnly=yes,UserKnownHostsFile={{ supervisor_config_dir }}/{{ supervisor_pull.name }}-pull.known_hosts,GlobalKnownHostsFile=/dev/null,StrictHostKeyChecking=yes,BatchMode=yes,ConnectTimeout=20
+TimeoutSec=60

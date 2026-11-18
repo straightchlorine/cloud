@@ -1,0 +1,46 @@
+---
+- name: Create the watchdog directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ supervisor_config_dir }}"
+    - "{{ supervisor_libexec_dir }}"
+
+- name: Install the watchdog script
+  ansible.builtin.copy:
+    src: repo-watch
+    dest: "{{ supervisor_libexec_dir }}/repo-watch"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the watch list
+  ansible.builtin.template:
+    src: watch.conf.j2
+    dest: "{{ supervisor_config_dir }}/watch.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the watchdog service and timer
+  ansible.builtin.template:
+    src: "watch.{{ item }}.j2"
+    dest: "/etc/systemd/system/supervisor-repo-watch.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  notify: Reload systemd units
+
+- name: Load the watchdog units
+  ansible.builtin.meta: flush_handlers
+
+- name: Arm the watchdog timer
+  ansible.builtin.systemd_service:
+    name: supervisor-repo-watch.timer
+    enabled: true
+    state: started

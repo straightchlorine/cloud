@@ -25,6 +25,7 @@ matrix:
     - honeybench
     - gpu-qp
     - restic
+    - supervisor
 
 steps:
   - name: molecule

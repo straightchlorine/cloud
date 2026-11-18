@@ -1,0 +1,29 @@
+---
+# supervisor_pulls and supervisor_watch have no defaults and must be set in host_vars.
+#
+# supervisor_pulls: hosts whose data this host pulls over a read-only sshfs mount and backs up through roles/restic.
+#   - name: dns                         # mount directory, ssh key stem and restic job name
+#     host: 192.168.20.10               # sshfs server
+#     port: 22                          # optional; known_hosts then names the host as [host]:port
+#     user: ansible                     # account the read-only key is authorized for
+#     remote_path: /home/ansible/syncthing/pihole-backup
+#     key: "{{ vault_supervisor_dns_pull_key }}"   # private key, forced to sftp-server -R on the remote
+#     known_hosts: "192.168.20.10 ssh-ed25519 AAAA..."   # pinned host key line(s)
+#     source_max_age_hours: 26          # the job refuses to run on a mount whose directory is older than this
+#     job: {...}                        # a restic job (repository, password, schedule, timeout, memory_max_mib,
+#                                       # retention, host, tags); the role fills in name, sources and fresh
+#
+# supervisor_watch: one entry per restic repository on the Storage Box.
+#   - {name: dns, path: /home/backup/restic-repos/dns, max_age_hours: 30}
+
+# Each pull is mounted below this directory, only while its restic job runs.
+supervisor_pull_mount_root: /mnt/restic-pull
+supervisor_config_dir: /etc/supervisor
+supervisor_libexec_dir: /usr/local/libexec/supervisor
+
+# Runs after the restic freshness check (12:00) and after the nightly jobs, so a night's missed run shows the same day.
+supervisor_watch_schedule: "*-*-* 12:30:00"
+
+supervisor_packages:
+  - sshfs
+  - openssh-client

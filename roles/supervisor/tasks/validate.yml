@@ -1,0 +1,54 @@
+---
+- name: Discover the device OS and architecture
+  ansible.builtin.include_role:
+    name: os
+  tags: [validation]
+
+- name: Run supervisor comprehensive validation
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: unified_validation
+  vars:  # noqa: var-naming[no-role-prefix]
+    validation_context: "backup supervisor"
+    validation_type: "full"
+    validation_role: "supervisor"
+    validation_supported_os_families: [Debian]
+    required_variables:
+      - supervisor_pulls
+      - supervisor_watch
+      - supervisor_pull_mount_root
+      - supervisor_watch_schedule
+  tags: [validation]
+
+- name: Require a mount root that is a plain absolute path
+  # restic validates the job's sources against the same character set.
+  ansible.builtin.assert:
+    that: supervisor_pull_mount_root is match('^(/[A-Za-z0-9._@+-]+)+\\Z')
+    fail_msg: "supervisor_pull_mount_root: needs an absolute path of letters, digits and . _ @ + -"
+    quiet: true
+  tags: [validation]
+
+- name: Require unique pull and watch names
+  ansible.builtin.assert:
+    that:
+      - supervisor_pulls | map(attribute='name') | unique | length == supervisor_pulls | length
+      - supervisor_watch | map(attribute='name') | unique | length == supervisor_watch | length
+    fail_msg: "supervisor_pulls and supervisor_watch: names must be unique"
+    quiet: true
+  tags: [validation]
+
+- name: Validate each pull before anything deploys
+  ansible.builtin.include_tasks: validate_pull.yml
+  loop: "{{ supervisor_pulls }}"
+  loop_control:
+    loop_var: supervisor_pull
+    label: "{{ supervisor_pull.name | default('?') }}"
+  tags: [validation]
+
+- name: Validate each watched repository
+  ansible.builtin.include_tasks: validate_watch.yml
+  loop: "{{ supervisor_watch }}"
+  loop_control:
+    loop_var: supervisor_watch_entry
+    label: "{{ supervisor_watch_entry.name | default('?') }}"
+  tags: [validation]

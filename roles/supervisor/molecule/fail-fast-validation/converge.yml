@@ -1,0 +1,15 @@
+---
+- name: Converge supervisor fail-fast-validation
+  hosts: all
+  vars_files:
+    - ../shared/vars.yml
+    - cases.yml
+  tasks:
+    - name: Run each case
+      ansible.builtin.include_tasks: case.yml
+      loop: "{{ molecule_cases }}"
+      loop_control:
+        loop_var: molecule_item
+        label: "{{ molecule_item.id }}"
+      vars:
+        molecule_case: "{{ molecule_case_defaults | combine(molecule_item) }}"

@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Watch every restic repository for a missing snapshot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ supervisor_libexec_dir }}/repo-watch
+# Exit 1 means a repository is stale or unreachable and the alert went out (or could not), so the failed unit
+# also shows in node_exporter's systemd collector.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

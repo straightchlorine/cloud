@@ -1,0 +1,20 @@
+---
+# Every key is mapped so an absent case field leaves that variable undefined, shadowing play vars.
+- name: "Case {{ molecule_case.id }}"
+  block:
+    - name: Run supervisor validate.yml
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: validate
+      vars:
+        supervisor_pulls: "{{ molecule_case.supervisor_pulls }}"
+        supervisor_watch: "{{ molecule_case.supervisor_watch }}"
+        supervisor_pull_mount_root: "{{ molecule_case.supervisor_pull_mount_root }}"
+        supervisor_watch_schedule: "{{ molecule_case.supervisor_watch_schedule }}"
+
+    - name: Fail when validation passed
+      ansible.builtin.fail:
+        msg: "case {{ molecule_case.id }} passed validation"
+  rescue:
+    - name: Assert the failure and record the case
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_SHARED') }}/assert_failure.yml"

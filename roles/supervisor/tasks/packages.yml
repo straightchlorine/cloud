@@ -1,0 +1,7 @@
+---
+- name: Include common package management
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: packages
+  vars:
+    role_specific_packages: "{{ supervisor_packages }}"  # noqa: var-naming[no-role-prefix]

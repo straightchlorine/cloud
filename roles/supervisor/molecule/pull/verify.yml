@@ -1,0 +1,113 @@
+---
+- name: Verify supervisor pull
+  hosts: all
+  become: true
+  vars_files: [../shared/vars.yml]
+  vars:
+    molecule_ssh: >-
+      -i /etc/supervisor/dns-pull.key -o IdentitiesOnly=yes -o BatchMode=yes
+      -o UserKnownHostsFile=/etc/supervisor/dns-pull.known_hosts -o StrictHostKeyChecking=yes
+      -o Port={{ molecule_ssh_port }}
+  tasks:
+    - name: Try a shell command with the pull key
+      ansible.builtin.shell: "ssh {{ molecule_ssh }} puller@127.0.0.1 'echo shell-ran-as-$(id -un)'"
+      register: molecule_shell
+      changed_when: false
+      failed_when: false
+
+    - name: Try to upload through sftp with the pull key
+      ansible.builtin.shell: >-
+        echo 'put /etc/hostname /home/puller/export/uploaded' | sftp {{ molecule_ssh }} -b - puller@127.0.0.1
+      register: molecule_put
+      changed_when: false
+      failed_when: false
+
+    - name: Look for the uploaded file
+      ansible.builtin.stat:
+        path: /home/puller/export/uploaded
+      register: molecule_uploaded
+
+    # The forced sftp-server -R is the whole remote-side defence: no shell, and no writes even for an sftp client.
+    - name: Assert the key is sftp-only and read-only
+      ansible.builtin.assert:
+        that:
+          - "'shell-ran-as' not in molecule_shell.stdout"
+          - molecule_put.rc != 0
+          - not molecule_uploaded.stat.exists
+        fail_msg: >-
+          shell: {{ molecule_shell.stdout }}; put rc {{ molecule_put.rc }};
+          uploaded {{ molecule_uploaded.stat.exists }}
+        quiet: true
+
+    - name: Run the pull job
+      ansible.builtin.command: systemctl start restic-job@dns.service
+      changed_when: true
+
+    - name: List the new snapshot
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec dns ls latest
+      register: molecule_snapshot
+      changed_when: false
+
+    - name: Read the snapshot's host and tags
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec dns snapshots --json
+      register: molecule_snapshot_meta
+      changed_when: false
+
+    - name: Assert the snapshot holds the exported file under the mount path, filed as the pulled host
+      vars:
+        snapshots: "{{ molecule_snapshot_meta.stdout | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - "'/mnt/restic-pull/dns/data.txt' in molecule_snapshot.stdout"
+          - snapshots | length == 1
+          - snapshots[0].hostname == 'dns'
+          - snapshots[0].tags | sort == ['debian-13', 'dns']
+        fail_msg: "snapshot wrong: {{ molecule_snapshot.stdout }} {{ molecule_snapshot_meta.stdout }}"
+        quiet: true
+
+    - name: Read the mount unit's state after the job
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ molecule_mount_unit }}"]
+      register: molecule_mount_after
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the mount stopped with the job
+      ansible.builtin.assert:
+        that: molecule_mount_after.stdout == 'inactive'
+        fail_msg: "mount unit is {{ molecule_mount_after.stdout }} after the job"
+        quiet: true
+
+    - name: Make the export older than the job's freshness limit
+      ansible.builtin.command: touch -d '3 days ago' /home/puller/export
+      changed_when: true
+
+    - name: Run the pull job on the stale export
+      ansible.builtin.command: systemctl start restic-job@dns.service
+      register: molecule_stale
+      changed_when: false
+      failed_when: false
+
+    - name: Read the stale run's log
+      ansible.builtin.command: journalctl -u restic-job@dns.service --no-pager --since '-5min'
+      register: molecule_stale_log
+      changed_when: false
+
+    - name: Assert the stale export is refused and not snapshotted again
+      ansible.builtin.assert:
+        that:
+          - molecule_stale.rc != 0
+          - "'not updated in the last 26 h' in molecule_stale_log.stdout"
+        fail_msg: "stale run: rc {{ molecule_stale.rc }}, {{ molecule_stale_log.stdout }}"
+        quiet: true
+
+    - name: Count the snapshots
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec dns snapshots --json
+      register: molecule_snapshots_after
+      changed_when: false
+
+    - name: Assert the refused run added no snapshot
+      ansible.builtin.assert:
+        that: (molecule_snapshots_after.stdout | from_json) | length == 1
+        fail_msg: "snapshots: {{ molecule_snapshots_after.stdout }}"
+        quiet: true
