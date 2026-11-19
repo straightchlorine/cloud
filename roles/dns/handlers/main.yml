@@ -5,3 +5,12 @@
     state: restarted
     enabled: true
   become: true
+
+- name: Rewrite the Pi-hole versions file
+  # Only once git can read the checkouts (git_safe_directory.yml) does it get real core and web versions.
+  ansible.builtin.command: "{{ dns_pihole_binary_path }} updatechecker"
+  args:
+    # Skipped until Pi-hole is installed.
+    removes: "{{ dns_pihole_binary_path }}"
+  become: true
+  changed_when: true

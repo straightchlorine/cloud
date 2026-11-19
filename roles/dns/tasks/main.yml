@@ -28,6 +28,10 @@
   ansible.builtin.include_tasks: storage.yml
   tags: [storage]
 
+# Before install.yml, so the installer's own version check can already read the checkouts.
+- name: Let git read the Pi-hole checkouts
+  ansible.builtin.include_tasks: git_safe_directory.yml
+
 - name: Install or update Pi-hole
   ansible.builtin.include_tasks: install.yml
 

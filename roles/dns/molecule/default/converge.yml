@@ -57,7 +57,7 @@
         loop_var: molecule_case
         label: "{{ molecule_case.id }}"
 
-    - name: Deploy chrony, auto-updates and the backup
+    - name: Deploy chrony, the git safe.directory list, auto-updates and the backup
       ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/deploy.yml"
 
     # Only install.yml deploys this template, so a broken variable would otherwise surface on a real Pi.

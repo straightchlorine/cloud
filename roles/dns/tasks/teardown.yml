@@ -77,6 +77,16 @@
   # On a partly torn-down host the chrony unit may already be gone.
   failed_when: false
 
+- name: Remove the Pi-hole checkouts from the system git safe.directory list
+  # Not community.general.git_config: its state=absent unsets every safe.directory entry, while the value pattern
+  # here keeps the others. rc 5 means no entry matched.
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv: [git, config, --system, --unset-all, safe.directory, '^(/etc/\.pihole|/var/www/html/admin)$']
+  become: true
+  register: dns_safe_directory_unset
+  changed_when: dns_safe_directory_unset.rc == 0
+  failed_when: dns_safe_directory_unset.rc not in [0, 5]
+
 - name: Purge packages the role installed
   ansible.builtin.apt:
     name:

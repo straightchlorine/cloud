@@ -26,6 +26,18 @@
           - { path: /etc/systemd/system/pihole-FTL.service, state: absent }
           - { path: /etc/systemd/system/foreign-zram.service, state: absent }
 
+    - name: Read the system git safe.directory list
+      ansible.builtin.command: git config --system --get-all safe.directory
+      changed_when: false
+      failed_when: dns_safe_directories.rc not in [0, 1]
+      register: dns_safe_directories
+
+    - name: Assert the Pi-hole checkouts left the safe.directory list
+      ansible.builtin.assert:
+        that: dns_safe_directories.stdout_lines | select('in', ['/etc/.pihole', '/var/www/html/admin']) | list == []
+        fail_msg: "safe.directory still lists: {{ dns_safe_directories.stdout_lines }}"
+        quiet: true
+
     - name: Look up the pihole user
       ansible.builtin.command: getent passwd pihole
       changed_when: false

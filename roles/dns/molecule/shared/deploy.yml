@@ -4,6 +4,11 @@
     name: common
     tasks_from: chrony
 
+- name: Mark the Pi-hole git checkouts safe
+  ansible.builtin.include_role:
+    name: dns
+    tasks_from: git_safe_directory
+
 - name: Deploy the auto-update script and cron
   ansible.builtin.include_role:
     name: dns

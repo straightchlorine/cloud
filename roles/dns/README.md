@@ -81,6 +81,10 @@ Teleporter snapshot (`docs/backup/restore.md`). The installed version is never c
 archive and a Pi-hole that updated itself survive a deploy. On an installed host, `configure.yml` only
 applies interface, upstreams and web ports.
 
+Before install, `/etc/.pihole` and `/var/www/html/admin` go into the system git `safe.directory` list.
+Without it, git refuses the checkouts as "dubious ownership" and the admin panel reports "The versions
+file is incomplete". When the list changes, the role reruns `pihole updatechecker`.
+
 The admin interface is password protected at `http://<ip>/admin`, SSH is fail2ban protected, and
 `firewall_common_ports` in `host_vars/dns.yml` lists the open ports (22, 53, 80, 9100, 9617).
 

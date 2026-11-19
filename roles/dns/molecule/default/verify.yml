@@ -117,6 +117,17 @@
         fail_msg: "chrony UnitFileState is {{ dns_chrony_unit.status.UnitFileState }}"
         quiet: true
 
+    - name: Read the system git safe.directory list
+      ansible.builtin.command: git config --system --get-all safe.directory
+      changed_when: false
+      register: dns_safe_directories
+
+    - name: Assert both Pi-hole checkouts are safe, once each
+      ansible.builtin.assert:
+        that: dns_safe_directories.stdout_lines | sort == ['/etc/.pihole', '/var/www/html/admin']
+        fail_msg: "safe.directory list wrong: {{ dns_safe_directories.stdout_lines }}"
+        quiet: true
+
     - name: Read the pull key's authorized_keys file
       ansible.builtin.slurp:
         src: /home/molecule/.ssh/authorized_keys

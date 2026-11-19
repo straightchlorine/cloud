@@ -1,0 +1,15 @@
+---
+# `pihole updatechecker` reads the core and web checkouts with git, which refuses them as "dubious ownership" for
+# the user it runs as, so /etc/pihole/versions gets null for core and web and the admin panel reports it.
+# System scope, because safe.directory is ignored in repo config and the checker runs as more than one user.
+- name: Mark the Pi-hole git checkouts as safe for every user
+  community.general.git_config:
+    name: safe.directory
+    value: "{{ item }}"
+    scope: system
+    add_mode: add
+  loop:
+    - /etc/.pihole
+    - /var/www/html/admin
+  become: true
+  notify: Rewrite the Pi-hole versions file

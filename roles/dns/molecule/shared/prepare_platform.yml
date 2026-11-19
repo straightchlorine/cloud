@@ -1,8 +1,8 @@
 ---
-- name: Install cron and iproute2
-  # The cron module needs crontab from cron; the teardown scenario needs ss from iproute2.
+- name: Install cron, iproute2 and git
+  # The cron module needs crontab from cron; the teardown scenario needs ss from iproute2; git_config needs git.
   ansible.builtin.apt:
-    name: [cron, iproute2]
+    name: [cron, iproute2, git]
     state: present
     update_cache: true
 

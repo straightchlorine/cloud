@@ -2,8 +2,8 @@
 # Publishes dns_pihole_needs_install. A reinstall wipes /etc/pihole, so it runs only when Pi-hole is missing or a
 # reinstall is forced. The installed version is deliberately not compared with dns_pihole_version: basic-install.sh
 # clones the current Pi-hole itself, so an installed host never reports the pinned tag, and `pihole -v` reads a
-# versions file that a cron run as the pihole user overwrites with "null" (git refuses the root-owned /etc/.pihole).
-# Either mismatch used to reinstall the host and discard a restored Teleporter archive.
+# versions file that holds "null" whenever git cannot read the checkouts (see git_safe_directory.yml).
+# Either mismatch would reinstall the host and discard a restored Teleporter archive.
 - name: Check for the Pi-hole binary
   ansible.builtin.stat:
     path: "{{ dns_pihole_binary_path }}"

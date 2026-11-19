@@ -41,7 +41,7 @@
         mode: "0644"
       loop: [ntp.ipv4.active, ntp.ipv6.active, ntp.sync.active]
 
-    - name: Create an installed Pi-hole whose version probe reports null, as after a cron run by the pihole user
+    - name: Create an installed Pi-hole whose version probe reports null, as when git cannot read the checkouts
       ansible.builtin.copy:
         content: "#!/bin/sh\necho 'Core version is null'\n"
         dest: /usr/local/bin/pihole
