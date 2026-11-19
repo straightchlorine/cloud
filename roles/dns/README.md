@@ -4,7 +4,7 @@ Pi-hole v6 DNS server with a chrony NTP server on a Debian-family Raspberry Pi.
 
 ## Hosts
 
-- Inventory group `dns_servers`, host `dns`: a Pi Zero 2 W at 192.168.20.2, connection user
+- Inventory group `dns_servers`, host `dns`: a Pi Zero 2 W at 192.168.20.10, connection user
   `ansible` (see `inventory/production/hosts.yml`, `host_vars/dns.yml`).
 - The resolver the LAN uses today is still a Pi 3B+ that is not in the inventory. Cutting clients
   over to `dns` is planned, not done.
@@ -128,7 +128,9 @@ cutover moves that reservation to the zero's `wlan0` MAC, so no client setting c
 2. **Compare**: `./scripts/dns/validate-deploy.sh dns`, adlist count, `dig @<zero>` for a blocked and
    an unblocked domain.
 3. **Swap** in OPNsense (static mappings): zero's MAC on 192.168.20.10, the 3B+ on another address
-   that is also the second DHCP DNS server (warm standby). Reboot the 3B+, then the zero.
+   that is also the second DHCP DNS server (warm standby). Reboot the 3B+, then the zero. Then delete
+   OPNsense's ARP entry for 192.168.20.10 (Interfaces > Diagnostics > ARP Table) if it still shows the 3B+'s
+   MAC: same-VLAN clients re-learn it themselves, but routed traffic from other VLANs keeps going to the 3B+.
 4. **Verify** from a client, then set `ansible_host: 192.168.20.10` and the Hosts line above, rerun
    `dns` and update the Prometheus target.
 5. **Soak** 48 hours (query counts, FTL restarts, Wi-Fi drops). **Rollback**: swap the MACs back.
