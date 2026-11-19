@@ -110,10 +110,18 @@
         mode: "0755"
       become: true
 
+    - name: Read the SSD filesystem UUID
+      # A USB disk that resets re-enumerates under a new name (sda -> sdb), so fstab must not name the device.
+      ansible.builtin.command: "blkid -s UUID -o value {{ common_ssd_target }}"
+      become: true
+      register: common_ssd_uuid
+      changed_when: false
+      failed_when: common_ssd_uuid.rc != 0 or common_ssd_uuid.stdout | length == 0
+
     - name: Mount the SSD at the data path
       ansible.posix.mount:
         path: "{{ common_ssd_mount_path }}"
-        src: "{{ common_ssd_target }}"
+        src: "UUID={{ common_ssd_uuid.stdout }}"
         fstype: "{{ common_ssd_filesystem }}"
         opts: "{{ common_ssd_mount_options }}"
         state: mounted
