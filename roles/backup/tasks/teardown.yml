@@ -1,6 +1,6 @@
 ---
 # Removes every trace of the legacy coordinator: its units, both base trees, the backup account's sudo grant and
-# home, the legacy restic binary and the fuse user_allow_other line. Delete this role once backup_wyse is clean.
+# home, the legacy restic binary and the fuse user_allow_other line. Delete this role once supervisor-wyse is clean.
 - name: Refuse to run outside a confirmed teardown
   ansible.builtin.include_role:
     name: common

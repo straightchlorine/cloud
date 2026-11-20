@@ -144,6 +144,12 @@
     fail_msg: "restic_job.skip_metered: needs true or false"
     quiet: true
 
+- name: Check the inode switch
+  ansible.builtin.assert:
+    that: restic_job_cfg.ignore_inode is boolean
+    fail_msg: "restic_job.ignore_inode: needs true or false"
+    quiet: true
+
 - name: Check the battery switch
   ansible.builtin.assert:
     that: restic_job_cfg.skip_on_battery is boolean

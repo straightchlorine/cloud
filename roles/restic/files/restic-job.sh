@@ -167,9 +167,13 @@ run_job() {
     read -ra extra_tags <<<"$RESTIC_JOB_TAGS"
     tag_args=()
     for t in "${extra_tags[@]}"; do tag_args+=(--tag "$t"); done
+    # A FUSE source such as sshfs numbers inodes per mount in lookup order, so without this restic takes
+    # unmodified files for changed ones and reads them again over the network on every run.
+    change_args=()
+    ((RESTIC_JOB_IGNORE_INODE)) && change_args+=(--ignore-inode)
     # --json is the only restic output with a stable format: one summary object, one object per unreadable file.
     out=$TMPDIR/$job.out
-    rr backup --json --host "$RESTIC_JOB_HOST" --tag "$job" "${tag_args[@]}" --exclude-caches \
+    rr backup --json --host "$RESTIC_JOB_HOST" --tag "$job" "${tag_args[@]}" "${change_args[@]}" --exclude-caches \
         --files-from-verbatim "$conf/$job.sources" --exclude-file "$conf/$job.excludes" >"$out"
     rc=$?
     case $rc in

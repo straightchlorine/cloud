@@ -65,6 +65,7 @@
       - "'molecule-restic-password-ok' not in molecule_env_text"
       - "\"RESTIC_JOB_KEEP='--keep-daily 1'\" in molecule_env_text"
       - "\"RESTIC_JOB_FRESH='/srv/molecule-src:24'\" in molecule_env_text"
+      - "'RESTIC_JOB_IGNORE_INODE=0' in molecule_env_text.splitlines()"
 
 - name: Assert the legacy install is retired
   vars:

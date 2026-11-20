@@ -26,7 +26,7 @@ firewall_ssh_sources:
   - 192.168.100.20  # Ansible controller
   - 100.64.0.5      # the controller over Tailscale
   - 192.168.100.10  # station-arch, read-only checks
-  - "{{ hostvars['backup_wyse'].ansible_host }}"  # backup supervisor's sshfs pull and watchdog
+  - "{{ hostvars['supervisor-wyse'].ansible_host }}"  # backup supervisor's sshfs pull and watchdog
 
 firewall_common_ports:
   - {port: 53, comment: "Pi-hole DNS", proto: "udp"}

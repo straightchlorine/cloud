@@ -1,0 +1,52 @@
+---
+# Dell Wyse thin client (7 GB eMMC): the backup supervisor. It pulls the dns host's Teleporter export into
+# restic. It has no backup job of its own: everything on it is rebuilt by Ansible and its keys live in the vault.
+# Its legacy coordinator install is retired by playbooks/backup-teardown.yml.
+device_role: backup
+device_type: debian
+prometheus_role: backup
+prometheus_exporters_node_exporter_enabled: true
+
+# Compressed RAM swap gives the restic jobs headroom on a 2 GB board without writing swap to the eMMC.
+common_zram_enabled: true
+
+# The Wyse writes through a Storage Box sub-account of its own, so its key reaches only its own repositories.
+# Its base directory is <repo base>/supervisor on the main account, one repository per pulled host inside it.
+# A sub-account has its own user and host name; restic_known_hosts needs a line for that host as well.
+restic_storage_host: "{{ vault_restic_storage_host_supervisor_wyse }}"
+restic_storage_user: "{{ vault_restic_storage_user_supervisor_wyse }}"
+restic_storage_key: "{{ vault_restic_storage_key_supervisor_wyse }}"
+
+# The repository is named after the host group it serves. A second DNS host would get dns-<pi model>.
+# `dns` is a new repository, so the first deploy needs -e restic_init_repository=true once; the old pi-dns
+# repository stays untouched until it is removed by hand.
+supervisor_pulls:
+  - name: dns
+    host: "{{ hostvars['dns'].ansible_host }}"
+    user: "{{ hostvars['dns'].dns_backup_owner }}"
+    remote_path: "{{ hostvars['dns'].dns_backup_dir }}"
+    key: "{{ vault_supervisor_dns_pull_key }}"
+    # Pinned from /etc/ssh/ssh_host_ed25519_key.pub on the Zero, so the mount refuses an impostor on its address.
+    known_hosts: >-
+      {{ hostvars['dns'].ansible_host }}
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+TxJmiI9oxp6mEMwmkTo16qNP5b3JCnd6XraeG4Cv+
+    # The export runs at 03:30. The pull at 04:00 is clear of the zero's 04:45 reboot window and of Pi-hole's own
+    # Sunday 04:33 gravity rebuild. The job refuses a source untouched for over a day plus slack.
+    source_max_age_hours: 26
+    job:
+      # The path as the sub-account sees it (sftp, then pwd), not the main account's.
+      repository: "sftp:hetzner-storage:{{ vault_restic_storage_base_supervisor_wyse }}/dns"
+      password: "{{ vault_restic_dns_password }}"
+      schedule: "*-*-* 04:00:00"
+      timeout: 1h
+      memory_max_mib: 512
+      retention: { daily: 14, weekly: 8, monthly: 12, yearly: 3 }
+      # The snapshots belong to the Zero, not to this host.
+      host: dns
+      tags: [debian-13]
+      max_age_hours: 30
+
+# The watchdog lists other hosts' repositories, which the Wyse's own sub-account cannot read, so it stays idle
+# until it has a read-only identity over the whole repository base. The intended list and limits:
+#   supervisor/dns 30, automation 30, music 30, station-arch 96, portable 72 (max_age_hours, the job's own limit)
+supervisor_watch: []

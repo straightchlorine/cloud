@@ -55,6 +55,7 @@ typo'd path cannot silently start an empty history.
 | max_age_hours | default 30 | the freshness check alerts past this age of the last good run; a gated job (`skip_metered` or `skip_on_battery`) needs >= 24 |
 | skip_metered | default `false` | boolean; skip runs while NetworkManager reports a metered link (see Gated jobs) |
 | skip_on_battery | default `false` | boolean; skip runs while a battery reports Discharging (see Gated jobs) |
+| ignore_inode | default `false` | boolean; passes `--ignore-inode`, so a file counts as changed only by mtime and size. For sources whose inode numbers are not stable, such as an sshfs mount (`roles/supervisor` sets it on its pull jobs) |
 | metered_connections | default `[]` | single-line NetworkManager connection names (usually the SSID), no control characters, treated as metered; needs `skip_metered: true` |
 
 Every run passes `--exclude-caches`, so directories carrying a `CACHEDIR.TAG` are skipped.

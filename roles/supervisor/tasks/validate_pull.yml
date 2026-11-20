@@ -50,6 +50,15 @@
       this host's name and OS), and leave name, sources and fresh to the role
     quiet: true
 
+- name: Check the job's repository is not a vault.yml.example placeholder
+  # A first deploy runs with restic_init_repository=true, which would start a new history at a placeholder path.
+  ansible.builtin.assert:
+    that: >-
+      supervisor_pull.job.repository is not defined
+      or supervisor_pull.job.repository is not search('your-|replace|changeme', ignorecase=True)
+    fail_msg: "supervisor_pulls[{{ supervisor_pull.name }}].job.repository: still a vault.yml.example placeholder"
+    quiet: true
+
 - name: Derive the job
   ansible.builtin.include_tasks: pull_facts.yml
 

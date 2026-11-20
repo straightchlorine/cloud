@@ -1,0 +1,15 @@
+---
+# One entry of supervisor_pulls arrives as supervisor_pull. A new repository holds no snapshot until the nightly run,
+# so the deploy takes the first one: that proves the mount, the key, restic and the Storage Box together, and the
+# watchdog does not report a missing snapshot the morning after.
+- name: Look for a good run of the pull job {{ supervisor_pull.name }}
+  ansible.builtin.stat:
+    path: "/var/lib/restic/{{ supervisor_pull.name }}.ok"
+  register: supervisor_pull_ok
+
+- name: Run the pull job once {{ supervisor_pull.name }}
+  # systemctl start waits for the oneshot unit, so a failed backup fails the deploy; its journal has the reason.
+  ansible.builtin.command:
+    argv: [systemctl, start, "restic-job@{{ supervisor_pull.name }}.service"]
+  changed_when: true
+  when: not supervisor_pull_ok.stat.exists

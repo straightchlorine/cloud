@@ -66,3 +66,12 @@
       loop_control:
         loop_var: supervisor_pull
         label: "{{ supervisor_pull.name }}"
+
+    - name: Take the first snapshot of each pull that has none yet
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: post_deploy_first_run
+      loop: "{{ supervisor_pulls }}"
+      loop_control:
+        loop_var: supervisor_pull
+        label: "{{ supervisor_pull.name }}"

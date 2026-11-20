@@ -117,3 +117,48 @@
       ok rc {{ supervisor_watch_ok.rc }}; all rc {{ supervisor_watch_all.rc }},
       stderr {{ problems }}, notices {{ notices }}
     quiet: true
+
+# The deploy-time check: stale and empty repositories are the watchdog's findings and pass, a listing it cannot get
+# fails. Both run the real post_deploy_watch.yml against the same stub.
+- name: Write the watch lists for the deploy-time check
+  ansible.builtin.copy:
+    dest: "/tmp/molecule-watch-{{ item.name }}.conf"
+    mode: "0644"
+    content: "{{ item.lines | join('\n') }}\n"
+  loop:
+    - { name: findings, lines: [fresh /box/fresh 30, stale /box/stale 30, empty /box/empty 30] }
+    - { name: broken, lines: [fresh /box/fresh 30, gone /box/gone 30] }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Run the deploy-time check on stale and empty repositories
+  ansible.builtin.include_role:
+    name: supervisor
+    tasks_from: post_deploy_watch
+  vars:
+    supervisor_watch_check_env:
+      SUPERVISOR_NOTIFY: /bin/true
+      SUPERVISOR_SFTP: "{{ molecule_stubs }}/sftp"
+      SUPERVISOR_WATCH_CONF: /tmp/molecule-watch-findings.conf
+
+- name: Run the deploy-time check on an unreachable repository
+  block:
+    - name: Run the deploy-time check
+      ansible.builtin.include_role:
+        name: supervisor
+        tasks_from: post_deploy_watch
+      vars:
+        supervisor_watch_check_env:
+          SUPERVISOR_NOTIFY: /bin/true
+          SUPERVISOR_SFTP: "{{ molecule_stubs }}/sftp"
+          SUPERVISOR_WATCH_CONF: /tmp/molecule-watch-broken.conf
+
+    - name: Fail when the unreachable repository passed
+      ansible.builtin.fail:
+        msg: the deploy-time check accepted an unreachable repository
+  rescue:
+    - name: Assert it failed on the unreachable repository
+      ansible.builtin.assert:
+        that: ansible_failed_result.msg is search('cannot list /box/gone/snapshots')
+        fail_msg: "failed for another reason: {{ ansible_failed_result.msg }}"
+        quiet: true

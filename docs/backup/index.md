@@ -43,16 +43,17 @@ directory and fails when no dump is fresh.
 | gpu-station | none; `gpu-qp fetch` copies results by hand |
 | honeypot | not restic: the role's own encrypted Postgres dump to R2 (`honeypot_backup_*`) |
 | firewall (OPNsense) | its own plugin backup, destination not recorded in this repo |
-| backup_wyse | none |
+| supervisor-wyse | none needed: it holds nothing Ansible does not rebuild, and its keys live in the vault |
 | pi-test-media | job disabled (`media_restic_enabled` unset) |
 | Proxmox VMs, NAS data | no hosts in the inventory |
 
 ### Planned
 
-Not implemented: a Wyse supervisor that watches freshness across all
-repositories, a dns pull job on `backup_wyse`, and Proxmox and NAS backups.
-`playbooks/backup-teardown.yml` removes the retired coordinator from
-`backup_wyse`; `roles/backup` keeps only that teardown.
+Built, not yet deployed: `roles/supervisor` on `supervisor-wyse` pulls the dns
+export into the `dns` repository; its freshness watchdog stays idle until it has
+a read-only Storage Box identity over every repository. Not implemented: Proxmox
+and NAS backups. `playbooks/backup-teardown.yml` removes the retired coordinator
+from `supervisor-wyse`; `roles/backup` keeps only that teardown.
 
 ### Accepted risk: one shared Storage Box account
 

@@ -36,6 +36,7 @@ restic_job_defaults:
   max_age_hours: 30
   skip_metered: false
   skip_on_battery: false
+  ignore_inode: false
   metered_connections: []
 
 # The account Ansible connects as. legacy.yml never strips the sudo grant or the account of this user.

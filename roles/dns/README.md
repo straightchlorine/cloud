@@ -94,11 +94,11 @@ The admin interface is password protected at `http://<ip>/admin`, SSH is fail2ba
   (`pihole-FTL --teleporter`) and one rolling `pihole-FTL.db` copy into `dns_backup_dir`. The
   folder is shared through Syncthing (`common_syncthing_enabled`); pairing with portable is pending,
   so the snapshot is not yet replicated off the host.
-- Off-site: with `dns_backup_pull_enabled`, the role authorizes the `backup_wyse` supervisor's
+- Off-site: with `dns_backup_pull_enabled`, the role authorizes the `supervisor-wyse` supervisor's
   read-only key (`dns_backup_pull_pubkey`, limited to `dns_backup_pull_from`) for the backup owner.
   The key runs only `sftp-server -R`. The supervisor mounts `dns_backup_dir` over sshfs and backs it
   up with restic (`roles/supervisor`). Generate the pair on the controller
-  (`ssh-keygen -t ed25519 -N "" -C restic-pull@backup_wyse -f dns-pull`), put the private half in the
+  (`ssh-keygen -t ed25519 -N "" -C restic-pull@supervisor-wyse -f dns-pull`), put the private half in the
   vault as `vault_supervisor_dns_pull_key` and the public line in `host_vars/dns.yml`.
 - Restore: `docs/backup/restore.md`; design: `docs/backup/index.md`.
 

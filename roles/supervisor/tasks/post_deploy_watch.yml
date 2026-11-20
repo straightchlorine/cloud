@@ -1,0 +1,24 @@
+---
+- name: Run the watchdog once against the real Storage Box
+  ansible.builtin.command: "{{ supervisor_libexec_dir }}/repo-watch"
+  environment: "{{ supervisor_watch_check_env }}"
+  register: supervisor_watch_run
+  changed_when: false
+  failed_when: false  # the assert below tells a stale repository from a broken connection
+
+- name: Show the repositories the watchdog reports
+  ansible.builtin.debug:
+    msg: "{{ supervisor_watch_run.stderr_lines }}"
+  when: supervisor_watch_run.rc == 1
+
+- name: Require the watchdog to read every watched repository
+  # A stale or empty repository is what the watchdog reports, so it does not fail the deploy that installs it.
+  # A listing it cannot get or parse means a wrong key, host key or path, which only a redeploy fixes.
+  ansible.builtin.assert:
+    that:
+      - supervisor_watch_run.rc in [0, 1]
+      - >-
+        supervisor_watch_run.stderr_lines | select('search', ': (cannot list|unreadable listing date) ')
+        | list | length == 0
+    fail_msg: "repo-watch cannot read the Storage Box: {{ supervisor_watch_run.stderr_lines }}"
+    quiet: true

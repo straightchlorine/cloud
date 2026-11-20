@@ -1,11 +1,13 @@
 ---
 # Derives what one pull entry (supervisor_pull) turns into; validate.yml and pull.yml both include this file.
+# ignore_inode: sshfs numbers inodes per mount, so restic would otherwise re-read unmodified files every night.
 - name: Derive the mount point and the restic job of the pull
   ansible.builtin.set_fact:
     supervisor_pull_mountpoint: "{{ supervisor_pull_mount_root }}/{{ supervisor_pull.name }}"
     supervisor_pull_job: >-
       {{ supervisor_pull.job | combine({
            'name': supervisor_pull.name,
+           'ignore_inode': true,
            'sources': [supervisor_pull_mount_root ~ '/' ~ supervisor_pull.name],
            'fresh': [{'path': supervisor_pull_mount_root ~ '/' ~ supervisor_pull.name,
                       'max_age_hours': supervisor_pull.source_max_age_hours}]}) }}

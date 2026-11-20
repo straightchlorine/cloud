@@ -127,7 +127,7 @@ checks, teardown and Molecule scenarios. Where an older role does it differently
 | `monitoring` | `debian-monitoring` | the monitoring play |
 | `prometheus` | `services`, `backup_primary`, `gpu_qp`, `station-arch` | Node Exporter and scrape targets |
 | `gpu_qp` | `gpu-station` | the GPU host play |
-| `backup_primary` | `backup_wyse` | Debian base plays; the retired coordinator host |
+| `backup_primary` | `supervisor-wyse` | Debian base plays and the backup supervisor (`roles/supervisor`) |
 | `workstations` | `station-arch`, `portable` | the restic play; Arch and Gentoo, so outside `fleet` |
 | `opnsense` | `firewall` | no play targets it |
 | `honeypot` | `centos-honeypot` | `playbooks/honeypot.yml`; outside `fleet` (CentOS, no apt or ufw) |

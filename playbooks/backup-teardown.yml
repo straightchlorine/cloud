@@ -1,6 +1,6 @@
 ---
 # Retires the legacy backup coordinator (roles/backup) from a host:
-#   ansible-playbook -i inventory/production playbooks/backup-teardown.yml --limit backup_wyse \
+#   ansible-playbook -i inventory/production playbooks/backup-teardown.yml --limit supervisor-wyse \
 #     -e backup_teardown_confirm=true
 # It removes the backup account's sudo grant, so Ansible must connect as another user (playbooks/bootstrap.yml).
 - name: Tear down the legacy backup coordinator

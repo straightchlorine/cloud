@@ -77,6 +77,7 @@
           - env is search("RESTIC_JOB_FRESH='/mnt/restic-pull/dns:26'")
           - "'RESTIC_JOB_HOST=dns' in env.splitlines()"
           - env is search("RESTIC_JOB_TAGS='debian-13'")
+          - "'RESTIC_JOB_IGNORE_INODE=1' in env.splitlines()"
         fail_msg: "job env or sources wrong:\n{{ env }}"
         quiet: true
 

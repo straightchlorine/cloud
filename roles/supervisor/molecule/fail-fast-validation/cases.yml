@@ -14,6 +14,8 @@ molecule_job_without_tags: "{{ molecule_pull.job | dict2items | rejectattr('key'
 molecule_job_with_sources: "{{ molecule_pull.job | combine({'sources': ['/etc']}) }}"
 molecule_job_zero_retention: >-
   {{ molecule_pull.job | combine({'retention': {'daily': 0, 'weekly': 0, 'monthly': 0, 'yearly': 0}}) }}
+molecule_job_placeholder_repository: >-
+  {{ molecule_pull.job | combine({'repository': 'sftp:hetzner-storage:/home/replace-with-sftp-pwd/dns'}) }}
 molecule_placeholder_known_hosts: 192.168.20.10 ssh-ed25519 AAAAreplaceAAAAAAAAAAAAAAAAAAAAAAAA
 
 molecule_cases:
@@ -68,3 +70,6 @@ molecule_cases:
   - id: pull-port-bad
     expect: "supervisor_pulls[dns]: port must be"
     supervisor_pulls: ["{{ molecule_pull | combine({'port': 70000}) }}"]
+  - id: pull-job-repository-placeholder
+    expect: "supervisor_pulls[dns].job.repository: still a vault.yml.example placeholder"
+    supervisor_pulls: ["{{ molecule_pull | combine({'job': molecule_job_placeholder_repository}) }}"]

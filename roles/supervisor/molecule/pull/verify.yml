@@ -39,6 +39,18 @@
           uploaded {{ molecule_uploaded.stat.exists }}
         quiet: true
 
+    - name: List the snapshots the deploy took
+      ansible.builtin.command: /usr/local/libexec/restic/restic-job exec dns snapshots --json
+      register: molecule_deploy_snapshots
+      changed_when: false
+
+    # Converge ran twice (idempotence), so exactly one snapshot proves the first-run task ran once and then held off.
+    - name: Assert the deploy took exactly one first snapshot
+      ansible.builtin.assert:
+        that: (molecule_deploy_snapshots.stdout | from_json) | length == 1
+        fail_msg: "snapshots after converge: {{ molecule_deploy_snapshots.stdout }}"
+        quiet: true
+
     - name: Run the pull job
       ansible.builtin.command: systemctl start restic-job@dns.service
       changed_when: true
@@ -59,7 +71,7 @@
       ansible.builtin.assert:
         that:
           - "'/mnt/restic-pull/dns/data.txt' in molecule_snapshot.stdout"
-          - snapshots | length == 1
+          - snapshots | length == 2
           - snapshots[0].hostname == 'dns'
           - snapshots[0].tags | sort == ['debian-13', 'dns']
         fail_msg: "snapshot wrong: {{ molecule_snapshot.stdout }} {{ molecule_snapshot_meta.stdout }}"
@@ -108,6 +120,69 @@
 
     - name: Assert the refused run added no snapshot
       ansible.builtin.assert:
-        that: (molecule_snapshots_after.stdout | from_json) | length == 1
+        that: (molecule_snapshots_after.stdout | from_json) | length == 2
         fail_msg: "snapshots: {{ molecule_snapshots_after.stdout }}"
+        quiet: true
+
+    # sshfs numbers inodes per mount in the order files are looked up. Two runs over mounts that looked the files up
+    # in opposite orders see different inode numbers for every unmodified file; only ignore_inode keeps restic from
+    # reading them all again.
+    - name: Create a tree of unmodified files and make the export fresh again
+      ansible.builtin.shell: |
+        set -eu
+        for d in $(seq 1 10); do
+          mkdir -p "/home/puller/export/tree/d$d"
+          for f in $(seq 1 20); do echo "$d-$f" > "/home/puller/export/tree/d$d/f$f"; done
+        done
+        chown -R puller /home/puller/export/tree
+        touch /home/puller/export
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Back up the tree over a mount that restic walks itself
+      ansible.builtin.command: systemctl start restic-job@dns.service
+      changed_when: true
+
+    - name: Hold a new mount and look the files up in reverse order
+      ansible.builtin.command:
+        argv:
+          - systemd-run
+          - --unit=molecule-reverse-lookup
+          - --property=RequiresMountsFor=/mnt/restic-pull/dns
+          - /bin/sh
+          - -c
+          - >-
+            find /mnt/restic-pull/dns -type f | sort -r | xargs stat -c %i > /tmp/molecule-reverse-inodes;
+            sleep 300
+      changed_when: true
+
+    - name: Wait until the reverse lookup is done
+      ansible.builtin.wait_for:
+        path: /tmp/molecule-reverse-inodes
+        search_regex: '^[0-9]+$'
+        timeout: 60
+
+    - name: Back up the unchanged tree over the reverse-numbered mount
+      ansible.builtin.command: systemctl start restic-job@dns.service
+      changed_when: true
+
+    - name: Release the held mount
+      ansible.builtin.command: systemctl stop molecule-reverse-lookup.service
+      changed_when: true
+
+    - name: Read the summary of the last run
+      ansible.builtin.shell: >-
+        set -o pipefail; journalctl -u restic-job@dns.service --no-pager -o cat
+        | grep 'restic-job: summary' | tail -n 1
+      args:
+        executable: /bin/bash
+      register: molecule_reverse_summary
+      changed_when: false
+
+    - name: Assert restic read none of the unmodified files again
+      ansible.builtin.assert:
+        that:
+          - molecule_reverse_summary.stdout is search(' new=0 changed=0 ')
+        fail_msg: "second run over a renumbered mount: {{ molecule_reverse_summary.stdout }}"
         quiet: true

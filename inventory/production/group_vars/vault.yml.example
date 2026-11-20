@@ -55,7 +55,7 @@ vault_restic_automation_password: "your-32-character-secure-restic-password"
 vault_restic_monitoring_password: "your-32-character-secure-restic-password"
 
 # Read-only key the backup supervisor mounts the dns host with; its public half is dns_backup_pull_pubkey in
-# host_vars/dns.yml. Generate: ssh-keygen -t ed25519 -N "" -C restic-pull@backup_wyse -f dns-pull
+# host_vars/dns.yml. Generate: ssh-keygen -t ed25519 -N "" -C restic-pull@supervisor-wyse -f dns-pull
 vault_supervisor_dns_pull_key: |
   -----BEGIN OPENSSH PRIVATE KEY-----
   your-pull-private-key-replace
@@ -84,7 +84,12 @@ vault_restic_storage_key_media: |
   -----BEGIN OPENSSH PRIVATE KEY-----
   your-storage-box-private-key-replace
   -----END OPENSSH PRIVATE KEY-----
-vault_restic_storage_key_backup_wyse: |
+# supervisor-wyse writes through its own Storage Box sub-account (host uNNNNN-subN.your-storagebox.de).
+# Its base is the path the sub-account sees for its home directory: log in with sftp and run pwd.
+vault_restic_storage_host_supervisor_wyse: "u12345-sub1.your-storagebox.de"
+vault_restic_storage_user_supervisor_wyse: "u12345-sub1"
+vault_restic_storage_base_supervisor_wyse: "/home/replace-with-sftp-pwd"
+vault_restic_storage_key_supervisor_wyse: |
   -----BEGIN OPENSSH PRIVATE KEY-----
   your-storage-box-private-key-replace
   -----END OPENSSH PRIVATE KEY-----

@@ -11,9 +11,10 @@
 #     known_hosts: "192.168.20.10 ssh-ed25519 AAAA..."   # pinned host key line(s)
 #     source_max_age_hours: 26          # the job refuses to run on a mount whose directory is older than this
 #     job: {...}                        # a restic job (repository, password, schedule, timeout, memory_max_mib,
-#                                       # retention, host, tags); the role fills in name, sources and fresh
+#                                       # retention, host, tags); the role fills in name, sources, fresh
+#                                       # and ignore_inode
 #
-# supervisor_watch: one entry per restic repository on the Storage Box.
+# supervisor_watch: one entry per restic repository on the Storage Box; an empty list leaves the watchdog idle.
 #   - {name: dns, path: /home/backup/restic-repos/dns, max_age_hours: 30}
 
 # Each pull is mounted below this directory, only while its restic job runs.
@@ -23,6 +24,11 @@ supervisor_libexec_dir: /usr/local/libexec/supervisor
 
 # Runs after the restic freshness check (12:00) and after the nightly jobs, so a night's missed run shows the same day.
 supervisor_watch_schedule: "*-*-* 12:30:00"
+
+# The environment of the deploy-time watchdog run. It sends no ntfy alert: the play output shows what it found
+# and the daily timer alerts. Molecule adds its sftp stub and canned watch lists here.
+supervisor_watch_check_env:
+  SUPERVISOR_NOTIFY: /bin/true
 
 supervisor_packages:
   - sshfs
