@@ -54,12 +54,13 @@ vault_restic_pi_test_media_password: "your-32-character-secure-restic-password"
 vault_restic_automation_password: "your-32-character-secure-restic-password"
 vault_restic_monitoring_password: "your-32-character-secure-restic-password"
 
-# Read-only key the backup supervisor mounts the dns host with; its public half is dns_backup_pull_pubkey in
-# host_vars/dns.yml. Generate: ssh-keygen -t ed25519 -N "" -C restic-pull@supervisor-wyse -f dns-pull
+# Read-only key the backup supervisor mounts the dns host with; roles/dns authorizes the public half on the dns
+# host. Generate: ssh-keygen -t ed25519 -N "" -C restic-pull@supervisor-wyse -f dns-pull
 vault_supervisor_dns_pull_key: |
   -----BEGIN OPENSSH PRIVATE KEY-----
   your-pull-private-key-replace
   -----END OPENSSH PRIVATE KEY-----
+vault_supervisor_dns_pull_pubkey: "ssh-ed25519 AAAA...replace restic-pull@supervisor-wyse"
 
 # NetworkManager connection names (usually the SSID) of the metered links portable must not back up over
 vault_portable_metered_connections:

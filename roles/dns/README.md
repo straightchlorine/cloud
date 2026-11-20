@@ -99,7 +99,7 @@ The admin interface is password protected at `http://<ip>/admin`, SSH is fail2ba
   The key runs only `sftp-server -R`. The supervisor mounts `dns_backup_dir` over sshfs and backs it
   up with restic (`roles/supervisor`). Generate the pair on the controller
   (`ssh-keygen -t ed25519 -N "" -C restic-pull@supervisor-wyse -f dns-pull`), put the private half in the
-  vault as `vault_supervisor_dns_pull_key` and the public line in `host_vars/dns.yml`.
+  vault as `vault_supervisor_dns_pull_key` and the public line as `vault_supervisor_dns_pull_pubkey`.
 - Restore: `docs/backup/restore.md`; design: `docs/backup/index.md`.
 
 ## Cutover from the Pi 3B+ (IP swap)

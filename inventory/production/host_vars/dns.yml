@@ -64,3 +64,9 @@ common_syncthing_enabled: true
 dns_backup_enabled: true
 dns_backup_dir: "/home/{{ ansible_user }}/syncthing/pihole-backup"
 dns_backup_owner: "{{ ansible_user }}"
+
+# supervisor-wyse pulls dns_backup_dir over sshfs with this key; roles/dns forces it to `sftp-server -R` and to the
+# address below. Both halves live in the vault: vault_supervisor_dns_pull_key and vault_supervisor_dns_pull_pubkey.
+dns_backup_pull_enabled: true
+dns_backup_pull_from: "{{ hostvars['supervisor-wyse'].ansible_host }}"
+dns_backup_pull_pubkey: "{{ vault_supervisor_dns_pull_pubkey }}"
