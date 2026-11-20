@@ -24,12 +24,21 @@
       - "{{ supervisor_pull_mountpoint }}"
   register: supervisor_pull_inspect
   changed_when: false
+  # When the mount cannot come up, the transient unit never runs: systemd-run may still exit 0, with no output.
+  # The assert below names that case instead of failing on an empty line.
+  failed_when: false
 
 - name: Require a read-only sshfs mount with data and no write access
   ansible.builtin.assert:
     that:
+      - supervisor_pull_inspect.rc == 0
+      - supervisor_pull_inspect.stdout_lines | length >= 3
       - supervisor_pull_inspect.stdout_lines[0] is match('^fuse.sshfs +ro,')
       - "'entries=0' not in supervisor_pull_inspect.stdout_lines"
       - "'write=refused' in supervisor_pull_inspect.stdout_lines"
-    fail_msg: "pull {{ supervisor_pull.name }}: {{ supervisor_pull_inspect.stdout }}"
+    fail_msg: >-
+      {% if supervisor_pull_inspect.stdout_lines | length < 3 %}pull {{ supervisor_pull.name }}: the mount did not
+      come up (rc {{ supervisor_pull_inspect.rc }} {{ supervisor_pull_inspect.stderr | trim }}); the journal of its
+      mount unit has the reason, often a key the remote does not authorize or its firewall{% else %}pull
+      {{ supervisor_pull.name }}: {{ supervisor_pull_inspect.stdout }}{% endif %}
     quiet: true

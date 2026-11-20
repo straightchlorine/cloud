@@ -186,3 +186,35 @@
           - molecule_reverse_summary.stdout is search(' new=0 changed=0 ')
         fail_msg: "second run over a renumbered mount: {{ molecule_reverse_summary.stdout }}"
         quiet: true
+
+    # A remote that refuses the mount must fail the deploy-time check with a message that names it, not crash on
+    # the empty output systemd-run leaves when the transient unit never starts. Stopping sshd stands in for a
+    # remote that does not authorize the key.
+    - name: Stop sshd so the pull mount cannot come up
+      ansible.builtin.systemd_service:
+        name: ssh.service
+        state: stopped
+
+    - name: Run the deploy-time pull check against the stopped sshd
+      block:
+        - name: Run the deploy-time pull check
+          ansible.builtin.include_role:
+            name: supervisor
+            tasks_from: post_deploy_pull
+          vars:
+            supervisor_pull: "{{ molecule_pull }}"
+
+        - name: Fail when the check passed without a mount
+          ansible.builtin.fail:
+            msg: the deploy-time pull check passed while sshd was stopped
+      rescue:
+        - name: Assert the check failed on the mount, by name
+          ansible.builtin.assert:
+            that: "ansible_failed_result.msg is search('pull dns: the mount did not come up')"
+            fail_msg: "failed for another reason: {{ ansible_failed_result.msg }}"
+            quiet: true
+      always:
+        - name: Start sshd again
+          ansible.builtin.systemd_service:
+            name: ssh.service
+            state: started
