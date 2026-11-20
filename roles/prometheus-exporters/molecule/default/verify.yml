@@ -100,3 +100,71 @@
         fail_msg: "missing {{ want }} in {{ prom }}"
         quiet: true
       loop: "{{ kernel }}"
+
+    - name: Read the installed packages
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Look up the account's home and shell
+      ansible.builtin.getent:
+        database: passwd
+        key: prometheus
+
+    # prepare.yml installed Debian's exporter, whose account has another home and whose process held it.
+    - name: Assert the distribution's exporter is gone and the account is the role's
+      ansible.builtin.assert:
+        that:
+          - "'prometheus-node-exporter' not in ansible_facts.packages"
+          - ansible_facts.getent_passwd.prometheus[4] == '/opt/prometheus-exporters'
+          - ansible_facts.getent_passwd.prometheus[5] == '/bin/false'
+        fail_msg: >-
+          package present: {{ 'prometheus-node-exporter' in ansible_facts.packages }},
+          account: {{ ansible_facts.getent_passwd.prometheus }}
+        quiet: true
+
+    - name: Install a stand-in for one of the role's own exporters
+      ansible.builtin.copy:
+        content: "#!/bin/sh\nexec sleep 600\n"
+        dest: /opt/prometheus-exporters/bin/molecule-own-exporter
+        mode: "0755"
+
+    - name: Run the stand-in as the exporters account
+      ansible.builtin.command:
+        argv: [systemd-run, --unit=molecule-own-exporter, --uid=prometheus,
+               /opt/prometheus-exporters/bin/molecule-own-exporter]
+      changed_when: true
+
+    - name: Accept the role's own process
+      ansible.builtin.include_role:
+        name: prometheus-exporters
+        tasks_from: foreign_exporters
+
+    - name: Run a process the role did not install as the exporters account
+      ansible.builtin.command:
+        argv: [systemd-run, --unit=molecule-foreign-exporter, --uid=prometheus, /bin/sleep, "600"]
+      changed_when: true
+
+    - name: Refuse the process the role did not install
+      block:
+        - name: Run the foreign-exporter check
+          ansible.builtin.include_role:
+            name: prometheus-exporters
+            tasks_from: foreign_exporters
+
+        - name: Fail when the foreign process was accepted
+          ansible.builtin.fail:
+            msg: the foreign-exporter check accepted a process the role did not install
+      rescue:
+        - name: Assert it named the foreign process and only that one
+          ansible.builtin.assert:
+            that:
+              - "ansible_failed_result.msg is search('prometheus runs processes this role did not install')"
+              - "ansible_failed_result.msg is search('/bin/sleep 600')"
+              - "ansible_failed_result.msg is not search('molecule-own-exporter')"
+            fail_msg: "failed for another reason: {{ ansible_failed_result.msg }}"
+            quiet: true
+      always:
+        - name: Stop the stand-in processes
+          ansible.builtin.command:
+            argv: [systemctl, stop, molecule-foreign-exporter.service, molecule-own-exporter.service]
+          changed_when: true

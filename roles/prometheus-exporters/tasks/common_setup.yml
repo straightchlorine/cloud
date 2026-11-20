@@ -1,5 +1,8 @@
 ---
 
+- name: Clear exporters this role did not install
+  ansible.builtin.include_tasks: foreign_exporters.yml
+
 - name: Create prometheus user and group
   ansible.builtin.group:
     name: "{{ prometheus_exporters_group }}"

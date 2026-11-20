@@ -6,6 +6,8 @@ device_role: backup
 device_type: debian
 prometheus_role: backup
 prometheus_exporters_node_exporter_enabled: true
+# The group default allows the exporter from the host's own subnet; the scraping Prometheus lives on another VLAN.
+prometheus_exporters_firewall_source: "{{ hostvars['debian-monitoring'].ansible_host }}"
 
 # Compressed RAM swap gives the restic jobs headroom on a 2 GB board without writing swap to the eMMC.
 common_zram_enabled: true

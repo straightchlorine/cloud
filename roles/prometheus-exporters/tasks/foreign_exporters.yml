@@ -1,0 +1,50 @@
+---
+# A host that ran another exporter before this role (a legacy setup, a distribution package) keeps processes under
+# the prometheus account. usermod then refuses to give the account this role's home, and the other exporter would
+# hold the port the role's binary needs.
+- name: Read the installed packages
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Purge the distribution's node exporter, which the pinned binary replaces
+  ansible.builtin.apt:
+    name: "{{ prometheus_exporters_distro_installed }}"
+    state: absent
+    purge: true
+  vars:
+    prometheus_exporters_distro_installed: >-
+      {{ prometheus_exporters_distro_node_exporter_packages | intersect(ansible_facts.packages.keys() | list) }}
+  become: true
+  when:
+    - prometheus_exporters_node_exporter_install_method == 'binary'
+    - prometheus_exporters_distro_installed | length > 0
+
+- name: Look up the exporters account
+  ansible.builtin.command:
+    argv: [getent, passwd, "{{ prometheus_exporters_user }}"]
+  register: prometheus_exporters_account
+  changed_when: false
+  failed_when: prometheus_exporters_account.rc not in [0, 2]  # 2: no such account yet, a first install
+
+- name: List the processes the exporters account runs
+  ansible.builtin.command:
+    argv: [pgrep, -a, -u, "{{ prometheus_exporters_user }}"]
+  register: prometheus_exporters_account_procs
+  changed_when: false
+  failed_when: prometheus_exporters_account_procs.rc not in [0, 1]  # 1: no process
+  when: prometheus_exporters_account.rc == 0
+
+- name: Refuse processes of the exporters account that this role did not install
+  # Anything left is not a distribution exporter this role knows how to replace, such as a Prometheus server.
+  # Removing that is the operator's decision.
+  vars:
+    prometheus_exporters_foreign_procs: >-
+      {{ prometheus_exporters_account_procs.stdout_lines
+         | reject('search', ' ' ~ (prometheus_exporters_base_dir | regex_escape) ~ '/') | list }}
+  ansible.builtin.assert:
+    that: prometheus_exporters_foreign_procs | length == 0
+    fail_msg: >-
+      {{ prometheus_exporters_user }} runs processes this role did not install:
+      {{ prometheus_exporters_foreign_procs | join('; ') }}. Stop and remove them, then rerun.
+    quiet: true
+  when: prometheus_exporters_account.rc == 0

@@ -9,6 +9,11 @@ prometheus_exporters_node_exporter_enabled: true
 prometheus_exporters_node_exporter_version: "1.12.1"
 prometheus_exporters_node_exporter_port: 9100
 prometheus_exporters_node_exporter_install_method: "binary" # 'binary' or 'package'
+# The distribution's node exporter, purged before a binary install: it binds the same port and its processes hold
+# the prometheus account, which usermod cannot change while they run.
+prometheus_exporters_distro_node_exporter_packages:
+  - prometheus-node-exporter
+  - prometheus-node-exporter-collectors
 prometheus_exporters_node_exporter_binary_url: >-
   https://github.com/prometheus/node_exporter/releases/download/v{{
   prometheus_exporters_node_exporter_version }}/node_exporter-{{
